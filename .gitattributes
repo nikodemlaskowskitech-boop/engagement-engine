@@ -1,0 +1,3 @@
+# Normalise line endings: stored as LF in Git, checked out natively on each OS.
+# Stops Windows CRLF endings showing up as whole-file changes.
+* text=auto
