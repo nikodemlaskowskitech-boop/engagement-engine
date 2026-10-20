@@ -76,9 +76,12 @@ One JSON event per line, one file per day in `data/events/`.
      (alert CS ops)
    Actions route by tier: Self-service automated, Scale to the regional
    pool, Enterprise to the named CSM.
-2. Churn risk: utilisation under 40% and falling for 2+ months; weekly
-   active users down 30%+ vs. the 90-day average. One = watch, both = act.
-   Ingestion errors raise the score.
+2. Churn risk (accounts live for the full 90 days). Usage signals:
+   utilisation under 40% and lower each month for two months; weekly
+   active users 30%+ below their 90-day average. One = Watch, both = Act.
+   Ingestion errors (5+ in 30 days, rising) only count next to a usage
+   signal, and push Watch up to Act with a "technical check first" action.
+   Self-service Watch has no owner: report only.
 3. Expansion: forecast to reach 90% of contracted volume before renewal,
    and users or teams up 25%+ in a quarter.
 4. QBR brief: about 30 days before next_qbr_date, an LLM writes a
@@ -104,12 +107,13 @@ One JSON event per line, one file per day in `data/events/`.
   with the views events (schema declared explicitly), crm, cs_team, as_of
   and utilisation. Every script uses it; define views here, once.
 - `explore.py`: DuckDB summaries by tier, region and CSM.
-- `flags.py`: the activation flag. One row per status, with reasons,
-  routed_to and action; saved to `data/flags_activation.csv`.
+- `flags.py`: the activation and churn flags. One row per flagged account,
+  with reasons, routed_to and action; saved to `data/flags_activation.csv`
+  and `data/flags_churn.csv`.
 
 ## Planned next
 
-- `flags.py`: churn and expansion flags next.
+- `flags.py`: the expansion flag next.
 - Engagement events: a second stream with the same schema (email_sent,
   email_opened, workshop_attended, meeting_held, ...) recording what CS
   did and how customers responded, so journeys can trigger on the last
