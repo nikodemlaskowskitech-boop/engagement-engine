@@ -94,6 +94,9 @@ con.sql(f"""
                END AS routed_to,
                CASE
                    WHEN status = 'Activating' THEN 'No action yet; check again tomorrow'
+                   -- an Enterprise account with no CSM can't be handed to "the CSM"
+                   WHEN tier = 'Enterprise' AND csm_owner IS NULL
+                       THEN format('Assign a CSM first; they then pick up this {{}} account', lower(status))
                    WHEN status = 'Activated' AND tier = 'Self-service' THEN 'Send welcome email and self-onboarding pack'
                    WHEN status = 'Activated' AND tier = 'Scale'        THEN 'Send welcome email and onboarding workshop invite'
                    WHEN status = 'Activated'                           THEN 'CSM books a kickoff call'
