@@ -82,8 +82,9 @@ con.sql(f"""
                    WHEN 'Activating' THEN
                        format('{{}} days since contract, {{}} users so far', days_since_contract, users_so_far)
                    ELSE
-                       format('{{}} days since contract, only {{}} active user(s) in the first {WINDOW_DAYS} days',
-                              days_since_contract, users_first_14d)
+                       format('{{}} days since contract, only {{}} active {{}} in the first {WINDOW_DAYS} days',
+                              days_since_contract, users_first_14d,
+                              CASE WHEN users_first_14d = 1 THEN 'user' ELSE 'users' END)
                END AS reasons,
                -- who acts: nobody yet, the automation, the regional pool or the named CSM
                CASE
@@ -112,8 +113,13 @@ con.sql(f"""
         -- events from accounts the CRM doesn't know about
         SELECT e.account_id, NULL AS account_name, NULL AS tier, NULL AS region,
                'Handoff gap' AS status,
-               format('Active since {{}}, {{}} users seen, no CRM record',
-                      min(e.event_date)::VARCHAR, count(DISTINCT e.user_id)) AS reasons,
+               -- if the first event is on the first day of data, the account was
+               -- already active before our data starts: say so, don't show a fake date
+               format('{{}}, {{}} users seen, no CRM record',
+                      CASE WHEN min(e.event_date) = (SELECT min(event_date) FROM events)
+                           THEN 'Active since before the data starts'
+                           ELSE 'Active since ' || min(e.event_date)::VARCHAR END,
+                      count(DISTINCT e.user_id)) AS reasons,
                'cs_ops' AS routed_to,
                'Create or fix the CRM record (tier, contract, owner); no customer email until then' AS action
         FROM events e
@@ -154,11 +160,11 @@ con.sql("""
 
 print("\n2. Work queue: everything that needs a human, by owner")
 con.sql("""
-    SELECT routed_to, status, account_id, account_name, reasons
+    SELECT routed_to, status, account_id, account_name, reasons, action
     FROM activation
     WHERE routed_to NOT IN ('none', 'automated')
     ORDER BY routed_to, status, account_id
-""").show(max_rows=100, max_width=200)
+""").show(max_rows=100, max_width=320)
 
 con.sql("COPY (SELECT * FROM activation ORDER BY status, account_id) TO 'data/flags_activation.csv' (HEADER)")
 print("\nSaved every row to data/flags_activation.csv")
