@@ -47,6 +47,17 @@ CONTRACT_SIZE = {
 # Typical starting user pool, by tier (min, max)
 USERS_BY_TIER = {"Enterprise": (10, 25), "Scale": (4, 10), "Self-service": (2, 5)}
 
+# How much of their contract accounts really use, by tier. Each account gets a
+# random factor in this range, applied to its personality's utilisation.
+# Enterprise is often over-provisioned at signing; Self-service runs lower
+# and is more spread out.
+UTIL_FACTOR_BY_TIER = {"Enterprise": (0.70, 1.05), "Scale": (0.80, 1.15), "Self-service": (0.50, 1.25)}
+
+# Personality weights that differ by tier (otherwise each personality's own weight applies).
+# An Enterprise deal is never missing from the CRM, and a silent Enterprise
+# customer is rare (it gets escalated fast).
+TIER_WEIGHT_OVERRIDES = {"Enterprise": {"handoff_gap": 0.0, "never_onboarded": 0.01}}
+
 # --- CS team ----------------------------------------------------------------
 # Enterprise accounts have a named CSM; Scale accounts go to a regional pool;
 # Self-service has no human coverage.
@@ -159,9 +170,10 @@ def event(name, kind, day, account_id, user_id=None, properties=None):
 
 
 def pick_personality(tier):
-    # An Enterprise deal is never missing from the CRM, so no handoff gaps there
-    names = [n for n in PERSONALITIES if not (tier == "Enterprise" and n == "handoff_gap")]
-    return random.choices(names, weights=[PERSONALITIES[n]["weight"] for n in names])[0]
+    names = list(PERSONALITIES)
+    overrides = TIER_WEIGHT_OVERRIDES.get(tier, {})
+    weights = [overrides.get(n, PERSONALITIES[n]["weight"]) for n in names]
+    return random.choices(names, weights=weights)[0]
 
 
 def contract_start_for(personality):
@@ -213,6 +225,7 @@ def build_accounts():
                 in_crm=p.get("in_crm", True),
                 users_start=users_start,
                 users_end=max(users_start, round(users_start * p.get("user_growth", 1.0))),
+                util_factor=random.uniform(*UTIL_FACTOR_BY_TIER[tier]),
                 add_ons="experiments" if (tier != "Self-service" and random.random() < 0.4) else "",
                 csm="",
                 pool="",
@@ -309,7 +322,8 @@ def events_for_day(acc, day_index, day, pool):
 
     # System: how many events the customer sent us today (this is what they pay for)
     daily_contract = CONTRACT_SIZE[acc["tier"]] / 365
-    volume = int(daily_contract * lerp(p["util"], day_index) * random.uniform(0.85, 1.15))
+    utilisation = min(1.2, lerp(p["util"], day_index) * acc["util_factor"])   # cap at 120% (overage)
+    volume = int(daily_contract * utilisation * random.uniform(0.85, 1.15))
     out.append(event("daily_event_volume", "system", day, acc["id"],
                      properties={"event_count": volume}))
 
