@@ -7,7 +7,13 @@ no loading step. Each query below checks one thing the flags will need.
 Run:  python explore.py
 """
 
+import sys
+
 import duckdb
+
+# Always write UTF-8, so DuckDB's table borders also work when the
+# output is saved to a file on Windows (which defaults to cp1252).
+sys.stdout.reconfigure(encoding="utf-8")
 
 con = duckdb.connect()
 
@@ -71,7 +77,11 @@ con.sql("""
            -- days live in the window: 30 at most, fewer for new accounts.
            -- Quiet days after go-live still count, so a customer who
            -- goes silent shows a drop instead of hiding it.
-           least(30, a.as_of_date - f.go_live_date + 1) AS days_measured,
+           -- accounts that never went live get no value (least() would
+           -- otherwise ignore the empty go-live date and return 30)
+           CASE WHEN f.go_live_date IS NOT NULL
+                THEN least(30, a.as_of_date - f.go_live_date + 1)
+           END AS days_measured,
            round(l.events_30d * 365
                  / least(30, a.as_of_date - f.go_live_date + 1)
                  / c.contracted_events * 100) AS utilisation_pct
