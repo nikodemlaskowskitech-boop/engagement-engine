@@ -100,12 +100,16 @@ One JSON event per line, one file per day in `data/events/`.
   declining, power_user, new_customer, stalled, never_onboarded,
   handoff_gap) mixed by weight, 90 days of events, the CRM table and the
   CS team table. Seeded, so output is repeatable.
-- `explore.py`: DuckDB summaries by tier, region and CSM; the event schema
-  is declared explicitly; `utilisation` is a reusable view.
+- `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
+  with the views events (schema declared explicitly), crm, cs_team, as_of
+  and utilisation. Every script uses it; define views here, once.
+- `explore.py`: DuckDB summaries by tier, region and CSM.
+- `flags.py`: the activation flag. One row per status, with reasons,
+  routed_to and action; saved to `data/flags_activation.csv`.
 
 ## Planned next
 
-- `flags.py`: the activation flag first, then churn and expansion.
+- `flags.py`: churn and expansion flags next.
 - Engagement events: a second stream with the same schema (email_sent,
   email_opened, workshop_attended, meeting_held, ...) recording what CS
   did and how customers responded, so journeys can trigger on the last
