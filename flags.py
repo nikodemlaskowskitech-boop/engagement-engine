@@ -44,8 +44,15 @@ customers: Self-service rows go to a Self-service report ("report") for
 analysis, and Scale/Enterprise rows ask the pool or CSM to investigate.
 
 Every row carries its reasons, who it is routed to and the action. Results are
-saved to data/flags_activation.csv, data/flags_churn.csv and
-data/flags_expansion.csv for the action log.
+saved to data/flags_activation.csv, data/flags_churn.csv,
+data/flags_expansion.csv and data/flags_qbr.csv for the action log.
+
+Flag 4, QBR (Enterprise only):
+
+  QBR coming up   next QBR in the next 30 days: prepare it (python qbr.py builds
+                  the facts pack)
+  QBR overdue     live 4+ months, last QBR 120+ days ago (or never), and
+                  nothing booked in the next 30 days: book one
 
 Run:  python flags.py
 """
@@ -421,3 +428,44 @@ con.sql("""
 
 con.sql("COPY (SELECT * FROM expansion ORDER BY status, account_id) TO 'data/flags_expansion.csv' (HEADER)")
 print("\nSaved every row to data/flags_expansion.csv")
+
+
+# --- Flag 4: QBR ---------------------------------------------------------------
+
+con.sql("""
+    CREATE VIEW qbr AS
+    SELECT account_id, account_name, tier, region,
+           CASE WHEN qbr_coming_up THEN 'QBR coming up' ELSE 'QBR overdue' END AS status,
+           CASE
+               WHEN qbr_coming_up THEN
+                   format('QBR on {} (in {} days); last QBR {}', next_qbr_date::VARCHAR, days_to_next_qbr,
+                          coalesce(days_since_last_qbr::VARCHAR || ' days ago', 'none yet'))
+               WHEN last_qbr_date IS NULL THEN
+                   format('No QBR yet, {} days after contract start; nothing booked',
+                          (SELECT as_of_date FROM as_of) - contract_start)
+               ELSE
+                   format('Last QBR {} days ago ({}); {}', days_since_last_qbr, last_qbr_date::VARCHAR,
+                          CASE WHEN next_qbr_date IS NULL THEN 'nothing booked'
+                               ELSE 'next one booked for ' || next_qbr_date::VARCHAR END)
+           END AS reasons,
+           coalesce(csm_owner, 'cs_ops') AS routed_to,
+           CASE
+               WHEN csm_owner IS NULL THEN 'Assign a CSM first; they then own this QBR'
+               WHEN qbr_coming_up THEN 'Prepare the QBR: run python qbr.py for the facts pack'
+               ELSE 'Book a QBR'
+           END AS action
+    FROM qbr_schedule
+    WHERE qbr_coming_up OR qbr_overdue
+""")
+
+print("\n\nQBR (Enterprise accounts)")
+
+print("\n7. QBRs coming up and overdue, by CSM")
+con.sql("""
+    SELECT routed_to, status, account_id, account_name, reasons, action
+    FROM qbr
+    ORDER BY routed_to, status, account_id
+""").show(max_rows=100, max_width=300)
+
+con.sql("COPY (SELECT * FROM qbr ORDER BY status, account_id) TO 'data/flags_qbr.csv' (HEADER)")
+print("\nSaved every row to data/flags_qbr.csv")

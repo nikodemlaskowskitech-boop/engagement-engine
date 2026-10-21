@@ -15,6 +15,7 @@ kind a real CS team runs.
 | Activation | New customers who are activated, stalled or silent, plus gaps in our own records (no CRM entry, no CSM assigned) | Automation, regional pools, named CSMs, CS ops |
 | Churn risk | Utilisation falling for two months, weekly active users dropping, and rising ingestion errors as a sign of a technical cause | Same routing, with Watch and Act levels |
 | Expansion | Accounts heading over their contract with a growing team, plus volume rising without users (often over-tracking) | CSMs and pools investigate and build the growth case; Sales only signs |
+| QBR | Enterprise QBRs in the next 30 days (with a facts pack per account) and QBRs overdue with nothing booked | Named CSMs |
 
 Every flag shows the numbers behind it (for example *"Utilisation 52%, then
 39%, then 27%"*), who it is routed to and what to do next.
@@ -29,7 +30,8 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 python generate_events.py   # ~500 accounts, 90 days of events
 python explore.py           # the book of business at a glance
-python flags.py             # activation, churn and expansion flags, plus work queues
+python flags.py             # activation, churn, expansion and QBR flags, plus work queues
+python qbr.py               # facts pack for each QBR in the next 30 days
 ```
 
 ## Design choices

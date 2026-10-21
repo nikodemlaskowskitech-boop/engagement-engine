@@ -9,6 +9,9 @@ Every script calls connect() to get a connection with the same views:
   utilisation  last-30-day utilisation per CRM account (see the comments)
   monthly_usage  utilisation and active users in each of the three 30-day
                  months, for accounts live for the full 90 days
+  qbr_schedule   Enterprise accounts with their QBR timing: coming up in the
+                 next 30 days, or overdue (live 4+ months, last QBR 120+ days
+                 ago or never, nothing booked in the next 30 days)
 
 Keeping this in one place means the schema and the utilisation rule are
 defined once, not copied into every script.
@@ -118,5 +121,21 @@ def connect():
                users_m1,
                users_m3
         FROM sums
+    """)
+
+    con.sql("""
+        CREATE VIEW qbr_schedule AS
+        SELECT c.account_id, c.account_name, c.tier, c.region, c.csm_owner,
+               c.contract_start, c.last_qbr_date, c.next_qbr_date,
+               a.as_of_date - c.last_qbr_date  AS days_since_last_qbr,
+               c.next_qbr_date - a.as_of_date  AS days_to_next_qbr,
+               c.next_qbr_date > a.as_of_date AND c.next_qbr_date <= a.as_of_date + 30 AS qbr_coming_up,
+               a.as_of_date - c.contract_start >= 120
+                   AND (c.last_qbr_date IS NULL OR a.as_of_date - c.last_qbr_date > 120)
+                   AND NOT coalesce(c.next_qbr_date > a.as_of_date
+                                    AND c.next_qbr_date <= a.as_of_date + 30, false) AS qbr_overdue
+        FROM crm c
+        CROSS JOIN as_of a
+        WHERE c.tier = 'Enterprise'
     """)
     return con
