@@ -55,6 +55,13 @@ USERS_BY_TIER = {"Enterprise": (10, 25), "Scale": (4, 10), "Self-service": (2, 5
 # and is more spread out.
 UTIL_FACTOR_BY_TIER = {"Enterprise": (0.70, 1.05), "Scale": (0.80, 1.15), "Self-service": (0.50, 1.25)}
 
+# The working week: how likely users are to show up, Monday to Sunday,
+# relative to the personality's activity. B2B analysts work weekdays (a bit
+# less on Fridays) and barely at weekends; the weekday boost keeps the weekly
+# average close to before. Event volume has no weekly rhythm on purpose: it's
+# the customer's own end users sending events, and they don't stop at weekends.
+WEEKDAY_ACTIVITY = (1.2, 1.2, 1.2, 1.2, 1.1, 0.3, 0.25)
+
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
 # An Enterprise deal is never missing from the CRM, and a silent Enterprise
 # customer is rare (it gets escalated fast).
@@ -369,6 +376,7 @@ def events_for_day(acc, day_index, day, pool):
         # the champion turns up almost daily (if the account is active at all)
         # and does several times more per day than a normal user
         chance = min(0.95, activity * 1.8) if champion else activity
+        chance = min(1.0, chance * WEEKDAY_ACTIVITY[day.weekday()])   # quiet weekends
         if random.random() < chance:
             for _ in range(random.randint(5, 12) if champion else random.randint(1, 4)):
                 out.append(event(random.choice(p["features"]), "product", day, acc["id"], user))
