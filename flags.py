@@ -33,9 +33,15 @@ heading over their contract:
                    3+ points a month fast enough to pass 90% before renewal
   Breadth signal   active users up 25%+ in the last two months
 
-Volume plus breadth = Act (real growth: the CSM builds the growth case; Sales
-only comes in to sign). Volume alone = Watch: rising volume with flat users is
-often over-tracking, so the action is a tracking check, not an upsell.
+Volume plus breadth = Act (real growth: the CSM investigates and builds the
+growth case; Sales only comes in to sign). Volume alone = Watch: rising volume
+with flat users is often over-tracking, so the action is a tracking check, not
+an upsell.
+
+This is a CSM cockpit, not an org-wide tool. Customer messaging triggered by
+usage or plan limits belongs to Product, so churn and expansion never email
+customers: Self-service rows go to a Self-service report ("report") for
+analysis, and Scale/Enterprise rows ask the pool or CSM to investigate.
 
 Every row carries its reasons, who it is routed to and the action. Results are
 saved to data/flags_activation.csv, data/flags_churn.csv and
@@ -278,23 +284,20 @@ con.sql(f"""
                    format('{{}} ingestion errors in the last 30 days ({{}} the month before)',
                           err_now, err_before) END
            ) AS reasons,
-           -- Watch on Self-service has nobody to watch it: it only shows in this report
+           -- This is a CSM cockpit: usage-triggered customer messaging belongs to
+           -- Product. Self-service has no CSM, so its rows go to the Self-service
+           -- report for analysis rather than to an automated email.
            CASE
-               WHEN tier = 'Self-service' AND NOT (score >= 2)
-                   THEN 'none'
-               WHEN tier = 'Self-service' THEN 'automated'
+               WHEN tier = 'Self-service' THEN 'report'
                WHEN tier = 'Scale'        THEN cs_pool
                ELSE coalesce(csm_owner, 'cs_ops')
            END AS routed_to,
            CASE
-               WHEN score < 2 THEN
-                   CASE WHEN tier = 'Self-service' THEN 'No action; listed in the churn report'
-                        ELSE 'Watch: raise it at the next check-in' END
-               WHEN errors_rising AND tier = 'Self-service' THEN
-                   'Send "we noticed data issues" email with fix steps'
+               WHEN tier = 'Self-service' THEN
+                   'Analyse in the Self-service report (look for patterns across accounts)'
+               WHEN score < 2 THEN 'Watch: raise it at the next check-in'
                WHEN errors_rising THEN
                    'Technical check first (ingestion errors are rising), then talk to the customer about usage'
-               WHEN tier = 'Self-service' THEN 'Send "getting more out of Cairnpath" email'
                WHEN tier = 'Scale'        THEN 'Reach out this week and offer a usage review'
                ELSE 'CSM calls this week: usage and breadth are both dropping'
            END AS action
@@ -320,7 +323,7 @@ print("\n4. Churn work queue: everything that needs a human, by owner")
 con.sql("""
     SELECT routed_to, status, account_id, account_name, reasons, action
     FROM churn
-    WHERE routed_to NOT IN ('none', 'automated')
+    WHERE routed_to NOT IN ('none', 'automated', 'report')
     ORDER BY routed_to, status, account_id
 """).show(max_rows=100, max_width=360)
 
@@ -370,25 +373,25 @@ con.sql(f"""
                    format('{{}} active users this month vs. {{}} two months ago (+{{}}%)',
                           users_m3, users_m1, round((users_m3 / users_m1 - 1) * 100)::INT) END
            ) AS reasons,
-           -- expansion stays with CS: the CSM (or pool) builds the case, Sales signs
+           -- expansion stays with CS: the CSM (or pool) investigates and builds the
+           -- case, Sales signs. Plan-limit messaging to customers belongs to Product,
+           -- so Self-service rows go to the Self-service report for analysis.
            CASE
-               WHEN tier = 'Self-service' THEN 'automated'
+               WHEN tier = 'Self-service' THEN 'report'
                WHEN tier = 'Scale'        THEN cs_pool
                ELSE coalesce(csm_owner, 'cs_ops')
            END AS routed_to,
            CASE
-               WHEN NOT breadth_signal AND tier = 'Self-service' THEN
-                   'Send "nearing your plan limit" email with a link to review tracked events'
-               WHEN NOT breadth_signal THEN
-                   'Check the tracking first: volume is rising but users are not (possible over-tracking)'
                WHEN tier = 'Self-service' THEN
-                   'Send upgrade offer: nearing the plan limit with a growing team'
+                   'Analyse in the Self-service report (look for patterns across accounts)'
+               WHEN NOT breadth_signal THEN
+                   'Investigate the tracking first: volume is rising but users are not (possible over-tracking)'
                WHEN util_m3 >= 100 THEN
-                   'Already over the contract: talk about the overage now and build the upgrade case'
+                   'Already over the contract: investigate what drives the growth, then raise the overage and build the upgrade case'
                WHEN months_to_renewal <= {RENEWAL_SOON_MONTHS} THEN
-                   'Renewal within 3 months: bring the growth case into the renewal'
+                   'Renewal within 3 months: confirm the growth is real (teams, use cases), then bring the case into the renewal'
                ELSE
-                   'Mid-term growth conversation: build the upgrade case before they hit the cap'
+                   'Investigate what drives the growth (teams, use cases), then build the upgrade case before they hit the cap'
            END AS action
     FROM scored
     WHERE volume_signal
@@ -412,7 +415,7 @@ print("\n6. Expansion work queue: everything that needs a human, by owner")
 con.sql("""
     SELECT routed_to, status, account_id, account_name, reasons, action
     FROM expansion
-    WHERE routed_to NOT IN ('none', 'automated')
+    WHERE routed_to NOT IN ('none', 'automated', 'report')
     ORDER BY routed_to, status, account_id
 """).show(max_rows=100, max_width=360)
 
