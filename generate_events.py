@@ -1,13 +1,15 @@
 """
 Cairnpath fake data generator.
 
-Writes four things into ./data:
+Writes five things into ./data:
   - crm_accounts.csv          the fake CRM table (one row per account)
   - cs_team.csv               who covers what: named CSMs and regional pools
   - events/YYYY-MM-DD.jsonl   one file per day, one JSON event per line
                               (like a daily dump landing in S3)
   - answer_key.csv            each account's hidden personality, for testing
                               only (check_flags.py); the flags never read it
+  - engagement/YYYY-MM-DD.jsonl  what CS did and how customers responded
+                              (emails, workshops, meetings), same schema
 
 The book of business is ~500 European accounts across three tiers and four
 sub-regions. Each account gets a "personality" that shapes its behaviour
@@ -61,6 +63,38 @@ UTIL_FACTOR_BY_TIER = {"Enterprise": (0.70, 1.05), "Scale": (0.80, 1.15), "Self-
 # average close to before. Event volume has no weekly rhythm on purpose: it's
 # the customer's own end users sending events, and they don't stop at weekends.
 WEEKDAY_ACTIVITY = (1.2, 1.2, 1.2, 1.2, 1.1, 0.3, 0.25)
+
+# --- CS engagement settings ------------------------------------------------------
+
+# About 1 in 5 new Self-service and Scale accounts get no "getting started" email
+# (a control group), so "welcomed vs. not" can be compared honestly later.
+CONTROL_SHARE = 0.2
+# The planted effect: welcomed accounts install the SDK 2 days after signing,
+# the control group after 5. It's fake data, so the comparison shows the
+# method works; it doesn't prove that emails work.
+SDK_DELAY_DAYS = {"welcomed": 2, "control": 5}
+
+# Local time vs. UTC across the window (all summer time: clocks change on 25 Oct)
+UTC_OFFSET_HOURS = {"UK&I": 1, "DACH": 2, "France & Benelux": 2, "Nordics": 2}
+
+# Each owner's style: days to act on a problem (min, max), days between
+# check-ins, and the chance they act on a declining account at all.
+# Different styles are what make "time to action by CSM" worth a chart.
+OWNER_STYLE = {
+    "csm_anna":   dict(act_days=(1, 3),  check_in_days=21, acts=0.95),
+    "csm_tom":    dict(act_days=(6, 12), check_in_days=45, acts=0.50),
+    "csm_lukas":  dict(act_days=(2, 5),  check_in_days=28, acts=0.85),
+    "csm_mia":    dict(act_days=(1, 2),  check_in_days=21, acts=0.95),
+    "csm_claire": dict(act_days=(3, 7),  check_in_days=30, acts=0.80),
+    "csm_erik":   dict(act_days=(5, 14), check_in_days=40, acts=0.55),
+    "pool":       dict(act_days=(3, 10), check_in_days=None, acts=0.60),   # every Scale pool
+}
+
+# How customers respond, by personality
+OPEN_RATE = {"new_customer": 0.80, "stalled": 0.45, "never_onboarded": 0.10}
+ONBOARDING_WORKSHOP_RATE = {"new_customer": 0.65, "stalled": 0.15, "never_onboarded": 0.03}
+ADVANCED_WORKSHOP_RATE = {"healthy": 0.08, "power_user": 0.20, "declining": 0.10}
+DECLINE_VISIBLE_DAY = 40   # around here a declining account's numbers start to show it
 
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
 # An Enterprise deal is never missing from the CRM, and a silent Enterprise
@@ -257,6 +291,7 @@ def build_accounts():
         acc["csm"] = ""
     set_qbr_dates(accounts)
     set_champions(accounts)
+    set_welcome_group(accounts)
     return accounts
 
 
@@ -273,6 +308,22 @@ def set_champions(accounts):
     rng = random.Random(SEED + 2)
     for acc in accounts:
         acc["has_champion"] = rng.random() < CHAMPION_SHARE_OF_ACCOUNTS
+
+
+def set_welcome_group(accounts):
+    """Decide which new Self-service and Scale accounts get the "getting started"
+    email and which are the control group. Own random generator, like the others."""
+    rng = random.Random(SEED + 3)
+    for acc in accounts:
+        new = PERSONALITIES[acc["personality"]]["lifecycle"] == "new"
+        acc["welcomed"] = (new and acc["in_crm"] and acc["tier"] != "Enterprise"
+                           and rng.random() >= CONTROL_SHARE)
+        acc["control"] = new and acc["in_crm"] and acc["tier"] != "Enterprise" and not acc["welcomed"]
+
+
+def nearest_weekday(day):
+    """Meetings don't happen at weekends: Saturday moves to Friday, Sunday to Monday."""
+    return day + timedelta(days={5: -1, 6: 1}.get(day.weekday(), 0))
 
 
 def set_qbr_dates(accounts):
@@ -300,6 +351,10 @@ def set_qbr_dates(accounts):
             acc["next_qbr"] = ""                    # overdue and nobody rebooked it
         else:
             acc["next_qbr"] = END_DATE + timedelta(days=rng.randint(5, 30))  # slipped, rebooked
+    for acc in accounts:                        # QBRs are held on weekdays
+        for field in ("last_qbr", "next_qbr"):
+            if acc[field]:
+                acc[field] = nearest_weekday(acc[field])
 
 
 # --- Output files -------------------------------------------------------------
@@ -348,7 +403,9 @@ def events_for_day(acc, day_index, day, pool):
     if p.get("silent"):
         return []                                   # never onboarded: silence
 
-    onboard_day = acc["contract_start"] + timedelta(days=2)   # SDK goes in 2 days after signing
+    # The SDK goes in 2 days after signing, or 5 for the control group (no email)
+    onboard_day = acc["contract_start"] + timedelta(
+        days=SDK_DELAY_DAYS["control" if acc["control"] else "welcomed"])
     if day < onboard_day:
         return []
 
@@ -397,6 +454,148 @@ def events_for_day(acc, day_index, day, pool):
     return out
 
 
+# --- CS engagement history --------------------------------------------------------
+# What CS did over the 90 days and how customers responded, in the same schema
+# as the product events (event_type "engagement"). Accounts missing from the
+# CRM get nothing: CS doesn't know they exist, which is the handoff gap.
+
+def cs_event(rng, name, when, acc, owner, topic, user_id=None):
+    return {
+        "event_id": str(uuid.UUID(int=rng.getrandbits(128), version=4)),
+        "event_name": name,
+        "event_type": "engagement",
+        "timestamp": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "account_id": acc["id"],
+        "user_id": user_id,                     # the customer user, when they respond
+        "properties": {"owner_id": owner, "topic": topic},
+        "context": {"source": "cs_history"},
+    }
+
+
+def local_time(rng, day, region, hour):
+    """A moment around `hour` local time on `day`, converted to UTC."""
+    moment = datetime.combine(day, time(hour)) + timedelta(minutes=rng.randint(-20, 40))
+    return moment - timedelta(hours=UTC_OFFSET_HOURS[region])
+
+
+def workshop_days(region, first_allowed):
+    """Fortnightly Tuesday workshops per region; F&B and the Nordics run the
+    weeks in between, so the CS team isn't running them all at once."""
+    day = START_DATE + timedelta(days=(1 - START_DATE.weekday()) % 7)   # first Tuesday
+    if region in ("France & Benelux", "Nordics"):
+        day += timedelta(days=7)
+    while day <= END_DATE:
+        if day >= first_allowed:
+            yield day
+        day += timedelta(days=14)
+
+
+def engagement_for_account(rng, acc):
+    p = PERSONALITIES[acc["personality"]]
+    region, start, tier = acc["region"], acc["contract_start"], acc["tier"]
+    owner = acc["csm"] or acc["pool"]
+    style = OWNER_STYLE["pool" if acc["pool"] else acc["csm"]] if owner else None
+    contact = f"{acc['id']}_usr_01"
+    out = []
+
+    def meeting(day, topic):
+        day = nearest_weekday(day)
+        out.append(cs_event(rng, "meeting_held", local_time(rng, day, region, rng.choice([10, 11, 14, 15])),
+                            acc, owner, topic, contact))
+
+    # Getting started email, the day after signing (control group: none)
+    if acc["welcomed"]:
+        sent = local_time(rng, start + timedelta(days=1 if start.weekday() < 4 else 7 - start.weekday()),
+                          region, 9)                       # next working day
+        out.append(cs_event(rng, "email_sent", sent, acc, "automated", "getting_started"))
+        if rng.random() < OPEN_RATE[acc["personality"]]:
+            opened = sent + timedelta(hours=min(120, rng.expovariate(1 / 18)))
+            local = opened + timedelta(hours=UTC_OFFSET_HOURS[region])
+            if local.weekday() >= 5 or not 7 <= local.hour <= 21:
+                # nobody reads work email at 2 a.m. or at weekends: next working morning
+                day = local.date() + timedelta(days=1 if local.hour > 21 else 0)
+                while day.weekday() >= 5:
+                    day += timedelta(days=1)
+                opened = local_time(rng, day, region, 8)
+            out.append(cs_event(rng, "email_opened", opened, acc, "automated", "getting_started", contact))
+
+    # Scale: fortnightly workshops. New accounts are invited (in the email) to
+    # their first onboarding workshop; live accounts sometimes join an advanced one.
+    if tier == "Scale" and p["lifecycle"] == "new" and acc["welcomed"]:
+        first = next(workshop_days(region, start + timedelta(days=4)), None)
+        if first and rng.random() < ONBOARDING_WORKSHOP_RATE[acc["personality"]]:
+            for n in range(1, min(3, acc["users_end"]) + 1):
+                out.append(cs_event(rng, "workshop_attended", local_time(rng, first, region, 14),
+                                    acc, owner, "onboarding_workshop", f"{acc['id']}_usr_{n:02d}"))
+    if tier == "Scale" and acc["personality"] in ADVANCED_WORKSHOP_RATE:
+        for day in workshop_days(region, START_DATE):
+            rate = ADVANCED_WORKSHOP_RATE[acc["personality"]]
+            if acc["personality"] == "declining":
+                rate *= 1 - (day - START_DATE).days / DAYS      # interest fades as usage falls
+            if rng.random() < rate:
+                for n in range(1, rng.randint(1, 2) + 1):
+                    out.append(cs_event(rng, "workshop_attended", local_time(rng, day, region, 14),
+                                        acc, owner, "advanced_workshop", f"{acc['id']}_usr_{n:02d}"))
+
+    if not owner:            # Self-service: no human coverage, so no meetings
+        return in_window(out)
+
+    # Enterprise: QBRs on the CRM dates, a kickoff for new accounts, regular check-ins
+    if tier == "Enterprise":
+        if acc["last_qbr"] and START_DATE <= acc["last_qbr"] <= END_DATE:
+            meeting(acc["last_qbr"], "qbr")
+        if p["lifecycle"] == "new":
+            meeting(start + timedelta(days=rng.randint(*style["act_days"])), "kickoff")
+        elif acc["personality"] in ("healthy", "power_user", "declining"):
+            day = START_DATE + timedelta(days=rng.randint(0, style["check_in_days"]))
+            while day <= END_DATE:
+                near_qbr = acc["last_qbr"] and abs((day - acc["last_qbr"]).days) < 10
+                if not near_qbr:
+                    meeting(day, "check_in")
+                day += timedelta(days=style["check_in_days"] + rng.randint(-5, 5))
+
+    # Declining accounts: a churn call once it shows, if the owner gets to it
+    if acc["personality"] == "declining" and rng.random() < style["acts"]:
+        meeting(START_DATE + timedelta(days=DECLINE_VISIBLE_DAY + rng.randint(*style["act_days"])),
+                "churn_call")
+    # Stalled Scale accounts: the pool calls once the 14-day window has passed
+    if tier == "Scale" and acc["personality"] == "stalled" and rng.random() < style["acts"]:
+        meeting(start + timedelta(days=14 + rng.randint(*style["act_days"])), "activation_call")
+
+    return in_window(out)
+
+
+def in_window(rows):
+    """Keep only what falls inside the data window (a churn call planned for
+    next week hasn't happened yet)."""
+    return [e for e in rows if START_DATE.isoformat() <= e["timestamp"][:10] <= END_DATE.isoformat()]
+
+
+def write_engagement(accounts):
+    """One file per day with any CS activity in data/engagement/."""
+    rng = random.Random(SEED + 4)         # own generator: no product number changes
+    by_day = {START_DATE + timedelta(days=i): [] for i in range(DAYS)}
+    for acc in accounts:
+        if not acc["in_crm"]:
+            continue
+        for e in engagement_for_account(rng, acc):
+            by_day[date.fromisoformat(e["timestamp"][:10])].append(e)
+    out_dir = OUT_DIR / "engagement"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("*.jsonl"):
+        old.unlink()
+    total = 0
+    for day, rows in by_day.items():
+        rows.sort(key=lambda e: e["timestamp"])
+        if not rows:
+            continue                       # quiet days (weekends) get no file
+        with (out_dir / f"{day.isoformat()}.jsonl").open("w") as f:
+            for row in rows:
+                f.write(json.dumps(row) + "\n")
+        total += len(rows)
+    return total
+
+
 def write_answer_key(accounts):
     """The truth behind the data: which personality each account was given.
 
@@ -407,9 +606,10 @@ def write_answer_key(accounts):
     path = OUT_DIR / "answer_key.csv"
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["account_id", "tier", "personality", "has_champion"])
+        writer.writerow(["account_id", "tier", "personality", "has_champion", "welcome_group"])
         for acc in accounts:
-            writer.writerow([acc["id"], acc["tier"], acc["personality"], acc["has_champion"]])
+            group = "welcomed" if acc["welcomed"] else "control" if acc["control"] else ""
+            writer.writerow([acc["id"], acc["tier"], acc["personality"], acc["has_champion"], group])
     return path
 
 
@@ -441,8 +641,10 @@ if __name__ == "__main__":
     crm_path = write_crm(accounts)
     key_path = write_answer_key(accounts)
     total = write_events(accounts)
+    cs_total = write_engagement(accounts)
     print(f"Accounts:   {len(accounts)} ({sum(a['in_crm'] for a in accounts)} in the CRM)")
     print(f"CS team:    {team_path}")
     print(f"CRM table:  {crm_path}")
     print(f"Answer key: {key_path} (for check_flags.py only)")
     print(f"Events:     {total:,} across {DAYS} daily files, {START_DATE} to {END_DATE}")
+    print(f"Engagement: {cs_total:,} CS touches and responses in data/engagement/")

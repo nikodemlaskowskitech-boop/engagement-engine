@@ -76,3 +76,30 @@ con.sql("""
     GROUP BY ALL
     ORDER BY c.region, csm
 """).show()
+
+print("\n7. CS engagement week by week (emails, opens, workshop attendees, meetings)")
+con.sql("""
+    SELECT date_trunc('week', event_date)::DATE AS week_starting,
+           count(*) FILTER (WHERE event_name = 'email_sent')        AS emails_sent,
+           count(*) FILTER (WHERE event_name = 'email_opened')      AS emails_opened,
+           count(*) FILTER (WHERE event_name = 'workshop_attended') AS workshop_attendees,
+           count(*) FILTER (WHERE event_name = 'meeting_held')      AS meetings
+    FROM engagement
+    GROUP BY ALL
+    ORDER BY week_starting
+""").show()
+
+print("\n8. Meetings by owner and topic (CSMs and Scale pools)")
+con.sql("""
+    SELECT coalesce(t.owner_name, e.properties.owner_id) AS owner,
+           count(*) FILTER (WHERE e.properties.topic = 'qbr')        AS qbr,
+           count(*) FILTER (WHERE e.properties.topic = 'check_in')   AS check_in,
+           count(*) FILTER (WHERE e.properties.topic = 'kickoff')    AS kickoff,
+           count(*) FILTER (WHERE e.properties.topic IN ('churn_call', 'activation_call')) AS problem_calls,
+           count(*) AS meetings
+    FROM engagement e
+    LEFT JOIN cs_team t ON t.owner_id = e.properties.owner_id
+    WHERE e.event_name = 'meeting_held'
+    GROUP BY ALL
+    ORDER BY meetings DESC
+""").show()
