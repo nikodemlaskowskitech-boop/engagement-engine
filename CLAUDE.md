@@ -22,6 +22,18 @@ with short comments, and prefer small steps he can review.
   with customers, or a good interview story), add a short tip on it.
   Keep it brief and only when it's genuinely useful.
 
+## Scope: a CSM cockpit
+
+This is a cockpit for the CS team, not an org-wide engagement tool.
+- Customer messaging triggered by usage or plan limits belongs to Product.
+  Churn and expansion flags never email customers: they ask the pool or
+  CSM to investigate and analyse.
+- Self-service churn and expansion rows go to the Self-service report
+  (routed_to = 'report') for analysis across accounts.
+- Onboarding programmes (activation welcome emails, workshop invites) stay:
+  they are CS one-to-many engagement, not utilisation messaging.
+- Apply the same test to anything new: investigate and analyse first.
+
 ## The fake product
 
 Cairnpath, a fictional product analytics SaaS. Customers pay for an
@@ -81,7 +93,7 @@ One JSON event per line, one file per day in `data/events/`.
    active users 30%+ below their 90-day average. One = Watch, both = Act.
    Ingestion errors (5+ in 30 days, rising) only count next to a usage
    signal, and push Watch up to Act with a "technical check first" action.
-   Self-service Watch has no owner: report only.
+   Self-service rows go to the Self-service report.
 3. Expansion (accounts live for the full 90 days). Stays with CS: the
    CSM builds the growth case, Sales only signs. Volume signal: 90%+ of
    contract already, or 80%+ and climbing 3+ points a month fast enough to
