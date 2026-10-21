@@ -108,8 +108,10 @@ One JSON event per line, one file per day in `data/events/`.
    key users, champion trend, errors, open flags). A champion is a top user
    doing 2x+ what the next one does; otherwise "no single champion". QBR overdue: live 4+ months, last
    QBR 120+ days ago or never, nothing booked in 30 days: book one.
-   Next: an LLM writes a one-page brief from the facts pack, ending with
-   one suggested ask.
+   `brief.py` has an LLM (Claude Sonnet 5.5 via the Anthropic API) write a
+   one-page brief per pack, ending with one suggested ask. Every number in
+   the draft is checked against the pack; untraceable ones are listed as
+   "unverified" at the bottom. Real user IDs go back in after the model.
 
 ## Design rules
 
@@ -141,11 +143,15 @@ One JSON event per line, one file per day in `data/events/`.
 - `qbr.py`: QBR facts packs (run `flags.py` first). Writes
   `data/qbr_facts.json` (pseudonymised) and `data/qbr_user_key.csv` (the
   real user IDs; never sent to an LLM).
+- `brief.py`: QBR briefs from the facts packs (run `qbr.py` first; needs
+  `ANTHROPIC_API_KEY` in the git-ignored `.env`). Writes
+  `data/briefs/<account_id>.md`. `python brief.py acc_037` for one account.
+  The API key lives only in `.env`: never print it, log it or commit it.
 
 ## Planned next
 
-- QBR brief: an LLM writes the one-page brief from `data/qbr_facts.json`;
-  real names are put back afterwards from the key file.
+- Move to AWS (Phase 6): switch `brief.py` to Bedrock (the anthropic
+  library's Bedrock client), so the key disappears in favour of an IAM role.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Engagement events: a second stream with the same schema (email_sent,

@@ -32,12 +32,16 @@ python generate_events.py   # ~500 accounts, 90 days of events
 python explore.py           # the book of business at a glance
 python flags.py             # activation, churn, expansion and QBR flags, plus work queues
 python qbr.py               # facts pack for each QBR in the next 30 days
+python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_API_KEY in .env)
 ```
 
 ## Design choices
 
-- **SQL computes the facts.** Every number a CSM sees comes from a query, not
-  a model.
+- **SQL computes the facts; the LLM only writes them up.** The model gets a
+  facts pack with pseudonymised users, never raw data. Every number in its
+  draft is checked against the pack, and anything it can't trace is listed
+  as "unverified" for the CSM to check. Real user IDs go back in afterwards,
+  outside the model.
 - **Every alert explains itself** and comes with an action. Alerts that only
   show a score get ignored.
 - **False alarms are treated as a bug.** Rising errors on their own flagged
