@@ -19,34 +19,68 @@ Not actions, so not logged:
   - routed_to 'report'  (Self-service rows: the report reads the flag files
                          directly, for analysis across accounts)
 
-How an action is "done" today (no real email or Slack yet, that's the next step):
-  automated              -> email, recorded as "sent (simulated)"
-  a CSM, pool or CS ops  -> a task in their queue, recorded as "queued"
+Where actions go (a Slack sandbox, set up in .env):
+  a CSM, pool or CS ops  -> one message per owner in #cs-queue, listing
+                            their new tasks (SLACK_WEBHOOK_QUEUE)
+  automated              -> customer emails are still simulated: there are
+                            no real customers. They're previewed in
+                            #email-preview instead (SLACK_WEBHOOK_EMAIL)
+Without the webhooks in .env, nothing is posted and actions are only logged.
+
+An action is logged only after its Slack post worked. If a post fails, those
+actions stay out of the log and are retried on the next run.
 
 Facts the pipeline creates ("welcome sent") live here, never in the CRM.
 
 Run flags.py first, then:  python actions.py
-Run it twice: the second run should log nothing new.
+Run it twice: the second run should post and log nothing new.
 """
 
 import csv
+import json
+import os
 import sys
-from collections import Counter
+import urllib.error
+import urllib.request
+from collections import defaultdict
 from pathlib import Path
 
 from cairnpath_db import connect
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-DATA = Path(__file__).resolve().parent / "data"
+REPO = Path(__file__).resolve().parent
+DATA = REPO / "data"
 LOG = DATA / "action_log.csv"
 FLAGS = ("activation", "churn", "expansion", "qbr")
 NOT_ACTIONS = {"none", "report"}
 COLUMNS = ["logged_on", "account_id", "flag", "status", "routed_to", "channel", "action", "outcome"]
 
-# The run date is the data's "today" (the day after the last day of events),
-# never the computer's clock: a re-run on old data must log the same dates.
-run_date = connect().sql("SELECT as_of_date + 1 FROM as_of").fetchone()[0]
+
+def load_webhooks():
+    """Read the Slack webhook addresses from .env (git-ignored), without
+    printing them: anyone with the address can post into the workspace."""
+    env = REPO / ".env"
+    if env.exists():
+        for line in env.read_text(encoding="utf-8-sig").splitlines():
+            name, _, value = line.partition("=")
+            if name.strip() in ("SLACK_WEBHOOK_QUEUE", "SLACK_WEBHOOK_EMAIL") and value.strip():
+                os.environ[name.strip()] = value.strip().strip('"').strip("'")
+    return os.environ.get("SLACK_WEBHOOK_QUEUE"), os.environ.get("SLACK_WEBHOOK_EMAIL")
+
+
+def post_to_slack(webhook, text):
+    """Send one message to a Slack channel. True if Slack accepted it."""
+    request = urllib.request.Request(
+        webhook, data=json.dumps({"text": text}).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.status == 200
+    except (urllib.error.HTTPError, urllib.error.URLError) as error:
+        # the error never includes the address, so it's safe to print
+        print(f"  Slack post failed ({error}): not logged, will retry next run")
+        return False
 
 
 def key(row):
@@ -54,14 +88,32 @@ def key(row):
     return (row["account_id"], row["flag"], row["status"])
 
 
+def task_line(t):
+    """One task, as it reads in Slack."""
+    name = t["account_name"] or "(not in the CRM)"
+    return (f"• *{name}* ({t['account_id']}), {t['flag']} {t['status']}: {t['reasons']}\n"
+            f"    → {t['action']}")
+
+
+# The run date is the data's "today" (the day after the last day of events),
+# never the computer's clock: a re-run on old data must log the same dates.
+run_date = connect().sql("SELECT as_of_date + 1 FROM as_of").fetchone()[0]
+queue_hook, email_hook = load_webhooks()
+
+with (DATA / "cs_team.csv").open(encoding="utf-8") as f:
+    owner_names = {r["owner_id"]: r["owner_name"] for r in csv.DictReader(f)}
+owner_names["cs_ops"] = "CS ops"
+owner_names["email"] = "Customer emails"
+
 # What was already done, from earlier runs
 done = set()
 if LOG.exists():
     with LOG.open(encoding="utf-8") as f:
         done = {key(r) for r in csv.DictReader(f)}
 
-# What the flags ask for today
-new_rows, skipped = [], 0
+# What the flags ask for today, grouped by where it goes
+new = defaultdict(list)        # owner (or "email") -> new tasks
+skipped = 0
 for flag in FLAGS:
     path = DATA / f"flags_{flag}.csv"
     if not path.exists():
@@ -70,33 +122,48 @@ for flag in FLAGS:
         for r in csv.DictReader(f):
             if r["routed_to"] in NOT_ACTIONS:
                 continue
-            row = {"logged_on": run_date, "account_id": r["account_id"], "flag": flag,
-                   "status": r["status"], "routed_to": r["routed_to"], "action": r["action"]}
-            if key(row) in done:
+            task = dict(r, flag=flag)
+            if key(task) in done:
                 skipped += 1
                 continue
-            if r["routed_to"] == "automated":
-                row.update(channel="email", outcome="sent (simulated)")
-            else:
-                row.update(channel="queue", outcome="queued")
-            new_rows.append(row)
-            done.add(key(row))   # so a duplicate row in the same run is only done once
+            new["email" if r["routed_to"] == "automated" else r["routed_to"]].append(task)
+            done.add(key(task))   # so a duplicate row in the same run is only done once
 
-# Append the new actions (the log only ever grows: it's the history)
+# Do the actions: one Slack message per group, then log the group if it worked
 first_run = not LOG.exists()
+logged = 0
 with LOG.open("a", newline="", encoding="utf-8") as f:
     writer = csv.DictWriter(f, fieldnames=COLUMNS)
     if first_run:
         writer.writeheader()
-    writer.writerows(new_rows)
+    for group, tasks in sorted(new.items()):
+        if group == "email":
+            channel, hook = "email", email_hook
+            text = (f"*{len(tasks)} customer emails* that would go out today "
+                    f"(simulated, run date {run_date}):\n" + "\n".join(task_line(t) for t in tasks))
+        else:
+            channel, hook = "queue", queue_hook
+            text = (f"*{owner_names.get(group, group)}*: {len(tasks)} new "
+                    f"{'task' if len(tasks) == 1 else 'tasks'} (run date {run_date})\n"
+                    + "\n".join(task_line(t) for t in tasks))
+        if hook:
+            if not post_to_slack(hook, text):
+                continue
+            outcome = "previewed in Slack (simulated)" if channel == "email" else "posted to Slack"
+        else:
+            outcome = "sent (simulated)" if channel == "email" else "queued"
+        writer.writerows({"logged_on": run_date, "account_id": t["account_id"], "flag": t["flag"],
+                          "status": t["status"], "routed_to": t["routed_to"], "channel": channel,
+                          "action": t["action"], "outcome": outcome} for t in tasks)
+        f.flush()         # write each group straight away: a crash later can't cause a re-post
+        logged += len(tasks)
+        print(f"  {channel:<6} {owner_names.get(group, group):<20} {len(tasks):>3}  {outcome}")
 
-print(f"\nAction log, run date {run_date}\n")
-print(f"  New actions logged: {len(new_rows)}")
+print(f"\nAction log, run date {run_date}")
+print(f"  New actions logged: {logged}")
 print(f"  Already done, skipped: {skipped}")
-
-if new_rows:
-    print("\n  New actions by channel and owner:")
-    for (channel, owner), n in sorted(Counter((r["channel"], r["routed_to"]) for r in new_rows).items()):
-        print(f"    {channel:<6} {owner:<14} {n:>3}")
-
-print(f"\nSaved to {LOG.relative_to(DATA.parent)}")
+if not (queue_hook and email_hook):
+    print("  Slack: no webhook in .env for "
+          + " and ".join(n for n, h in (("#cs-queue", queue_hook), ("#email-preview", email_hook)) if not h)
+          + ", so those actions are only logged")
+print(f"\nSaved to {LOG.relative_to(REPO)}")
