@@ -266,10 +266,13 @@ con.sql(f"""
                    format('Utilisation {{}}%, then {{}}%, then {{}}% (falling two months running)',
                           util_m1::INT, util_m2::INT, util_m3::INT) END,
                CASE WHEN breadth_dropping THEN
-                   format('{{}} weekly active users vs. {{}} on average ({{}}%)',
-                          wau_now, round(wau_avg, 1), round((wau_now / wau_avg - 1) * 100)::INT) END,
+                   format('{{}} weekly active {{}} vs. {{}} on average ({{}}%)',
+                          wau_now, CASE WHEN wau_now = 1 THEN 'user' ELSE 'users' END,
+                          round(wau_avg, 1), round((wau_now / wau_avg - 1) * 100)::INT) END,
                CASE WHEN errors_rising THEN
-                   format('{{}} ingestion errors in the last 30 days, up from {{}}', err_now, err_before) END
+                   -- show both months as they are: "up from" made flat trends sound like spikes
+                   format('{{}} ingestion errors in the last 30 days ({{}} the month before)',
+                          err_now, err_before) END
            ) AS reasons,
            -- Watch on Self-service has nobody to watch it: it only shows in this report
            CASE
