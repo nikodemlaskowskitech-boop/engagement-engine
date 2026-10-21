@@ -230,6 +230,7 @@ def build_accounts():
                 csm="",
                 pool="",
                 next_qbr="",
+                last_qbr="",
             )
             if tier == "Enterprise":
                 # Round-robin the region's CSMs so each carries the same book
@@ -245,7 +246,35 @@ def build_accounts():
                       and PERSONALITIES[a["personality"]]["lifecycle"] == "new" and a["in_crm"]]
     for acc in new_enterprise[:2]:
         acc["csm"] = ""
+    set_qbr_dates(accounts)
     return accounts
+
+
+def set_qbr_dates(accounts):
+    """Quarterly QBRs for Enterprise accounts, with some overdue and not rebooked.
+
+    Uses its own random generator so adding QBR dates doesn't change any of
+    the other generated data.
+    """
+    rng = random.Random(SEED + 1)
+    for acc in accounts:
+        if acc["tier"] != "Enterprise":
+            continue
+        start = acc["contract_start"]
+        if (END_DATE - start).days < 100:
+            # new account: no QBR yet, the first one roughly a quarter after signing
+            acc["last_qbr"] = ""
+            acc["next_qbr"] = start + timedelta(days=rng.randint(80, 100))
+            continue
+        last = END_DATE - timedelta(days=rng.randint(15, 160))
+        acc["last_qbr"] = max(last, start + timedelta(days=60))
+        planned = acc["last_qbr"] + timedelta(days=90 + rng.randint(-7, 7))
+        if planned > END_DATE:
+            acc["next_qbr"] = planned
+        elif rng.random() < 0.5:
+            acc["next_qbr"] = ""                    # overdue and nobody rebooked it
+        else:
+            acc["next_qbr"] = END_DATE + timedelta(days=rng.randint(5, 30))  # slipped, rebooked
 
 
 # --- Output files -------------------------------------------------------------
@@ -262,7 +291,8 @@ def write_team():
 def write_crm(accounts):
     path = OUT_DIR / "crm_accounts.csv"
     columns = ["account_id", "account_name", "tier", "region", "contract_start", "renewal_date",
-               "contracted_events", "add_ons", "csm_owner", "cs_pool", "next_qbr_date"]
+               "contracted_events", "add_ons", "csm_owner", "cs_pool", "last_qbr_date",
+               "next_qbr_date"]
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
@@ -281,6 +311,7 @@ def write_crm(accounts):
                 "add_ons": acc["add_ons"],
                 "csm_owner": acc["csm"],
                 "cs_pool": acc["pool"],
+                "last_qbr_date": acc["last_qbr"].isoformat() if acc["last_qbr"] else "",
                 "next_qbr_date": acc["next_qbr"].isoformat() if acc["next_qbr"] else "",
             })
     return path
