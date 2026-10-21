@@ -125,7 +125,7 @@ def put_back_user_ids(text, account_id):
 
 def main():
     load_api_key()
-    packs = json.loads(REPO / "data" / "qbr_facts.json".read_text(encoding="utf-8"))
+    packs = json.loads((REPO / "data" / "qbr_facts.json").read_text(encoding="utf-8"))
     if len(sys.argv) > 1:
         packs = [p for p in packs if p["account"]["account_id"] == sys.argv[1]]
         if not packs:
