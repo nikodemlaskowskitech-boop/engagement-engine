@@ -68,7 +68,11 @@ Each open flag and any other warning sign in the facts (falling usage,
 champion slowing down, ingestion errors), with its numbers.
 
 ## Opportunities
-Underused add-ons and any growth signal. Omit the section if there are none.
+Growth signals only. Omit the section if there are none.
+An unused paid add-on is NOT an opportunity when the account has an open
+churn flag: it is a downsell risk at renewal (the customer will ask why they
+pay for it), so list it under Risks instead. Without a churn flag, list it
+here as something to understand: why isn't it used?
 
 ## People
 Who carries the account (champion or not) and what that means for the QBR.

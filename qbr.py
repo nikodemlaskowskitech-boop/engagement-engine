@@ -196,8 +196,9 @@ for a in accounts:
             "weekly_active_users_now": w["wau_now"],
             "weekly_active_users_avg_90d": w["wau_avg_90d"],
             "weekly_active_users_change_pct": wau_change,
-            "monthly_active_users_two_months_ago": a["users_m1"],
-            "monthly_active_users_this_month": a["users_m3"],
+            # monthly active users is deliberately left out: anyone who showed up
+            # once counts, so it looks steady while real use falls, and the LLM
+            # presented it as good news when it was in the pack
             "features_used_90d": used,
             "underused_add_ons": underused,
         },
