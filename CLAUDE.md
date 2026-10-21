@@ -104,8 +104,9 @@ One JSON event per line, one file per day in `data/events/`.
    tracking check (rising volume with flat users is often over-tracking).
 4. QBR (Enterprise). QBR coming up: next QBR in the next 30 days, so the
    CSM prepares it; `qbr.py` builds a facts pack per account (usage,
-   forecast, adoption, underused add-ons, pseudonymised key users,
-   champion trend, errors, open flags). QBR overdue: live 4+ months, last
+   forecast, weekly active users trend, underused add-ons, pseudonymised
+   key users, champion trend, errors, open flags). A champion is a top user
+   doing 2x+ what the next one does; otherwise "no single champion". QBR overdue: live 4+ months, last
    QBR 120+ days ago or never, nothing booked in 30 days: book one.
    Next: an LLM writes a one-page brief from the facts pack, ending with
    one suggested ask.
@@ -125,7 +126,8 @@ One JSON event per line, one file per day in `data/events/`.
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
   declining, power_user, new_customer, stalled, never_onboarded,
   handoff_gap) mixed by weight, 90 days of events, the CRM table and the
-  CS team table. Seeded, so output is repeatable.
+  CS team table. About 4 in 10 accounts have a champion (one user far more
+  active than the rest). Seeded, so output is repeatable.
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
   with the views events (schema declared explicitly), crm, cs_team, as_of
   and utilisation, monthly_usage (utilisation and users per 30-day month),

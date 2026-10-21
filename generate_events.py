@@ -247,7 +247,23 @@ def build_accounts():
     for acc in new_enterprise[:2]:
         acc["csm"] = ""
     set_qbr_dates(accounts)
+    set_champions(accounts)
     return accounts
+
+
+CHAMPION_SHARE_OF_ACCOUNTS = 0.4   # roughly 4 in 10 accounts have one power user
+
+
+def set_champions(accounts):
+    """Give some accounts a champion: one user (the first) who is active almost
+    every day and does several times more than anyone else. Real accounts are
+    rarely evenly spread; single-champion risk depends on this.
+
+    Uses its own random generator so it doesn't change any other account fact.
+    """
+    rng = random.Random(SEED + 2)
+    for acc in accounts:
+        acc["has_champion"] = rng.random() < CHAMPION_SHARE_OF_ACCOUNTS
 
 
 def set_qbr_dates(accounts):
@@ -347,8 +363,12 @@ def events_for_day(acc, day_index, day, pool):
     # Product activity: each user is active with today's probability
     activity = lerp(p["activity"], day_index)
     for user in pool:
-        if random.random() < activity:
-            for _ in range(random.randint(1, 4)):
+        champion = acc["has_champion"] and user == pool[0]
+        # the champion turns up almost daily (if the account is active at all)
+        # and does several times more per day than a normal user
+        chance = min(0.95, activity * 1.8) if champion else activity
+        if random.random() < chance:
+            for _ in range(random.randint(5, 12) if champion else random.randint(1, 4)):
                 out.append(event(random.choice(p["features"]), "product", day, acc["id"], user))
 
     # System: how many events the customer sent us today (this is what they pay for)

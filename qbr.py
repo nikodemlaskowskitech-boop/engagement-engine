@@ -7,9 +7,11 @@ the facts, all computed in SQL:
   account     tier, region, CSM, contract dates, contracted volume, add-ons
   qbr         next and last QBR dates
   usage       utilisation month by month, and a simple forecast at renewal
-  adoption    active users then and now, features used, underused add-ons
-  key users   the top three users and their share of activity, plus whether
-              the champion (the most active user) is slowing down
+  key users   the top three users and their share of activity; a champion
+              only when the top user does 2x+ what the next one does, and
+              whether they're slowing down
+  adoption    weekly active users vs. the 90-day average (monthly active users
+              alone hides declines), features used, underused add-ons
   health      ingestion errors and every open flag from flags.py
 
 Users are pseudonymised ("User A") before anything leaves this script, as the
@@ -31,6 +33,9 @@ from cairnpath_db import connect
 sys.stdout.reconfigure(encoding="utf-8")
 
 con = connect()
+
+CHAMPION_RATIO = 2        # the top user counts as the champion when they do at least
+                          # twice as much as the next most active user
 
 
 def rows(sql):
@@ -91,6 +96,19 @@ top_users = rows(f"""
     SELECT * FROM ranked WHERE rank <= 3 ORDER BY account_id, rank
 """)
 
+# Weekly active users now vs. the average week (the same measure churn uses):
+# monthly active users counts anyone who showed up once and hides declines
+weekly = rows(f"""
+    SELECT e.account_id,
+           count(DISTINCT e.user_id) FILTER (WHERE e.event_date > a.as_of_date - 7) AS wau_now,
+           round(count(DISTINCT e.user_id || '|' || CAST((a.as_of_date - e.event_date) // 7 AS VARCHAR))
+                 / 13.0, 1) AS wau_avg_90d
+    FROM events e
+    CROSS JOIN as_of a
+    WHERE e.user_id IS NOT NULL AND e.account_id IN ({ids})
+    GROUP BY e.account_id
+""")
+
 errors = rows(f"""
     SELECT e.account_id, count(*) AS ingestion_errors_30d
     FROM events e
@@ -127,11 +145,25 @@ for a in accounts:
         key_users.append({"alias": alias, "share_of_activity_pct": u["share_pct"],
                           "events_last_30d": u["events_last_30d"],
                           "events_prev_30d": u["events_prev_30d"]})
-    champion = key_users[0] if key_users else None
-    champion_trend = None
+    # A "champion" only exists when one person clearly carries the account. If
+    # activity is spread evenly, saying "the champion is slowing down" would
+    # mislead. Relative, not a fixed share: in a 20-person team even a strong
+    # champion has only 15-25% of the activity.
+    champion = None
+    if key_users and (len(key_users) == 1 or
+                      key_users[0]["share_of_activity_pct"] >= CHAMPION_RATIO * key_users[1]["share_of_activity_pct"]):
+        champion = key_users[0]
     if champion and champion["events_prev_30d"]:
         change = round(100 * (champion["events_last_30d"] / champion["events_prev_30d"] - 1))
-        champion_trend = f"{champion['alias']} activity {change:+d}% vs. the previous 30 days"
+        champion_trend = (f"{champion['alias']} carries {champion['share_of_activity_pct']:.0f}% of activity; "
+                          f"their activity is {change:+d}% vs. the previous 30 days")
+    elif champion:
+        champion_trend = f"{champion['alias']} carries {champion['share_of_activity_pct']:.0f}% of activity"
+    else:
+        champion_trend = "Activity is spread evenly: no single champion"
+
+    w = next((x for x in weekly if x["account_id"] == acc_id), {"wau_now": 0, "wau_avg_90d": 0})
+    wau_change = round(100 * (w["wau_now"] / w["wau_avg_90d"] - 1)) if w["wau_avg_90d"] else None
 
     used = {f["event_name"]: f["times_used"] for f in features if f["account_id"] == acc_id}
     underused = []
@@ -154,10 +186,18 @@ for a in accounts:
         },
         "usage": {
             "utilisation_pct_by_month": [a["util_m1"], a["util_m2"], a["util_m3"]],
-            "forecast_utilisation_pct_at_renewal": a["forecast_util_at_renewal"],
+            # the forecast only projects growth; flat or falling usage is not forecast down
+            "forecast_utilisation_pct_at_renewal": (
+                a["forecast_util_at_renewal"]
+                if a["util_m1"] is not None and a["util_m3"] > a["util_m1"]
+                else "no growth trend to forecast"),
         },
         "adoption": {
-            "active_users_two_months_ago": a["users_m1"], "active_users_this_month": a["users_m3"],
+            "weekly_active_users_now": w["wau_now"],
+            "weekly_active_users_avg_90d": w["wau_avg_90d"],
+            "weekly_active_users_change_pct": wau_change,
+            "monthly_active_users_two_months_ago": a["users_m1"],
+            "monthly_active_users_this_month": a["users_m3"],
             "features_used_90d": used,
             "underused_add_ons": underused,
         },
