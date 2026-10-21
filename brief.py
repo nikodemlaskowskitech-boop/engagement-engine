@@ -11,6 +11,9 @@ outside the model.
 
 Needs an Anthropic API key in a git-ignored .env file in the repo root:
     ANTHROPIC_API_KEY=sk-ant-...
+Best scoped to a workspace in the Claude Console. An organisation-wide key
+also needs the workspace ID on a second line:
+    ANTHROPIC_WORKSPACE_ID=wrkspc_...
 
 Run qbr.py first, then:
     python brief.py              # a brief for every QBR in the next 30 days
@@ -77,7 +80,8 @@ facts above.
 
 
 def load_api_key():
-    """Read ANTHROPIC_API_KEY from .env (git-ignored) without printing it.
+    """Read ANTHROPIC_API_KEY (and, optionally, ANTHROPIC_WORKSPACE_ID) from
+    .env (git-ignored) without printing them.
 
     The .env file is looked up next to this script, not in the folder the
     terminal happens to be in, so it works wherever you run it from.
@@ -86,8 +90,8 @@ def load_api_key():
     if env.exists():
         for line in env.read_text(encoding="utf-8-sig").splitlines():
             name, _, value = line.partition("=")
-            if name.strip() == "ANTHROPIC_API_KEY" and value.strip():
-                os.environ["ANTHROPIC_API_KEY"] = value.strip().strip('"').strip("'")
+            if name.strip() in ("ANTHROPIC_API_KEY", "ANTHROPIC_WORKSPACE_ID") and value.strip():
+                os.environ[name.strip()] = value.strip().strip('"').strip("'")
     if not os.environ.get("ANTHROPIC_API_KEY"):
         sys.exit(f"No API key: looked for ANTHROPIC_API_KEY in {env} "
                  f"({'file found' if env.exists() else 'file not found'})")
@@ -131,7 +135,11 @@ def main():
         if not packs:
             sys.exit(f"No QBR facts pack for {sys.argv[1]}: run python qbr.py and check the ID")
 
-    client = anthropic.Anthropic()
+    # A key scoped to one workspace needs nothing more. An organisation-wide key
+    # must say which workspace each request is for, via this header.
+    workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+    client = anthropic.Anthropic(
+        default_headers={"anthropic-workspace-id": workspace} if workspace else None)
     out_dir = REPO / "data" / "briefs"
     out_dir.mkdir(parents=True, exist_ok=True)
     total_in = total_out = 0
