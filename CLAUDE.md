@@ -148,9 +148,13 @@ One JSON event per line, one file per day in `data/events/`.
   name. Re-run it after any change to a flag rule.
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
-  logs each new action: email for `automated` (simulated for now), a queue
-  task for CSMs, pools and CS ops. `none` and `report` rows aren't actions.
-  The log only grows; delete it to start over.
+  logs each new action. Queue tasks for CSMs, pools and CS ops post to
+  Slack #cs-queue, one message per owner; customer emails stay simulated
+  and are previewed in #email-preview. Webhooks in `.env`
+  (SLACK_WEBHOOK_QUEUE, SLACK_WEBHOOK_EMAIL): secrets, like the API key.
+  An action is logged only after its post worked, so failures retry.
+  `none` and `report` rows aren't actions. The log only grows; delete it
+  to start over.
 - `qbr.py`: QBR facts packs (run `flags.py` first). Writes
   `data/qbr_facts.json` (pseudonymised) and `data/qbr_user_key.csv` (the
   real user IDs; never sent to an LLM).
