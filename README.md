@@ -31,6 +31,7 @@ python -m pip install -r requirements.txt
 python generate_events.py   # ~500 accounts, 90 days of events
 python explore.py           # the book of business at a glance
 python flags.py             # activation, churn, expansion and QBR flags, plus work queues
+python check_flags.py       # test the flags against the generator's answer key
 python qbr.py               # facts pack for each QBR in the next 30 days
 python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_API_KEY in .env)
 ```
@@ -44,6 +45,11 @@ python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_AP
   outside the model.
 - **Every alert explains itself** and comes with an action. Alerts that only
   show a score get ignored.
+- **The rules are tested against an answer key.** The generator records
+  which behaviour it gave each account; `check_flags.py` checks that every
+  flag finds the accounts it should and lists each miss and false alarm.
+  It caught a 2-person account flagged as churn risk because one user had a
+  quiet week ("-48%"), so a drop now has to be at least one whole user.
 - **False alarms are treated as a bug.** Rising errors on their own flagged
   41 healthy accounts, so they now only count alongside a usage signal. A
   straight-line forecast flagged 32 healthy accounts as "heading over the

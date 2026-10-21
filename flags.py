@@ -18,7 +18,9 @@ Flag 2, churn risk. Looks at accounts live for the full 90 days of data and
 checks three signals:
 
   Utilisation falling   under 40% now, and lower each month for two months
-  Breadth dropping      weekly active users 30%+ below their 90-day average
+  Breadth dropping      weekly active users 30%+ below their 90-day average, and
+                        at least one whole user fewer (on a 2-person account a
+                        normal quiet week is already "-48%")
   Errors rising         5+ ingestion errors in the last 30 days, more than before
 
 One usage signal = Watch, two = Act. Rising errors only count next to a usage
@@ -69,7 +71,8 @@ MIN_USERS = 2          # "activated" needs at least this many active users
 SILENT_AFTER_DAYS = 10 # no events at all after this many days = silent
 
 CHURN_UTIL_BELOW = 40     # utilisation under this (in %) counts as low
-CHURN_BREADTH_DROP = 0.30 # weekly active users this far below their average
+CHURN_BREADTH_DROP = 0.30 # weekly active users this far below their average...
+CHURN_BREADTH_MIN_USERS = 1 # ...and at least this many users fewer (small accounts)
 CHURN_MIN_ERRORS = 5      # ingestion errors in the last 30 days that count as "rising"
 
 EXP_AT_CAP = 90           # utilisation (in %) that counts as "at the cap"
@@ -261,7 +264,8 @@ con.sql(f"""
     scored AS (
         SELECT *,
                util_m3 < {CHURN_UTIL_BELOW} AND util_m3 < util_m2 AND util_m2 < util_m1 AS util_falling,
-               wau_avg > 0 AND wau_now <= (1 - {CHURN_BREADTH_DROP}) * wau_avg          AS breadth_dropping,
+               wau_avg > 0 AND wau_now <= (1 - {CHURN_BREADTH_DROP}) * wau_avg
+                   AND wau_avg - wau_now >= {CHURN_BREADTH_MIN_USERS}                  AS breadth_dropping,
                err_now >= {CHURN_MIN_ERRORS} AND err_now > err_before                  AS errors_rising
         FROM signals
     ),

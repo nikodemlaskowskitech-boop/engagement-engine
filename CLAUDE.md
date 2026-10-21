@@ -91,7 +91,8 @@ One JSON event per line, one file per day in `data/events/`.
    pool, Enterprise to the named CSM.
 2. Churn risk (accounts live for the full 90 days). Usage signals:
    utilisation under 40% and lower each month for two months; weekly
-   active users 30%+ below their 90-day average. One = Watch, both = Act.
+   active users 30%+ below their 90-day average and at least one whole user
+   fewer (small accounts). One = Watch, both = Act.
    Ingestion errors (5+ in 30 days, rising) only count next to a usage
    signal, and push Watch up to Act with a "technical check first" action.
    Self-service rows go to the Self-service report.
@@ -130,6 +131,8 @@ One JSON event per line, one file per day in `data/events/`.
   handoff_gap) mixed by weight, 90 days of events, the CRM table and the
   CS team table. About 4 in 10 accounts have a champion (one user far more
   active than the rest). Seeded, so output is repeatable.
+  Also writes `data/answer_key.csv` (each account's personality): for
+  testing only, the flags must never read it.
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
   with the views events (schema declared explicitly), crm, cs_team, as_of
   and utilisation, monthly_usage (utilisation and users per 30-day month),
@@ -140,6 +143,9 @@ One JSON event per line, one file per day in `data/events/`.
   flagged account, with reasons, routed_to and action; saved to
   `data/flags_activation.csv`, `data/flags_churn.csv` and
   `data/flags_expansion.csv`; the QBR flag to `data/flags_qbr.csv`.
+- `check_flags.py`: tests the flags against the answer key (run `flags.py`
+  first): share of each personality found, false alarms, and every miss by
+  name. Re-run it after any change to a flag rule.
 - `qbr.py`: QBR facts packs (run `flags.py` first). Writes
   `data/qbr_facts.json` (pseudonymised) and `data/qbr_user_key.csv` (the
   real user IDs; never sent to an LLM).

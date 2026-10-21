@@ -1,11 +1,13 @@
 """
 Cairnpath fake data generator.
 
-Writes three things into ./data:
+Writes four things into ./data:
   - crm_accounts.csv          the fake CRM table (one row per account)
   - cs_team.csv               who covers what: named CSMs and regional pools
   - events/YYYY-MM-DD.jsonl   one file per day, one JSON event per line
                               (like a daily dump landing in S3)
+  - answer_key.csv            each account's hidden personality, for testing
+                              only (check_flags.py); the flags never read it
 
 The book of business is ~500 European accounts across three tiers and four
 sub-regions. Each account gets a "personality" that shapes its behaviour
@@ -387,6 +389,22 @@ def events_for_day(acc, day_index, day, pool):
     return out
 
 
+def write_answer_key(accounts):
+    """The truth behind the data: which personality each account was given.
+
+    Real data has no answer key, so the flags must never read this file. It
+    exists only so check_flags.py can test whether each flag finds the
+    accounts it should.
+    """
+    path = OUT_DIR / "answer_key.csv"
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["account_id", "tier", "personality", "has_champion"])
+        for acc in accounts:
+            writer.writerow([acc["id"], acc["tier"], acc["personality"], acc["has_champion"]])
+    return path
+
+
 def write_events(accounts):
     events_dir = OUT_DIR / "events"
     events_dir.mkdir(parents=True, exist_ok=True)
@@ -413,8 +431,10 @@ if __name__ == "__main__":
     accounts = build_accounts()
     team_path = write_team()
     crm_path = write_crm(accounts)
+    key_path = write_answer_key(accounts)
     total = write_events(accounts)
     print(f"Accounts:   {len(accounts)} ({sum(a['in_crm'] for a in accounts)} in the CRM)")
     print(f"CS team:    {team_path}")
     print(f"CRM table:  {crm_path}")
+    print(f"Answer key: {key_path} (for check_flags.py only)")
     print(f"Events:     {total:,} across {DAYS} daily files, {START_DATE} to {END_DATE}")
