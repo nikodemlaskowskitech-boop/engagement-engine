@@ -146,6 +146,11 @@ One JSON event per line, one file per day in `data/events/`.
 - `check_flags.py`: tests the flags against the answer key (run `flags.py`
   first): share of each personality found, false alarms, and every miss by
   name. Re-run it after any change to a flag rule.
+- `actions.py`: turns flag rows into actions, once only (run `flags.py`
+  first). Checks `data/action_log.csv` by account, flag and status, then
+  logs each new action: email for `automated` (simulated for now), a queue
+  task for CSMs, pools and CS ops. `none` and `report` rows aren't actions.
+  The log only grows; delete it to start over.
 - `qbr.py`: QBR facts packs (run `flags.py` first). Writes
   `data/qbr_facts.json` (pseudonymised) and `data/qbr_user_key.csv` (the
   real user IDs; never sent to an LLM).

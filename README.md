@@ -32,6 +32,7 @@ python generate_events.py   # ~500 accounts, 90 days of events
 python explore.py           # the book of business at a glance
 python flags.py             # activation, churn, expansion and QBR flags, plus work queues
 python check_flags.py       # test the flags against the generator's answer key
+python actions.py           # log each action once (run it twice: the second run adds nothing)
 python qbr.py               # facts pack for each QBR in the next 30 days
 python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_API_KEY in .env)
 ```
@@ -45,6 +46,10 @@ python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_AP
   outside the model.
 - **Every alert explains itself** and comes with an action. Alerts that only
   show a score get ignored.
+- **Actions happen once only.** Flags are raised again on every run, so
+  `actions.py` checks an action log before doing anything and records what
+  it did. A daily run never emails the same customer twice, and facts the
+  pipeline creates ("welcome sent") stay out of the CRM.
 - **The rules are tested against an answer key.** The generator records
   which behaviour it gave each account; `check_flags.py` checks that every
   flag finds the accounts it should and lists each miss and false alarm.

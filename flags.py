@@ -141,13 +141,16 @@ con.sql(f"""
                    WHEN status = 'Activating'   THEN 'none'
                    WHEN tier = 'Self-service'   THEN 'automated'
                    WHEN tier = 'Scale'          THEN cs_pool
-                   ELSE coalesce(csm_owner, 'cs_ops')
+                   -- no CSM yet: CS ops gets one task, on the "No CSM assigned"
+                   -- row below; this row waits for the new CSM to pick it up
+                   WHEN csm_owner IS NULL       THEN 'none'
+                   ELSE csm_owner
                END AS routed_to,
                CASE
                    WHEN status = 'Activating' THEN 'No action yet; check again tomorrow'
-                   -- an Enterprise account with no CSM can't be handed to "the CSM"
                    WHEN tier = 'Enterprise' AND csm_owner IS NULL
-                       THEN format('Assign a CSM first; they then pick up this {{}} account', lower(status))
+                       THEN format('Waiting for a CSM (see No CSM assigned); they then pick up this {{}} account',
+                                   lower(status))
                    WHEN status = 'Activated' AND tier = 'Self-service' THEN 'Send welcome email and self-onboarding pack'
                    WHEN status = 'Activated' AND tier = 'Scale'        THEN 'Send welcome email and onboarding workshop invite'
                    WHEN status = 'Activated'                           THEN 'CSM books a kickoff call'
