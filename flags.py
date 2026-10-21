@@ -14,8 +14,20 @@ Plus two checks on our own data, which go to CS ops rather than the customer:
   Handoff gap      events from an account that has no CRM record
   No CSM assigned  an Enterprise account in scope with no csm_owner
 
-Every row carries its reasons, who it is routed to and the action, and the
-results are saved to data/flags_activation.csv for the action log.
+Flag 2, churn risk. Looks at accounts live for the full 90 days of data and
+checks three signals:
+
+  Utilisation falling   under 40% now, and lower each month for two months
+  Breadth dropping      weekly active users 30%+ below their 90-day average
+  Errors rising         5+ ingestion errors in the last 30 days, more than before
+
+One usage signal = Watch, two = Act. Rising errors only count next to a usage
+signal (on their own they're noise), and they push Watch up to Act: falling
+usage plus rising errors often means data stopped arriving, so the action asks
+for a technical check first.
+
+Every row carries its reasons, who it is routed to and the action. Results are
+saved to data/flags_activation.csv and data/flags_churn.csv for the action log.
 
 Run:  python flags.py
 """
@@ -30,6 +42,10 @@ SCOPE_DAYS = 45        # only contracts from the last 45 days
 WINDOW_DAYS = 14       # activation must happen within 14 days of contract start
 MIN_USERS = 2          # "activated" needs at least this many active users
 SILENT_AFTER_DAYS = 10 # no events at all after this many days = silent
+
+CHURN_UTIL_BELOW = 40     # utilisation under this (in %) counts as low
+CHURN_BREADTH_DROP = 0.30 # weekly active users this far below their average
+CHURN_MIN_ERRORS = 5      # ingestion errors in the last 30 days that count as "rising"
 
 con = connect()
 
@@ -168,3 +184,141 @@ con.sql("""
 
 con.sql("COPY (SELECT * FROM activation ORDER BY status, account_id) TO 'data/flags_activation.csv' (HEADER)")
 print("\nSaved every row to data/flags_activation.csv")
+
+
+# --- Flag 2: churn risk ---------------------------------------------------------
+
+con.sql(f"""
+    CREATE VIEW churn AS
+    WITH base AS (
+        -- CRM accounts live for the whole 90-day window (we need two months of trend)
+        SELECT c.*, a.as_of_date
+        FROM crm c
+        CROSS JOIN as_of a
+        JOIN (SELECT account_id, min(event_date) AS go_live_date
+              FROM events GROUP BY account_id) f ON f.account_id = c.account_id
+        WHERE f.go_live_date <= a.as_of_date - 89
+    ),
+    monthly AS (
+        -- volume sent in each of the three 30-day months, oldest first
+        SELECT b.account_id,
+               sum(e.properties.event_count) FILTER (WHERE e.event_date <= b.as_of_date - 60) AS vol_m1,
+               sum(e.properties.event_count) FILTER (WHERE e.event_date >  b.as_of_date - 60
+                                                       AND e.event_date <= b.as_of_date - 30) AS vol_m2,
+               sum(e.properties.event_count) FILTER (WHERE e.event_date >  b.as_of_date - 30) AS vol_m3
+        FROM base b
+        JOIN events e ON e.account_id = b.account_id AND e.event_name = 'daily_event_volume'
+        GROUP BY b.account_id
+    ),
+    weekly AS (
+        -- active users this week vs. the average week (13 weeks in 90 days)
+        SELECT b.account_id,
+               count(DISTINCT e.user_id) FILTER (WHERE e.event_date > b.as_of_date - 7) AS wau_now,
+               count(DISTINCT e.user_id || '|' || CAST((b.as_of_date - e.event_date) // 7 AS VARCHAR)) / 13.0 AS wau_avg
+        FROM base b
+        JOIN events e ON e.account_id = b.account_id AND e.user_id IS NOT NULL
+        GROUP BY b.account_id
+    ),
+    errors AS (
+        SELECT b.account_id,
+               count(e.event_id) FILTER (WHERE e.event_date > b.as_of_date - 30) AS err_now,
+               count(e.event_id) FILTER (WHERE e.event_date >  b.as_of_date - 60
+                                           AND e.event_date <= b.as_of_date - 30) AS err_before
+        FROM base b
+        LEFT JOIN events e ON e.account_id = b.account_id AND e.event_name = 'ingestion_error'
+        GROUP BY b.account_id
+    ),
+    signals AS (
+        SELECT b.account_id, b.account_name, b.tier, b.region, b.csm_owner, b.cs_pool,
+               round(m.vol_m1 * 365 / 30 / b.contracted_events * 100) AS util_m1,
+               round(m.vol_m2 * 365 / 30 / b.contracted_events * 100) AS util_m2,
+               round(m.vol_m3 * 365 / 30 / b.contracted_events * 100) AS util_m3,
+               coalesce(w.wau_now, 0) AS wau_now,
+               coalesce(w.wau_avg, 0) AS wau_avg,
+               r.err_now, r.err_before
+        FROM base b
+        JOIN monthly m USING (account_id)
+        LEFT JOIN weekly w USING (account_id)
+        JOIN errors r USING (account_id)
+    ),
+    scored AS (
+        SELECT *,
+               util_m3 < {CHURN_UTIL_BELOW} AND util_m3 < util_m2 AND util_m2 < util_m1 AS util_falling,
+               wau_avg > 0 AND wau_now <= (1 - {CHURN_BREADTH_DROP}) * wau_avg          AS breadth_dropping,
+               err_now >= {CHURN_MIN_ERRORS} AND err_now > err_before                  AS errors_rising
+        FROM signals
+    ),
+    totals AS (
+        -- errors only raise the score: on their own they're noise (healthy
+        -- accounts get a bad week now and then), so they need a usage signal
+        SELECT *,
+               util_falling::INT + breadth_dropping::INT                              AS usage_signals,
+               util_falling::INT + breadth_dropping::INT
+                   + CASE WHEN errors_rising AND (util_falling OR breadth_dropping) THEN 1 ELSE 0 END AS score
+        FROM scored
+    )
+    SELECT account_id, account_name, tier, region,
+           CASE WHEN score >= 2
+                THEN 'Act' ELSE 'Watch' END AS status,
+           -- the reasons: the numbers behind each signal that fired
+           concat_ws('; ',
+               CASE WHEN util_falling THEN
+                   format('Utilisation {{}}%, then {{}}%, then {{}}% (falling two months running)',
+                          util_m1::INT, util_m2::INT, util_m3::INT) END,
+               CASE WHEN breadth_dropping THEN
+                   format('{{}} weekly active {{}} vs. {{}} on average ({{}}%)',
+                          wau_now, CASE WHEN wau_now = 1 THEN 'user' ELSE 'users' END,
+                          round(wau_avg, 1), round((wau_now / wau_avg - 1) * 100)::INT) END,
+               CASE WHEN errors_rising THEN
+                   -- show both months as they are: "up from" made flat trends sound like spikes
+                   format('{{}} ingestion errors in the last 30 days ({{}} the month before)',
+                          err_now, err_before) END
+           ) AS reasons,
+           -- Watch on Self-service has nobody to watch it: it only shows in this report
+           CASE
+               WHEN tier = 'Self-service' AND NOT (score >= 2)
+                   THEN 'none'
+               WHEN tier = 'Self-service' THEN 'automated'
+               WHEN tier = 'Scale'        THEN cs_pool
+               ELSE coalesce(csm_owner, 'cs_ops')
+           END AS routed_to,
+           CASE
+               WHEN score < 2 THEN
+                   CASE WHEN tier = 'Self-service' THEN 'No action; listed in the churn report'
+                        ELSE 'Watch: raise it at the next check-in' END
+               WHEN errors_rising AND tier = 'Self-service' THEN
+                   'Send "we noticed data issues" email with fix steps'
+               WHEN errors_rising THEN
+                   'Technical check first (ingestion errors are rising), then talk to the customer about usage'
+               WHEN tier = 'Self-service' THEN 'Send "getting more out of Cairnpath" email'
+               WHEN tier = 'Scale'        THEN 'Reach out this week and offer a usage review'
+               ELSE 'CSM calls this week: usage and breadth are both dropping'
+           END AS action
+    FROM totals
+    WHERE usage_signals >= 1
+""")
+
+print("\n\nChurn risk (accounts live for the full 90 days)")
+
+print("\n3. Accounts per status and tier")
+con.sql("""
+    SELECT status,
+           count(*) FILTER (WHERE tier = 'Enterprise')   AS "Enterprise",
+           count(*) FILTER (WHERE tier = 'Scale')        AS "Scale",
+           count(*) FILTER (WHERE tier = 'Self-service') AS "Self-service",
+           count(*)                                      AS total
+    FROM churn
+    GROUP BY status
+    ORDER BY status
+""").show()
+
+print("\n4. Churn work queue: everything that needs a human, by owner")
+con.sql("""
+    SELECT routed_to, status, account_id, account_name, reasons, action
+    FROM churn
+    WHERE routed_to NOT IN ('none', 'automated')
+    ORDER BY routed_to, status, account_id
+""").show(max_rows=100, max_width=360)
+
+con.sql("COPY (SELECT * FROM churn ORDER BY status, account_id) TO 'data/flags_churn.csv' (HEADER)")
+print("\nSaved every row to data/flags_churn.csv")
