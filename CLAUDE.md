@@ -82,8 +82,13 @@ One JSON event per line, one file per day in `data/events/`.
    Ingestion errors (5+ in 30 days, rising) only count next to a usage
    signal, and push Watch up to Act with a "technical check first" action.
    Self-service Watch has no owner: report only.
-3. Expansion: forecast to reach 90% of contracted volume before renewal,
-   and users or teams up 25%+ in a quarter.
+3. Expansion (accounts live for the full 90 days). Stays with CS: the
+   CSM builds the growth case, Sales only signs. Volume signal: 90%+ of
+   contract already, or 80%+ and climbing 3+ points a month fast enough to
+   pass 90% before renewal. Breadth signal: active users up 25%+ in two
+   months. Volume + breadth = Act (action depends on timing: overage now,
+   renewal within 3 months, or mid-term). Volume only = Watch with a
+   tracking check (rising volume with flat users is often over-tracking).
 4. QBR brief: about 30 days before next_qbr_date, an LLM writes a
    one-page brief ending with one suggested ask.
 
@@ -105,15 +110,18 @@ One JSON event per line, one file per day in `data/events/`.
   CS team table. Seeded, so output is repeatable.
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
   with the views events (schema declared explicitly), crm, cs_team, as_of
-  and utilisation. Every script uses it; define views here, once.
+  and utilisation, monthly_usage (utilisation and users per 30-day month).
+  Every script uses it; define views here, once.
 - `explore.py`: DuckDB summaries by tier, region and CSM.
-- `flags.py`: the activation and churn flags. One row per flagged account,
-  with reasons, routed_to and action; saved to `data/flags_activation.csv`
-  and `data/flags_churn.csv`.
+- `flags.py`: the activation, churn and expansion flags. One row per
+  flagged account, with reasons, routed_to and action; saved to
+  `data/flags_activation.csv`, `data/flags_churn.csv` and
+  `data/flags_expansion.csv`.
 
 ## Planned next
 
-- `flags.py`: the expansion flag next.
+- QBR brief: the LLM writes up SQL facts for Enterprise accounts with a
+  QBR in the next 30 days.
 - Engagement events: a second stream with the same schema (email_sent,
   email_opened, workshop_attended, meeting_held, ...) recording what CS
   did and how customers responded, so journeys can trigger on the last

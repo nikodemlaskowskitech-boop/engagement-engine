@@ -14,6 +14,7 @@ kind a real CS team runs.
 | --- | --- | --- |
 | Activation | New customers who are activated, stalled or silent, plus gaps in our own records (no CRM entry, no CSM assigned) | Automation, regional pools, named CSMs, CS ops |
 | Churn risk | Utilisation falling for two months, weekly active users dropping, and rising ingestion errors as a sign of a technical cause | Same routing, with Watch and Act levels |
+| Expansion | Accounts heading over their contract with a growing team, plus volume rising without users (often over-tracking) | CSMs and pools build the growth case; Sales only signs |
 
 Every flag shows the numbers behind it (for example *"Utilisation 52%, then
 39%, then 27%"*), who it is routed to and what to do next.
@@ -28,7 +29,7 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 python generate_events.py   # ~500 accounts, 90 days of events
 python explore.py           # the book of business at a glance
-python flags.py             # activation and churn flags, plus work queues
+python flags.py             # activation, churn and expansion flags, plus work queues
 ```
 
 ## Design choices
@@ -38,7 +39,10 @@ python flags.py             # activation and churn flags, plus work queues
 - **Every alert explains itself** and comes with an action. Alerts that only
   show a score get ignored.
 - **False alarms are treated as a bug.** Rising errors on their own flagged
-  41 healthy accounts, so they now only count alongside a usage signal.
+  41 healthy accounts, so they now only count alongside a usage signal. A
+  straight-line forecast flagged 32 healthy accounts as "heading over the
+  cap", so forecasts now only count for accounts already at 80% and
+  clearly climbing.
 - **Automation supplements CSMs; it doesn't replace them.** Rules catch the
   long tail across hundreds of accounts. They will always miss edge cases:
   healthy accounts that dip, and churners that look fine until they leave.

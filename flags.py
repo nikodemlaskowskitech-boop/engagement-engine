@@ -26,8 +26,20 @@ signal (on their own they're noise), and they push Watch up to Act: falling
 usage plus rising errors often means data stopped arriving, so the action asks
 for a technical check first.
 
+Flag 3, expansion. Looks at accounts live for the full 90 days that are
+heading over their contract:
+
+  Volume signal    at 90%+ of contracted volume already, or at 80%+ and climbing
+                   3+ points a month fast enough to pass 90% before renewal
+  Breadth signal   active users up 25%+ in the last two months
+
+Volume plus breadth = Act (real growth: the CSM builds the growth case; Sales
+only comes in to sign). Volume alone = Watch: rising volume with flat users is
+often over-tracking, so the action is a tracking check, not an upsell.
+
 Every row carries its reasons, who it is routed to and the action. Results are
-saved to data/flags_activation.csv and data/flags_churn.csv for the action log.
+saved to data/flags_activation.csv, data/flags_churn.csv and
+data/flags_expansion.csv for the action log.
 
 Run:  python flags.py
 """
@@ -46,6 +58,12 @@ SILENT_AFTER_DAYS = 10 # no events at all after this many days = silent
 CHURN_UTIL_BELOW = 40     # utilisation under this (in %) counts as low
 CHURN_BREADTH_DROP = 0.30 # weekly active users this far below their average
 CHURN_MIN_ERRORS = 5      # ingestion errors in the last 30 days that count as "rising"
+
+EXP_AT_CAP = 90           # utilisation (in %) that counts as "at the cap"
+EXP_HIGH = 80             # forecasts only count from this utilisation up...
+EXP_MIN_CLIMB = 3         # ...and when climbing at least this many points a month
+EXP_BREADTH_GROWTH = 0.25 # active users up this much in two months
+RENEWAL_SOON_MONTHS = 3   # renewal this close: take the growth case into the renewal
 
 con = connect()
 
@@ -191,24 +209,12 @@ print("\nSaved every row to data/flags_activation.csv")
 con.sql(f"""
     CREATE VIEW churn AS
     WITH base AS (
-        -- CRM accounts live for the whole 90-day window (we need two months of trend)
+        -- CRM accounts live for the whole 90-day window (we need two months of trend);
+        -- monthly_usage already holds exactly those accounts
         SELECT c.*, a.as_of_date
         FROM crm c
+        JOIN monthly_usage mu ON mu.account_id = c.account_id
         CROSS JOIN as_of a
-        JOIN (SELECT account_id, min(event_date) AS go_live_date
-              FROM events GROUP BY account_id) f ON f.account_id = c.account_id
-        WHERE f.go_live_date <= a.as_of_date - 89
-    ),
-    monthly AS (
-        -- volume sent in each of the three 30-day months, oldest first
-        SELECT b.account_id,
-               sum(e.properties.event_count) FILTER (WHERE e.event_date <= b.as_of_date - 60) AS vol_m1,
-               sum(e.properties.event_count) FILTER (WHERE e.event_date >  b.as_of_date - 60
-                                                       AND e.event_date <= b.as_of_date - 30) AS vol_m2,
-               sum(e.properties.event_count) FILTER (WHERE e.event_date >  b.as_of_date - 30) AS vol_m3
-        FROM base b
-        JOIN events e ON e.account_id = b.account_id AND e.event_name = 'daily_event_volume'
-        GROUP BY b.account_id
     ),
     weekly AS (
         -- active users this week vs. the average week (13 weeks in 90 days)
@@ -230,14 +236,12 @@ con.sql(f"""
     ),
     signals AS (
         SELECT b.account_id, b.account_name, b.tier, b.region, b.csm_owner, b.cs_pool,
-               round(m.vol_m1 * 365 / 30 / b.contracted_events * 100) AS util_m1,
-               round(m.vol_m2 * 365 / 30 / b.contracted_events * 100) AS util_m2,
-               round(m.vol_m3 * 365 / 30 / b.contracted_events * 100) AS util_m3,
+               m.util_m1, m.util_m2, m.util_m3,
                coalesce(w.wau_now, 0) AS wau_now,
                coalesce(w.wau_avg, 0) AS wau_avg,
                r.err_now, r.err_before
         FROM base b
-        JOIN monthly m USING (account_id)
+        JOIN monthly_usage m USING (account_id)
         LEFT JOIN weekly w USING (account_id)
         JOIN errors r USING (account_id)
     ),
@@ -322,3 +326,95 @@ con.sql("""
 
 con.sql("COPY (SELECT * FROM churn ORDER BY status, account_id) TO 'data/flags_churn.csv' (HEADER)")
 print("\nSaved every row to data/flags_churn.csv")
+
+
+# --- Flag 3: expansion ----------------------------------------------------------
+
+con.sql(f"""
+    CREATE VIEW expansion AS
+    WITH signals AS (
+        SELECT c.account_id, c.account_name, c.tier, c.region, c.csm_owner, c.cs_pool,
+               m.util_m1, m.util_m3, m.users_m1, m.users_m3,
+               (m.util_m3 - m.util_m1) / 2.0             AS climb_per_month,
+               (c.renewal_date - a.as_of_date) / 30.0     AS months_to_renewal
+        FROM crm c
+        JOIN monthly_usage m USING (account_id)
+        CROSS JOIN as_of a
+    ),
+    scored AS (
+        SELECT *,
+               -- a straight-line forecast only counts when the account is already
+               -- high and clearly climbing: small noisy drifts projected over months
+               -- would otherwise "reach the cap" on paper
+               util_m3 >= {EXP_AT_CAP}
+                   OR (util_m3 >= {EXP_HIGH} AND climb_per_month >= {EXP_MIN_CLIMB}
+                       AND util_m3 + climb_per_month * months_to_renewal >= {EXP_AT_CAP}) AS volume_signal,
+               users_m1 > 0 AND users_m3 >= (1 + {EXP_BREADTH_GROWTH}) * users_m1     AS breadth_signal,
+               ceil(({EXP_AT_CAP} - util_m3) / nullif(climb_per_month, 0))             AS months_to_cap
+        FROM signals
+    )
+    SELECT account_id, account_name, tier, region,
+           CASE WHEN breadth_signal THEN 'Act' ELSE 'Watch' END AS status,
+           concat_ws('; ',
+               CASE
+                   WHEN util_m3 >= 100 THEN
+                       format('Already over the contract: {{}}% of contracted volume', util_m3::INT)
+                   WHEN util_m3 >= {EXP_AT_CAP} THEN
+                       format('Already at {{}}% of contracted volume', util_m3::INT)
+                   ELSE
+                       format('Utilisation {{}}% and climbing {{}} points a month: about {{}} months to {EXP_AT_CAP}%, renewal in {{}}',
+                              util_m3::INT, round(climb_per_month)::INT, months_to_cap::INT,
+                              round(months_to_renewal)::INT)
+               END,
+               CASE WHEN breadth_signal THEN
+                   format('{{}} active users this month vs. {{}} two months ago (+{{}}%)',
+                          users_m3, users_m1, round((users_m3 / users_m1 - 1) * 100)::INT) END
+           ) AS reasons,
+           -- expansion stays with CS: the CSM (or pool) builds the case, Sales signs
+           CASE
+               WHEN tier = 'Self-service' THEN 'automated'
+               WHEN tier = 'Scale'        THEN cs_pool
+               ELSE coalesce(csm_owner, 'cs_ops')
+           END AS routed_to,
+           CASE
+               WHEN NOT breadth_signal AND tier = 'Self-service' THEN
+                   'Send "nearing your plan limit" email with a link to review tracked events'
+               WHEN NOT breadth_signal THEN
+                   'Check the tracking first: volume is rising but users are not (possible over-tracking)'
+               WHEN tier = 'Self-service' THEN
+                   'Send upgrade offer: nearing the plan limit with a growing team'
+               WHEN util_m3 >= 100 THEN
+                   'Already over the contract: talk about the overage now and build the upgrade case'
+               WHEN months_to_renewal <= {RENEWAL_SOON_MONTHS} THEN
+                   'Renewal within 3 months: bring the growth case into the renewal'
+               ELSE
+                   'Mid-term growth conversation: build the upgrade case before they hit the cap'
+           END AS action
+    FROM scored
+    WHERE volume_signal
+""")
+
+print("\n\nExpansion (accounts live for the full 90 days)")
+
+print("\n5. Accounts per status and tier")
+con.sql("""
+    SELECT status,
+           count(*) FILTER (WHERE tier = 'Enterprise')   AS "Enterprise",
+           count(*) FILTER (WHERE tier = 'Scale')        AS "Scale",
+           count(*) FILTER (WHERE tier = 'Self-service') AS "Self-service",
+           count(*)                                      AS total
+    FROM expansion
+    GROUP BY status
+    ORDER BY status
+""").show()
+
+print("\n6. Expansion work queue: everything that needs a human, by owner")
+con.sql("""
+    SELECT routed_to, status, account_id, account_name, reasons, action
+    FROM expansion
+    WHERE routed_to NOT IN ('none', 'automated')
+    ORDER BY routed_to, status, account_id
+""").show(max_rows=100, max_width=360)
+
+con.sql("COPY (SELECT * FROM expansion ORDER BY status, account_id) TO 'data/flags_expansion.csv' (HEADER)")
+print("\nSaved every row to data/flags_expansion.csv")
