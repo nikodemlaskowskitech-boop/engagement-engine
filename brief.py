@@ -30,6 +30,8 @@ import anthropic
 
 sys.stdout.reconfigure(encoding="utf-8")
 
+REPO = Path(__file__).resolve().parent   # the repo root, wherever the terminal is
+
 MODEL = "claude-sonnet-5-5"
 PRICE_PER_MILLION = {"input": 2.00, "output": 10.00}   # USD, Claude Sonnet 5.5 list price
 MAX_OUTPUT_TOKENS = 1500
@@ -75,15 +77,20 @@ facts above.
 
 
 def load_api_key():
-    """Read ANTHROPIC_API_KEY from .env (git-ignored) without printing it."""
-    env = Path(".env")
+    """Read ANTHROPIC_API_KEY from .env (git-ignored) without printing it.
+
+    The .env file is looked up next to this script, not in the folder the
+    terminal happens to be in, so it works wherever you run it from.
+    """
+    env = Path(__file__).resolve().parent / ".env"
     if env.exists():
         for line in env.read_text(encoding="utf-8-sig").splitlines():
             name, _, value = line.partition("=")
             if name.strip() == "ANTHROPIC_API_KEY" and value.strip():
                 os.environ["ANTHROPIC_API_KEY"] = value.strip().strip('"').strip("'")
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        sys.exit("No API key: add ANTHROPIC_API_KEY=... to the .env file in the repo root")
+        sys.exit(f"No API key: looked for ANTHROPIC_API_KEY in {env} "
+                 f"({'file found' if env.exists() else 'file not found'})")
 
 
 def numbers_in(text):
@@ -109,7 +116,7 @@ def unverified_numbers(brief, pack):
 
 def put_back_user_ids(text, account_id):
     """Replace aliases with real user IDs, outside the model."""
-    with open("data/qbr_user_key.csv", encoding="utf-8") as f:
+    with open(REPO / "data" / "qbr_user_key.csv", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             if row["account_id"] == account_id:
                 text = text.replace(row["alias"], f"{row['alias']} ({row['user_id']})")
@@ -118,14 +125,14 @@ def put_back_user_ids(text, account_id):
 
 def main():
     load_api_key()
-    packs = json.loads(Path("data/qbr_facts.json").read_text(encoding="utf-8"))
+    packs = json.loads(REPO / "data" / "qbr_facts.json".read_text(encoding="utf-8"))
     if len(sys.argv) > 1:
         packs = [p for p in packs if p["account"]["account_id"] == sys.argv[1]]
         if not packs:
             sys.exit(f"No QBR facts pack for {sys.argv[1]}: run python qbr.py and check the ID")
 
     client = anthropic.Anthropic()
-    out_dir = Path("data/briefs")
+    out_dir = REPO / "data" / "briefs"
     out_dir.mkdir(parents=True, exist_ok=True)
     total_in = total_out = 0
 
