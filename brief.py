@@ -11,6 +11,9 @@ outside the model.
 
 Needs an Anthropic API key in a git-ignored .env file in the repo root:
     ANTHROPIC_API_KEY=sk-ant-...
+Best scoped to a workspace in the Claude Console. An organisation-wide key
+also needs the workspace ID on a second line:
+    ANTHROPIC_WORKSPACE_ID=wrkspc_...
 
 Run qbr.py first, then:
     python brief.py              # a brief for every QBR in the next 30 days
@@ -29,6 +32,8 @@ from pathlib import Path
 import anthropic
 
 sys.stdout.reconfigure(encoding="utf-8")
+
+REPO = Path(__file__).resolve().parent   # the repo root, wherever the terminal is
 
 MODEL = "claude-sonnet-5-5"
 PRICE_PER_MILLION = {"input": 2.00, "output": 10.00}   # USD, Claude Sonnet 5.5 list price
@@ -63,7 +68,11 @@ Each open flag and any other warning sign in the facts (falling usage,
 champion slowing down, ingestion errors), with its numbers.
 
 ## Opportunities
-Underused add-ons and any growth signal. Omit the section if there are none.
+Growth signals only. Omit the section if there are none.
+An unused paid add-on is NOT an opportunity when the account has an open
+churn flag: it is a downsell risk at renewal (the customer will ask why they
+pay for it), so list it under Risks instead. Without a churn flag, list it
+here as something to understand: why isn't it used?
 
 ## People
 Who carries the account (champion or not) and what that means for the QBR.
@@ -75,15 +84,21 @@ facts above.
 
 
 def load_api_key():
-    """Read ANTHROPIC_API_KEY from .env (git-ignored) without printing it."""
-    env = Path(".env")
+    """Read ANTHROPIC_API_KEY (and, optionally, ANTHROPIC_WORKSPACE_ID) from
+    .env (git-ignored) without printing them.
+
+    The .env file is looked up next to this script, not in the folder the
+    terminal happens to be in, so it works wherever you run it from.
+    """
+    env = Path(__file__).resolve().parent / ".env"
     if env.exists():
         for line in env.read_text(encoding="utf-8-sig").splitlines():
             name, _, value = line.partition("=")
-            if name.strip() == "ANTHROPIC_API_KEY" and value.strip():
-                os.environ["ANTHROPIC_API_KEY"] = value.strip().strip('"').strip("'")
+            if name.strip() in ("ANTHROPIC_API_KEY", "ANTHROPIC_WORKSPACE_ID") and value.strip():
+                os.environ[name.strip()] = value.strip().strip('"').strip("'")
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        sys.exit("No API key: add ANTHROPIC_API_KEY=... to the .env file in the repo root")
+        sys.exit(f"No API key: looked for ANTHROPIC_API_KEY in {env} "
+                 f"({'file found' if env.exists() else 'file not found'})")
 
 
 def numbers_in(text):
@@ -109,7 +124,7 @@ def unverified_numbers(brief, pack):
 
 def put_back_user_ids(text, account_id):
     """Replace aliases with real user IDs, outside the model."""
-    with open("data/qbr_user_key.csv", encoding="utf-8") as f:
+    with open(REPO / "data" / "qbr_user_key.csv", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             if row["account_id"] == account_id:
                 text = text.replace(row["alias"], f"{row['alias']} ({row['user_id']})")
@@ -118,14 +133,18 @@ def put_back_user_ids(text, account_id):
 
 def main():
     load_api_key()
-    packs = json.loads(Path("data/qbr_facts.json").read_text(encoding="utf-8"))
+    packs = json.loads((REPO / "data" / "qbr_facts.json").read_text(encoding="utf-8"))
     if len(sys.argv) > 1:
         packs = [p for p in packs if p["account"]["account_id"] == sys.argv[1]]
         if not packs:
             sys.exit(f"No QBR facts pack for {sys.argv[1]}: run python qbr.py and check the ID")
 
-    client = anthropic.Anthropic()
-    out_dir = Path("data/briefs")
+    # A key scoped to one workspace needs nothing more. An organisation-wide key
+    # must say which workspace each request is for, via this header.
+    workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+    client = anthropic.Anthropic(
+        default_headers={"anthropic-workspace-id": workspace} if workspace else None)
+    out_dir = REPO / "data" / "briefs"
     out_dir.mkdir(parents=True, exist_ok=True)
     total_in = total_out = 0
 
