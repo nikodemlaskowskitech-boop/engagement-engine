@@ -138,7 +138,9 @@ One JSON event per line, one file per day in `data/events/`.
    in the brief"), they're logged "covered by the QBR", no "No meeting"
    escalation, and team_report.py counts the QBR as the action when the
    signal came in the 30 days before it. The flag rows stay, for tracking.
-   If the QBR date passes with no QBR held, the flag is raised again.
+   If the QBR date passes with no QBR held (view qbr_slips, from the action
+   log), the flag is raised again as a normal task, never handed to a QBR
+   again, and a newly booked QBR no longer holds back the escalation.
 
 ## Design rules
 
@@ -182,7 +184,8 @@ One JSON event per line, one file per day in `data/events/`.
   with the views events (schema declared explicitly), engagement (the CS
   history, same schema), crm, cs_team, as_of
   and utilisation, monthly_usage (utilisation and users per 30-day month),
-  qbr_schedule (QBR coming up / overdue), daily_util_30d (30-day
+  qbr_schedule (QBR coming up / overdue), qbr_slips (flags handed to a
+  QBR that didn't happen, from the action log), daily_util_30d (30-day
   utilisation on every day, rounded like the flags), last_touch (last CS touch,
   last meeting, getting-started email opened or not, per account).
   Every script uses it; define views here, once.

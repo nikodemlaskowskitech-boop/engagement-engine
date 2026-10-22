@@ -42,7 +42,9 @@ QBR task lists the open flags ("also in the brief: ..."), qbr.py puts them in
 the facts pack, and the flag is logged as "covered by the QBR on <date>". The
 flag files keep the rows, so the problem is still tracked, and team_report.py
 counts the QBR as the action. If the QBR date passes with no QBR held, the
-flag is raised again as a normal task (the QBR slipped; the problem didn't).
+flag is raised again as a normal task (the QBR slipped; the problem didn't),
+and it is never handed to a QBR again: a customer who keeps moving the QBR
+can't park a problem for months.
 
 Facts the pipeline creates ("welcome sent") live here, never in the CRM.
 Each customer email also becomes an email_sent event in the engagement stream
@@ -61,7 +63,7 @@ import urllib.error
 import uuid
 import urllib.request
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from time import sleep
 
@@ -186,26 +188,20 @@ in_the_brief = defaultdict(list)          # account -> flags folded into its QBR
 
 # What was already done, from earlier runs
 done = set()
-# QBRs actually held, per account, to check that a "covered by the QBR" happened
-qbrs_held = defaultdict(list)
-for account_id, held_on in con.sql("""SELECT account_id, event_date FROM engagement
-                                      WHERE event_name = 'meeting_held' AND properties.topic = 'qbr'""").fetchall():
-    qbrs_held[account_id].append(held_on)
-
-
-def qbr_slipped(row):
-    """A flag handed to a QBR whose date has passed with no QBR held since: the
-    QBR slipped, so the flag is raised again instead of staying "done"."""
-    if row["channel"] != "qbr":
-        return False
-    qbr_date = date.fromisoformat(row["outcome"].rsplit(" ", 1)[-1])
-    logged_on = date.fromisoformat(row["logged_on"])
-    return qbr_date < run_date and not any(d >= logged_on for d in qbrs_held[row["account_id"]])
-
+# Flags handed to a QBR that then didn't happen (view qbr_slips, cairnpath_db.py):
+# key -> the QBR date that was promised. Each flag gets one QBR, not a new one
+# every time the date moves: these come back as normal tasks.
+slipped = {(a, fl, st): promised for a, fl, st, promised
+           in con.sql("SELECT account_id, flag, status, max(promised_qbr) FROM qbr_slips GROUP BY ALL").fetchall()}
 
 if LOG.exists():
     with LOG.open(encoding="utf-8") as f:
-        done = {key(r) for r in csv.DictReader(f) if not qbr_slipped(r)}
+        last_channel = {key(r): r["channel"] for r in csv.DictReader(f)}   # the log is in time order
+    done = set(last_channel)
+    # a slipped flag whose last log entry is still "covered by the QBR" goes out again,
+    # once: after that its last entry is the new task, so it counts as done
+    slipped = {k: v for k, v in slipped.items() if last_channel.get(k) == "qbr"}
+    done -= set(slipped)
 
 # What the flags ask for today, grouped by where it goes
 new = defaultdict(list)        # owner (or "email") -> new tasks
@@ -222,7 +218,10 @@ for flag in FLAGS:
             if key(task) in done:
                 skipped += 1
                 continue
-            if flag in QBR_COVERS and r["account_id"] in qbr_soon:
+            if key(task) in slipped:                    # its QBR came and went: don't wait again
+                task["action"] = (f"QBR due {slipped[key(task)]} didn't happen: act now, "
+                                  f"don't wait for the next one. {task['action']}")
+            elif flag in QBR_COVERS and r["account_id"] in qbr_soon:
                 new["qbr_covered"].append(task)         # logged, no separate task
                 in_the_brief[r["account_id"]].append(f"{flag} {r['status']}")
                 done.add(key(task))
