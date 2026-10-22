@@ -30,7 +30,7 @@ import sys
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
-from slack_loop import CALL_TOPIC, OUTCOMES, SLACK, append_event, load_env, run_date
+from slack_loop import CALL_TOPIC, OUTCOMES, SLACK, append_event, flag_label, load_env, run_date
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -77,7 +77,7 @@ def log_call(ack, body, client):
         "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": [
             {"type": "section", "text": {"type": "mrkdwn",
-                                         "text": f"*{ref['n']}* ({ref['a']}) · {ref['f']} {ref['s']}"}},
+                                         "text": f"*{ref['n']}* ({ref['a']}) · {flag_label(ref['f'], ref['s'])}"}},
             {"type": "input", "block_id": "outcome", "label": {"type": "plain_text", "text": "Outcome"},
              "element": {"type": "static_select", "action_id": "value", "options": [
                  {"text": {"type": "plain_text", "text": label}, "value": key}
@@ -102,7 +102,7 @@ def log_call_submitted(ack, body, view, client):
     # can't read messages, by design, so the card is rebuilt from what we know)
     text = f":telephone_receiver: Call logged by <@{user}>: *{OUTCOMES[outcome]}*" + (f" · _{note}_" if note else "")
     client.chat_update(channel=ref["channel"], ts=ref["ts"], text=f"{ref['n']}: call logged", blocks=[
-        {"type": "section", "text": {"type": "mrkdwn", "text": f"*{ref['n']}* ({ref['a']}) · {ref['f']} *{ref['s']}*"}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": f"*{ref['n']}* ({ref['a']}) · {flag_label(ref['f'], ref['s'])}"}},
         {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]},
         {"type": "actions", "elements": [{"type": "button", "action_id": "open_timeline",
                                           "text": {"type": "plain_text", "text": "Open timeline"},

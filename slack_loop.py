@@ -53,6 +53,11 @@ def card_channel(owner_id, demo_user):
     return demo_user if owner_id in SLACK["dm_owners"] else SLACK["team_channel"]
 
 
+def flag_label(flag, status):
+    """'churn *Act*', but just '*QBR coming up*' when the status already names the flag."""
+    return f"*{status}*" if flag.lower() in status.lower() else f"{flag} *{status}*"
+
+
 def card_blocks(task, owner_name, last_touch=None):
     """One task as a Slack card (Block Kit): what, why, what to do, and three buttons."""
     name = task["account_name"] or "(not in the CRM)"
@@ -62,7 +67,7 @@ def card_blocks(task, owner_name, last_touch=None):
     link = f"{SLACK['cockpit_url']}#{task['account_id']}"
     return [
         {"type": "section", "text": {"type": "mrkdwn", "text":
-            f"*{name}* ({task['account_id']}) · {task['flag']} *{task['status']}*\n"
+            f"*{name}* ({task['account_id']}) · {flag_label(task['flag'], task['status'])}\n"
             f"{task['reasons']}\n→ {task['action']}"}},
         {"type": "context", "elements": [{"type": "mrkdwn", "text": f"For *{owner_name}* · {touch}"}]},
         {"type": "actions", "block_id": "task_actions", "elements": [
