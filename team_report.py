@@ -39,29 +39,7 @@ con = connect()
 
 con.sql(f"""
     CREATE VIEW time_to_action AS
-    WITH daily AS (
-        SELECT account_id, event_date, properties.event_count AS vol
-        FROM events
-        WHERE event_name = 'daily_event_volume'
-    ),
-    rolling AS (
-        -- 30-day utilisation on every day, the way the flags measure it
-        SELECT account_id, event_date,
-               sum(vol) OVER w   AS vol_30d,
-               count(*) OVER w   AS days_in_window
-        FROM daily
-        WINDOW w AS (PARTITION BY account_id ORDER BY event_date
-                     ROWS BETWEEN 29 PRECEDING AND CURRENT ROW)
-    ),
-    util_30d AS (
-        SELECT t.account_id, t.event_date,
-               -- rounded like the flags (79.6% counts as 80%), so both agree
-               round(t.vol_30d * 365.0 / 30 / c.contracted_events * 100) AS util
-        FROM rolling t
-        JOIN crm c USING (account_id)
-        WHERE t.days_in_window = 30          -- a full 30 days, or it isn't comparable
-    ),
-    act AS (
+    WITH act AS (
         SELECT account_id, routed_to, 'churn' AS flag
         FROM read_csv_auto('data/flags_churn.csv') WHERE status = 'Act'
         UNION ALL
@@ -73,7 +51,7 @@ con.sql(f"""
                min(u.event_date) FILTER (WHERE (a.flag = 'churn' AND u.util < 40)
                                             OR (a.flag = 'expansion' AND u.util >= 80)) AS signal_date
         FROM act a
-        JOIN util_30d u USING (account_id)
+        JOIN daily_util_30d u USING (account_id)    -- 30-day utilisation per day (cairnpath_db.py)
         GROUP BY a.account_id, a.routed_to, a.flag
     ),
     calls AS (

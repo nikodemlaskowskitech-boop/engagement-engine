@@ -157,7 +157,8 @@ One JSON event per line, one file per day in `data/events/`.
   with the views events (schema declared explicitly), engagement (the CS
   history, same schema), crm, cs_team, as_of
   and utilisation, monthly_usage (utilisation and users per 30-day month),
-  qbr_schedule (QBR coming up / overdue), last_touch (last CS touch,
+  qbr_schedule (QBR coming up / overdue), daily_util_30d (30-day
+  utilisation on every day, rounded like the flags), last_touch (last CS touch,
   last meeting, getting-started email opened or not, per account).
   Every script uses it; define views here, once.
 - `explore.py`: DuckDB summaries by tier, region and CSM, plus CS
@@ -172,7 +173,8 @@ One JSON event per line, one file per day in `data/events/`.
 - `journeys.py`: rules on the last touch (run `flags.py` first). "Email
   never opened": Self-service stalled/silent, getting-started email 5+ days
   old and unopened -> CS ops checks the contact. "No meeting in 30 days":
-  churn or expansion Act (Scale/Enterprise) with no meeting in 30 days ->
+  churn or expansion Act (Scale/Enterprise) for 14+ days with no meeting
+  in 30 days ->
   escalated to the owner's manager (one Slack message per manager). Saved
   to `data/flags_journey.csv`, same columns as the flags.
 - `team_report.py`: time to action by owner and manager (run `flags.py`
