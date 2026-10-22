@@ -131,7 +131,7 @@ CS_TEAM = [
 
 PERSONALITIES = {
     "healthy": dict(
-        weight=0.57, lifecycle="existing",
+        weight=0.51, lifecycle="existing",
         activity=(0.6, 0.6), util=(0.65, 0.70), user_growth=1.1, errors=(0.02, 0.02),
         features=["chart_created", "dashboard_shared", "cohort_created", "data_export"],
     ),
@@ -146,8 +146,8 @@ PERSONALITIES = {
         features=["chart_created", "dashboard_shared", "cohort_created",
                   "experiment_launched", "data_export"],
     ),
-    "new_customer": dict(      # signs recently, installs the SDK, the team gets going
-        weight=0.08, lifecycle="new",
+    "new_customer": dict(      # signs during the window, installs the SDK, the team gets going
+        weight=0.14, lifecycle="new",
         activity=(0.5, 0.5), util=(0.30, 0.30), user_growth=1.4, errors=(0.03, 0.03),
         features=["chart_created", "dashboard_shared"],
     ),
@@ -225,11 +225,15 @@ def contract_start_for(personality):
     if p["lifecycle"] == "existing":
         # Signed before the data window, renewal still ahead (offset < 275 days)
         return START_DATE - timedelta(days=random.randint(10, 270))
+    # Silent and stalled accounts are recent: older ones would have been
+    # rescued or lost by now, so they stay inside the activation window.
     if personality == "never_onboarded":
         return END_DATE - timedelta(days=random.randint(12, 40))
     if personality == "stalled":
         return END_DATE - timedelta(days=random.randint(16, 40))
-    return END_DATE - timedelta(days=random.randint(3, 40))      # new_customer
+    # Healthy new customers sign all through the window, like a real sales
+    # pipeline, so onboarding shows up every week (not just in the last six).
+    return END_DATE - timedelta(days=random.randint(3, DAYS - 2))      # new_customer
 
 
 # --- Build the book of business ----------------------------------------------

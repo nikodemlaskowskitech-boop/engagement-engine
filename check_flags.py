@@ -45,6 +45,14 @@ flags = {name: read(f"flags_{name}.csv") for name in ("activation", "churn", "ex
 con = connect()
 util_now = dict(con.sql("SELECT account_id, util_m3 FROM monthly_usage").fetchall())
 
+# The activation flag only looks at contracts from the last 45 days (SCOPE_DAYS
+# in flags.py). A customer who signed in July is past onboarding by October,
+# so it can't be expected to show up there.
+ACTIVATION_SCOPE_DAYS = 45
+in_activation_scope = {a for (a,) in con.sql(f"""
+    SELECT c.account_id FROM crm c, as_of a
+    WHERE a.as_of_date - c.contract_start <= {ACTIVATION_SCOPE_DAYS}""").fetchall()}
+
 
 def personality(account_id):
     return key[account_id]["personality"]
@@ -75,7 +83,7 @@ EXPECTATIONS = [
     ("Stalled accounts show as Stalled",         "activation", {"Stalled"},     "stalled",         100),
     ("Never-onboarded accounts show as Silent",  "activation", {"Silent"},      "never_onboarded", 100),
     ("Handoff gaps are caught",                  "activation", {"Handoff gap"}, "handoff_gap",     100),
-    ("New customers activate",                   "activation", {"Activated", "Activating"}, "new_customer", 90),
+    ("New customers (last 45 days) activate",    "activation", {"Activated", "Activating"}, "new_customer", 90),
     ("Declining accounts raise a churn flag",    "churn",      {"Act", "Watch"}, "declining",      90),
     # Power users are engaged, but some bought far more than they use: with
     # headroom left there's no expansion case yet, so not all of them qualify.
@@ -95,6 +103,8 @@ problems = []
 
 for label, flag, statuses, p, min_pct in EXPECTATIONS:
     should = [a for a, r in key.items() if r["personality"] == p]
+    if flag == "activation" and p != "handoff_gap":      # handoff gaps have no contract date
+        should = [a for a in should if a in in_activation_scope]
     hit = {r["account_id"] for r in flags[flag] if r["status"] in statuses}
     found = [a for a in should if a in hit]
     # Activation statuses belong to one personality each, so anyone else there is
