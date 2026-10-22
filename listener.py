@@ -112,8 +112,11 @@ def log_call_submitted(ack, body, view, client):
 
 
 @app.action("open_timeline")
-def open_timeline(ack):
-    ack()                                           # a link button: Slack opens it, we just say "seen"
+def open_timeline(ack, body):
+    ack()                                           # a link button: Slack opens the page itself
+    # Looking isn't acting, so nothing is recorded; just show it in the window
+    url = body["actions"][0].get("url", "")
+    print(f"  opened      {url.rsplit('#', 1)[-1]}  (timeline, nothing recorded)")
 
 
 if __name__ == "__main__":
