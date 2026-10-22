@@ -79,8 +79,10 @@ One JSON event per line, one file per day in `data/events/`.
   engagement): email_sent, email_opened, workshop_attended, meeting_held,
   with properties.owner_id (csm_*, pool_*, automated) and properties.topic
   (getting_started, onboarding_workshop, advanced_workshop, qbr, kickoff,
-  check_in, churn_call, activation_call). user_id = the customer user who
-  responded or attended.
+  check_in, churn_call, activation_call; from actions.py: welcome_pack,
+  invite_your_team, need_help_starting). user_id = the customer user who
+  responded or attended. context.source says who wrote it (cs_history from
+  the generator, actions.py for new actions).
 
 ## The four flags
 
@@ -170,6 +172,9 @@ One JSON event per line, one file per day in `data/events/`.
   and are previewed in #email-preview. Webhooks in `.env`
   (SLACK_WEBHOOK_QUEUE, SLACK_WEBHOOK_EMAIL): secrets, like the API key.
   An action is logged only after its post worked, so failures retry.
+  Each customer email is also written as an email_sent event to
+  `data/engagement/<run date>.jsonl`. `generate_events.py` clears the log,
+  since new data makes old actions meaningless.
   `none` and `report` rows aren't actions. The log only grows; delete it
   to start over.
 - `qbr.py`: QBR facts packs (run `flags.py` first). Writes
@@ -186,8 +191,8 @@ One JSON event per line, one file per day in `data/events/`.
   library's Bedrock client), so the key disappears in favour of an IAM role.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
-- Engagement events: the history exists; next `actions.py` writes new
-  email_sent events, then journeys trigger on the last touch and reports
+- Engagement events: the history exists and `actions.py` adds new
+  email_sent events; next, journeys trigger on the last touch and reports
   show time to action and outcome by CSM and team. Views to build: account
   timeline, onboarding funnel (welcomed vs. control), CS team activity,
   book-of-business heatmap.

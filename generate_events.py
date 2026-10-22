@@ -646,6 +646,12 @@ if __name__ == "__main__":
     key_path = write_answer_key(accounts)
     total = write_events(accounts)
     cs_total = write_engagement(accounts)
+    # New data is a new world: actions logged against the old data no longer
+    # match anything, and their email events were just wiped with data/engagement/
+    old_log = OUT_DIR / "action_log.csv"
+    if old_log.exists():
+        old_log.unlink()
+        print("Action log: cleared (it belonged to the previous data)")
     print(f"Accounts:   {len(accounts)} ({sum(a['in_crm'] for a in accounts)} in the CRM)")
     print(f"CS team:    {team_path}")
     print(f"CRM table:  {crm_path}")

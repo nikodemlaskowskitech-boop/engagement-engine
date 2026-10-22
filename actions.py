@@ -31,6 +31,9 @@ An action is logged only after its Slack post worked. If a post fails, those
 actions stay out of the log and are retried on the next run.
 
 Facts the pipeline creates ("welcome sent") live here, never in the CRM.
+Each customer email also becomes an email_sent event in the engagement stream
+(data/engagement/<run date>.jsonl), so the CS history and new actions sit on
+one timeline that journeys and views can read.
 
 Run flags.py first, then:  python actions.py
 Run it twice: the second run should post and log nothing new.
@@ -41,8 +44,10 @@ import json
 import os
 import sys
 import urllib.error
+import uuid
 import urllib.request
 from collections import defaultdict
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from cairnpath_db import connect
@@ -55,6 +60,13 @@ LOG = DATA / "action_log.csv"
 FLAGS = ("activation", "churn", "expansion", "qbr")
 NOT_ACTIONS = {"none", "report"}
 COLUMNS = ["logged_on", "account_id", "flag", "status", "routed_to", "channel", "action", "outcome"]
+
+# Which customer email each automated action is, as a topic in the engagement stream
+EMAIL_TOPICS = {("activation", "Activated"): "welcome_pack",
+                ("activation", "Stalled"):   "invite_your_team",
+                ("activation", "Silent"):    "need_help_starting"}
+EMAIL_HOUR = 9                                    # emails go out at 9:00 local time
+UTC_OFFSET_HOURS = {"UK&I": 1, "DACH": 2, "France & Benelux": 2, "Nordics": 2}
 
 
 def load_webhooks():
@@ -81,6 +93,28 @@ def post_to_slack(webhook, text):
         # the error never includes the address, so it's safe to print
         print(f"  Slack post failed ({error}): not logged, will retry next run")
         return False
+
+
+def write_email_events(tasks):
+    """Record each customer email as an email_sent event, same schema as the
+    CS history the generator wrote."""
+    path = DATA / "engagement" / f"{run_date}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        for t in tasks:
+            sent = (datetime.combine(run_date, time(EMAIL_HOUR))
+                    - timedelta(hours=UTC_OFFSET_HOURS.get(t["region"], 1)))
+            f.write(json.dumps({
+                "event_id": str(uuid.uuid4()),
+                "event_name": "email_sent",
+                "event_type": "engagement",
+                "timestamp": sent.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "account_id": t["account_id"],
+                "user_id": None,
+                "properties": {"owner_id": "automated",
+                               "topic": EMAIL_TOPICS.get((t["flag"], t["status"]), "other")},
+                "context": {"source": "actions.py"},
+            }) + "\n")
 
 
 def key(row):
@@ -152,6 +186,8 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
             outcome = "previewed in Slack (simulated)" if channel == "email" else "posted to Slack"
         else:
             outcome = "sent (simulated)" if channel == "email" else "queued"
+        if channel == "email":
+            write_email_events(tasks)       # the email, on the engagement timeline
         writer.writerows({"logged_on": run_date, "account_id": t["account_id"], "flag": t["flag"],
                           "status": t["status"], "routed_to": t["routed_to"], "channel": channel,
                           "action": t["action"], "outcome": outcome} for t in tasks)
