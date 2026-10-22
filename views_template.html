@@ -224,6 +224,11 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
         <div class="tablewrap" id="bk-heat"></div>
         <p class="note">Each cell is the share of the row's accounts on that week's last day, using 30-day utilisation; hover for counts. Accounts appear once they have 30 days of data.</p>
       </div>
+      <div class="panel">
+        <h2>Shelfware: live 60+ days, never above 40%</h2>
+        <p id="bk-shelf"></p>
+        <p class="note">Flat and low, so it never shows as "falling". Enterprise and Scale get an adoption review; Self-service gets the use-case inspiration email.</p>
+      </div>
     </section>
 
   </div>
@@ -321,6 +326,7 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
   pickBy((a) => tta[a.account_id] && tta[a.account_id].owner_type === "csm" && !tta[a.account_id].call_date && tta[a.account_id].flag === "churn", "Declining, never called");
   pickBy((a) => tta[a.account_id] && tta[a.account_id].days_to_call === 0 && tta[a.account_id].called_early && tta[a.account_id].flag === "churn", "Called before the signal");
   pickBy((a) => a.flags.some((f) => f.flag === "journey" && f.status === "No meeting in 30 days"), "Escalated to a manager");
+  pickBy((a) => a.tier === "Enterprise" && a.flags.some((f) => f.flag === "churn" && f.status === "Shelfware"), "Shelfware, never ramped");
   pickBy((a) => a.flags.some((f) => f.flag === "expansion" && f.status === "Act") && a.flags.some((f) => f.flag === "qbr"), "Growing, QBR due");
   pickBy((a) => a.util.some((u) => u != null) && !a.flags.length && a.tier === "Enterprise", "Healthy, no flags");
 
@@ -625,6 +631,12 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
     $("bk-finding").textContent = bkM === "risk"
       ? `${L.hit} of ${L.live} live accounts (${pct(L.hit, L.live)}%) sit under the churn line today, up from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`
       : `${L.hit} of ${L.live} live accounts (${pct(L.hit, L.live)}%) are at 80% of their contract or more today, from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`;
+    // shelfware by tier, counts next to shares (small segments mislead)
+    $("bk-shelf").textContent = tiers.map((t) => {
+      const accs = D.accounts.filter((a) => a.tier === t);
+      const hit = accs.filter((a) => a.flags.some((f) => f.flag === "churn" && f.status === "Shelfware")).length;
+      return `${t}: ${hit} of ${accs.length} (${pct(hit, accs.length)}%)`;
+    }).join(" · ");
     const shareMax = Math.max(0.01, ...rows.flatMap((x) => x.cells.map((c) => (c.live ? c.hit / c.live : 0))));
     const ramp = ["var(--seq-0)", "var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
     const host = $("bk-heat"); host.innerHTML = "";

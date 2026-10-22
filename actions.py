@@ -73,7 +73,8 @@ COLUMNS = ["logged_on", "account_id", "flag", "status", "routed_to", "channel", 
 # Which customer email each automated action is, as a topic in the engagement stream
 EMAIL_TOPICS = {("activation", "Activated"): "welcome_pack",
                 ("activation", "Stalled"):   "invite_your_team",
-                ("activation", "Silent"):    "need_help_starting"}
+                ("activation", "Silent"):    "need_help_starting",
+                ("churn", "Shelfware"):      "use_case_inspiration"}
 EMAIL_HOUR = SETTINGS["actions"]["email_hour"]   # emails go out at this hour, local time
 UTC_OFFSET_HOURS = {"UK&I": 1, "DACH": 2, "France & Benelux": 2, "Nordics": 2}
 

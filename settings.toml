@@ -16,6 +16,8 @@ util_below = 40           # 30-day utilisation under this (%) counts as low
 breadth_drop = 0.30       # weekly active users this far below their 90-day average...
 breadth_min_users = 1     # ...and at least this many users fewer (small accounts)
 min_errors = 5            # ingestion errors in 30 days that count as "rising"
+ramp_days = 60            # Shelfware: after go-live, a customer gets this long to ramp up;
+                          # then never reaching util_below (flat and low) = Shelfware
 
 [expansion]
 at_cap = 90               # utilisation (%) that counts as "at the cap"
