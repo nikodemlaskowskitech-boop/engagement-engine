@@ -97,7 +97,7 @@ OWNER_STYLE = {
 OPEN_RATE = {"new_customer": 0.80, "stalled": 0.45, "never_onboarded": 0.10}
 ONBOARDING_WORKSHOP_RATE = {"new_customer": 0.65, "stalled": 0.15, "never_onboarded": 0.03}
 ADVANCED_WORKSHOP_RATE = {"healthy": 0.08, "power_user": 0.20, "declining": 0.10}
-DECLINE_VISIBLE_DAY = 40   # around here a declining account's numbers start to show it
+TRAILING_LAG_DAYS = 15     # a 30-day average crosses a line about 15 days after daily usage does
 
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
 # An Enterprise deal is never missing from the CRM, and a silent Enterprise
@@ -497,6 +497,18 @@ def workshop_days(region, first_allowed):
         day += timedelta(days=14)
 
 
+def visible_day(acc, below=None, above=None):
+    """The day an account's problem (or growth) shows in its numbers: when its
+    30-day utilisation would cross the line the flags use. Owners react to
+    this, so "time to action" in the reports measures something real."""
+    p = PERSONALITIES[acc["personality"]]
+    for i in range(DAYS):
+        util = min(1.2, lerp(p["util"], i) * acc["util_factor"])
+        if (below is not None and util < below) or (above is not None and util >= above):
+            return START_DATE + timedelta(days=i + TRAILING_LAG_DAYS)
+    return None                                   # never crosses inside the window
+
+
 def engagement_for_account(rng, acc):
     p = PERSONALITIES[acc["personality"]]
     region, start, tier = acc["region"], acc["contract_start"], acc["tier"]
@@ -571,13 +583,15 @@ def engagement_for_account(rng, acc):
                 day += timedelta(days=style["check_in_days"] + rng.randint(-5, 5))
 
     # Declining accounts: a churn call once it shows, if the owner gets to it
-    if acc["personality"] == "declining" and rng.random() < style["acts"]:
-        first = START_DATE + timedelta(days=DECLINE_VISIBLE_DAY + rng.randint(*style["act_days"]))
+    seen = visible_day(acc, below=0.40) if acc["personality"] == "declining" else None
+    if seen and rng.random() < style["acts"]:
+        first = seen + timedelta(days=rng.randint(*style["act_days"]))
         meeting(first, "churn_call")
         follow_ups(first)
     # Growing accounts: a growth call once the growth shows, if the owner gets to it
-    if acc["personality"] == "power_user" and rng.random() < style["acts"]:
-        first = START_DATE + timedelta(days=DECLINE_VISIBLE_DAY + rng.randint(*style["act_days"]))
+    seen = visible_day(acc, above=0.80) if acc["personality"] == "power_user" else None
+    if seen and rng.random() < style["acts"]:
+        first = seen + timedelta(days=rng.randint(*style["act_days"]))
         meeting(first, "growth_call")
         follow_ups(first)
     # Stalled Scale accounts: the pool calls once the 14-day window has passed
