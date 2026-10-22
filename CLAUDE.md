@@ -134,7 +134,8 @@ One JSON event per line, one file per day in `data/events/`.
 
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
   declining, power_user, new_customer, stalled, never_onboarded,
-  handoff_gap) mixed by weight, 90 days of events, the CRM table and the
+  handoff_gap) mixed by weight (new customers sign all through the window;
+  stalled and silent ones are recent), 90 days of events, the CRM table and the
   CS team table. About 4 in 10 accounts have a champion (one user far more
   active than the rest). Product use follows a working week (quiet
   weekends); event volume doesn't (the customer's end users never stop).
