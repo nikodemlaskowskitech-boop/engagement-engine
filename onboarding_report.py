@@ -31,11 +31,12 @@ Run generate_events.py first (no flags needed), then:  python onboarding_report.
 import sys
 
 from cairnpath_db import connect
+from settings import SETTINGS
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-ACTIVATION_DAYS = 14       # same window as the activation flag
-MIN_USERS = 2
+ACTIVATION_DAYS = SETTINGS["activation"]["window_days"]   # same window as the activation flag
+MIN_USERS = SETTINGS["activation"]["min_users"]
 
 def add_views(con):
     """Create the onboarding view (also used by export_views.py)."""

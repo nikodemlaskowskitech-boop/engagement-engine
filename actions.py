@@ -57,6 +57,7 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from cairnpath_db import connect
+from settings import SETTINGS
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -71,7 +72,7 @@ COLUMNS = ["logged_on", "account_id", "flag", "status", "routed_to", "channel", 
 EMAIL_TOPICS = {("activation", "Activated"): "welcome_pack",
                 ("activation", "Stalled"):   "invite_your_team",
                 ("activation", "Silent"):    "need_help_starting"}
-EMAIL_HOUR = 9                                    # emails go out at 9:00 local time
+EMAIL_HOUR = SETTINGS["actions"]["email_hour"]   # emails go out at this hour, local time
 UTC_OFFSET_HOURS = {"UK&I": 1, "DACH": 2, "France & Benelux": 2, "Nordics": 2}
 
 

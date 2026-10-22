@@ -1,0 +1,41 @@
+# Cairnpath engine settings: every threshold and time window in one place.
+#
+# Change a number here and rerun the scripts; nothing else needs editing.
+# After changing a flag rule, run check_flags.py to see what it did.
+#
+# Percentages are whole numbers (40 = 40%); shares are fractions (0.30 = 30%).
+
+[activation]
+scope_days = 45           # only contracts from the last 45 days are checked
+window_days = 14          # activation must happen within 14 days of contract start
+min_users = 2             # "activated" needs at least this many active users
+silent_after_days = 10    # no events at all after this many days = Silent
+
+[churn]
+util_below = 40           # 30-day utilisation under this (%) counts as low
+breadth_drop = 0.30       # weekly active users this far below their 90-day average...
+breadth_min_users = 1     # ...and at least this many users fewer (small accounts)
+min_errors = 5            # ingestion errors in 30 days that count as "rising"
+
+[expansion]
+at_cap = 90               # utilisation (%) that counts as "at the cap"
+high = 80                 # forecasts only count from this utilisation up...
+min_climb = 3             # ...and when climbing at least this many points a month
+breadth_growth = 0.25     # active users up this much in two months
+renewal_soon_months = 3   # renewal this close: take the growth case into the renewal
+
+[qbr]
+coming_up_days = 30       # a QBR in the next 30 days: prepare it
+overdue_after_days = 120  # last QBR this long ago (or never) and nothing booked: book one
+champion_ratio = 2        # the top user is the champion when doing 2x+ the next one
+
+[journeys]
+unopened_after_days = 5   # give people a few days to open an email
+no_meeting_days = 30      # an Act account should have had a conversation by now...
+act_for_days = 14         # ...once it has been Act this long (a fair chance to act)
+
+[team_report]
+early_days = 14           # a call this many days before the signal still counts (as 0 days)
+
+[actions]
+email_hour = 9            # customer emails go out at 9:00 local time
