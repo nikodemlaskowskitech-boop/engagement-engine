@@ -44,7 +44,7 @@ con.sql(f"""
         FROM events
         WHERE event_name = 'daily_event_volume'
     ),
-    trailing AS (
+    rolling AS (
         -- 30-day utilisation on every day, the way the flags measure it
         SELECT account_id, event_date,
                sum(vol) OVER w   AS vol_30d,
@@ -56,7 +56,7 @@ con.sql(f"""
     util_30d AS (
         SELECT t.account_id, t.event_date,
                t.vol_30d * 365.0 / 30 / c.contracted_events * 100 AS util
-        FROM trailing t
+        FROM rolling t
         JOIN crm c USING (account_id)
         WHERE t.days_in_window = 30          -- a full 30 days, or it isn't comparable
     ),
@@ -105,7 +105,7 @@ print("\nCS team report: when an account needs action, how fast does its owner a
 print("\n1. By owner (CSMs, then Scale pools), fastest first")
 con.sql("""
     SELECT o.owner_name                                      AS owner,
-           o.owner_type                                      AS type,
+           o.owner_type,
            count(*)                                          AS act_accounts,
            format('{} ({}%)', count(t.call_date),
                   round(100.0 * count(t.call_date) / count(*))::INT) AS called,
