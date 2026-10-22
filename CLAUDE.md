@@ -190,6 +190,11 @@ One JSON event per line, one file per day in `data/events/`.
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- `export_views.py`: everything the views need, to `data/views_data.json`
+  (run `generate_events.py`, `flags.py` and `journeys.py` first). Reuses the
+  reports' SQL through `team_report.add_views(con)` and
+  `onboarding_report.add_views(con)`, so the page and the reports agree.
+  Counts only, never real user IDs.
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to

@@ -35,98 +35,103 @@ sys.stdout.reconfigure(encoding="utf-8")
 EARLY_DAYS = 14          # a call this many days before the signal still counts
 PROBLEM_CALLS = "('churn_call', 'growth_call', 'activation_call')"
 
-con = connect()
+def add_views(con):
+    """Create the time_to_action and meetings_90d views (also used by export_views.py)."""
+    con.sql(f"""
+        CREATE VIEW time_to_action AS
+        WITH act AS (
+            SELECT account_id, routed_to, 'churn' AS flag
+            FROM read_csv_auto('data/flags_churn.csv') WHERE status = 'Act'
+            UNION ALL
+            SELECT account_id, routed_to, 'expansion' AS flag
+            FROM read_csv_auto('data/flags_expansion.csv') WHERE status = 'Act'
+        ),
+        signals AS (
+            SELECT a.account_id, a.routed_to, a.flag,
+                   min(u.event_date) FILTER (WHERE (a.flag = 'churn' AND u.util < 40)
+                                                OR (a.flag = 'expansion' AND u.util >= 80)) AS signal_date
+            FROM act a
+            JOIN daily_util_30d u USING (account_id)    -- 30-day utilisation per day (cairnpath_db.py)
+            GROUP BY a.account_id, a.routed_to, a.flag
+        ),
+        calls AS (
+            SELECT account_id, event_date AS call_date
+            FROM engagement
+            WHERE event_name = 'meeting_held' AND properties.topic IN {PROBLEM_CALLS}
+        )
+        SELECT s.account_id, s.routed_to, s.flag, s.signal_date,
+               min(c.call_date) AS call_date,
+               -- no call means no number: greatest() would quietly turn an empty
+               -- value into 0 and make uncalled accounts look fast
+               CASE WHEN min(c.call_date) IS NOT NULL
+                    THEN greatest(min(c.call_date) - s.signal_date, 0) END AS days_to_call,
+               min(c.call_date) < s.signal_date AS called_early,
+               s.account_id IN (SELECT account_id FROM read_csv_auto('data/flags_journey.csv')
+                                WHERE status = 'No meeting in 30 days') AS escalated
+        FROM signals s
+        LEFT JOIN calls c ON c.account_id = s.account_id
+                         AND c.call_date >= s.signal_date - {EARLY_DAYS}
+        GROUP BY s.account_id, s.routed_to, s.flag, s.signal_date
+    """)
 
-con.sql(f"""
-    CREATE VIEW time_to_action AS
-    WITH act AS (
-        SELECT account_id, routed_to, 'churn' AS flag
-        FROM read_csv_auto('data/flags_churn.csv') WHERE status = 'Act'
-        UNION ALL
-        SELECT account_id, routed_to, 'expansion' AS flag
-        FROM read_csv_auto('data/flags_expansion.csv') WHERE status = 'Act'
-    ),
-    signals AS (
-        SELECT a.account_id, a.routed_to, a.flag,
-               min(u.event_date) FILTER (WHERE (a.flag = 'churn' AND u.util < 40)
-                                            OR (a.flag = 'expansion' AND u.util >= 80)) AS signal_date
-        FROM act a
-        JOIN daily_util_30d u USING (account_id)    -- 30-day utilisation per day (cairnpath_db.py)
-        GROUP BY a.account_id, a.routed_to, a.flag
-    ),
-    calls AS (
-        SELECT account_id, event_date AS call_date
-        FROM engagement
-        WHERE event_name = 'meeting_held' AND properties.topic IN {PROBLEM_CALLS}
-    )
-    SELECT s.account_id, s.routed_to, s.flag, s.signal_date,
-           min(c.call_date) AS call_date,
-           -- no call means no number: greatest() would quietly turn an empty
-           -- value into 0 and make uncalled accounts look fast
-           CASE WHEN min(c.call_date) IS NOT NULL
-                THEN greatest(min(c.call_date) - s.signal_date, 0) END AS days_to_call,
-           min(c.call_date) < s.signal_date AS called_early,
-           s.account_id IN (SELECT account_id FROM read_csv_auto('data/flags_journey.csv')
-                            WHERE status = 'No meeting in 30 days') AS escalated
-    FROM signals s
-    LEFT JOIN calls c ON c.account_id = s.account_id
-                     AND c.call_date >= s.signal_date - {EARLY_DAYS}
-    GROUP BY s.account_id, s.routed_to, s.flag, s.signal_date
-""")
+    con.sql("""
+        CREATE VIEW meetings_90d AS
+        SELECT properties.owner_id AS owner_id, count(*) AS meetings_90d
+        FROM engagement, as_of
+        WHERE event_name = 'meeting_held' AND event_date <= as_of_date
+        GROUP BY 1
+    """)
 
-con.sql("""
-    CREATE VIEW meetings_90d AS
-    SELECT properties.owner_id AS owner_id, count(*) AS meetings_90d
-    FROM engagement, as_of
-    WHERE event_name = 'meeting_held' AND event_date <= as_of_date
-    GROUP BY 1
-""")
 
-print("\nCS team report: when an account needs action, how fast does its owner act?")
+if __name__ == "__main__":
+    con = connect()
+    add_views(con)
 
-print("\n1. By owner (CSMs, then Scale pools), fastest first")
-con.sql("""
-    SELECT o.owner_name                                      AS owner,
-           o.owner_type,
-           count(*)                                          AS act_accounts,
-           format('{} ({}%)', count(t.call_date),
-                  round(100.0 * count(t.call_date) / count(*))::INT) AS called,
-           median(t.days_to_call)                            AS median_days_to_call,
-           count(*) FILTER (WHERE t.called_early)            AS called_early,
-           count(*) FILTER (WHERE t.escalated)               AS escalated,
-           any_value(m.meetings_90d)                         AS meetings_90d
-    FROM time_to_action t
-    JOIN cs_team o ON o.owner_id = t.routed_to
-    LEFT JOIN meetings_90d m ON m.owner_id = t.routed_to
-    GROUP BY o.owner_name, o.owner_type
-    ORDER BY o.owner_type, median_days_to_call NULLS LAST, owner
-""").show(max_width=250)
+    print("\nCS team report: when an account needs action, how fast does its owner act?")
 
-print("\n2. By manager (their CSMs and pools together)")
-con.sql("""
-    SELECT o.manager,
-           count(*)                                          AS act_accounts,
-           format('{} ({}%)', count(t.call_date),
-                  round(100.0 * count(t.call_date) / count(*))::INT) AS called,
-           median(t.days_to_call)                            AS median_days_to_call,
-           count(*) FILTER (WHERE t.escalated)               AS escalated
-    FROM time_to_action t
-    JOIN cs_team o ON o.owner_id = t.routed_to
-    GROUP BY o.manager
-    ORDER BY o.manager
-""").show()
+    print("\n1. By owner (CSMs, then Scale pools), fastest first")
+    con.sql("""
+        SELECT o.owner_name                                      AS owner,
+               o.owner_type,
+               count(*)                                          AS act_accounts,
+               format('{} ({}%)', count(t.call_date),
+                      round(100.0 * count(t.call_date) / count(*))::INT) AS called,
+               median(t.days_to_call)                            AS median_days_to_call,
+               count(*) FILTER (WHERE t.called_early)            AS called_early,
+               count(*) FILTER (WHERE t.escalated)               AS escalated,
+               any_value(m.meetings_90d)                         AS meetings_90d
+        FROM time_to_action t
+        JOIN cs_team o ON o.owner_id = t.routed_to
+        LEFT JOIN meetings_90d m ON m.owner_id = t.routed_to
+        GROUP BY o.owner_name, o.owner_type
+        ORDER BY o.owner_type, median_days_to_call NULLS LAST, owner
+    """).show(max_width=250)
 
-print("\n3. Every Act account, slowest first (no call at the top)")
-con.sql("""
-    SELECT o.owner_name AS owner, t.account_id, c.account_name, t.flag,
-           t.signal_date, t.call_date, t.days_to_call, t.escalated
-    FROM time_to_action t
-    JOIN cs_team o ON o.owner_id = t.routed_to
-    JOIN crm c USING (account_id)
-    ORDER BY t.call_date IS NOT NULL, t.days_to_call DESC, owner
-""").show(max_rows=100)
+    print("\n2. By manager (their CSMs and pools together)")
+    con.sql("""
+        SELECT o.manager,
+               count(*)                                          AS act_accounts,
+               format('{} ({}%)', count(t.call_date),
+                      round(100.0 * count(t.call_date) / count(*))::INT) AS called,
+               median(t.days_to_call)                            AS median_days_to_call,
+               count(*) FILTER (WHERE t.escalated)               AS escalated
+        FROM time_to_action t
+        JOIN cs_team o ON o.owner_id = t.routed_to
+        GROUP BY o.manager
+        ORDER BY o.manager
+    """).show()
 
-first_day = con.sql("SELECT min(event_date) + 29 FROM events").fetchone()[0]
-print(f"\nA signal on {first_day} (the first day a 30-day average exists) means the account")
-print("was already over the line before measuring could start; the true wait may be longer.")
-print("\nNot measured yet: outcome (did the account recover after the call?).")
+    print("\n3. Every Act account, slowest first (no call at the top)")
+    con.sql("""
+        SELECT o.owner_name AS owner, t.account_id, c.account_name, t.flag,
+               t.signal_date, t.call_date, t.days_to_call, t.escalated
+        FROM time_to_action t
+        JOIN cs_team o ON o.owner_id = t.routed_to
+        JOIN crm c USING (account_id)
+        ORDER BY t.call_date IS NOT NULL, t.days_to_call DESC, owner
+    """).show(max_rows=100)
+
+    first_day = con.sql("SELECT min(event_date) + 29 FROM events").fetchone()[0]
+    print(f"\nA signal on {first_day} (the first day a 30-day average exists) means the account")
+    print("was already over the line before measuring could start; the true wait may be longer.")
+    print("\nNot measured yet: outcome (did the account recover after the call?).")

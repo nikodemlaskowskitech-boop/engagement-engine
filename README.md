@@ -35,6 +35,7 @@ python check_flags.py       # test the flags against the generator's answer key
 python journeys.py          # follow-ups based on the last CS touch (unopened emails, no meeting in 30 days)
 python team_report.py       # how fast each CSM and pool acts on churn and expansion Act accounts
 python onboarding_report.py # does the getting-started email help? welcomed vs. control group
+python export_views.py      # data for the views page (data/views_data.json)
 python actions.py           # post new tasks to Slack and log each action once (run it twice: the second run adds nothing)
 python qbr.py               # facts pack for each QBR in the next 30 days
 python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_API_KEY in .env)
