@@ -3,6 +3,8 @@ Shared DuckDB setup for the Cairnpath scripts.
 
 Every script calls connect() to get a connection with the same views:
   events       the daily JSON event files, with the agreed schema declared
+  engagement   the CS history: emails, workshops and meetings, same schema
+               (event_type 'engagement'; properties.owner_id and .topic)
   crm          the CRM table
   cs_team      named CSMs and regional pools
   as_of        the data's own 'today': the last day we have data for
@@ -38,6 +40,22 @@ def connect():
             user_id:    'VARCHAR',
             properties: 'STRUCT(event_count BIGINT, invited_user VARCHAR, error_code VARCHAR)',
             context:    'STRUCT(sdk_version VARCHAR, source VARCHAR)'
+        })
+    """)
+    # What CS did and how customers responded. Same schema as the product
+    # events, but its own properties: who owns the touch and what it was about.
+    con.sql("""
+        CREATE VIEW engagement AS
+        SELECT *, "timestamp"::DATE AS event_date
+        FROM read_json('data/engagement/*.jsonl', format = 'newline_delimited', columns = {
+            event_id:   'VARCHAR',
+            event_name: 'VARCHAR',
+            event_type: 'VARCHAR',
+            timestamp:  'TIMESTAMP',
+            account_id: 'VARCHAR',
+            user_id:    'VARCHAR',
+            properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR)',
+            context:    'STRUCT(source VARCHAR)'
         })
     """)
     con.sql("CREATE VIEW crm AS SELECT * FROM read_csv_auto('data/crm_accounts.csv')")

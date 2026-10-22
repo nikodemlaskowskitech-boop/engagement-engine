@@ -75,6 +75,12 @@ One JSON event per line, one file per day in `data/events/`.
 - System events: daily_event_volume (properties.event_count),
   ingestion_error (properties.error_code)
 - Derived in SQL, never emitted: first event / go-live date
+- Engagement events (`data/engagement/`, view `engagement`, event_type
+  engagement): email_sent, email_opened, workshop_attended, meeting_held,
+  with properties.owner_id (csm_*, pool_*, automated) and properties.topic
+  (getting_started, onboarding_workshop, advanced_workshop, qbr, kickoff,
+  check_in, churn_call, activation_call). user_id = the customer user who
+  responded or attended.
 
 ## The four flags
 
@@ -133,14 +139,22 @@ One JSON event per line, one file per day in `data/events/`.
   active than the rest). Product use follows a working week (quiet
   weekends); event volume doesn't (the customer's end users never stop).
   Seeded, so output is repeatable.
-  Also writes `data/answer_key.csv` (each account's personality): for
-  testing only, the flags must never read it.
+  Also writes the CS history to `data/engagement/` (own random generator):
+  getting-started emails and opens, fortnightly Scale workshops, QBRs on
+  the CRM dates, kickoffs, check-ins and churn calls, each owner with their
+  own speed. 1 in 5 new Self-service/Scale accounts is a control group (no
+  email; planted effect: SDK in after 5 days, not 2). Working hours, local
+  time, no weekend meetings.
+  Also writes `data/answer_key.csv` (each account's personality and
+  welcome group): for testing only, the flags must never read it.
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
-  with the views events (schema declared explicitly), crm, cs_team, as_of
+  with the views events (schema declared explicitly), engagement (the CS
+  history, same schema), crm, cs_team, as_of
   and utilisation, monthly_usage (utilisation and users per 30-day month),
   qbr_schedule (QBR coming up / overdue).
   Every script uses it; define views here, once.
-- `explore.py`: DuckDB summaries by tier, region and CSM.
+- `explore.py`: DuckDB summaries by tier, region and CSM, plus CS
+  engagement week by week and meetings by owner.
 - `flags.py`: the activation, churn and expansion flags. One row per
   flagged account, with reasons, routed_to and action; saved to
   `data/flags_activation.csv`, `data/flags_churn.csv` and
@@ -171,7 +185,8 @@ One JSON event per line, one file per day in `data/events/`.
   library's Bedrock client), so the key disappears in favour of an IAM role.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
-- Engagement events: a second stream with the same schema (email_sent,
-  email_opened, workshop_attended, meeting_held, ...) recording what CS
-  did and how customers responded, so journeys can trigger on the last
-  touch and reports can show time to action and outcome by CSM and team.
+- Engagement events: the history exists; next `actions.py` writes new
+  email_sent events, then journeys trigger on the last touch and reports
+  show time to action and outcome by CSM and team. Views to build: account
+  timeline, onboarding funnel (welcomed vs. control), CS team activity,
+  book-of-business heatmap.
