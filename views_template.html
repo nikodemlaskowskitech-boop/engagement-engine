@@ -131,7 +131,7 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
       <h1>Cairnpath CS Cockpit</h1>
       <span class="asof" id="asof"></span>
     </div>
-    <p class="lede">Four views on one book of business: 476 European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
+    <p class="lede">Four views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
     <nav role="tablist" aria-label="Views">
       <button role="tab" id="tab-timeline" data-view="timeline" aria-selected="true">Account timeline</button>
       <button role="tab" id="tab-onboarding" data-view="onboarding" aria-selected="false">Onboarding</button>
@@ -251,6 +251,7 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
   const day = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5;
   const fmt = (s) => new Date(day(s) * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
   const median = (xs) => { if (!xs.length) return null; const a = [...xs].sort((x, y) => x - y), m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  $("n-accounts").textContent = D.accounts.length;   // from the export, never typed in
   const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
