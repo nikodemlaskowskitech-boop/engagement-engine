@@ -38,7 +38,10 @@ bot_token, app_token = load_env("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN")
 if not (bot_token and app_token):
     sys.exit("SLACK_BOT_TOKEN and SLACK_APP_TOKEN are needed in .env (see slack_loop.py)")
 
-app = App(token=bot_token)
+# Socket Mode clicks arrive over our own outgoing connection, so there are no
+# incoming web requests to check. Slack's request signatures (the "signing
+# secret") only matter for a public endpoint, which comes with AWS in Phase 6.
+app = App(token=bot_token, request_verification_enabled=False)
 DAY = run_date()     # every click is dated on the pipeline's run date
 
 
