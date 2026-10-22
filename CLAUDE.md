@@ -194,7 +194,10 @@ One JSON event per line, one file per day in `data/events/`.
   (run `generate_events.py`, `flags.py` and `journeys.py` first). Reuses the
   reports' SQL through `team_report.add_views(con)` and
   `onboarding_report.add_views(con)`, so the page and the reports agree.
-  Counts only, never real user IDs.
+  Counts only, never real user IDs. Also builds `data/views.html` from
+  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): four
+  tabs (account timeline, onboarding, CS team, book of business), opens in any
+  browser offline. The page only draws; the numbers come from the export.
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to
@@ -227,6 +230,4 @@ One JSON event per line, one file per day in `data/events/`.
   special account flags as extra QBR inputs.
 - Engagement: history, new email_sent events, the first journeys and the
   team report (time to action) and the welcomed vs. control report exist;
-  next, outcome after a call, then the views. Views to build: account
-  timeline, onboarding funnel (welcomed vs. control), CS team activity,
-  book-of-business heatmap.
+  the views page is built; next, outcome after a call and the move to AWS.

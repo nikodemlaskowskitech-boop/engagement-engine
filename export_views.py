@@ -1,5 +1,7 @@
 """
-Export everything the four views need to one file: data/views_data.json.
+Export everything the four views need to one file: data/views_data.json,
+and build the views page from it: data/views.html (views_template.html with
+the data inside, so it opens in any browser, offline).
 
 The views page only draws; every number is computed here, in SQL, with the
 same views the reports use (cairnpath_db.py, team_report.py and
@@ -116,7 +118,18 @@ export = {
 }
 
 out = DATA / "views_data.json"
-out.write_text(json.dumps(export, separators=(",", ":")), encoding="utf-8")
+data_json = json.dumps(export, separators=(",", ":"))
+out.write_text(data_json, encoding="utf-8")
+
+# The page: the template with the data dropped into its <script> tag ("</" is
+# escaped so no account name can ever close the tag early)
+template = (Path(__file__).resolve().parent / "views_template.html").read_text(encoding="utf-8")
+page = DATA / "views.html"
+page.write_text("<!doctype html>\n<meta charset=\"utf-8\">\n"
+                "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+                + template.replace("__VIEWS_DATA__", data_json.replace("</", "<\\/")),
+                encoding="utf-8")
 print(f"\nViews data as of {as_of}: {len(accounts)} accounts, {len(touches)} touches, "
       f"{len(export['onboarding'])} onboarding rows, {len(export['time_to_action'])} Act accounts")
 print(f"Saved {out.relative_to(DATA.parent)} ({out.stat().st_size // 1024} KB)")
+print(f"Saved {page.relative_to(DATA.parent)}: open it in a browser")
