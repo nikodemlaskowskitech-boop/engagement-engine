@@ -32,6 +32,7 @@ python generate_events.py   # ~500 accounts, 90 days of events
 python explore.py           # the book of business at a glance
 python flags.py             # activation, churn, expansion and QBR flags, plus work queues
 python check_flags.py       # test the flags against the generator's answer key
+python journeys.py          # follow-ups based on the last CS touch (unopened emails, no meeting in 30 days)
 python actions.py           # post new tasks to Slack and log each action once (run it twice: the second run adds nothing)
 python qbr.py               # facts pack for each QBR in the next 30 days
 python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_API_KEY in .env)

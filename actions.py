@@ -41,7 +41,7 @@ Each customer email also becomes an email_sent event in the engagement stream
 (data/engagement/<run date>.jsonl), so the CS history and new actions sit on
 one timeline that journeys and views can read.
 
-Run flags.py first, then:  python actions.py
+Run flags.py and journeys.py first, then:  python actions.py
 Run it twice: the second run should post and log nothing new.
 """
 
@@ -63,7 +63,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 REPO = Path(__file__).resolve().parent
 DATA = REPO / "data"
 LOG = DATA / "action_log.csv"
-FLAGS = ("activation", "churn", "expansion", "qbr")
+FLAGS = ("activation", "churn", "expansion", "qbr", "journey")   # journey: from journeys.py
 NOT_ACTIONS = {"none", "report"}
 COLUMNS = ["logged_on", "account_id", "flag", "status", "routed_to", "channel", "action", "outcome"]
 
@@ -129,21 +129,37 @@ def key(row):
 
 
 def task_line(t):
-    """One task, as it reads in Slack."""
+    """One task, as it reads in Slack, with the account's last CS touch for context."""
     name = t["account_name"] or "(not in the CRM)"
+    touch = last_touch.get(t["account_id"])
+    context = f"\n    _last touch: {touch[0]}, {touch[1]}_" if touch else "\n    _no CS touch on record_"
     return (f"• *{name}* ({t['account_id']}), {t['flag']} {t['status']}: {t['reasons']}\n"
-            f"    → {t['action']}")
+            f"    → {t['action']}" + context)
 
 
 # The run date is the data's "today" (the day after the last day of events),
 # never the computer's clock: a re-run on old data must log the same dates.
-run_date = connect().sql("SELECT as_of_date + 1 FROM as_of").fetchone()[0]
+con = connect()
+run_date = con.sql("SELECT as_of_date + 1 FROM as_of").fetchone()[0]
+# last touch up to the end of the data (not today's own emails), for context in Slack
+last_touch = {a: (what, when) for a, what, when in con.sql("""
+    SELECT account_id,
+           arg_max(replace(properties.topic, '_', ' ') || ' (' || replace(event_name, '_', ' ') || ')',
+                   "timestamp"),
+           max(event_date)
+    FROM engagement, as_of
+    WHERE event_date <= as_of_date
+    GROUP BY account_id""").fetchall()}
 queue_hook, email_hook = load_webhooks()
 
 with (DATA / "cs_team.csv").open(encoding="utf-8") as f:
     owner_names = {r["owner_id"]: r["owner_name"] for r in csv.DictReader(f)}
 owner_names["cs_ops"] = "CS ops"
 owner_names["email"] = "Customer emails"
+# managers aren't owners in cs_team, only a column: mgr_james -> "James (manager)"
+with (DATA / "cs_team.csv").open(encoding="utf-8") as f:
+    for r in csv.DictReader(f):
+        owner_names.setdefault(r["manager"], f"{r['manager'].removeprefix('mgr_').title()} (manager)")
 
 with (DATA / "onboarding_holdout.csv").open(encoding="utf-8") as f:
     holdout = {r["account_id"] for r in csv.DictReader(f)}
@@ -161,7 +177,7 @@ skipped = 0
 for flag in FLAGS:
     path = DATA / f"flags_{flag}.csv"
     if not path.exists():
-        sys.exit(f"{path} is missing: run python flags.py first")
+        sys.exit(f"{path} is missing: run python flags.py, then python journeys.py")
     with path.open(encoding="utf-8") as f:
         for r in csv.DictReader(f):
             if r["routed_to"] in NOT_ACTIONS:
