@@ -156,7 +156,8 @@ One JSON event per line, one file per day in `data/events/`.
   with the views events (schema declared explicitly), engagement (the CS
   history, same schema), crm, cs_team, as_of
   and utilisation, monthly_usage (utilisation and users per 30-day month),
-  qbr_schedule (QBR coming up / overdue).
+  qbr_schedule (QBR coming up / overdue), last_touch (last CS touch,
+  last meeting, getting-started email opened or not, per account).
   Every script uses it; define views here, once.
 - `explore.py`: DuckDB summaries by tier, region and CSM, plus CS
   engagement week by week and meetings by owner.
@@ -167,6 +168,12 @@ One JSON event per line, one file per day in `data/events/`.
 - `check_flags.py`: tests the flags against the answer key (run `flags.py`
   first): share of each personality found, false alarms, and every miss by
   name. Re-run it after any change to a flag rule.
+- `journeys.py`: rules on the last touch (run `flags.py` first). "Email
+  never opened": Self-service stalled/silent, getting-started email 5+ days
+  old and unopened -> CS ops checks the contact. "No meeting in 30 days":
+  churn or expansion Act (Scale/Enterprise) with no meeting in 30 days ->
+  escalated to the owner's manager (one Slack message per manager). Saved
+  to `data/flags_journey.csv`, same columns as the flags.
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to
@@ -179,6 +186,8 @@ One JSON event per line, one file per day in `data/events/`.
   Each customer email is also written as an email_sent event to
   `data/engagement/<run date>.jsonl`. `generate_events.py` clears the log,
   since new data makes old actions meaningless.
+  Reads the journey rows too, and shows each account's last CS touch under
+  every Slack task.
   `none` and `report` rows aren't actions. The log only grows; delete it
   to start over.
 - `qbr.py`: QBR facts packs (run `flags.py` first). Writes
@@ -195,8 +204,7 @@ One JSON event per line, one file per day in `data/events/`.
   library's Bedrock client), so the key disappears in favour of an IAM role.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
-- Engagement events: the history exists and `actions.py` adds new
-  email_sent events; next, journeys trigger on the last touch and reports
-  show time to action and outcome by CSM and team. Views to build: account
+- Engagement: history, new email_sent events and the first journeys exist;
+  next, reports show time to action and outcome by CSM and team. Views to build: account
   timeline, onboarding funnel (welcomed vs. control), CS team activity,
   book-of-business heatmap.

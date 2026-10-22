@@ -11,6 +11,8 @@ Every script calls connect() to get a connection with the same views:
   utilisation  last-30-day utilisation per CRM account (see the comments)
   monthly_usage  utilisation and active users in each of the three 30-day
                  months, for accounts live for the full 90 days
+  last_touch     per account: the last CS touch (what and when), the last
+                 meeting, and whether the getting-started email was opened
   qbr_schedule   Enterprise accounts with their QBR timing: coming up in the
                  next 30 days, or overdue (live 4+ months, last QBR 120+ days
                  ago or never, nothing booked in the next 30 days)
@@ -155,5 +157,22 @@ def connect():
         FROM crm c
         CROSS JOIN as_of a
         WHERE c.tier = 'Enterprise'
+    """)
+
+    # The last touch per account, for journeys ("no meeting in 30 days") and
+    # for context on every task ("last touch: QBR on 12 Sep").
+    con.sql("""
+        CREATE VIEW last_touch AS
+        SELECT account_id,
+               max(event_date)                                  AS last_touch_date,
+               arg_max(replace(properties.topic, '_', ' ') || ' ('
+                       || replace(event_name, '_', ' ') || ')', "timestamp") AS last_touch,
+               max(event_date) FILTER (WHERE event_name = 'meeting_held') AS last_meeting_date,
+               min(event_date) FILTER (WHERE event_name = 'email_sent'
+                                         AND properties.topic = 'getting_started') AS getting_started_sent,
+               count(*) FILTER (WHERE event_name = 'email_opened'
+                                  AND properties.topic = 'getting_started') > 0  AS getting_started_opened
+        FROM engagement
+        GROUP BY account_id
     """)
     return con
