@@ -79,7 +79,7 @@ One JSON event per line, one file per day in `data/events/`.
   engagement): email_sent, email_opened, workshop_attended, meeting_held,
   with properties.owner_id (csm_*, pool_*, automated) and properties.topic
   (getting_started, onboarding_workshop, advanced_workshop, qbr, kickoff,
-  check_in, churn_call, activation_call; from actions.py: welcome_pack,
+  check_in, churn_call, activation_call, growth_call, follow_up; from actions.py: welcome_pack,
   invite_your_team, need_help_starting). user_id = the customer user who
   responded or attended. context.source says who wrote it (cs_history from
   the generator, actions.py for new actions).
@@ -144,7 +144,7 @@ One JSON event per line, one file per day in `data/events/`.
   Seeded, so output is repeatable.
   Also writes the CS history to `data/engagement/` (own random generator):
   getting-started emails and opens, fortnightly Scale workshops, QBRs on
-  the CRM dates, kickoffs, check-ins and churn calls, each owner with their
+  the CRM dates, kickoffs, check-ins, churn and growth calls and follow-ups, each owner with their
   own speed. 1 in 5 new Self-service/Scale accounts is a control group (no
   email; planted effect: SDK in after 5 days, not 2). Working hours, local
   time, no weekend meetings.

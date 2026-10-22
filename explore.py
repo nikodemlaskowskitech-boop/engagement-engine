@@ -95,7 +95,7 @@ con.sql("""
            count(*) FILTER (WHERE e.properties.topic = 'qbr')        AS qbr,
            count(*) FILTER (WHERE e.properties.topic = 'check_in')   AS check_in,
            count(*) FILTER (WHERE e.properties.topic = 'kickoff')    AS kickoff,
-           count(*) FILTER (WHERE e.properties.topic IN ('churn_call', 'activation_call')) AS problem_calls,
+           count(*) FILTER (WHERE e.properties.topic IN ('churn_call', 'activation_call', 'growth_call', 'follow_up')) AS calls,
            count(*) AS meetings
     FROM engagement e
     LEFT JOIN cs_team t ON t.owner_id = e.properties.owner_id

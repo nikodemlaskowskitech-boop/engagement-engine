@@ -80,16 +80,17 @@ SDK_DELAY_DAYS = {"welcomed": 2, "control": 5}
 UTC_OFFSET_HOURS = {"UK&I": 1, "DACH": 2, "France & Benelux": 2, "Nordics": 2}
 
 # Each owner's style: days to act on a problem (min, max), days between
-# check-ins, and the chance they act on a declining account at all.
+# check-ins, the chance they act on a declining or growing account at all,
+# and how often they follow up afterwards (None: one call, then nothing).
 # Different styles are what make "time to action by CSM" worth a chart.
 OWNER_STYLE = {
-    "csm_anna":   dict(act_days=(1, 3),  check_in_days=21, acts=0.95),
-    "csm_tom":    dict(act_days=(6, 12), check_in_days=45, acts=0.50),
-    "csm_lukas":  dict(act_days=(2, 5),  check_in_days=28, acts=0.85),
-    "csm_mia":    dict(act_days=(1, 2),  check_in_days=21, acts=0.95),
-    "csm_claire": dict(act_days=(3, 7),  check_in_days=30, acts=0.80),
-    "csm_erik":   dict(act_days=(5, 14), check_in_days=40, acts=0.55),
-    "pool":       dict(act_days=(3, 10), check_in_days=None, acts=0.60),   # every Scale pool
+    "csm_anna":   dict(act_days=(1, 3),  check_in_days=21, acts=0.95, follow_up_days=14),
+    "csm_tom":    dict(act_days=(6, 12), check_in_days=45, acts=0.50, follow_up_days=None),
+    "csm_lukas":  dict(act_days=(2, 5),  check_in_days=28, acts=0.85, follow_up_days=21),
+    "csm_mia":    dict(act_days=(1, 2),  check_in_days=21, acts=0.95, follow_up_days=14),
+    "csm_claire": dict(act_days=(3, 7),  check_in_days=30, acts=0.80, follow_up_days=21),
+    "csm_erik":   dict(act_days=(5, 14), check_in_days=40, acts=0.55, follow_up_days=None),
+    "pool":       dict(act_days=(3, 10), check_in_days=None, acts=0.60, follow_up_days=28),  # every Scale pool
 }
 
 # How customers respond, by personality
@@ -504,6 +505,15 @@ def engagement_for_account(rng, acc):
     contact = f"{acc['id']}_usr_01"
     out = []
 
+    def follow_ups(after):
+        """Owners who follow up keep meeting every few weeks; others don't."""
+        if not style["follow_up_days"]:
+            return
+        day = after + timedelta(days=style["follow_up_days"] + rng.randint(-3, 3))
+        while day <= END_DATE:
+            meeting(day, "follow_up")
+            day += timedelta(days=style["follow_up_days"] + rng.randint(-3, 3))
+
     def meeting(day, topic):
         day = nearest_weekday(day)
         out.append(cs_event(rng, "meeting_held", local_time(rng, day, region, rng.choice([10, 11, 14, 15])),
@@ -562,8 +572,14 @@ def engagement_for_account(rng, acc):
 
     # Declining accounts: a churn call once it shows, if the owner gets to it
     if acc["personality"] == "declining" and rng.random() < style["acts"]:
-        meeting(START_DATE + timedelta(days=DECLINE_VISIBLE_DAY + rng.randint(*style["act_days"])),
-                "churn_call")
+        first = START_DATE + timedelta(days=DECLINE_VISIBLE_DAY + rng.randint(*style["act_days"]))
+        meeting(first, "churn_call")
+        follow_ups(first)
+    # Growing accounts: a growth call once the growth shows, if the owner gets to it
+    if acc["personality"] == "power_user" and rng.random() < style["acts"]:
+        first = START_DATE + timedelta(days=DECLINE_VISIBLE_DAY + rng.randint(*style["act_days"]))
+        meeting(first, "growth_call")
+        follow_ups(first)
     # Stalled Scale accounts: the pool calls once the 14-day window has passed
     if tier == "Scale" and acc["personality"] == "stalled" and rng.random() < style["acts"]:
         meeting(start + timedelta(days=14 + rng.randint(*style["act_days"])), "activation_call")
