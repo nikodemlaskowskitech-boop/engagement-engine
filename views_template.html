@@ -1,0 +1,664 @@
+<title>Cairnpath CS Cockpit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a working cockpit. One header band with the four views as tabs; each view
+   opens with its one-line finding, then the chart, then the detail. Colour is kept
+   for state (risk, growth, escalation) and for the touch types on the timeline. */
+:root {
+  --bg: #f6f7f6;            /* page: grey with a faint green-slate bias */
+  --surface: #ffffff;       /* chart and table surfaces */
+  --ink: #15201d;           /* primary text */
+  --ink-2: #4b5753;         /* secondary text */
+  --ink-3: #7b8682;         /* muted: axes, captions */
+  --rule: #dfe3e1;          /* hairlines, grid */
+  --accent: #1f6f5c;        /* cairn green: selection, links, focus */
+  --accent-soft: #e3efeb;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;   /* touch types */
+  --seq-0: #edf3fb; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #5598e7; --seq-4: #256abf; --seq-5: #104281;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --good-ink: #0b6b1f; --warning-ink: #8a5a00; --serious-ink: #a4461f; --critical-ink: #b02a2a;
+  --good-bg: #e7f4e6; --warning-bg: #fdf3dc; --serious-bg: #fbeae2; --critical-bg: #f9e3e3;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111715; --surface: #18201d; --ink: #e9eeec; --ink-2: #b4bfbb; --ink-3: #85918c;
+    --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
+    --seq-0: #1b2530; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
+    --good-ink: #6fd16f; --warning-ink: #fab219; --serious-ink: #f0a07f; --critical-ink: #f08080;
+    --good-bg: #17301a; --warning-bg: #352a0e; --serious-bg: #3a2318; --critical-bg: #3a1c1c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111715; --surface: #18201d; --ink: #e9eeec; --ink-2: #b4bfbb; --ink-3: #85918c;
+  --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
+  --seq-0: #1b2530; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
+  --good-ink: #6fd16f; --warning-ink: #fab219; --serious-ink: #f0a07f; --critical-ink: #f08080;
+  --good-bg: #17301a; --warning-bg: #352a0e; --serious-bg: #3a2318; --critical-bg: #3a1c1c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+header { border-bottom: 1px solid var(--rule); background: var(--surface); }
+header .wrap { padding-block: 20px 0; display: grid; gap: 14px; }
+.brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+.asof { font-family: var(--font-data); font-size: 0.8rem; color: var(--ink-3); }
+.lede { margin: 0; color: var(--ink-2); max-width: 70ch; }
+nav { display: flex; gap: 4px; overflow-x: auto; }
+nav button { font: 500 0.92rem var(--font-body); color: var(--ink-2); background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px 12px; cursor: pointer; white-space: nowrap; }
+nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+nav button:hover { color: var(--ink); }
+button:focus-visible, select:focus-visible, input:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+main .wrap { padding-block: 24px 48px; display: grid; gap: 20px; }
+section.view { display: grid; gap: 20px; }
+.finding { font-family: var(--font-display); font-weight: 600; font-size: 1.3rem; line-height: 1.3; margin: 0; max-width: 60ch; text-wrap: balance; }
+.sub { margin: -10px 0 0; color: var(--ink-2); max-width: 75ch; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 18px; min-width: 0; }
+.panel h2 { font: 600 0.78rem var(--font-body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); margin: 0 0 12px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 860px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.note { font-size: 0.85rem; color: var(--ink-3); margin: 10px 0 0; max-width: 80ch; }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+
+/* controls */
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+select, input[type="search"] { font: 0.92rem var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; max-width: 100%; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 0.82rem var(--font-body); color: var(--ink-2); background: var(--bg); border: 1px solid var(--rule); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.chip:hover, .chip[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.seg button { font: 500 0.85rem var(--font-body); background: var(--surface); color: var(--ink-2); border: 0; padding: 6px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+
+/* facts and flags */
+dl.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 0.9rem; }
+dl.facts dt { color: var(--ink-3); }
+dl.facts dd { margin: 0; }
+.flags { display: grid; gap: 10px; margin-top: 14px; }
+.flag { border-left: 3px solid var(--rule); padding: 2px 0 2px 10px; font-size: 0.88rem; }
+.flag .pill { display: inline-block; font: 600 0.72rem var(--font-body); letter-spacing: 0.03em; text-transform: uppercase; border-radius: 4px; padding: 1px 6px; margin-right: 6px; }
+.flag.critical { border-color: var(--critical); } .flag.critical .pill { background: var(--critical-bg); color: var(--critical-ink); }
+.flag.warning { border-color: var(--warning); } .flag.warning .pill { background: var(--warning-bg); color: var(--warning-ink); }
+.flag.good { border-color: var(--good); } .flag.good .pill { background: var(--good-bg); color: var(--good-ink); }
+.flag.serious { border-color: var(--serious); } .flag.serious .pill { background: var(--serious-bg); color: var(--serious-ink); }
+.flag.neutral .pill { background: var(--accent-soft); color: var(--accent); }
+.flag p { margin: 2px 0 0; color: var(--ink-2); }
+
+/* charts */
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { font-family: var(--font-body); font-size: 11px; fill: var(--ink-3); }
+svg .val { font-family: var(--font-data); fill: var(--ink-2); }
+svg .lbl { fill: var(--ink-2); font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--ink-2); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend svg { width: 12px; height: 12px; display: inline; }
+.tip { position: fixed; z-index: 20; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 0.8rem; line-height: 1.4; padding: 7px 9px; border-radius: 6px; max-width: 280px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.18); }
+.tip b { font-weight: 600; }
+
+/* tables */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th { text-align: left; font: 600 0.74rem var(--font-body); text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); padding: 6px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+td.r, th.r { text-align: right; }
+tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); background: var(--bg); }
+.bad { color: var(--critical-ink); font-weight: 600; }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat { border-left: 2px solid var(--rule); padding-left: 12px; }
+.stat .k { font-size: 0.78rem; color: var(--ink-3); }
+.stat .v { font-family: var(--font-display); font-weight: 600; font-size: 1.35rem; }
+.stat .v small { font: 400 0.8rem var(--font-body); color: var(--ink-3); }
+@media (prefers-reduced-motion: no-preference) { .fade { animation: fade 0.25s ease-out; } @keyframes fade { from { opacity: 0.4; } to { opacity: 1; } } }
+</style>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <h1>Cairnpath CS Cockpit</h1>
+      <span class="asof" id="asof"></span>
+    </div>
+    <p class="lede">Four views on one book of business: 476 European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
+    <nav role="tablist" aria-label="Views">
+      <button role="tab" id="tab-timeline" data-view="timeline" aria-selected="true">Account timeline</button>
+      <button role="tab" id="tab-onboarding" data-view="onboarding" aria-selected="false">Onboarding</button>
+      <button role="tab" id="tab-team" data-view="team" aria-selected="false">CS team</button>
+      <button role="tab" id="tab-book" data-view="book" aria-selected="false">Book of business</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <section class="view" id="view-timeline" role="tabpanel" aria-labelledby="tab-timeline">
+      <p class="finding" id="tl-finding">One account over 90 days: what it did, what CS did, and what the engine flagged.</p>
+      <div class="controls">
+        <select id="tl-account" aria-label="Account"></select>
+        <div class="chips" id="tl-picks" aria-label="Accounts worth a look"></div>
+      </div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>Usage and CS touches</h2>
+          <div id="tl-chart"></div>
+          <div class="legend" id="tl-legend"></div>
+          <p class="note">Utilisation is the 30-day average share of contracted volume, so it starts on 19 August, 30 days into the data. The dashed lines are the flags' lines: under 40% counts towards churn, 80% and up towards expansion.</p>
+        </div>
+        <div class="panel">
+          <h2>Account</h2>
+          <dl class="facts" id="tl-facts"></dl>
+          <div class="flags" id="tl-flags"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-onboarding" role="tabpanel" aria-labelledby="tab-onboarding" hidden>
+      <p class="finding" id="ob-finding"></p>
+      <p class="sub">New Self-service and Scale accounts. Welcomed accounts got the getting-started email the day after signing; the control group is the onboarding holdout and got none. The effect in this data is planted, so this shows the method; it doesn't prove that real emails work.</p>
+      <div class="controls">
+        <div class="seg" id="ob-tier" role="group" aria-label="Tier">
+          <button id="ob-all" data-tier="all" aria-pressed="true">Both tiers</button>
+          <button id="ob-ss" data-tier="Self-service" aria-pressed="false">Self-service</button>
+          <button id="ob-sc" data-tier="Scale" aria-pressed="false">Scale</button>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>Days from signing to SDK install, accounts per day</h2>
+          <div id="ob-dots"></div>
+          <div class="legend" id="ob-legend"></div>
+        </div>
+        <div class="panel">
+          <h2>Outcome</h2>
+          <div id="ob-funnel"></div>
+          <p class="note">Activated: SDK in and 2+ active users within 14 days of signing, counted only for accounts signed 14+ days ago.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-team" role="tabpanel" aria-labelledby="tab-team" hidden>
+      <p class="finding" id="tm-finding"></p>
+      <p class="sub">Every account at churn or expansion Act with a CSM or a pool. The clock starts when its 30-day utilisation crossed the flag's line and stops at the first churn, growth or activation call. Check-ins and QBRs don't count. A call up to 14 days before the signal counts as 0 days.</p>
+      <div class="panel">
+        <h2>Days from signal to first call, one dot per account</h2>
+        <div id="tm-dots"></div>
+        <div class="legend" id="tm-legend"></div>
+      </div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>By owner</h2>
+          <div class="tablewrap"><table id="tm-table"></table></div>
+          <p class="note">Most CSMs have one or two Act accounts. Read the counts: one account is an anecdote, not a pattern.</p>
+        </div>
+        <div class="panel">
+          <h2>Meetings per week</h2>
+          <div id="tm-weeks"></div>
+          <p class="note">All meetings held, QBRs and check-ins included. Darker means more.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-book" role="tabpanel" aria-labelledby="tab-book" hidden>
+      <p class="finding" id="bk-finding"></p>
+      <div class="controls">
+        <div class="seg" id="bk-measure" role="group" aria-label="Measure">
+          <button id="bk-risk" data-m="risk" aria-pressed="true">Under 40% (churn line)</button>
+          <button id="bk-growth" data-m="growth" aria-pressed="false">80% and up (expansion line)</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="bk-title">Share of live accounts under 40% utilisation, by week</h2>
+        <div class="tablewrap" id="bk-heat"></div>
+        <p class="note">Each cell is the share of the row's accounts on that week's last day, using 30-day utilisation; hover for counts. Accounts appear once they have 30 days of data.</p>
+      </div>
+    </section>
+
+  </div>
+</main>
+<div class="tip" id="tip" hidden></div>
+
+<script id="views-data" type="application/json">__VIEWS_DATA__</script>
+<script>
+(function () {
+  "use strict";
+  const D = JSON.parse(document.getElementById("views-data").textContent);
+  const $ = (id) => document.getElementById(id);
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs = {}, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+  const day = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5;
+  const fmt = (s) => new Date(day(s) * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const median = (xs) => { if (!xs.length) return null; const a = [...xs].sort((x, y) => x - y), m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  $("asof").textContent = "Data as of " + fmt(D.as_of) + " 2026";
+  const byId = Object.fromEntries(D.accounts.map((a) => [a.account_id, a]));
+  const ownerName = Object.fromEntries(D.team.map((t) => [t.owner_id, t.owner_name]));
+  ownerName.automated = "Automated email";
+
+  // tooltip
+  const tip = $("tip");
+  const showTip = (ev, html) => { tip.innerHTML = html; tip.hidden = false; moveTip(ev); };
+  const moveTip = (ev) => {
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let x = ev.clientX + 14, y = ev.clientY + 14;
+    if (x + w > innerWidth - 8) x = ev.clientX - w - 14;
+    if (y + h > innerHeight - 8) y = ev.clientY - h - 14;
+    tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px";
+  };
+  const hideTip = () => { tip.hidden = true; };
+  const hover = (node, html) => {
+    node.addEventListener("pointerenter", (e) => showTip(e, html));
+    node.addEventListener("pointermove", moveTip);
+    node.addEventListener("pointerleave", hideTip);
+  };
+
+  // tabs, with a bookmarkable #token per view
+  const views = ["timeline", "onboarding", "team", "book"];
+  const show = (v) => {
+    if (!views.includes(v)) v = "timeline";
+    for (const w of views) {
+      $("view-" + w).hidden = w !== v;
+      $("tab-" + w).setAttribute("aria-selected", String(w === v));
+    }
+    try { history.replaceState(null, "", "#" + v); } catch (e) { /* not allowed in some frames */ }
+    hideTip();
+  };
+  document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
+
+  // ---------------------------------------------------------------- timeline
+  const TOUCH = {
+    email_sent: { name: "Email sent", color: "var(--s1)", shape: "circle-open" },
+    email_opened: { name: "Email opened", color: "var(--s1)", shape: "circle" },
+    workshop_attended: { name: "Workshop attended", color: "var(--s3)", shape: "square" },
+    meeting_held: { name: "Meeting held", color: "var(--s4)", shape: "diamond" },
+  };
+  const PROBLEM = new Set(["churn_call", "growth_call", "activation_call", "follow_up"]);
+  const topicName = (t) => (t || "").replace(/_/g, " ");
+  const drawShape = (g, shape, x, y, color, r = 5) => {
+    if (shape === "circle" || shape === "circle-open")
+      return el("circle", { cx: x, cy: y, r, fill: shape === "circle" ? color : "var(--surface)", stroke: color, "stroke-width": 2 }, g);
+    if (shape === "square") return el("rect", { x: x - r + 0.5, y: y - r + 0.5, width: 2 * r - 1, height: 2 * r - 1, rx: 1.5, fill: color, stroke: "var(--surface)", "stroke-width": 1.5 }, g);
+    return el("path", { d: `M${x} ${y - r - 1}L${x + r + 1} ${y}L${x} ${y + r + 1}L${x - r - 1} ${y}Z`, fill: color, stroke: "var(--surface)", "stroke-width": 1.5 }, g);
+  };
+  const legendSwatch = (shape, color) => {
+    const s = document.createElementNS(NS, "svg"); s.setAttribute("viewBox", "0 0 12 12");
+    drawShape(s, shape, 6, 6, color, 4); return s;
+  };
+  const touchesBy = {};
+  for (const t of D.touches) (touchesBy[t.account_id] ||= []).push(t);
+
+  const severity = (f) => {
+    if (f.flag === "churn") return f.status === "Act" ? "critical" : "warning";
+    if (f.flag === "expansion") return f.status === "Act" ? "good" : "warning";
+    if (f.flag === "journey") return "serious";
+    if (f.flag === "activation") return ["Stalled", "Silent", "Handoff gap", "No CSM assigned"].includes(f.status) ? "warning" : "good";
+    return "neutral";
+  };
+
+  // accounts worth a look: the stories the reports surface
+  const tta = Object.fromEntries(D.time_to_action.map((r) => [r.account_id, r]));
+  const picks = [];
+  const pickBy = (fn, why) => { const a = D.accounts.find((x) => fn(x) && !picks.some((p) => p.id === x.account_id)); if (a) picks.push({ id: a.account_id, why }); };
+  pickBy((a) => tta[a.account_id] && tta[a.account_id].owner_type === "csm" && !tta[a.account_id].call_date && tta[a.account_id].flag === "churn", "Declining, never called");
+  pickBy((a) => tta[a.account_id] && tta[a.account_id].days_to_call === 0 && tta[a.account_id].called_early && tta[a.account_id].flag === "churn", "Called before the signal");
+  pickBy((a) => a.flags.some((f) => f.flag === "journey" && f.status === "No meeting in 30 days"), "Escalated to a manager");
+  pickBy((a) => a.flags.some((f) => f.flag === "expansion" && f.status === "Act") && a.flags.some((f) => f.flag === "qbr"), "Growing, QBR due");
+  pickBy((a) => a.util.some((u) => u != null) && !a.flags.length && a.tier === "Enterprise", "Healthy, no flags");
+
+  const sel = $("tl-account");
+  const sorted = [...D.accounts].sort((a, b) => a.account_name.localeCompare(b.account_name));
+  for (const tier of ["Enterprise", "Scale", "Self-service"]) {
+    const og = document.createElement("optgroup"); og.label = tier;
+    for (const a of sorted.filter((x) => x.tier === tier)) {
+      const o = document.createElement("option"); o.value = a.account_id;
+      o.textContent = `${a.account_name} (${a.account_id})${a.flags.length ? " · " + a.flags.length + " flag" + (a.flags.length > 1 ? "s" : "") : ""}`;
+      og.appendChild(o);
+    }
+    sel.appendChild(og);
+  }
+  for (const p of picks) {
+    const b = document.createElement("button"); b.className = "chip"; b.id = "pick-" + p.id;
+    b.textContent = `${byId[p.id].account_name}: ${p.why}`;
+    b.addEventListener("click", () => { sel.value = p.id; drawTimeline(p.id); });
+    $("tl-picks").appendChild(b);
+  }
+  sel.addEventListener("change", () => drawTimeline(sel.value));
+
+  const TOUCH_ORDER = ["email_sent", "email_opened", "workshop_attended", "meeting_held"];
+  for (const k of TOUCH_ORDER) {
+    const s = document.createElement("span"); s.append(legendSwatch(TOUCH[k].shape, TOUCH[k].color), TOUCH[k].name); $("tl-legend").appendChild(s);
+  }
+  { const s = document.createElement("span"); const sv = document.createElementNS(NS, "svg"); sv.setAttribute("viewBox", "0 0 12 12");
+    el("line", { x1: 0, y1: 6, x2: 12, y2: 6, stroke: "var(--accent)", "stroke-width": 2 }, sv); s.append(sv, "30-day utilisation"); $("tl-legend").appendChild(s);
+    const s2 = document.createElement("span"); const sv2 = document.createElementNS(NS, "svg"); sv2.setAttribute("viewBox", "0 0 12 12");
+    el("rect", { x: 2, y: 3, width: 8, height: 9, rx: 1, fill: "var(--seq-2)" }, sv2); s2.append(sv2, "Weekly active users"); $("tl-legend").appendChild(s2); }
+
+  function drawTimeline(id) {
+    const a = byId[id]; if (!a) return;
+    pressChips(id);
+    const host = $("tl-chart"); host.innerHTML = ""; host.classList.remove("fade"); void host.offsetWidth; host.classList.add("fade");
+    const W = 720, H = 330, L = 44, R = 16, top = 12;
+    const x0 = day("2026-07-21"), x1 = day(D.as_of) + 1;
+    const X = (d) => L + ((d - x0) / (x1 - x0)) * (W - L - R);
+    const uTop = top, uH = 150, wTop = 188, wH = 64, tY = 292;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `Usage and CS touches for ${a.account_name}` }, host);
+
+    // utilisation panel
+    const uMax = Math.max(100, ...a.util.filter((u) => u != null)) ;
+    const top100 = Math.ceil(uMax / 20) * 20;
+    const UY = (u) => uTop + uH - (u / top100) * uH;
+    for (let g = 0; g <= top100; g += 20) {
+      el("line", { x1: L, x2: W - R, y1: UY(g), y2: UY(g), stroke: "var(--rule)", "stroke-width": 1 }, svg);
+      el("text", { x: L - 6, y: UY(g) + 4, "text-anchor": "end", class: "val" }, svg).textContent = g + "%";
+    }
+    for (const [v, label] of [[40, "churn line 40%"], [80, "expansion line 80%"]]) {
+      el("line", { x1: L, x2: W - R, y1: UY(v), y2: UY(v), stroke: "var(--ink-3)", "stroke-width": 1, "stroke-dasharray": "4 4" }, svg);
+      el("text", { x: W - R, y: UY(v) - 4, "text-anchor": "end" }, svg).textContent = label;
+    }
+    const pts = a.util.map((u, i) => (u == null ? null : [X(day(D.util_dates[i])), UY(u)])).filter(Boolean);
+    if (pts.length) {
+      el("path", { d: "M" + pts.map((p) => p.join(" ")).join("L"), fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+      const last = pts[pts.length - 1], lastU = a.util.filter((u) => u != null).slice(-1)[0];
+      el("circle", { cx: last[0], cy: last[1], r: 4, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
+      el("text", { x: last[0] - 8, y: last[1] - 9, "text-anchor": "end", class: "val" }, svg).textContent = lastU + "%";
+      // hover band for daily values
+      const hit = el("rect", { x: X(day(D.util_dates[0])), y: uTop, width: X(x1) - X(day(D.util_dates[0])), height: uH, fill: "transparent" }, svg);
+      const cross = el("line", { y1: uTop, y2: uTop + uH, stroke: "var(--ink-3)", "stroke-width": 1, visibility: "hidden" }, svg);
+      hit.addEventListener("pointermove", (e) => {
+        const r = svg.getBoundingClientRect(), sx = ((e.clientX - r.left) / r.width) * W;
+        let best = 0, bd = 1e9;
+        D.util_dates.forEach((d, i) => { const dd = Math.abs(X(day(d)) - sx); if (dd < bd && a.util[i] != null) { bd = dd; best = i; } });
+        cross.setAttribute("x1", X(day(D.util_dates[best]))); cross.setAttribute("x2", X(day(D.util_dates[best]))); cross.setAttribute("visibility", "visible");
+        showTip(e, `<b>${fmt(D.util_dates[best])}</b><br>30-day utilisation <b>${a.util[best]}%</b>`);
+      });
+      hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); hideTip(); });
+    } else {
+      el("text", { x: (L + W - R) / 2, y: uTop + uH / 2, "text-anchor": "middle", class: "lbl" }, svg).textContent = "No usage yet";
+    }
+    if (pts.length) el("text", { x: X(x0) + 2, y: uTop + uH - 6 }, svg).textContent = "before 19 Aug: no 30-day average yet";
+
+    // weekly active users
+    const wMax = Math.max(1, ...a.wau);
+    const WY = (v) => wTop + wH - (v / wMax) * wH;
+    el("text", { x: L - 6, y: wTop + 4, "text-anchor": "end", class: "val" }, svg).textContent = wMax;
+    el("text", { x: L - 6, y: wTop + wH + 4, "text-anchor": "end", class: "val" }, svg).textContent = 0;
+    el("line", { x1: L, x2: W - R, y1: wTop + wH, y2: wTop + wH, stroke: "var(--rule)" }, svg);
+    D.week_ends.forEach((we, i) => {
+      const xe = X(day(we) + 1), xs = Math.max(L, X(day(we) - 6));
+      const v = a.wau[i], y = WY(v);
+      if (v > 0) {
+        const r = el("path", { d: `M${xs + 1} ${wTop + wH}V${y + 3}Q${xs + 1} ${y} ${xs + 4} ${y}H${xe - 4}Q${xe - 1} ${y} ${xe - 1} ${y + 3}V${wTop + wH}Z`, fill: "var(--seq-2)" }, svg);
+        hover(r, `<b>Week ending ${fmt(we)}</b><br>${v} weekly active user${v === 1 ? "" : "s"}`);
+      }
+    });
+    el("text", { x: L, y: wTop - 6, class: "lbl" }, svg).textContent = "Weekly active users";
+
+    // touch strip
+    el("line", { x1: L, x2: W - R, y1: tY, y2: tY, stroke: "var(--rule)" }, svg);
+    el("text", { x: L, y: tY - 16, class: "lbl" }, svg).textContent = "CS touches";
+    const rows = { email_sent: -7, email_opened: -7, workshop_attended: 0, meeting_held: 7 };
+    for (const t of (touchesBy[id] || [])) {
+      const k = TOUCH[t.event]; if (!k) continue;
+      const cx = X(day(t.date) + 0.5), cy = tY + rows[t.event];
+      const strong = t.event === "meeting_held" && PROBLEM.has(t.topic);
+      const m = drawShape(svg, k.shape, cx, cy, k.color, strong ? 6 : 5);
+      const owner = ownerName[t.owner_id] || t.owner_id;
+      const src = t.source === "actions.py" ? " · sent by the engine" : "";
+      hover(m, `<b>${k.name}</b> · ${esc(topicName(t.topic))}<br>${fmt(t.date)} · ${esc(owner)}${src}`);
+      const hitc = el("circle", { cx, cy, r: 10, fill: "transparent" }, svg);
+      hover(hitc, `<b>${k.name}</b> · ${esc(topicName(t.topic))}<br>${fmt(t.date)} · ${esc(owner)}${src}`);
+    }
+    // contract start and renewal markers
+    for (const [d, label] of [[a.contract_start, "signed"], [a.renewal_date, "renewal"]]) {
+      if (!d) continue; const dd = day(d); if (dd < x0 || dd > x1) continue;
+      el("line", { x1: X(dd), x2: X(dd), y1: uTop, y2: tY + 14, stroke: "var(--ink-2)", "stroke-width": 1, "stroke-dasharray": "2 3" }, svg);
+      el("text", { x: X(dd) + 4, y: uTop + 10, class: "lbl" }, svg).textContent = label + " " + fmt(d);
+    }
+    // month ticks
+    for (const m of ["2026-08-01", "2026-09-01", "2026-10-01"]) {
+      el("line", { x1: X(day(m)), x2: X(day(m)), y1: tY + 14, y2: tY + 19, stroke: "var(--ink-3)" }, svg);
+      el("text", { x: X(day(m)), y: tY + 32, "text-anchor": "middle" }, svg).textContent = fmt(m);
+    }
+
+    // facts
+    const contracted = (a.contracted_events / 1e6).toLocaleString("en-GB") + "M events a year";
+    const facts = [["Tier", a.tier], ["Region", a.region], ["Owner", a.owner || (a.tier === "Self-service" ? "No CSM (Self-service)" : "Not assigned")],
+      ["Contract", fmt(a.contract_start) + " " + a.contract_start.slice(0, 4) + " to " + fmt(a.renewal_date) + " " + a.renewal_date.slice(0, 4)],
+      ["Commitment", contracted], ["Add-ons", a.add_ons || "None"]];
+    $("tl-facts").innerHTML = facts.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
+    const t = tta[id];
+    if (t) $("tl-facts").innerHTML += `<dt>Time to call</dt><dd>${t.call_date ? (t.called_early ? "Called before the signal" : t.days_to_call + " days after the signal") : '<span class="bad">No call since ' + fmt(t.signal_date) + "</span>"}</dd>`;
+    $("tl-flags").innerHTML = a.flags.length
+      ? a.flags.map((f) => `<div class="flag ${severity(f)}"><span class="pill">${esc(f.flag)} · ${esc(f.status)}</span><p>${esc(f.reasons)}</p></div>`).join("")
+      : '<p class="note">No open flags.</p>';
+    const tc = (touchesBy[id] || []).length;
+    $("tl-finding").textContent = `${a.account_name}: ${a.flags.length ? a.flags.length + " open flag" + (a.flags.length > 1 ? "s" : "") : "no open flags"}, ${tc} CS touch${tc === 1 ? "" : "es"} in 90 days.`;
+  }
+  function pressChips(id) { document.querySelectorAll("#tl-picks .chip").forEach((c) => c.setAttribute("aria-pressed", String(c.id === "pick-" + id))); }
+
+  // ---------------------------------------------------------------- onboarding
+  const GROUPS = [{ key: "welcomed", name: "Welcomed", color: "var(--s1)" }, { key: "control (no email)", name: "Control (no email)", color: "var(--s2)" }];
+  for (const g of GROUPS) { const s = document.createElement("span"); s.append(legendSwatch("circle", g.color), g.name); $("ob-legend").appendChild(s); }
+  let obTier = "all";
+  document.querySelectorAll("#ob-tier button").forEach((b) => b.addEventListener("click", () => {
+    obTier = b.dataset.tier; document.querySelectorAll("#ob-tier button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); drawOnboarding();
+  }));
+  function obStats(rows) {
+    const inst = rows.filter((r) => r.sdk_date);
+    const old = rows.filter((r) => r.old_enough);
+    const act = old.filter((r) => r.sdk_date && day(r.sdk_date) < day(r.contract_start) + 14 && r.users_first_14d >= 2);
+    return { n: rows.length, inst: inst.length, chart: rows.filter((r) => r.first_chart_date).length,
+      mSdk: median(inst.map((r) => day(r.sdk_date) - day(r.contract_start))),
+      mChart: median(rows.filter((r) => r.first_chart_date).map((r) => day(r.first_chart_date) - day(r.contract_start))),
+      old: old.length, act: act.length };
+  }
+  function drawOnboarding() {
+    const rows = D.onboarding.filter((r) => obTier === "all" || r.tier === obTier);
+    const S = Object.fromEntries(GROUPS.map((g) => [g.key, obStats(rows.filter((r) => r.welcome_group === g.key))]));
+    const w = S["welcomed"], c = S["control (no email)"];
+    $("ob-finding").textContent = `The email gets accounts started ${Math.round(c.mSdk - w.mSdk)} days sooner (median ${w.mSdk} vs ${c.mSdk} days to SDK), but about the same share activate: ${pct(w.act, w.old)}% vs ${pct(c.act, c.old)}%.`;
+
+    // histogram: accounts per day from signing to SDK install, one row per group
+    const host = $("ob-dots"); host.innerHTML = "";
+    const W = 640, L = 150, R = 16, rowH = 86, H = 2 * rowH + 40, maxD = 14;
+    const slot = (W - L - R) / (maxD + 1);
+    const X = (d) => L + Math.min(d, maxD) * slot;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Days from signing to SDK install by group" }, host);
+    const hist = (g) => { const h = Array(maxD + 1).fill(0); rows.filter((r) => r.welcome_group === g.key && r.sdk_date).forEach((r) => h[Math.min(maxD, day(r.sdk_date) - day(r.contract_start))]++); return h; };
+    const H2 = GROUPS.map(hist), top = Math.max(1, ...H2.flat());
+    for (let d = 0; d <= maxD; d += 2) el("text", { x: X(d) + slot / 2, y: 2 * rowH + 24, "text-anchor": "middle", class: "val" }, svg).textContent = d === maxD ? "14+" : d;
+    el("text", { x: (L + W - R) / 2, y: H - 2, "text-anchor": "middle" }, svg).textContent = "days from signing to SDK install";
+    GROUPS.forEach((g, gi) => {
+      const base = 10 + (gi + 1) * rowH - 8, st = S[g.key];
+      el("text", { x: 0, y: base - rowH / 2, class: "lbl" }, svg).textContent = g.name;
+      el("text", { x: 0, y: base - rowH / 2 + 16 }, svg).textContent = `${st.inst} of ${st.n} installed`;
+      el("text", { x: 0, y: base - rowH / 2 + 32 }, svg).textContent = st.mSdk == null ? "" : `median ${st.mSdk} days`;
+      el("line", { x1: L, x2: W - R, y1: base, y2: base, stroke: "var(--rule)" }, svg);
+      H2[gi].forEach((v, d) => {
+        if (!v) return;
+        const h = Math.max(3, (v / top) * (rowH - 26)), x = X(d) + 3, w = slot - 6;
+        const bar = el("path", { d: `M${x} ${base}V${base - h + 3}Q${x} ${base - h} ${x + 3} ${base - h}H${x + w - 3}Q${x + w} ${base - h} ${x + w} ${base - h + 3}V${base}Z`, fill: g.color }, svg);
+        el("text", { x: x + w / 2, y: base - h - 4, "text-anchor": "middle", class: "val" }, svg).textContent = v;
+        hover(bar, `<b>${g.name}</b><br>${v} account${v === 1 ? "" : "s"} installed the SDK ${d === maxD ? "14+ days" : d + " day" + (d === 1 ? "" : "s")} after signing`);
+      });
+    });
+
+    // outcome bars
+    const fh = $("ob-funnel");
+    const stages = [["Signed", (s) => s.n, (s) => s.n], ["SDK installed", (s) => s.inst, (s) => s.n], ["First chart", (s) => s.chart, (s) => s.n], ["Activated in 14 days", (s) => s.act, (s) => s.old]];
+    fh.innerHTML = "";
+    const FW = 320, rowF = 54, FH = stages.length * rowF + 6;
+    const fsvg = el("svg", { viewBox: `0 0 ${FW} ${FH}`, role: "img", "aria-label": "Onboarding outcome by group" }, fh);
+    stages.forEach(([label, num, den], si) => {
+      const y = si * rowF;
+      el("text", { x: 0, y: y + 12, class: "lbl" }, fsvg).textContent = label;
+      GROUPS.forEach((g, gi) => {
+        const s = S[g.key], n = num(s), d = den(s), p = d ? n / d : 0;
+        const by = y + 18 + gi * 14, bw = Math.max(2, p * (FW - 110));
+        el("rect", { x: 0, y: by, width: FW - 110, height: 10, rx: 2, fill: "var(--bg)" }, fsvg);
+        const bar = el("rect", { x: 0, y: by, width: bw, height: 10, rx: 2, fill: g.color }, fsvg);
+        el("text", { x: FW - 104, y: by + 9, class: "val" }, fsvg).textContent = `${n} of ${d} (${pct(n, d)}%)`;
+        hover(bar, `<b>${g.name}</b> · ${label}<br>${n} of ${d} accounts (${pct(n, d)}%)`);
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------- team
+  const owners = D.team.filter((t) => D.time_to_action.some((r) => r.routed_to === t.owner_id));
+  const ownerRows = owners.map((o) => {
+    const rs = D.time_to_action.filter((r) => r.routed_to === o.owner_id);
+    const called = rs.filter((r) => r.call_date);
+    return { o, rs, n: rs.length, called: called.length, med: median(called.map((r) => r.days_to_call)), early: rs.filter((r) => r.called_early).length, esc: rs.filter((r) => r.escalated).length };
+  }).sort((a, b) => (a.o.owner_type === b.o.owner_type ? (a.med ?? 99) - (b.med ?? 99) || a.o.owner_name.localeCompare(b.o.owner_name) : a.o.owner_type === "csm" ? -1 : 1));
+
+  function drawTeam() {
+    const all = D.time_to_action, called = all.filter((r) => r.call_date);
+    const csm = ownerRows.filter((r) => r.o.owner_type === "csm"), pool = ownerRows.filter((r) => r.o.owner_type === "pool");
+    const sum = (rs, k) => rs.reduce((s, r) => s + r[k], 0);
+    $("tm-finding").textContent = `CSMs called ${sum(csm, "called")} of ${sum(csm, "n")} Act accounts; the Scale pools called ${sum(pool, "called")} of ${sum(pool, "n")}. ${all.length - called.length} accounts that need action have had no call.`;
+
+    // dot plot: one row per owner, days 0..20, plus a "no call" column
+    const host = $("tm-dots"); host.innerHTML = "";
+    const W = 760, L = 150, R = 90, rowH = 30, top = 8, H = top + ownerRows.length * rowH + 40, maxD = 20;
+    const X = (d) => L + (d / maxD) * (W - L - R);
+    const noCallX = W - R + 50;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Days from signal to first call per account, by owner" }, host);
+    const yEnd = top + ownerRows.length * rowH;
+    for (let d = 0; d <= maxD; d += 5) {
+      el("line", { x1: X(d), x2: X(d), y1: top, y2: yEnd, stroke: "var(--rule)" }, svg);
+      el("text", { x: X(d), y: yEnd + 16, "text-anchor": "middle", class: "val" }, svg).textContent = d;
+    }
+    el("text", { x: (L + X(maxD)) / 2, y: yEnd + 32, "text-anchor": "middle" }, svg).textContent = "days from signal to first call";
+    el("line", { x1: noCallX, x2: noCallX, y1: top, y2: yEnd, stroke: "var(--rule)", "stroke-dasharray": "2 3" }, svg);
+    el("text", { x: noCallX, y: yEnd + 16, "text-anchor": "middle", class: "lbl" }, svg).textContent = "no call";
+    ownerRows.forEach((r, i) => {
+      const cy = top + i * rowH + rowH / 2;
+      if (i === csm.length && i > 0) el("line", { x1: 0, x2: W, y1: top + i * rowH, y2: top + i * rowH, stroke: "var(--ink-3)", "stroke-width": 1 }, svg);
+      el("text", { x: 0, y: cy + 4, class: "lbl" }, svg).textContent = r.o.owner_name;
+      const stack = {};
+      for (const a of r.rs) {
+        const k = a.call_date ? String(Math.min(a.days_to_call, maxD)) : "none";
+        const n = (stack[k] = (stack[k] || 0) + 1) - 1;
+        const cx = (a.call_date ? X(Math.min(a.days_to_call, maxD)) : noCallX) + (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 8;
+        const isGrowth = a.flag === "expansion";
+        const m = a.call_date
+          ? el("circle", { cx, cy, r: 4.5, fill: isGrowth ? "var(--s3)" : "var(--s1)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg)
+          : el("circle", { cx, cy, r: 4.5, fill: "var(--surface)", stroke: "var(--critical)", "stroke-width": 2 }, svg);
+        const name = byId[a.account_id]?.account_name || a.account_id;
+        hover(m, `<b>${esc(name)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>${a.call_date ? (a.called_early ? "Called " + fmt(a.call_date) + ", before the signal" : "Called " + fmt(a.call_date) + ", " + a.days_to_call + " days later") : "No call yet"}${a.escalated ? "<br>Escalated to the manager" : ""}`);
+        m.style.cursor = "pointer";
+        m.addEventListener("click", () => { sel.value = a.account_id; drawTimeline(a.account_id); show("timeline"); });
+      }
+    });
+    $("tm-legend").innerHTML = "";
+    for (const [shape, color, name] of [["circle", "var(--s1)", "Churn Act, called"], ["circle", "var(--s3)", "Expansion Act, called"], ["circle-open", "var(--critical)", "No call yet"]]) {
+      const s = document.createElement("span"); s.append(legendSwatch(shape, color), name); $("tm-legend").appendChild(s);
+    }
+    { const s = document.createElement("span"); s.textContent = "Click a dot to open its timeline."; $("tm-legend").appendChild(s); }
+
+    // owner table
+    const head = `<tr><th>Owner</th><th class="r">Act</th><th class="r">Called</th><th class="r">Median days</th><th class="r">Escalated</th></tr>`;
+    const line = (r) => `<tr><td>${esc(r.o.owner_name)}</td><td class="r num">${r.n}</td><td class="r num${r.called < r.n ? " bad" : ""}">${r.called} (${pct(r.called, r.n)}%)</td><td class="r num">${r.med == null ? "–" : r.med}</td><td class="r num">${r.esc || "–"}</td></tr>`;
+    $("tm-table").innerHTML = head + `<tr class="group"><td colspan="5">Named CSMs</td></tr>` + csm.map(line).join("") + `<tr class="group"><td colspan="5">Scale pools</td></tr>` + pool.map(line).join("");
+
+    // meetings per week heat grid
+    const wh = $("tm-weeks"); wh.innerHTML = "";
+    const weeks = D.week_ends;
+    const team = D.team;
+    const counts = team.map((t) => weeks.map((we) => D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > day(we) - 7 && day(x.date) <= day(we)).length));
+    const max = Math.max(1, ...counts.flat());
+    const GW = 360, GL = 120, cw = (GW - GL) / weeks.length, ch = 20, GH = team.length * (ch + 3) + 26;
+    const gs = el("svg", { viewBox: `0 0 ${GW} ${GH}`, role: "img", "aria-label": "Meetings per week by owner" }, wh);
+    const ramp = ["var(--seq-0)", "var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
+    team.forEach((t, i) => {
+      const y = i * (ch + 3);
+      el("text", { x: 0, y: y + 14, class: "lbl" }, gs).textContent = t.owner_name.replace(" Scale team", " pool");
+      weeks.forEach((we, j) => {
+        const v = counts[i][j];
+        const c = v === 0 ? ramp[0] : ramp[Math.min(5, 1 + Math.floor(((v - 1) / Math.max(1, max - 1)) * 4.999))];
+        const r = el("rect", { x: GL + j * cw + 1, y, width: cw - 2, height: ch, rx: 2, fill: c }, gs);
+        hover(r, `<b>${esc(t.owner_name)}</b><br>Week ending ${fmt(we)}: ${v} meeting${v === 1 ? "" : "s"}`);
+      });
+    });
+    [0, 6, 12].forEach((j) => { el("text", { x: GL + j * cw + cw / 2, y: GH - 6, "text-anchor": "middle" }, gs).textContent = fmt(weeks[j]); });
+  }
+
+  // ---------------------------------------------------------------- book of business
+  let bkM = "risk";
+  document.querySelectorAll("#bk-measure button").forEach((b) => b.addEventListener("click", () => {
+    bkM = b.dataset.m; document.querySelectorAll("#bk-measure button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); drawBook();
+  }));
+  function drawBook() {
+    const regions = ["UK&I", "DACH", "France & Benelux", "Nordics"], tiers = ["Enterprise", "Scale", "Self-service"];
+    const weeks = D.week_ends.filter((we) => day(we) >= day(D.util_dates[0]));
+    const idx = weeks.map((we) => D.util_dates.indexOf(we));
+    const test = bkM === "risk" ? (u) => u < 40 : (u) => u >= 80;
+    $("bk-title").textContent = bkM === "risk" ? "Share of live accounts under 40% utilisation, by week" : "Share of live accounts at 80% utilisation and up, by week";
+    const rows = [];
+    for (const r of regions) for (const t of tiers) {
+      const accs = D.accounts.filter((a) => a.region === r && a.tier === t);
+      const cells = idx.map((i) => { const live = accs.filter((a) => a.util[i] != null); const hit = live.filter((a) => test(a.util[i])); return { live: live.length, hit: hit.length }; });
+      rows.push({ r, t, n: accs.length, cells });
+    }
+    const last = rows.map((x) => x.cells[x.cells.length - 1]), first = rows.map((x) => x.cells[0]);
+    const tot = (cs) => cs.reduce((s, c) => ({ live: s.live + c.live, hit: s.hit + c.hit }), { live: 0, hit: 0 });
+    const L = tot(last), F = tot(first);
+    $("bk-finding").textContent = bkM === "risk"
+      ? `${L.hit} of ${L.live} live accounts (${pct(L.hit, L.live)}%) sit under the churn line today, up from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`
+      : `${L.hit} of ${L.live} live accounts (${pct(L.hit, L.live)}%) are at 80% of their contract or more today, from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`;
+    const shareMax = Math.max(0.01, ...rows.flatMap((x) => x.cells.map((c) => (c.live ? c.hit / c.live : 0))));
+    const ramp = ["var(--seq-0)", "var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
+    const host = $("bk-heat"); host.innerHTML = "";
+    const W = 880, LBL = 250, cw = (W - LBL) / weeks.length, ch = 24, H = rows.length * (ch + 3) + 54;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Book of business heatmap", style: "min-width:640px" }, host);
+    weeks.forEach((we, j) => { el("text", { x: LBL + j * cw + cw / 2, y: 12, "text-anchor": "middle" }, svg).textContent = fmt(we); });
+    rows.forEach((x, i) => {
+      const y = 22 + i * (ch + 3);
+      if (i % 3 === 0) el("text", { x: 0, y: y + 16, class: "lbl", "font-weight": 600 }, svg).textContent = x.r;
+      el("text", { x: 116, y: y + 16, class: "lbl" }, svg).textContent = `${x.t} (${x.n})`;
+      x.cells.forEach((c, j) => {
+        const s = c.live ? c.hit / c.live : 0;
+        const fill = c.live === 0 ? "var(--bg)" : s === 0 ? ramp[0] : ramp[Math.min(5, 1 + Math.floor((s / shareMax) * 4.999))];
+        const r = el("rect", { x: LBL + j * cw + 1, y, width: cw - 2, height: ch, rx: 2, fill }, svg);
+        if (c.live) {
+          const t = el("text", { x: LBL + j * cw + cw / 2, y: y + 16, "text-anchor": "middle", class: "val" }, svg);
+          t.textContent = c.hit ? pct(c.hit, c.live) + "%" : "–";
+          t.style.fill = s / shareMax > 0.6 ? "var(--surface)" : "var(--ink-2)";
+          t.style.pointerEvents = "none";
+        }
+        hover(r, `<b>${esc(x.r)} · ${x.t}</b><br>Week ending ${fmt(weeks[j])}<br>${c.hit} of ${c.live} live accounts (${pct(c.hit, c.live)}%) ${bkM === "risk" ? "under 40%" : "at 80% and up"}`);
+      });
+    });
+    // legend
+    const ly = H - 18;
+    el("text", { x: LBL, y: ly + 10 }, svg).textContent = "0%";
+    ramp.forEach((c, k) => el("rect", { x: LBL + 24 + k * 26, y: ly, width: 24, height: 12, rx: 2, fill: c }, svg));
+    el("text", { x: LBL + 24 + 6 * 26 + 4, y: ly + 10 }, svg).textContent = pct(shareMax, 1) + "% of the row";
+  }
+
+  // first paint: every view drawn, the one in the link shown
+  const firstPick = picks.length ? picks[0].id : D.accounts[0].account_id;
+  sel.value = firstPick; drawTimeline(firstPick);
+  drawOnboarding(); drawTeam(); drawBook();
+  show((location.hash || "").replace("#", ""));
+})();
+</script>
