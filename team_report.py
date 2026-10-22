@@ -55,7 +55,8 @@ con.sql(f"""
     ),
     util_30d AS (
         SELECT t.account_id, t.event_date,
-               t.vol_30d * 365.0 / 30 / c.contracted_events * 100 AS util
+               -- rounded like the flags (79.6% counts as 80%), so both agree
+               round(t.vol_30d * 365.0 / 30 / c.contracted_events * 100) AS util
         FROM rolling t
         JOIN crm c USING (account_id)
         WHERE t.days_in_window = 30          -- a full 30 days, or it isn't comparable
@@ -82,7 +83,10 @@ con.sql(f"""
     )
     SELECT s.account_id, s.routed_to, s.flag, s.signal_date,
            min(c.call_date) AS call_date,
-           greatest(min(c.call_date) - s.signal_date, 0) AS days_to_call,
+           -- no call means no number: greatest() would quietly turn an empty
+           -- value into 0 and make uncalled accounts look fast
+           CASE WHEN min(c.call_date) IS NOT NULL
+                THEN greatest(min(c.call_date) - s.signal_date, 0) END AS days_to_call,
            min(c.call_date) < s.signal_date AS called_early,
            s.account_id IN (SELECT account_id FROM read_csv_auto('data/flags_journey.csv')
                             WHERE status = 'No meeting in 30 days') AS escalated
@@ -118,7 +122,7 @@ con.sql("""
     LEFT JOIN meetings_90d m ON m.owner_id = t.routed_to
     GROUP BY o.owner_name, o.owner_type
     ORDER BY o.owner_type, median_days_to_call NULLS LAST, owner
-""").show()
+""").show(max_width=250)
 
 print("\n2. By manager (their CSMs and pools together)")
 con.sql("""
@@ -144,4 +148,7 @@ con.sql("""
     ORDER BY t.call_date IS NOT NULL, t.days_to_call DESC, owner
 """).show(max_rows=100)
 
+first_day = con.sql("SELECT min(event_date) + 29 FROM events").fetchone()[0]
+print(f"\nA signal on {first_day} (the first day a 30-day average exists) means the account")
+print("was already over the line before measuring could start; the true wait may be longer.")
 print("\nNot measured yet: outcome (did the account recover after the call?).")
