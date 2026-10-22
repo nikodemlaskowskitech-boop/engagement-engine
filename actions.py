@@ -41,7 +41,8 @@ separate churn or expansion task. The QBR is where the CSM deals with it: the
 QBR task lists the open flags ("also in the brief: ..."), qbr.py puts them in
 the facts pack, and the flag is logged as "covered by the QBR on <date>". The
 flag files keep the rows, so the problem is still tracked, and team_report.py
-counts the QBR as the action.
+counts the QBR as the action. If the QBR date passes with no QBR held, the
+flag is raised again as a normal task (the QBR slipped; the problem didn't).
 
 Facts the pipeline creates ("welcome sent") live here, never in the CRM.
 Each customer email also becomes an email_sent event in the engagement stream
@@ -60,7 +61,7 @@ import urllib.error
 import uuid
 import urllib.request
 from collections import defaultdict
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from time import sleep
 
@@ -185,9 +186,26 @@ in_the_brief = defaultdict(list)          # account -> flags folded into its QBR
 
 # What was already done, from earlier runs
 done = set()
+# QBRs actually held, per account, to check that a "covered by the QBR" happened
+qbrs_held = defaultdict(list)
+for account_id, held_on in con.sql("""SELECT account_id, event_date FROM engagement
+                                      WHERE event_name = 'meeting_held' AND properties.topic = 'qbr'""").fetchall():
+    qbrs_held[account_id].append(held_on)
+
+
+def qbr_slipped(row):
+    """A flag handed to a QBR whose date has passed with no QBR held since: the
+    QBR slipped, so the flag is raised again instead of staying "done"."""
+    if row["channel"] != "qbr":
+        return False
+    qbr_date = date.fromisoformat(row["outcome"].rsplit(" ", 1)[-1])
+    logged_on = date.fromisoformat(row["logged_on"])
+    return qbr_date < run_date and not any(d >= logged_on for d in qbrs_held[row["account_id"]])
+
+
 if LOG.exists():
     with LOG.open(encoding="utf-8") as f:
-        done = {key(r) for r in csv.DictReader(f)}
+        done = {key(r) for r in csv.DictReader(f) if not qbr_slipped(r)}
 
 # What the flags ask for today, grouped by where it goes
 new = defaultdict(list)        # owner (or "email") -> new tasks
