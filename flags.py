@@ -28,13 +28,14 @@ signal (on their own they're noise), and they push Watch up to Act: falling
 usage plus rising errors often means data stopped arriving, so the action asks
 for a technical check first.
 
-Plus Shelfware (Scale and Enterprise): live 60+ days, and the 30-day
-utilisation has never reached 40%. Nothing is falling, so the signals above
-stay quiet, but the customer uses a fraction of what they bought and the
-renewal will come in smaller. Usually the rollout never happened (other
-teams, data sources or use cases still to come), so the action is an
-adoption review and a ramp plan. Accounts already at Watch or Act keep that
-status. Self-service buys its own plan size, so it isn't checked.
+Plus Shelfware: live 60+ days, and the 30-day utilisation has never reached
+40%. Nothing is falling, so the signals above stay quiet, but the customer
+uses a fraction of what they bought and the renewal will come in smaller.
+Usually the rollout never happened (other teams, data sources or use cases
+still to come). Scale and Enterprise get an adoption review and a ramp plan;
+Self-service has no CSM, so it gets the one-to-many version: an automated
+use-case inspiration email (CS adoption content, not a plan-limit message).
+Accounts already at Watch or Act keep that status.
 
 Flag 3, expansion. Looks at accounts live for the full 90 days that are
 heading over their contract:
@@ -49,9 +50,11 @@ with flat users is often over-tracking, so the action is a tracking check, not
 an upsell.
 
 This is a CSM cockpit, not an org-wide tool. Customer messaging triggered by
-usage or plan limits belongs to Product, so churn and expansion never email
-customers: Self-service rows go to a Self-service report ("report") for
-analysis, and Scale/Enterprise rows ask the pool or CSM to investigate.
+usage or plan limits belongs to Product, so churn and expansion never send
+those: Self-service rows go to a Self-service report ("report") for analysis,
+and Scale/Enterprise rows ask the pool or CSM to investigate. The exception is
+Self-service Shelfware, which gets adoption content (use cases), never a
+plan-limit or upgrade message.
 
 Every row carries its reasons, who it is routed to and the action. Results are
 saved to data/flags_activation.csv, data/flags_churn.csv,
@@ -340,8 +343,7 @@ con.sql(f"""
         CROSS JOIN as_of a
         JOIN (SELECT account_id, min(event_date) AS go_live_date
               FROM events GROUP BY account_id) f ON f.account_id = c.account_id
-        WHERE c.tier IN ('Scale', 'Enterprise')          -- committed contracts, a CS owner
-          AND f.go_live_date <= a.as_of_date - {RAMP_DAYS}   -- had time to ramp up
+        WHERE f.go_live_date <= a.as_of_date - {RAMP_DAYS}   -- had time to ramp up
     ),
     util AS (
         -- every 30-day utilisation we can compute for the account
@@ -358,9 +360,13 @@ con.sql(f"""
                   || '{{}}M events a year bought; renewal {{}}',
                   u.util_now::INT, u.util_max::INT, strftime(u.seen_since, '%d %b'),
                   (l.contracted_events // 1000000)::INT, strftime(l.renewal_date::DATE, '%d %b %Y')) AS reasons,
-           CASE WHEN l.tier = 'Scale' THEN l.cs_pool
+           CASE WHEN l.tier = 'Self-service' THEN 'automated'     -- one-to-many: an email
+                WHEN l.tier = 'Scale'        THEN l.cs_pool
                 ELSE coalesce(l.csm_owner, 'cs_ops') END AS routed_to,
-           CASE WHEN l.tier = 'Scale' THEN
+           CASE WHEN l.tier = 'Self-service' THEN
+                    'Send the use-case inspiration email: how other teams use Cairnpath, '
+                    || 'with links to the guides for each use case'
+                WHEN l.tier = 'Scale' THEN
                     'Offer an adoption review: which teams and data sources are still to come? '
                     || 'Invite them to the next advanced workshop'
                 ELSE 'CSM books an adoption review: what is blocking the rollout (teams, data '

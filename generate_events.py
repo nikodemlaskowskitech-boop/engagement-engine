@@ -55,9 +55,10 @@ USERS_BY_TIER = {"Enterprise": (10, 25), "Scale": (4, 10), "Self-service": (2, 5
 
 # How much of their contract accounts really use, by tier. Each account gets a
 # random factor in this range, applied to its personality's utilisation.
-# Enterprise is often over-provisioned at signing; Self-service runs lower
-# and is more spread out.
-UTIL_FACTOR_BY_TIER = {"Enterprise": (0.70, 1.05), "Scale": (0.80, 1.15), "Self-service": (0.50, 1.25)}
+# Enterprise is often over-provisioned at signing; Self-service is more spread
+# out. The low ends keep a healthy or ramped-up account above 40%: low and flat
+# is the shelfware personality's job, not an accident of the factor.
+UTIL_FACTOR_BY_TIER = {"Enterprise": (0.70, 1.05), "Scale": (0.80, 1.15), "Self-service": (0.65, 1.25)}
 
 # The working week: how likely users are to show up, Monday to Sunday,
 # relative to the personality's activity. B2B analysts work weekdays (a bit
@@ -102,10 +103,7 @@ TRAILING_LAG_DAYS = 15     # a 30-day average crosses a line about 15 days after
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
 # An Enterprise deal is never missing from the CRM, and a silent Enterprise
 # customer is rare (it gets escalated fast).
-# Shelfware is an oversold annual commitment, which needs a sales-led deal:
-# Self-service customers pick their own plan.
-TIER_WEIGHT_OVERRIDES = {"Enterprise": {"handoff_gap": 0.0, "never_onboarded": 0.01},
-                         "Self-service": {"shelfware": 0.0}}
+TIER_WEIGHT_OVERRIDES = {"Enterprise": {"handoff_gap": 0.0, "never_onboarded": 0.01}}
 
 # --- CS team ----------------------------------------------------------------
 # Enterprise accounts have a named CSM; Scale accounts go to a regional pool;

@@ -27,12 +27,15 @@ with short comments, and prefer small steps he can review.
 
 This is a cockpit for the CS team, not an org-wide engagement tool.
 - Customer messaging triggered by usage or plan limits belongs to Product.
-  Churn and expansion flags never email customers: they ask the pool or
-  CSM to investigate and analyse.
+  Churn and expansion flags never send usage, plan-limit or upgrade
+  messages: they ask the pool or CSM to investigate and analyse (the one
+  email is Self-service Shelfware's adoption content, below).
 - Self-service churn and expansion rows go to the Self-service report
   (routed_to = 'report') for analysis across accounts.
 - Onboarding programmes (activation welcome emails, workshop invites) stay:
-  they are CS one-to-many engagement, not utilisation messaging.
+  they are CS one-to-many engagement, not utilisation messaging. So does
+  adoption content for Self-service (e.g. the use-case inspiration email for
+  Shelfware): it teaches, it never mentions plan limits or upgrades.
 - Apply the same test to anything new: investigate and analyse first.
 
 ## The fake product
@@ -81,7 +84,7 @@ One JSON event per line, one file per day in `data/events/`.
   with properties.owner_id (csm_*, pool_*, automated) and properties.topic
   (getting_started, onboarding_workshop, advanced_workshop, qbr, kickoff,
   check_in, churn_call, activation_call, growth_call, follow_up; from actions.py: welcome_pack,
-  invite_your_team, need_help_starting). user_id = the customer user who
+  invite_your_team, need_help_starting, use_case_inspiration). user_id = the customer user who
   responded or attended. context.source says who wrote it (cs_history from
   the generator, actions.py for new actions, slack for clicks). Slack clicks
   add task_claimed events and meeting_held with properties.outcome, .note
@@ -107,9 +110,10 @@ One JSON event per line, one file per day in `data/events/`.
    Ingestion errors (5+ in 30 days, rising) only count next to a usage
    signal, and push Watch up to Act with a "technical check first" action.
    Self-service rows go to the Self-service report.
-   Shelfware (Scale and Enterprise): live 60+ days (go-live) and 30-day
-   utilisation never reached 40%: flat and low, never ramped up. Status
-   Shelfware, action: adoption review and a ramp plan before renewal.
+   Shelfware: live 60+ days (go-live) and 30-day utilisation never reached
+   40%: flat and low, never ramped up. Status Shelfware. Scale and
+   Enterprise: adoption review and a ramp plan before renewal. Self-service:
+   automated use-case inspiration email (topic use_case_inspiration).
    Accounts already at Watch or Act keep that status.
 3. Expansion (accounts live for the full 90 days). Stays with CS: the
    CSM builds the growth case, Sales only signs. Volume signal: 90%+ of
@@ -149,8 +153,8 @@ One JSON event per line, one file per day in `data/events/`.
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
   declining, power_user, new_customer, shelfware, stalled, never_onboarded,
   handoff_gap) mixed by weight (new customers sign all through the window
-  and ramp their volume up over the first month; shelfware is Scale and
-  Enterprise only, flat at about a quarter of the contract;
+  and ramp their volume up over the first month; shelfware is flat at about
+  a quarter of the contract;
   stalled and silent ones are recent), 90 days of events, the CRM table and the
   CS team table. About 4 in 10 accounts have a champion (one user far more
   active than the rest). Product use follows a working week (quiet

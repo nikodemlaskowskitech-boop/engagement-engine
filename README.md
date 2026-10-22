@@ -13,7 +13,7 @@ kind a real CS team runs.
 | Flag | Looks for | Who acts |
 | --- | --- | --- |
 | Activation | New customers who are activated, stalled or silent, plus gaps in our own records (no CRM entry, no CSM assigned) | Automation, regional pools, named CSMs, CS ops |
-| Churn risk | Utilisation falling for two months, weekly active users dropping, and rising ingestion errors as a sign of a technical cause; plus Shelfware: live 60+ days and never above 40% utilisation (the rollout never happened) | Same routing, with Watch and Act levels; Shelfware asks for an adoption review |
+| Churn risk | Utilisation falling for two months, weekly active users dropping, and rising ingestion errors as a sign of a technical cause; plus Shelfware: live 60+ days and never above 40% utilisation (the rollout never happened) | Same routing, with Watch and Act levels; Shelfware asks for an adoption review (Self-service: a use-case inspiration email) |
 | Expansion | Accounts heading over their contract with a growing team, plus volume rising without users (often over-tracking) | CSMs and pools investigate and build the growth case; Sales only signs |
 | QBR | Enterprise QBRs in the next 30 days (with a facts pack per account) and QBRs overdue with nothing booked | Named CSMs |
 
