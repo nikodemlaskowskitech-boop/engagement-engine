@@ -184,6 +184,12 @@ One JSON event per line, one file per day in `data/events/`.
   a call up to 14 days before the signal counts as 0 days ("called
   early"). Also escalations and meetings in 90 days. Outcome not measured
   yet.
+- `onboarding_report.py`: welcomed vs. control (run `generate_events.py`
+  first). New Self-service/Scale accounts that got the getting-started email
+  vs. the onboarding holdout: SDK installed, median days to SDK and to first
+  chart (speed), activated in 14 days for accounts 14+ days old (outcome),
+  overall and by tier, counts next to percentages. Planted effect: shows the
+  method, doesn't prove emails work.
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to
@@ -215,7 +221,7 @@ One JSON event per line, one file per day in `data/events/`.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Engagement: history, new email_sent events, the first journeys and the
-  team report (time to action) exist; next, the welcomed vs. control
-  comparison, then outcome after a call. Views to build: account
+  team report (time to action) and the welcomed vs. control report exist;
+  next, outcome after a call, then the views. Views to build: account
   timeline, onboarding funnel (welcomed vs. control), CS team activity,
   book-of-business heatmap.
