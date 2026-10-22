@@ -112,7 +112,8 @@ One JSON event per line, one file per day in `data/events/`.
    Self-service rows go to the Self-service report.
    Shelfware: live 60+ days (go-live) and 30-day utilisation never reached
    40%: flat and low, never ramped up. Status Shelfware. Scale and
-   Enterprise: adoption review and a ramp plan before renewal. Self-service:
+   Enterprise: adoption review and a ramp plan before renewal (renewal
+   within 3 months: call this week about the renewal volume). Self-service:
    automated use-case inspiration email (topic use_case_inspiration).
    Accounts already at Watch or Act keep that status.
 3. Expansion (accounts live for the full 90 days). Stays with CS: the
@@ -132,6 +133,12 @@ One JSON event per line, one file per day in `data/events/`.
    one-page brief per pack, ending with one suggested ask. Every number in
    the draft is checked against the pack; untraceable ones are listed as
    "unverified" at the bottom. Real user IDs go back in after the model.
+   QBR first: with a QBR in the next 30 days, an Enterprise account's churn
+   and expansion flags get no separate task. The QBR task lists them ("also
+   in the brief"), they're logged "covered by the QBR", no "No meeting"
+   escalation, and team_report.py counts the QBR as the action when the
+   signal came in the 30 days before it. The flag rows stay, for tracking.
+   If the QBR date passes with no QBR held, the flag is raised again.
 
 ## Design rules
 
@@ -192,13 +199,14 @@ One JSON event per line, one file per day in `data/events/`.
   never opened": Self-service stalled/silent, getting-started email 5+ days
   old and unopened -> CS ops checks the contact. "No meeting in 30 days":
   churn or expansion Act (Scale/Enterprise) for 14+ days with no meeting
-  in 30 days ->
+  in 30 days, and no QBR booked in the next 30 days ->
   escalated to the owner's manager (one Slack message per manager). Saved
   to `data/flags_journey.csv`, same columns as the flags.
 - `team_report.py`: time to action by owner and manager (run `flags.py`
   and `journeys.py` first). Signal date = first day the account's 30-day
   utilisation crossed the flag's line (rebuilt from usage); call date =
-  first churn, growth or activation call (check-ins and QBRs don't count);
+  first churn, growth or activation call (check-ins don't count; a QBR
+  counts when the signal came in the 30 days before it, column via);
   a call up to 14 days before the signal counts as 0 days ("called
   early"). Also escalations and meetings in 90 days. Outcome not measured
   yet.
@@ -231,7 +239,8 @@ One JSON event per line, one file per day in `data/events/`.
   Reads the journey rows too, and shows each account's last CS touch under
   every Slack task. Owners in settings.toml [slack] interactive_owners get one
   card per task with buttons (via the bot token, one a second) instead of
-  the digest.
+  the digest. QBR first: churn/expansion rows of an account with a QBR in
+  the next 30 days are logged "covered by the QBR" and named on its QBR task.
   `none` and `report` rows aren't actions. The log only grows; delete it
   to start over.
 - `slack_loop.py`: shared Slack pieces (task cards, .env tokens, appending

@@ -26,7 +26,7 @@ SLACK = SETTINGS["slack"]
 
 # Which kind of call a "Log call" click records, by flag
 CALL_TOPIC = {"churn": "churn_call", "expansion": "growth_call", "activation": "activation_call",
-              "journey": "follow_up", "qbr": "check_in"}
+              "journey": "follow_up", "qbr": "qbr"}      # a QBR card logs the QBR itself
 
 OUTCOMES = {"reached_at_risk": "Reached: at risk", "reached_fine": "Reached: all fine",
             "no_answer": "No answer"}
@@ -74,7 +74,8 @@ def card_blocks(task, owner_name, last_touch=None):
             {"type": "button", "action_id": "claim", "text": {"type": "plain_text", "text": "I'll take it"},
              "value": ref},
             {"type": "button", "action_id": "log_call", "style": "primary",
-             "text": {"type": "plain_text", "text": "Log call"}, "value": ref},
+             "text": {"type": "plain_text", "text": "Log QBR" if task["flag"] == "qbr" else "Log call"},
+             "value": ref},
             {"type": "button", "action_id": "open_timeline", "url": link,
              "text": {"type": "plain_text", "text": "Open timeline"}},
         ]},

@@ -7,8 +7,11 @@ For every account at churn or expansion Act with a CSM or a pool:
                 (under 40% for churn, 80%+ for expansion). We never stored
                 when flags fired, so the start is rebuilt from the usage.
   call date     the owner's first problem call (churn, growth or activation
-                call). Routine check-ins and QBRs don't count: they were in
-                the diary anyway, so they aren't a reaction.
+                call). Routine check-ins don't count: they were in the diary
+                anyway, so they aren't a reaction. A QBR counts when the
+                signal came in the 30 days before it: QBR first means the
+                flag was handed to that QBR (actions.py), so the QBR is the
+                action. "via" says which it was (call or qbr).
   days to call  call date minus signal date. A call up to 14 days before the
                 signal counts as 0 ("called early"): good owners spot trouble
                 before a 30-day average does.
@@ -34,6 +37,7 @@ from settings import SETTINGS
 sys.stdout.reconfigure(encoding="utf-8")
 
 EARLY_DAYS = SETTINGS["team_report"]["early_days"]   # a call this early still counts (settings.toml)
+QBR_WINDOW = SETTINGS["qbr"]["coming_up_days"]       # a signal this close before a QBR is the QBR's job
 PROBLEM_CALLS = "('churn_call', 'growth_call', 'activation_call')"
 
 def add_views(con):
@@ -56,12 +60,17 @@ def add_views(con):
             GROUP BY a.account_id, a.routed_to, a.flag
         ),
         calls AS (
-            SELECT account_id, event_date AS call_date
+            SELECT account_id, event_date AS call_date, 'call' AS via
             FROM engagement
             WHERE event_name = 'meeting_held' AND properties.topic IN {PROBLEM_CALLS}
+            UNION ALL
+            SELECT account_id, event_date, 'qbr'
+            FROM engagement
+            WHERE event_name = 'meeting_held' AND properties.topic = 'qbr'
         )
         SELECT s.account_id, s.routed_to, s.flag, s.signal_date,
                min(c.call_date) AS call_date,
+               arg_min(c.via, c.call_date) AS via,
                -- no call means no number: greatest() would quietly turn an empty
                -- value into 0 and make uncalled accounts look fast
                CASE WHEN min(c.call_date) IS NOT NULL
@@ -71,7 +80,10 @@ def add_views(con):
                                 WHERE status = 'No meeting in 30 days') AS escalated
         FROM signals s
         LEFT JOIN calls c ON c.account_id = s.account_id
-                         AND c.call_date >= s.signal_date - {EARLY_DAYS}
+                         AND ((c.via = 'call' AND c.call_date >= s.signal_date - {EARLY_DAYS})
+                              -- a QBR covers a signal from the 30 days before it
+                              OR (c.via = 'qbr' AND c.call_date BETWEEN s.signal_date
+                                                                    AND s.signal_date + {QBR_WINDOW}))
         GROUP BY s.account_id, s.routed_to, s.flag, s.signal_date
     """)
 
@@ -125,7 +137,7 @@ if __name__ == "__main__":
     print("\n3. Every Act account, slowest first (no call at the top)")
     con.sql("""
         SELECT o.owner_name AS owner, t.account_id, c.account_name, t.flag,
-               t.signal_date, t.call_date, t.days_to_call, t.escalated
+               t.signal_date, t.call_date, t.via, t.days_to_call, t.escalated
         FROM time_to_action t
         JOIN cs_team o ON o.owner_id = t.routed_to
         JOIN crm c USING (account_id)
