@@ -422,7 +422,7 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
       const strong = t.event === "meeting_held" && PROBLEM.has(t.topic);
       const m = drawShape(svg, k.shape, cx, cy, k.color, strong ? 6 : 5);
       const owner = ownerName[t.owner_id] || t.owner_id;
-      const src = t.source === "actions.py" ? " · sent by the engine" : "";
+      const src = t.source === "actions.py" ? " · sent by the engine" : t.source === "slack" ? " · logged in Slack" : "";
       hover(m, `<b>${k.name}</b> · ${esc(topicName(t.topic))}<br>${fmt(t.date)} · ${esc(owner)}${src}`);
       const hitc = el("circle", { cx, cy, r: 10, fill: "transparent" }, svg);
       hover(hitc, `<b>${k.name}</b> · ${esc(topicName(t.topic))}<br>${fmt(t.date)} · ${esc(owner)}${src}`);
@@ -659,6 +659,9 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
   const firstPick = picks.length ? picks[0].id : D.accounts[0].account_id;
   sel.value = firstPick; drawTimeline(firstPick);
   drawOnboarding(); drawTeam(); drawBook();
-  show((location.hash || "").replace("#", ""));
+  // a link like ...#acc_069 (from Slack's Open timeline) opens that account
+  const hashToken = (location.hash || "").replace("#", "");
+  if (byId[hashToken]) { sel.value = hashToken; drawTimeline(hashToken); show("timeline"); }
+  else show(hashToken);
 })();
 </script>

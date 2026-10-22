@@ -36,7 +36,8 @@ python journeys.py          # follow-ups based on the last CS touch (unopened em
 python team_report.py       # how fast each CSM and pool acts on churn and expansion Act accounts
 python onboarding_report.py # does the getting-started email help? welcomed vs. control group
 python export_views.py      # the views page: open data/views.html in a browser
-python actions.py           # post new tasks to Slack and log each action once (run it twice: the second run adds nothing)
+python actions.py           # tasks to Slack: digests, plus cards with buttons for the demo owners
+python listener.py          # in a second window: handles the buttons; clicks flow back as events           # post new tasks to Slack and log each action once (run it twice: the second run adds nothing)
 python qbr.py               # facts pack for each QBR in the next 30 days
 python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_API_KEY in .env)
 ```

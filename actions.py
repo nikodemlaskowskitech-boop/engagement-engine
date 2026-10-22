@@ -55,9 +55,11 @@ import urllib.request
 from collections import defaultdict
 from datetime import datetime, time, timedelta
 from pathlib import Path
+from time import sleep
 
 from cairnpath_db import connect
 from settings import SETTINGS
+from slack_loop import card_blocks, card_channel, interactive, load_env
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -152,6 +154,8 @@ last_touch = {a: (what, when) for a, what, when in con.sql("""
     WHERE event_date <= as_of_date
     GROUP BY account_id""").fetchall()}
 queue_hook, email_hook = load_webhooks()
+# the bot token posts task cards with buttons; without it, everything stays a digest
+bot_token, demo_user = load_env("SLACK_BOT_TOKEN", "SLACK_DEMO_USER")
 
 with (DATA / "cs_team.csv").open(encoding="utf-8") as f:
     owner_names = {r["owner_id"]: r["owner_name"] for r in csv.DictReader(f)}
@@ -193,7 +197,12 @@ for flag in FLAGS:
                     done.add(key(task))
                     continue
                 task["action"] += HOLDOUT_NOTE          # a person shouldn't send it by hand either
-            new["email" if r["routed_to"] == "automated" else r["routed_to"]].append(task)
+            if r["routed_to"] == "automated":
+                new["email"].append(task)
+            elif interactive(r["routed_to"]) and bot_token:
+                new["card"].append(task)                # a card with buttons (settings.toml [slack])
+            else:
+                new[r["routed_to"]].append(task)        # the owner's digest message
             done.add(key(task))   # so a duplicate row in the same run is only done once
 
 # Do the actions: one Slack message per group, then log the group if it worked
@@ -204,6 +213,31 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
     if first_run:
         writer.writeheader()
     for group, tasks in sorted(new.items()):
+        if group == "card":
+            # one card per task, each logged only once Slack has accepted it
+            from slack_sdk import WebClient
+            from slack_sdk.errors import SlackApiError
+            client = WebClient(token=bot_token)
+            posted = 0
+            for t in tasks:
+                owner = owner_names.get(t["routed_to"], t["routed_to"])
+                try:
+                    client.chat_postMessage(channel=card_channel(t["routed_to"], demo_user or SETTINGS["slack"]["team_channel"]),
+                                            blocks=card_blocks(t, owner, last_touch.get(t["account_id"])),
+                                            text=f"{t['account_name']}: {t['flag']} {t['status']} for {owner}")
+                except SlackApiError as error:
+                    print(f"  Slack card failed for {t['account_id']} ({error.response['error']}): "
+                          "not logged, will retry next run")
+                    continue
+                writer.writerow({"logged_on": run_date, "account_id": t["account_id"], "flag": t["flag"],
+                                 "status": t["status"], "routed_to": t["routed_to"], "channel": "card",
+                                 "action": t["action"], "outcome": "card posted"})
+                f.flush()
+                posted += 1
+                sleep(1.1)                              # Slack allows about one message a second
+            logged += posted
+            print(f"  {'card':<6} {'Interactive owners':<20} {posted:>3}  task cards with buttons")
+            continue
         if group == "held_out":
             writer.writerows({"logged_on": run_date, "account_id": t["account_id"], "flag": t["flag"],
                               "status": t["status"], "routed_to": t["routed_to"], "channel": "none",

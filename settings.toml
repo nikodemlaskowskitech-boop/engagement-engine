@@ -39,3 +39,9 @@ early_days = 14           # a call this many days before the signal still counts
 
 [actions]
 email_hour = 9            # customer emails go out at 9:00 local time
+
+[slack]
+team_channel = "#cs-queue"                      # where task cards go
+interactive_owners = ["pool_dach", "csm_anna", "mgr_sophie"]   # their tasks get cards with buttons
+dm_owners = ["csm_anna"]                        # ...sent as DMs to SLACK_DEMO_USER (you play Anna)
+cockpit_url = "https://claude.ai/artifact/LGt2Q5S98GeVDK3kNzrhph"   # Open timeline links here
