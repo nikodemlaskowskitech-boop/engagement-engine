@@ -107,6 +107,10 @@ One JSON event per line, one file per day in `data/events/`.
    Ingestion errors (5+ in 30 days, rising) only count next to a usage
    signal, and push Watch up to Act with a "technical check first" action.
    Self-service rows go to the Self-service report.
+   Shelfware (Scale and Enterprise): live 60+ days (go-live) and 30-day
+   utilisation never reached 40%: flat and low, never ramped up. Status
+   Shelfware, action: adoption review and a ramp plan before renewal.
+   Accounts already at Watch or Act keep that status.
 3. Expansion (accounts live for the full 90 days). Stays with CS: the
    CSM builds the growth case, Sales only signs. Volume signal: 90%+ of
    contract already, or 80%+ and climbing 3+ points a month fast enough to
@@ -143,8 +147,10 @@ One JSON event per line, one file per day in `data/events/`.
   Tiers, routing and the utilisation definition are still in the SQL (next:
   the data contract).
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
-  declining, power_user, new_customer, stalled, never_onboarded,
-  handoff_gap) mixed by weight (new customers sign all through the window;
+  declining, power_user, new_customer, shelfware, stalled, never_onboarded,
+  handoff_gap) mixed by weight (new customers sign all through the window
+  and ramp their volume up over the first month; shelfware is Scale and
+  Enterprise only, flat at about a quarter of the contract;
   stalled and silent ones are recent), 90 days of events, the CRM table and the
   CS team table. About 4 in 10 accounts have a champion (one user far more
   active than the rest). Product use follows a working week (quiet

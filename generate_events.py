@@ -96,13 +96,16 @@ OWNER_STYLE = {
 # How customers respond, by personality
 OPEN_RATE = {"new_customer": 0.80, "stalled": 0.45, "never_onboarded": 0.10}
 ONBOARDING_WORKSHOP_RATE = {"new_customer": 0.65, "stalled": 0.15, "never_onboarded": 0.03}
-ADVANCED_WORKSHOP_RATE = {"healthy": 0.08, "power_user": 0.20, "declining": 0.10}
+ADVANCED_WORKSHOP_RATE = {"healthy": 0.08, "power_user": 0.20, "declining": 0.10, "shelfware": 0.03}
 TRAILING_LAG_DAYS = 15     # a 30-day average crosses a line about 15 days after daily usage does
 
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
 # An Enterprise deal is never missing from the CRM, and a silent Enterprise
 # customer is rare (it gets escalated fast).
-TIER_WEIGHT_OVERRIDES = {"Enterprise": {"handoff_gap": 0.0, "never_onboarded": 0.01}}
+# Shelfware is an oversold annual commitment, which needs a sales-led deal:
+# Self-service customers pick their own plan.
+TIER_WEIGHT_OVERRIDES = {"Enterprise": {"handoff_gap": 0.0, "never_onboarded": 0.01},
+                         "Self-service": {"shelfware": 0.0}}
 
 # --- CS team ----------------------------------------------------------------
 # Enterprise accounts have a named CSM; Scale accounts go to a regional pool;
@@ -130,11 +133,13 @@ CS_TEAM = [
 #   errors        = chance of ingestion errors on a given day
 #   features      = which product events their users produce
 #   lifecycle     = "existing" (live before the data starts) or "new" (signed recently)
+#   ramp_days     = new accounts only: util goes from its start to its end value over
+#                   this many days after go-live (instead of across the 90 days)
 #   weight        = share of accounts with this personality
 
 PERSONALITIES = {
     "healthy": dict(
-        weight=0.51, lifecycle="existing",
+        weight=0.46, lifecycle="existing",
         activity=(0.6, 0.6), util=(0.65, 0.70), user_growth=1.1, errors=(0.02, 0.02),
         features=["chart_created", "dashboard_shared", "cohort_created", "data_export"],
     ),
@@ -150,8 +155,13 @@ PERSONALITIES = {
                   "experiment_launched", "data_export"],
     ),
     "new_customer": dict(      # signs during the window, installs the SDK, the team gets going
-        weight=0.14, lifecycle="new",
-        activity=(0.5, 0.5), util=(0.30, 0.30), user_growth=1.4, errors=(0.03, 0.03),
+        weight=0.14, lifecycle="new", ramp_days=30,   # volume ramps up over the first month
+        activity=(0.5, 0.5), util=(0.20, 0.70), user_growth=1.4, errors=(0.03, 0.03),
+        features=["chart_created", "dashboard_shared"],
+    ),
+    "shelfware": dict(         # live for months, people use it, but the rollout never came:
+        weight=0.05, lifecycle="existing",       # flat volume far below what they bought
+        activity=(0.45, 0.45), util=(0.22, 0.24), user_growth=1.0, errors=(0.02, 0.02),
         features=["chart_created", "dashboard_shared"],
     ),
     "stalled": dict(           # signs recently, installs the SDK, but only one person uses it
@@ -447,7 +457,13 @@ def events_for_day(acc, day_index, day, pool):
 
     # System: how many events the customer sent us today (this is what they pay for)
     daily_contract = CONTRACT_SIZE[acc["tier"]] / 365
-    utilisation = min(1.2, lerp(p["util"], day_index) * acc["util_factor"])   # cap at 120% (overage)
+    if p.get("ramp_days"):
+        # new customers ramp up: more data sources and teams come on over the first month
+        ramp = min(1.0, (day - onboard_day).days / p["ramp_days"])
+        planned = p["util"][0] + (p["util"][1] - p["util"][0]) * ramp
+    else:
+        planned = lerp(p["util"], day_index)
+    utilisation = min(1.2, planned * acc["util_factor"])   # cap at 120% (overage)
     volume = int(daily_contract * utilisation * random.uniform(0.85, 1.15))
     out.append(event("daily_event_volume", "system", day, acc["id"],
                      properties={"event_count": volume}))
@@ -574,7 +590,7 @@ def engagement_for_account(rng, acc):
             meeting(acc["last_qbr"], "qbr")
         if p["lifecycle"] == "new":
             meeting(start + timedelta(days=rng.randint(*style["act_days"])), "kickoff")
-        elif acc["personality"] in ("healthy", "power_user", "declining"):
+        elif acc["personality"] in ("healthy", "power_user", "declining", "shelfware"):
             day = START_DATE + timedelta(days=rng.randint(0, style["check_in_days"]))
             while day <= END_DATE:
                 near_qbr = acc["last_qbr"] and abs((day - acc["last_qbr"]).days) < 10

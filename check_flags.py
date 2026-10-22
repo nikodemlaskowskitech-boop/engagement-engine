@@ -86,6 +86,8 @@ EXPECTATIONS = [
     ("Handoff gaps are caught",                  "activation", {"Handoff gap"}, "handoff_gap",     100),
     ("New customers (last 45 days) activate",    "activation", {"Activated", "Activating"}, "new_customer", 90),
     ("Declining accounts raise a churn flag",    "churn",      {"Act", "Watch"}, "declining",      90),
+    # A shelfware account with a random bad week can land in Watch instead, so not 100%
+    ("Shelfware accounts show as Shelfware",     "churn",      {"Shelfware"},    "shelfware",      80),
     # Power users are engaged, but some bought far more than they use: with
     # headroom left there's no expansion case yet, so not all of them qualify.
     ("Power users raise an expansion flag",      "expansion",  {"Act", "Watch"}, "power_user",     60),
@@ -94,6 +96,8 @@ EXPECTATIONS = [
 # False alarms: rows that should never come from these personalities
 FALSE_ALARMS = [
     ("Healthy or growing accounts in churn",     "churn",      {"Act", "Watch"}, {"healthy", "power_user"}),
+    # New customers ramp up over their first month: they must never look like shelfware
+    ("Ramping or healthy accounts as Shelfware", "churn",      {"Shelfware"},    {"healthy", "power_user", "new_customer"}),
     # A healthy account near its cap is a fair Watch (heading over contract);
     # Act needs growing users too, so it should come from power users only.
     ("Healthy accounts at expansion Act",        "expansion",  {"Act"},          {"healthy"}),

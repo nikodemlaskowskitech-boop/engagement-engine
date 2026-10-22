@@ -321,6 +321,7 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
   pickBy((a) => tta[a.account_id] && tta[a.account_id].owner_type === "csm" && !tta[a.account_id].call_date && tta[a.account_id].flag === "churn", "Declining, never called");
   pickBy((a) => tta[a.account_id] && tta[a.account_id].days_to_call === 0 && tta[a.account_id].called_early && tta[a.account_id].flag === "churn", "Called before the signal");
   pickBy((a) => a.flags.some((f) => f.flag === "journey" && f.status === "No meeting in 30 days"), "Escalated to a manager");
+  pickBy((a) => a.tier === "Enterprise" && a.flags.some((f) => f.flag === "churn" && f.status === "Shelfware"), "Shelfware, never ramped");
   pickBy((a) => a.flags.some((f) => f.flag === "expansion" && f.status === "Act") && a.flags.some((f) => f.flag === "qbr"), "Growing, QBR due");
   pickBy((a) => a.util.some((u) => u != null) && !a.flags.length && a.tier === "Enterprise", "Healthy, no flags");
 

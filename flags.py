@@ -28,6 +28,14 @@ signal (on their own they're noise), and they push Watch up to Act: falling
 usage plus rising errors often means data stopped arriving, so the action asks
 for a technical check first.
 
+Plus Shelfware (Scale and Enterprise): live 60+ days, and the 30-day
+utilisation has never reached 40%. Nothing is falling, so the signals above
+stay quiet, but the customer uses a fraction of what they bought and the
+renewal will come in smaller. Usually the rollout never happened (other
+teams, data sources or use cases still to come), so the action is an
+adoption review and a ramp plan. Accounts already at Watch or Act keep that
+status. Self-service buys its own plan size, so it isn't checked.
+
 Flag 3, expansion. Looks at accounts live for the full 90 days that are
 heading over their contract:
 
@@ -76,6 +84,7 @@ CHURN_UTIL_BELOW = SETTINGS["churn"]["util_below"]
 CHURN_BREADTH_DROP = SETTINGS["churn"]["breadth_drop"]
 CHURN_BREADTH_MIN_USERS = SETTINGS["churn"]["breadth_min_users"]
 CHURN_MIN_ERRORS = SETTINGS["churn"]["min_errors"]
+RAMP_DAYS = SETTINGS["churn"]["ramp_days"]
 
 EXP_AT_CAP = SETTINGS["expansion"]["at_cap"]
 EXP_HIGH = SETTINGS["expansion"]["high"]
@@ -228,7 +237,7 @@ print("\nSaved every row to data/flags_activation.csv")
 # --- Flag 2: churn risk ---------------------------------------------------------
 
 con.sql(f"""
-    CREATE VIEW churn AS
+    CREATE VIEW churn_trend AS
     WITH base AS (
         -- CRM accounts live for the whole 90-day window (we need two months of trend);
         -- monthly_usage already holds exactly those accounts
@@ -321,7 +330,56 @@ con.sql(f"""
     WHERE usage_signals >= 1
 """)
 
-print("\n\nChurn risk (accounts live for the full 90 days)")
+# Shelfware: low and flat, never ramped up. The trend signals above need a fall,
+# so an account that was always low never trips them.
+con.sql(f"""
+    CREATE VIEW shelfware AS
+    WITH live AS (
+        SELECT c.*, a.as_of_date, f.go_live_date
+        FROM crm c
+        CROSS JOIN as_of a
+        JOIN (SELECT account_id, min(event_date) AS go_live_date
+              FROM events GROUP BY account_id) f ON f.account_id = c.account_id
+        WHERE c.tier IN ('Scale', 'Enterprise')          -- committed contracts, a CS owner
+          AND f.go_live_date <= a.as_of_date - {RAMP_DAYS}   -- had time to ramp up
+    ),
+    util AS (
+        -- every 30-day utilisation we can compute for the account
+        SELECT account_id,
+               arg_max(util, event_date)       AS util_now,
+               max(util)                       AS util_max,
+               min(event_date) - 29            AS seen_since   -- the first 30-day window's start
+        FROM daily_util_30d
+        GROUP BY account_id
+    )
+    SELECT l.account_id, l.account_name, l.tier, l.region,
+           'Shelfware' AS status,
+           format('Never ramped up: utilisation {{}}% now and never above {{}}% since {{}}; '
+                  || '{{}}M events a year bought; renewal {{}}',
+                  u.util_now::INT, u.util_max::INT, strftime(u.seen_since, '%d %b'),
+                  (l.contracted_events // 1000000)::INT, strftime(l.renewal_date::DATE, '%d %b %Y')) AS reasons,
+           CASE WHEN l.tier = 'Scale' THEN l.cs_pool
+                ELSE coalesce(l.csm_owner, 'cs_ops') END AS routed_to,
+           CASE WHEN l.tier = 'Scale' THEN
+                    'Offer an adoption review: which teams and data sources are still to come? '
+                    || 'Invite them to the next advanced workshop'
+                ELSE 'CSM books an adoption review: what is blocking the rollout (teams, data '
+                     || 'sources, use cases)? Agree a ramp plan well before the renewal'
+           END AS action
+    FROM live l
+    JOIN util u USING (account_id)
+    WHERE u.util_max < {CHURN_UTIL_BELOW}
+""")
+
+# One churn list: the trend signals first; Shelfware only where they found nothing
+con.sql("""
+    CREATE VIEW churn AS
+    SELECT * FROM churn_trend
+    UNION ALL
+    SELECT * FROM shelfware WHERE account_id NOT IN (SELECT account_id FROM churn_trend)
+""")
+
+print("\n\nChurn risk (Watch/Act: live for the full 90 days; Shelfware: live 60+ days, never ramped)")
 
 print("\n3. Accounts per status and tier")
 con.sql("""
