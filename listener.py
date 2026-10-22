@@ -10,7 +10,8 @@ signature itself.)
 What each button does:
   I'll take it    -> a task_claimed event; the card shows who took it
   Log call        -> a small form (outcome + note) -> a meeting_held event with
-                     the right topic (churn_call, growth_call, ...); the card
+                     the right topic (churn_call, growth_call, ...; "Log QBR"
+                     on a QBR card records the QBR itself); the card
                      shows the call. The next pipeline run sees the call: the
                      escalation stops, the team report counts it, the
                      timeline shows it.
@@ -72,7 +73,7 @@ def log_call(ack, body, client):
     meta = json.dumps({**ref, "channel": body["channel"]["id"], "ts": body["message"]["ts"]})
     client.views_open(trigger_id=body["trigger_id"], view={
         "type": "modal", "callback_id": "log_call_form", "private_metadata": meta,
-        "title": {"type": "plain_text", "text": "Log a call"},
+        "title": {"type": "plain_text", "text": "Log the QBR" if ref["f"] == "qbr" else "Log a call"},
         "submit": {"type": "plain_text", "text": "Log it"},
         "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": [
@@ -100,7 +101,8 @@ def log_call_submitted(ack, body, view, client):
     append_event(DAY, ref["a"], "meeting_held", ref["o"], topic, user, outcome, note)
     # update the original card: the buttons give way to what happened (the bot
     # can't read messages, by design, so the card is rebuilt from what we know)
-    text = f":telephone_receiver: Call logged by <@{user}>: *{OUTCOMES[outcome]}*" + (f" · _{note}_" if note else "")
+    what = "QBR" if ref["f"] == "qbr" else "Call"
+    text = f":telephone_receiver: {what} logged by <@{user}>: *{OUTCOMES[outcome]}*" + (f" · _{note}_" if note else "")
     client.chat_update(channel=ref["channel"], ts=ref["ts"], text=f"{ref['n']}: call logged", blocks=[
         {"type": "section", "text": {"type": "mrkdwn", "text": f"*{ref['n']}* ({ref['a']}) · {flag_label(ref['f'], ref['s'])}"}},
         {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]},

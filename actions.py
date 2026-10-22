@@ -36,6 +36,13 @@ out" (so they aren't retried) and nothing is sent; their queue tasks carry a
 note so the pool or CSM doesn't send the welcome email by hand either. People
 still help them if they ask: a holdout withholds the programme, not support.
 
+QBR first: an Enterprise account with a QBR in the next 30 days gets no
+separate churn or expansion task. The QBR is where the CSM deals with it: the
+QBR task lists the open flags ("also in the brief: ..."), qbr.py puts them in
+the facts pack, and the flag is logged as "covered by the QBR on <date>". The
+flag files keep the rows, so the problem is still tracked, and team_report.py
+counts the QBR as the action.
+
 Facts the pipeline creates ("welcome sent") live here, never in the CRM.
 Each customer email also becomes an email_sent event in the engagement stream
 (data/engagement/<run date>.jsonl), so the CS history and new actions sit on
@@ -171,6 +178,11 @@ with (DATA / "onboarding_holdout.csv").open(encoding="utf-8") as f:
     holdout = {r["account_id"] for r in csv.DictReader(f)}
 HOLDOUT_NOTE = " (onboarding holdout: no welcome email or onboarding pack; help if they ask)"
 
+# QBR first: Enterprise accounts with a QBR coming up, and its date
+qbr_soon = dict(con.sql("SELECT account_id, next_qbr_date FROM qbr_schedule WHERE qbr_coming_up").fetchall())
+QBR_COVERS = ("churn", "expansion")       # flags the QBR takes over (settings could hold this later)
+in_the_brief = defaultdict(list)          # account -> flags folded into its QBR task
+
 # What was already done, from earlier runs
 done = set()
 if LOG.exists():
@@ -192,6 +204,11 @@ for flag in FLAGS:
             if key(task) in done:
                 skipped += 1
                 continue
+            if flag in QBR_COVERS and r["account_id"] in qbr_soon:
+                new["qbr_covered"].append(task)         # logged, no separate task
+                in_the_brief[r["account_id"]].append(f"{flag} {r['status']}")
+                done.add(key(task))
+                continue
             if r["account_id"] in holdout:
                 if r["routed_to"] == "automated":
                     new["held_out"].append(task)        # logged, never sent
@@ -205,6 +222,12 @@ for flag in FLAGS:
             else:
                 new[r["routed_to"]].append(task)        # the owner's digest message
             done.add(key(task))   # so a duplicate row in the same run is only done once
+
+# The QBR task names what it now covers, so the CSM sees it in one place
+for tasks in new.values():
+    for t in tasks:
+        if t["flag"] == "qbr" and in_the_brief.get(t["account_id"]):
+            t["action"] += ". Also in the brief: " + ", ".join(in_the_brief[t["account_id"]])
 
 # Do the actions: one Slack message per group, then log the group if it worked
 first_run = not LOG.exists()
@@ -240,6 +263,15 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
                 sleep(1.1)                              # Slack allows about one message a second
             logged += posted
             print(f"  {'card':<6} {'Interactive owners':<20} {posted:>3}  task cards with buttons")
+            continue
+        if group == "qbr_covered":
+            writer.writerows({"logged_on": run_date, "account_id": t["account_id"], "flag": t["flag"],
+                              "status": t["status"], "routed_to": t["routed_to"], "channel": "qbr",
+                              "action": t["action"],
+                              "outcome": f"covered by the QBR on {qbr_soon[t['account_id']]}"} for t in tasks)
+            f.flush()
+            logged += len(tasks)
+            print(f"  {'qbr':<6} {'Covered by a QBR':<20} {len(tasks):>3}  folded into the QBR task and brief")
             continue
         if group == "held_out":
             writer.writerows({"logged_on": run_date, "account_id": t["account_id"], "flag": t["flag"],

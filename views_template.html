@@ -571,7 +571,7 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
           ? el("circle", { cx, cy, r: 4.5, fill: isGrowth ? "var(--s3)" : "var(--s1)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg)
           : el("circle", { cx, cy, r: 4.5, fill: "var(--surface)", stroke: "var(--critical)", "stroke-width": 2 }, svg);
         const name = byId[a.account_id]?.account_name || a.account_id;
-        hover(m, `<b>${esc(name)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>${a.call_date ? (a.called_early ? "Called " + fmt(a.call_date) + ", before the signal" : "Called " + fmt(a.call_date) + ", " + a.days_to_call + " days later") : "No call yet"}${a.escalated ? "<br>Escalated to the manager" : ""}`);
+        hover(m, `<b>${esc(name)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>${a.call_date ? (a.via === "qbr" ? "Covered by the QBR on " + fmt(a.call_date) + ", " + a.days_to_call + " days later" : a.called_early ? "Called " + fmt(a.call_date) + ", before the signal" : "Called " + fmt(a.call_date) + ", " + a.days_to_call + " days later") : "No call yet"}${a.escalated ? "<br>Escalated to the manager" : ""}`);
         m.style.cursor = "pointer";
         m.addEventListener("click", () => { sel.value = a.account_id; drawTimeline(a.account_id); show("timeline"); });
       }
