@@ -11,6 +11,8 @@ Every script calls connect() to get a connection with the same views:
   utilisation  last-30-day utilisation per CRM account (see the comments)
   monthly_usage  utilisation and active users in each of the three 30-day
                  months, for accounts live for the full 90 days
+  daily_util_30d per account and day: utilisation over the 30 days up to
+                 that day, rounded like the flags (when did a line get crossed?)
   last_touch     per account: the last CS touch (what and when), the last
                  meeting, and whether the getting-started email was opened
   qbr_schedule   Enterprise accounts with their QBR timing: coming up in the
@@ -157,6 +159,31 @@ def connect():
         FROM crm c
         CROSS JOIN as_of a
         WHERE c.tier = 'Enterprise'
+    """)
+
+    # 30-day utilisation on every day, measured the way the flags measure it
+    # (rounded, full 30 days only), so reports and journeys can find the day
+    # an account first crossed a flag's line.
+    con.sql("""
+        CREATE VIEW daily_util_30d AS
+        WITH daily AS (
+            SELECT account_id, event_date, properties.event_count AS vol
+            FROM events
+            WHERE event_name = 'daily_event_volume'
+        ),
+        rolling AS (
+            SELECT account_id, event_date,
+                   sum(vol) OVER w   AS vol_30d,
+                   count(*) OVER w   AS days_in_window
+            FROM daily
+            WINDOW w AS (PARTITION BY account_id ORDER BY event_date
+                         ROWS BETWEEN 29 PRECEDING AND CURRENT ROW)
+        )
+        SELECT r.account_id, r.event_date,
+               round(r.vol_30d * 365.0 / 30 / c.contracted_events * 100) AS util
+        FROM rolling r
+        JOIN crm c USING (account_id)
+        WHERE r.days_in_window = 30          -- a full 30 days, or it isn't comparable
     """)
 
     # The last touch per account, for journeys ("no meeting in 30 days") and

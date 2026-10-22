@@ -145,7 +145,8 @@ One JSON event per line, one file per day in `data/events/`.
   Also writes the CS history to `data/engagement/` (own random generator):
   getting-started emails and opens, fortnightly Scale workshops, QBRs on
   the CRM dates, kickoffs, check-ins, churn and growth calls and follow-ups, each owner with their
-  own speed. 1 in 5 new Self-service/Scale accounts is a control group (no
+  own speed, reacting to the day each account's problem shows in its
+  numbers. 1 in 5 new Self-service/Scale accounts is a control group (no
   email; planted effect: SDK in after 5 days, not 2). Working hours, local
   time, no weekend meetings.
   Also writes `data/onboarding_holdout.csv`: the control group as a
@@ -156,7 +157,8 @@ One JSON event per line, one file per day in `data/events/`.
   with the views events (schema declared explicitly), engagement (the CS
   history, same schema), crm, cs_team, as_of
   and utilisation, monthly_usage (utilisation and users per 30-day month),
-  qbr_schedule (QBR coming up / overdue), last_touch (last CS touch,
+  qbr_schedule (QBR coming up / overdue), daily_util_30d (30-day
+  utilisation on every day, rounded like the flags), last_touch (last CS touch,
   last meeting, getting-started email opened or not, per account).
   Every script uses it; define views here, once.
 - `explore.py`: DuckDB summaries by tier, region and CSM, plus CS
@@ -171,9 +173,23 @@ One JSON event per line, one file per day in `data/events/`.
 - `journeys.py`: rules on the last touch (run `flags.py` first). "Email
   never opened": Self-service stalled/silent, getting-started email 5+ days
   old and unopened -> CS ops checks the contact. "No meeting in 30 days":
-  churn or expansion Act (Scale/Enterprise) with no meeting in 30 days ->
+  churn or expansion Act (Scale/Enterprise) for 14+ days with no meeting
+  in 30 days ->
   escalated to the owner's manager (one Slack message per manager). Saved
   to `data/flags_journey.csv`, same columns as the flags.
+- `team_report.py`: time to action by owner and manager (run `flags.py`
+  and `journeys.py` first). Signal date = first day the account's 30-day
+  utilisation crossed the flag's line (rebuilt from usage); call date =
+  first churn, growth or activation call (check-ins and QBRs don't count);
+  a call up to 14 days before the signal counts as 0 days ("called
+  early"). Also escalations and meetings in 90 days. Outcome not measured
+  yet.
+- `onboarding_report.py`: welcomed vs. control (run `generate_events.py`
+  first). New Self-service/Scale accounts that got the getting-started email
+  vs. the onboarding holdout: SDK installed, median days to SDK and to first
+  chart (speed), activated in 14 days for accounts 14+ days old (outcome),
+  overall and by tier, counts next to percentages. Planted effect: shows the
+  method, doesn't prove emails work.
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to
@@ -204,7 +220,8 @@ One JSON event per line, one file per day in `data/events/`.
   library's Bedrock client), so the key disappears in favour of an IAM role.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
-- Engagement: history, new email_sent events and the first journeys exist;
-  next, reports show time to action and outcome by CSM and team. Views to build: account
+- Engagement: history, new email_sent events, the first journeys and the
+  team report (time to action) and the welcomed vs. control report exist;
+  next, outcome after a call, then the views. Views to build: account
   timeline, onboarding funnel (welcomed vs. control), CS team activity,
   book-of-business heatmap.

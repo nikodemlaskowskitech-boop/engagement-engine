@@ -12,7 +12,10 @@ it worked. Two rules for now:
 
   No meeting in 30 days   an account at churn or expansion Act (Scale or
                           Enterprise) with no meeting in the last 30 days,
-                          or none at all. Escalated to the owner's manager,
+                          or none at all, and Act for 14+ days (its 30-day
+                          utilisation crossed the line at least 14 days ago:
+                          an account that turned Act yesterday is nobody's
+                          failure yet). Escalated to the owner's manager,
                           who gets one Slack message listing their team's
                           accounts, not a task per account.
 
@@ -30,6 +33,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 UNOPENED_AFTER_DAYS = 5     # give people a few days to open an email
 NO_MEETING_DAYS = 30        # an Act account should have had a conversation by now
+ACT_FOR_DAYS = 14           # ...once it has been Act for this long (a fair chance to act)
 
 con = connect()
 
@@ -40,6 +44,15 @@ con.sql(f"""
         SELECT *, 'churn' AS flag FROM read_csv_auto('data/flags_churn.csv') WHERE status = 'Act'
         UNION ALL
         SELECT *, 'expansion' AS flag FROM read_csv_auto('data/flags_expansion.csv') WHERE status = 'Act'
+    ),
+    act_signal AS (
+        -- the day each Act account first crossed its flag's line
+        SELECT f.account_id, f.flag,
+               min(u.event_date) FILTER (WHERE (f.flag = 'churn' AND u.util < 40)
+                                            OR (f.flag = 'expansion' AND u.util >= 80)) AS signal_date
+        FROM acts f
+        JOIN daily_util_30d u USING (account_id)
+        GROUP BY f.account_id, f.flag
     ),
     email_never_opened AS (
         SELECT f.account_id, f.account_name, f.tier, f.region,
@@ -61,8 +74,8 @@ con.sql(f"""
     no_meeting AS (
         SELECT f.account_id, f.account_name, f.tier, f.region,
                'No meeting in 30 days' AS status,
-               format('{{}} Act, owner {{}}; {{}}',
-                      f.flag, coalesce(o.owner_name, f.routed_to),
+               format('{{}} Act since {{}}, owner {{}}; {{}}',
+                      f.flag, coalesce(s.signal_date::VARCHAR, 'unknown'), coalesce(o.owner_name, f.routed_to),
                       CASE WHEN t.last_meeting_date IS NULL THEN 'no meeting in the 90 days of history'
                            ELSE format('last meeting {{}} ({{}} days ago)', t.last_meeting_date::VARCHAR,
                                        a.as_of_date - t.last_meeting_date) END) AS reasons,
@@ -71,9 +84,12 @@ con.sql(f"""
                    AS action
         FROM acts f
         JOIN cs_team o ON o.owner_id = f.routed_to       -- only accounts with a CSM or a pool
-        LEFT JOIN last_touch t USING (account_id)
+        LEFT JOIN last_touch t ON t.account_id = f.account_id
+        LEFT JOIN act_signal s ON s.account_id = f.account_id AND s.flag = f.flag
         CROSS JOIN as_of a
-        WHERE t.last_meeting_date IS NULL OR a.as_of_date - t.last_meeting_date > {NO_MEETING_DAYS}
+        WHERE (t.last_meeting_date IS NULL OR a.as_of_date - t.last_meeting_date > {NO_MEETING_DAYS})
+          -- no signal date (Act from users and errors, not utilisation): keep it
+          AND (s.signal_date IS NULL OR a.as_of_date - s.signal_date >= {ACT_FOR_DAYS})
     )
     SELECT * FROM email_never_opened
     UNION ALL
