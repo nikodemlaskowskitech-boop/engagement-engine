@@ -83,7 +83,9 @@ One JSON event per line, one file per day in `data/events/`.
   check_in, churn_call, activation_call, growth_call, follow_up; from actions.py: welcome_pack,
   invite_your_team, need_help_starting). user_id = the customer user who
   responded or attended. context.source says who wrote it (cs_history from
-  the generator, actions.py for new actions).
+  the generator, actions.py for new actions, slack for clicks). Slack clicks
+  add task_claimed events and meeting_held with properties.outcome, .note
+  and .slack_user.
 
 ## The four flags
 
@@ -217,9 +219,19 @@ One JSON event per line, one file per day in `data/events/`.
   `data/engagement/<run date>.jsonl`. `generate_events.py` clears the log,
   since new data makes old actions meaningless.
   Reads the journey rows too, and shows each account's last CS touch under
-  every Slack task.
+  every Slack task. Owners in settings.toml [slack] interactive_owners get one
+  card per task with buttons (via the bot token, one a second) instead of
+  the digest.
   `none` and `report` rows aren't actions. The log only grows; delete it
   to start over.
+- `slack_loop.py`: shared Slack pieces (task cards, .env tokens, appending
+  click events). `listener.py`: Socket Mode listener (`python listener.py`,
+  leave it running): "I'll take it" -> task_claimed, "Log call" -> a form ->
+  meeting_held with the flag's call topic, "Open timeline" -> the cockpit
+  page at `#acc_xxx`. Clicks are dated on the run date. Which owners get
+  cards (and which get DMs) is in settings.toml [slack]; everyone else keeps
+  the digest. Tokens in .env: SLACK_BOT_TOKEN (xoxb), SLACK_APP_TOKEN (xapp),
+  SLACK_DEMO_USER.
 - `qbr.py`: QBR facts packs (run `flags.py` first). Writes
   `data/qbr_facts.json` (pseudonymised) and `data/qbr_user_key.csv` (the
   real user IDs; never sent to an LLM).

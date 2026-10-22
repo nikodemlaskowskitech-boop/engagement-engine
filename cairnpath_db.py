@@ -60,7 +60,7 @@ def connect():
             timestamp:  'TIMESTAMP',
             account_id: 'VARCHAR',
             user_id:    'VARCHAR',
-            properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR)',
+            properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR)',
             context:    'STRUCT(source VARCHAR)'
         })
     """)
