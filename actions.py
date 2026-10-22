@@ -226,8 +226,10 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
                                             blocks=card_blocks(t, owner, last_touch.get(t["account_id"])),
                                             text=f"{t['account_name']}: {t['flag']} {t['status']} for {owner}")
                 except SlackApiError as error:
-                    print(f"  Slack card failed for {t['account_id']} ({error.response['error']}): "
-                          "not logged, will retry next run")
+                    needed = error.response.get("needed")      # Slack names the missing permission
+                    print(f"  Slack card failed for {t['account_id']} ({error.response['error']}"
+                          + (f", the bot needs the scope {needed}" if needed else "")
+                          + "): not logged, will retry next run")
                     continue
                 writer.writerow({"logged_on": run_date, "account_id": t["account_id"], "flag": t["flag"],
                                  "status": t["status"], "routed_to": t["routed_to"], "channel": "card",
