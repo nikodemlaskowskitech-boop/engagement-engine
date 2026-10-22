@@ -1,7 +1,7 @@
 """
 Cairnpath fake data generator.
 
-Writes five things into ./data:
+Writes six things into ./data:
   - crm_accounts.csv          the fake CRM table (one row per account)
   - cs_team.csv               who covers what: named CSMs and regional pools
   - events/YYYY-MM-DD.jsonl   one file per day, one JSON event per line
@@ -10,6 +10,8 @@ Writes five things into ./data:
                               only (check_flags.py); the flags never read it
   - engagement/YYYY-MM-DD.jsonl  what CS did and how customers responded
                               (emails, workshops, meetings), same schema
+  - onboarding_holdout.csv    the control group: new accounts that get no
+                              onboarding emails (actions.py checks it)
 
 The book of business is ~500 European accounts across three tiers and four
 sub-regions. Each account gets a "personality" that shapes its behaviour
@@ -600,6 +602,20 @@ def write_engagement(accounts):
     return total
 
 
+def write_holdout(accounts):
+    """The onboarding programme's own list of held-out accounts. Unlike the
+    answer key, this is a real-world fact: whoever sends onboarding emails
+    must check it, or the control group stops being one."""
+    path = OUT_DIR / "onboarding_holdout.csv"
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["account_id", "held_out_since"])
+        for acc in accounts:
+            if acc["control"]:
+                writer.writerow([acc["id"], acc["contract_start"].isoformat()])
+    return path
+
+
 def write_answer_key(accounts):
     """The truth behind the data: which personality each account was given.
 
@@ -644,6 +660,7 @@ if __name__ == "__main__":
     team_path = write_team()
     crm_path = write_crm(accounts)
     key_path = write_answer_key(accounts)
+    holdout_path = write_holdout(accounts)
     total = write_events(accounts)
     cs_total = write_engagement(accounts)
     # New data is a new world: actions logged against the old data no longer
@@ -656,5 +673,6 @@ if __name__ == "__main__":
     print(f"CS team:    {team_path}")
     print(f"CRM table:  {crm_path}")
     print(f"Answer key: {key_path} (for check_flags.py only)")
+    print(f"Holdout:    {holdout_path} (no onboarding emails for these accounts)")
     print(f"Events:     {total:,} across {DAYS} daily files, {START_DATE} to {END_DATE}")
     print(f"Engagement: {cs_total:,} CS touches and responses in data/engagement/")

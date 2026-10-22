@@ -30,6 +30,12 @@ Without the webhooks in .env, nothing is posted and actions are only logged.
 An action is logged only after its Slack post worked. If a post fails, those
 actions stay out of the log and are retried on the next run.
 
+Onboarding holdout: accounts in data/onboarding_holdout.csv are the control
+group and get no onboarding emails. Their email actions are logged as "held
+out" (so they aren't retried) and nothing is sent; their queue tasks carry a
+note so the pool or CSM doesn't send the welcome email by hand either. People
+still help them if they ask: a holdout withholds the programme, not support.
+
 Facts the pipeline creates ("welcome sent") live here, never in the CRM.
 Each customer email also becomes an email_sent event in the engagement stream
 (data/engagement/<run date>.jsonl), so the CS history and new actions sit on
@@ -139,6 +145,10 @@ with (DATA / "cs_team.csv").open(encoding="utf-8") as f:
 owner_names["cs_ops"] = "CS ops"
 owner_names["email"] = "Customer emails"
 
+with (DATA / "onboarding_holdout.csv").open(encoding="utf-8") as f:
+    holdout = {r["account_id"] for r in csv.DictReader(f)}
+HOLDOUT_NOTE = " (onboarding holdout: no welcome email or onboarding pack; help if they ask)"
+
 # What was already done, from earlier runs
 done = set()
 if LOG.exists():
@@ -160,6 +170,12 @@ for flag in FLAGS:
             if key(task) in done:
                 skipped += 1
                 continue
+            if r["account_id"] in holdout:
+                if r["routed_to"] == "automated":
+                    new["held_out"].append(task)        # logged, never sent
+                    done.add(key(task))
+                    continue
+                task["action"] += HOLDOUT_NOTE          # a person shouldn't send it by hand either
             new["email" if r["routed_to"] == "automated" else r["routed_to"]].append(task)
             done.add(key(task))   # so a duplicate row in the same run is only done once
 
@@ -171,6 +187,14 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
     if first_run:
         writer.writeheader()
     for group, tasks in sorted(new.items()):
+        if group == "held_out":
+            writer.writerows({"logged_on": run_date, "account_id": t["account_id"], "flag": t["flag"],
+                              "status": t["status"], "routed_to": t["routed_to"], "channel": "none",
+                              "action": t["action"], "outcome": "held out (control group)"} for t in tasks)
+            f.flush()
+            logged += len(tasks)
+            print(f"  {'none':<6} {'Onboarding holdout':<20} {len(tasks):>3}  held out (control group)")
+            continue
         if group == "email":
             channel, hook = "email", email_hook
             text = (f"*{len(tasks)} customer emails* that would go out today "

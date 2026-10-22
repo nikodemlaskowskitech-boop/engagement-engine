@@ -148,6 +148,8 @@ One JSON event per line, one file per day in `data/events/`.
   own speed. 1 in 5 new Self-service/Scale accounts is a control group (no
   email; planted effect: SDK in after 5 days, not 2). Working hours, local
   time, no weekend meetings.
+  Also writes `data/onboarding_holdout.csv`: the control group as a
+  real-world fact (the programme's own list), which every sender checks.
   Also writes `data/answer_key.csv` (each account's personality and
   welcome group): for testing only, the flags must never read it.
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
@@ -172,6 +174,8 @@ One JSON event per line, one file per day in `data/events/`.
   and are previewed in #email-preview. Webhooks in `.env`
   (SLACK_WEBHOOK_QUEUE, SLACK_WEBHOOK_EMAIL): secrets, like the API key.
   An action is logged only after its post worked, so failures retry.
+  Holdout accounts get no onboarding emails (logged as "held out", never
+  sent) and their queue tasks carry a note not to send one by hand.
   Each customer email is also written as an email_sent event to
   `data/engagement/<run date>.jsonl`. `generate_events.py` clears the log,
   since new data makes old actions meaningless.
