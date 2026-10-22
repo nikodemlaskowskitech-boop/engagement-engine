@@ -68,7 +68,7 @@ for account_id, weeks_ago, users in con.sql("""
         GROUP BY ALL""").fetchall():
     wau.setdefault(account_id, [0] * 13)[12 - weeks_ago] = users      # oldest week first
 week_ends = [str(d) for (d,) in con.sql(
-    "SELECT as_of_date - 7 * (12 - i) FROM as_of, range(13) t(i) ORDER BY i").fetchall()]
+    "SELECT as_of_date - (7 * (12 - i))::INTEGER FROM as_of, range(13) t(i) ORDER BY i").fetchall()]
 
 # Open flags per account, straight from the flag files
 flags = {}
