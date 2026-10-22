@@ -25,6 +25,7 @@ high = 80                 # forecasts only count from this utilisation up...
 min_climb = 3             # ...and when climbing at least this many points a month
 breadth_growth = 0.25     # active users up this much in two months
 renewal_soon_months = 3   # renewal this close: take the growth case into the renewal
+                          # (and Shelfware: call this week about the renewal itself)
 
 [qbr]
 coming_up_days = 30       # a QBR in the next 30 days: prepare it

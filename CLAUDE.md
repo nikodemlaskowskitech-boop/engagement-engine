@@ -112,7 +112,8 @@ One JSON event per line, one file per day in `data/events/`.
    Self-service rows go to the Self-service report.
    Shelfware: live 60+ days (go-live) and 30-day utilisation never reached
    40%: flat and low, never ramped up. Status Shelfware. Scale and
-   Enterprise: adoption review and a ramp plan before renewal. Self-service:
+   Enterprise: adoption review and a ramp plan before renewal (renewal
+   within 3 months: call this week about the renewal volume). Self-service:
    automated use-case inspiration email (topic use_case_inspiration).
    Accounts already at Watch or Act keep that status.
 3. Expansion (accounts live for the full 90 days). Stays with CS: the

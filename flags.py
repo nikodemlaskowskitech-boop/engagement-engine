@@ -88,12 +88,13 @@ CHURN_BREADTH_DROP = SETTINGS["churn"]["breadth_drop"]
 CHURN_BREADTH_MIN_USERS = SETTINGS["churn"]["breadth_min_users"]
 CHURN_MIN_ERRORS = SETTINGS["churn"]["min_errors"]
 RAMP_DAYS = SETTINGS["churn"]["ramp_days"]
+# renewal this close: act now (used by Shelfware and expansion)
+RENEWAL_SOON_MONTHS = SETTINGS["expansion"]["renewal_soon_months"]
 
 EXP_AT_CAP = SETTINGS["expansion"]["at_cap"]
 EXP_HIGH = SETTINGS["expansion"]["high"]
 EXP_MIN_CLIMB = SETTINGS["expansion"]["min_climb"]
 EXP_BREADTH_GROWTH = SETTINGS["expansion"]["breadth_growth"]
-RENEWAL_SOON_MONTHS = SETTINGS["expansion"]["renewal_soon_months"]
 
 con = connect()
 
@@ -366,6 +367,11 @@ con.sql(f"""
            CASE WHEN l.tier = 'Self-service' THEN
                     'Send the use-case inspiration email: how other teams use Cairnpath, '
                     || 'with links to the guides for each use case'
+                -- renewal close: no time for a slow ramp plan, so the call is about the renewal itself
+                WHEN (l.renewal_date::DATE - l.as_of_date) / 30.0 <= {RENEWAL_SOON_MONTHS} THEN
+                    format('Renewal in {{}} weeks: call this week. Agree what blocks the rollout and a '
+                           || 'realistic volume for the renewal, so it is not a surprise cut',
+                           ((l.renewal_date::DATE - l.as_of_date) // 7)::INT)
                 WHEN l.tier = 'Scale' THEN
                     'Offer an adoption review: which teams and data sources are still to come? '
                     || 'Invite them to the next advanced workshop'
