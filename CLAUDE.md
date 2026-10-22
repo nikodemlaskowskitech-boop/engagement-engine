@@ -138,6 +138,7 @@ One JSON event per line, one file per day in `data/events/`.
    in the brief"), they're logged "covered by the QBR", no "No meeting"
    escalation, and team_report.py counts the QBR as the action when the
    signal came in the 30 days before it. The flag rows stay, for tracking.
+   If the QBR date passes with no QBR held, the flag is raised again.
 
 ## Design rules
 
