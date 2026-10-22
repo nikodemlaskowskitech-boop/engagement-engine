@@ -62,24 +62,26 @@ Run:  python flags.py
 import sys
 
 from cairnpath_db import connect
+from settings import SETTINGS
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-SCOPE_DAYS = 45        # only contracts from the last 45 days
-WINDOW_DAYS = 14       # activation must happen within 14 days of contract start
-MIN_USERS = 2          # "activated" needs at least this many active users
-SILENT_AFTER_DAYS = 10 # no events at all after this many days = silent
+# All thresholds live in settings.toml
+SCOPE_DAYS = SETTINGS["activation"]["scope_days"]               # only recent contracts
+WINDOW_DAYS = SETTINGS["activation"]["window_days"]             # activation window after contract start
+MIN_USERS = SETTINGS["activation"]["min_users"]                 # "activated" needs this many active users
+SILENT_AFTER_DAYS = SETTINGS["activation"]["silent_after_days"] # no events after this many days = silent
 
-CHURN_UTIL_BELOW = 40     # utilisation under this (in %) counts as low
-CHURN_BREADTH_DROP = 0.30 # weekly active users this far below their average...
-CHURN_BREADTH_MIN_USERS = 1 # ...and at least this many users fewer (small accounts)
-CHURN_MIN_ERRORS = 5      # ingestion errors in the last 30 days that count as "rising"
+CHURN_UTIL_BELOW = SETTINGS["churn"]["util_below"]
+CHURN_BREADTH_DROP = SETTINGS["churn"]["breadth_drop"]
+CHURN_BREADTH_MIN_USERS = SETTINGS["churn"]["breadth_min_users"]
+CHURN_MIN_ERRORS = SETTINGS["churn"]["min_errors"]
 
-EXP_AT_CAP = 90           # utilisation (in %) that counts as "at the cap"
-EXP_HIGH = 80             # forecasts only count from this utilisation up...
-EXP_MIN_CLIMB = 3         # ...and when climbing at least this many points a month
-EXP_BREADTH_GROWTH = 0.25 # active users up this much in two months
-RENEWAL_SOON_MONTHS = 3   # renewal this close: take the growth case into the renewal
+EXP_AT_CAP = SETTINGS["expansion"]["at_cap"]
+EXP_HIGH = SETTINGS["expansion"]["high"]
+EXP_MIN_CLIMB = SETTINGS["expansion"]["min_climb"]
+EXP_BREADTH_GROWTH = SETTINGS["expansion"]["breadth_growth"]
+RENEWAL_SOON_MONTHS = SETTINGS["expansion"]["renewal_soon_months"]
 
 con = connect()
 

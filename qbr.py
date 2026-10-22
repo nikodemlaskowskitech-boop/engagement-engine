@@ -29,12 +29,13 @@ import sys
 from pathlib import Path
 
 from cairnpath_db import connect
+from settings import SETTINGS
 
 sys.stdout.reconfigure(encoding="utf-8")
 
 con = connect()
 
-CHAMPION_RATIO = 2        # the top user counts as the champion when they do at least
+CHAMPION_RATIO = SETTINGS["qbr"]["champion_ratio"]   # the top user counts as the champion when they do at least
                           # twice as much as the next most active user
 
 

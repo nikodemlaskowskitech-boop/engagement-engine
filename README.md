@@ -41,6 +41,9 @@ python qbr.py               # facts pack for each QBR in the next 30 days
 python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_API_KEY in .env)
 ```
 
+To tune the engine, edit `settings.toml` (every threshold and time window,
+with a comment on each), then rerun `flags.py` and `check_flags.py`.
+
 ## Design choices
 
 - **SQL computes the facts; the LLM only writes them up.** The model gets a

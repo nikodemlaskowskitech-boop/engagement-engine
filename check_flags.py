@@ -24,6 +24,7 @@ from collections import Counter
 from pathlib import Path
 
 from cairnpath_db import connect
+from settings import SETTINGS
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -48,7 +49,7 @@ util_now = dict(con.sql("SELECT account_id, util_m3 FROM monthly_usage").fetchal
 # The activation flag only looks at contracts from the last 45 days (SCOPE_DAYS
 # in flags.py). A customer who signed in July is past onboarding by October,
 # so it can't be expected to show up there.
-ACTIVATION_SCOPE_DAYS = 45
+ACTIVATION_SCOPE_DAYS = SETTINGS["activation"]["scope_days"]
 in_activation_scope = {a for (a,) in con.sql(f"""
     SELECT c.account_id FROM crm c, as_of a
     WHERE a.as_of_date - c.contract_start <= {ACTIVATION_SCOPE_DAYS}""").fetchall()}

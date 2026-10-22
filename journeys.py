@@ -28,12 +28,13 @@ Run flags.py first (this reads its results), then:  python journeys.py
 import sys
 
 from cairnpath_db import connect
+from settings import SETTINGS
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-UNOPENED_AFTER_DAYS = 5     # give people a few days to open an email
-NO_MEETING_DAYS = 30        # an Act account should have had a conversation by now
-ACT_FOR_DAYS = 14           # ...once it has been Act for this long (a fair chance to act)
+UNOPENED_AFTER_DAYS = SETTINGS["journeys"]["unopened_after_days"]   # all in settings.toml
+NO_MEETING_DAYS = SETTINGS["journeys"]["no_meeting_days"]
+ACT_FOR_DAYS = SETTINGS["journeys"]["act_for_days"]
 
 con = connect()
 

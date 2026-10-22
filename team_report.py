@@ -29,10 +29,11 @@ Run flags.py and journeys.py first, then:  python team_report.py
 import sys
 
 from cairnpath_db import connect
+from settings import SETTINGS
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-EARLY_DAYS = 14          # a call this many days before the signal still counts
+EARLY_DAYS = SETTINGS["team_report"]["early_days"]   # a call this early still counts (settings.toml)
 PROBLEM_CALLS = "('churn_call', 'growth_call', 'activation_call')"
 
 def add_views(con):

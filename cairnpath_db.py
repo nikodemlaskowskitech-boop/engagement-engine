@@ -25,6 +25,8 @@ defined once, not copied into every script.
 
 import duckdb
 
+from settings import SETTINGS
+
 
 def connect():
     con = duckdb.connect()
@@ -145,17 +147,19 @@ def connect():
         FROM sums
     """)
 
-    con.sql("""
+    # QBR timing comes from settings.toml
+    up, overdue = SETTINGS["qbr"]["coming_up_days"], SETTINGS["qbr"]["overdue_after_days"]
+    con.sql(f"""
         CREATE VIEW qbr_schedule AS
         SELECT c.account_id, c.account_name, c.tier, c.region, c.csm_owner,
                c.contract_start, c.last_qbr_date, c.next_qbr_date,
                a.as_of_date - c.last_qbr_date  AS days_since_last_qbr,
                c.next_qbr_date - a.as_of_date  AS days_to_next_qbr,
-               c.next_qbr_date > a.as_of_date AND c.next_qbr_date <= a.as_of_date + 30 AS qbr_coming_up,
-               a.as_of_date - c.contract_start >= 120
-                   AND (c.last_qbr_date IS NULL OR a.as_of_date - c.last_qbr_date > 120)
+               c.next_qbr_date > a.as_of_date AND c.next_qbr_date <= a.as_of_date + {up} AS qbr_coming_up,
+               a.as_of_date - c.contract_start >= {overdue}
+                   AND (c.last_qbr_date IS NULL OR a.as_of_date - c.last_qbr_date > {overdue})
                    AND NOT coalesce(c.next_qbr_date > a.as_of_date
-                                    AND c.next_qbr_date <= a.as_of_date + 30, false) AS qbr_overdue
+                                    AND c.next_qbr_date <= a.as_of_date + {up}, false) AS qbr_overdue
         FROM crm c
         CROSS JOIN as_of a
         WHERE c.tier = 'Enterprise'
