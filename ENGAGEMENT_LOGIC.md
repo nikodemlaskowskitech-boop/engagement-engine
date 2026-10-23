@@ -5,9 +5,10 @@ signal is handled three ways, depending on how much human coverage the account
 has, and every step has a time limit so nothing waits for ever.
 
 The diagrams follow two conventions from customer success tooling: one lane per
-coverage tier (tech touch, pooled, named CSM), and journey flows where the main
-path runs left to right and a timed check ("30 days: is the flag still there?")
-branches off it, as in Gainsight's Journey Orchestrator programs.
+coverage tier (tech touch, pooled, named CSM), and journey flows where a timed
+check ("30 days: is the flag still there?") decides the next step, as in
+Gainsight's Journey Orchestrator programs. Hexagons are those timed checks;
+diamonds are plain yes/no decisions.
 
 Colours: green = automated, purple = a CS person acts, amber = a manager
 decides, grey = end state.
@@ -74,7 +75,7 @@ control group never gets the programme, no account gets more than one
 automated email in 14 days, and each issue gets two touches at most.
 
 ```mermaid
-flowchart LR
+flowchart TB
     f["Flag: Stalled, Silent<br/>or Shelfware"] --> h{"Onboarding<br/>holdout?"}
     h -->|yes| ho(["Held out<br/>logged, never sent"])
     h -->|no| cap{"Emailed in the<br/>last 14 days?"}
@@ -102,7 +103,7 @@ to them, so the customer hears from the same person. If that person can't pick
 it up (holiday, left, swamped), the manager decides: a person, not a timer.
 
 ```mermaid
-flowchart LR
+flowchart TB
     f["Flag on a<br/>Scale account"] --> q["Card in the<br/>shared queue"]
     q --> c{"Claimed?"}
     c -->|"I'll take it"| own["One owner<br/>works it"]
@@ -134,7 +135,7 @@ comes back as a task, and it is never handed to a QBR again: a customer who
 keeps moving the QBR can't park a problem for months.
 
 ```mermaid
-flowchart LR
+flowchart TB
     f["Churn or expansion<br/>flag"] --> qbr{"QBR in the<br/>next 30 days?"}
     qbr -->|yes| fold["Folded into the<br/>QBR task and brief"]
     fold --> held{{"QBR held<br/>by its date?"}}
