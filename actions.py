@@ -240,6 +240,11 @@ for account_id, day, slack_user in con.sql("""
         ORDER BY "timestamp" """).fetchall():
     slack_touches[account_id].append((day, slack_user))
 
+# Hand-backs a manager approved in Slack (journeys.py asks), per account: the latest
+handbacks = dict(con.sql("""
+    SELECT account_id, max(event_date) FROM engagement
+    WHERE event_name = 'handback_approved' GROUP BY account_id""").fetchall())
+
 # Email fatigue: the last automated email per account, from any programme
 last_email = dict(con.sql("""
     SELECT account_id, max(event_date) FROM engagement
@@ -256,7 +261,14 @@ def follow_up(task):
         return None
     fu = dict(task, status=f"{task['status']} (follow-up)", action=texts[kind])
     if key(fu) in done:
-        return None                                  # already followed up once: stop
+        # already followed up once. One exception: the person it went to never
+        # picked it up and their manager approved handing it back to the pool
+        approved = handbacks.get(task["account_id"])
+        back = dict(fu, status=f"{task['status']} (follow-up, pool)",
+                    action=texts["pool"] + ". Handed back to the pool by the manager: anyone can take it")
+        if kind == "pool" and approved and approved >= first_sent.get(key(fu), approved) and key(back) not in done:
+            return back
+        return None                                  # otherwise stop: one follow-up only
     fu["reasons"] = f"{task['reasons']}; first contact {sent}, {(run_date - sent).days} days ago, no change"
     if kind == "pool":
         took = [u for day, u in slack_touches[task["account_id"]] if day >= sent]

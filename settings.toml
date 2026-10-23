@@ -49,6 +49,7 @@ email_hour = 9            # customer emails go out at 9:00 local time
 # life; one value each for the demo.
 after_days = 30           # follow up when the flag still stands this long after the first send
 email_cap_days = 14       # at most one automated email per account in this many days (all programmes)
+handback_after_days = 5   # a named follow-up nobody picked up this long: the manager approves handing it back
 
 [slack]
 team_channel = "#cs-queue"                      # where task cards go

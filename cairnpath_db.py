@@ -20,6 +20,8 @@ Every script calls connect() to get a connection with the same views:
                  ago or never, nothing booked in the next 30 days)
   qbr_slips      flags handed to a QBR whose date passed with no QBR held
                  (from the action log; empty before the first actions.py run)
+  action_status  every task sent to a person: Open, Claimed, Done or Resolved,
+                 and its age (from the action log, engagement and the flags)
 
 Keeping this in one place means the schema and the utilisation rule are
 defined once, not copied into every script.
@@ -220,7 +222,7 @@ def connect():
             CREATE VIEW qbr_slips AS
             WITH covered AS (
                 SELECT account_id, flag, status, logged_on::DATE AS logged_on,
-                       regexp_extract(outcome, '(\d{4}-\d{2}-\d{2})$', 1)::DATE AS promised_qbr
+                       regexp_extract(outcome, '(\\d{4}-\\d{2}-\\d{2})$', 1)::DATE AS promised_qbr
                 FROM read_csv('data/action_log.csv', all_varchar = true)
                 WHERE channel = 'qbr'
             )
@@ -235,4 +237,81 @@ def connect():
         con.sql("""CREATE VIEW qbr_slips AS
                    SELECT NULL::VARCHAR AS account_id, NULL::VARCHAR AS flag, NULL::VARCHAR AS status,
                           NULL::DATE AS logged_on, NULL::DATE AS promised_qbr WHERE false""")
+
+    # Action status: the action log says a task was SENT; this says what happened
+    # since, worked out from the data (nobody has to tick anything):
+    #   Done      the owner met the account about it after the task was sent:
+    #             churn -> churn call or QBR, expansion -> growth call or QBR,
+    #             QBR -> the QBR, activation and escalations -> any meeting.
+    #             A check-in doesn't close a churn task: the problem has to be raised.
+    #   Resolved  the flag went away on its own (usage recovered, CRM fixed).
+    #             CS ops tasks can only end this way: the CRM record is fixed.
+    #   Claimed   someone took it in Slack ("I'll take it"), nothing since
+    #   (a manager's "Follow-up not picked up" task is Done once they approve the hand-back)
+    #   Open      sent, nothing since
+    flag_names = ("activation", "churn", "expansion", "qbr", "journey")
+    if os.path.exists("data/action_log.csv") and all(
+            os.path.exists(f"data/flags_{f}.csv") for f in flag_names):
+        flag_files = " UNION ALL ".join(
+            f"SELECT account_id, '{f}' AS flag, status FROM read_csv('data/flags_{f}.csv', all_varchar = true)"
+            for f in flag_names)
+        con.sql(f"""
+            CREATE VIEW action_status AS
+            WITH tasks AS (
+                -- tasks for people (cards and Slack digests); the latest send of each
+                SELECT account_id, flag, status,
+                       arg_max(routed_to, logged_on) AS routed_to,
+                       arg_max(action, logged_on)    AS action,
+                       max(logged_on)::DATE          AS sent_on
+                FROM read_csv('data/action_log.csv', all_varchar = true)
+                WHERE channel IN ('card', 'queue')
+                GROUP BY account_id, flag, status
+            ),
+            open_flags AS ({flag_files}),
+            done AS (
+                SELECT t.account_id, t.flag, t.status, min(e.event_date) AS done_on
+                FROM tasks t
+                JOIN engagement e ON e.account_id = t.account_id AND e.event_date >= t.sent_on
+                WHERE t.routed_to <> 'cs_ops'
+                  AND CASE WHEN t.status = 'Follow-up not picked up'
+                               THEN e.event_name = 'handback_approved'
+                           WHEN e.event_name <> 'meeting_held' THEN false
+                           ELSE CASE t.flag
+                          WHEN 'churn'     THEN e.properties.topic IN ('churn_call', 'qbr')
+                          WHEN 'expansion' THEN e.properties.topic IN ('growth_call', 'qbr')
+                          WHEN 'qbr'       THEN e.properties.topic = 'qbr'
+                          ELSE true                         -- activation, escalations
+                      END END
+                GROUP BY ALL
+            ),
+            claimed AS (
+                SELECT t.account_id, t.flag, t.status, min(e.event_date) AS claimed_on,
+                       arg_min(e.properties.slack_user, e."timestamp") AS claimed_by
+                FROM tasks t
+                JOIN engagement e ON e.account_id = t.account_id AND e.event_date >= t.sent_on
+                WHERE e.event_name = 'task_claimed' AND e.properties.topic = t.flag
+                GROUP BY ALL
+            )
+            SELECT t.account_id, t.flag, t.status, t.routed_to, t.action, t.sent_on,
+                   CASE WHEN d.done_on IS NOT NULL      THEN 'Done'
+                        WHEN o.account_id IS NULL       THEN 'Resolved'
+                        WHEN c.claimed_on IS NOT NULL   THEN 'Claimed'
+                        ELSE 'Open' END                 AS action_status,
+                   d.done_on, c.claimed_by,
+                   a.as_of_date + 1 - t.sent_on         AS age_days   -- days since it was sent
+            FROM tasks t
+            CROSS JOIN as_of a
+            LEFT JOIN done d    USING (account_id, flag, status)
+            LEFT JOIN claimed c USING (account_id, flag, status)
+            -- a follow-up ("Shelfware (follow-up)") is resolved when its original flag is gone
+            LEFT JOIN (SELECT DISTINCT * FROM open_flags) o
+                   ON o.account_id = t.account_id AND o.flag = t.flag
+                  AND o.status = regexp_replace(t.status, ' \\(follow-up.*\\)$', '')
+        """)
+    else:   # actions.py hasn't run yet: no tasks
+        con.sql("""CREATE VIEW action_status AS
+                   SELECT NULL::VARCHAR AS account_id, NULL::VARCHAR AS flag, NULL::VARCHAR AS status,
+                          NULL::VARCHAR AS routed_to, NULL::VARCHAR AS action, NULL::DATE AS sent_on, NULL::VARCHAR AS action_status,
+                          NULL::DATE AS done_on, NULL::VARCHAR AS claimed_by, NULL::INTEGER AS age_days
+                   WHERE false""")
     return con

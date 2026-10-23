@@ -189,7 +189,9 @@ One JSON event per line, one file per day in `data/events/`.
   history, same schema), crm, cs_team, as_of
   and utilisation, monthly_usage (utilisation and users per 30-day month),
   qbr_schedule (QBR coming up / overdue), qbr_slips (flags handed to a
-  QBR that didn't happen, from the action log), daily_util_30d (30-day
+  QBR that didn't happen, from the action log), action_status (every task
+  sent to a person: Open, Claimed, Done or Resolved, and its age),
+  daily_util_30d (30-day
   utilisation on every day, rounded like the flags), last_touch (last CS touch,
   last meeting, getting-started email opened or not, per account).
   Every script uses it; define views here, once.
@@ -207,7 +209,10 @@ One JSON event per line, one file per day in `data/events/`.
   old and unopened -> CS ops checks the contact. "No meeting in 30 days":
   churn or expansion Act (Scale/Enterprise) for 14+ days with no meeting
   in 30 days, and no QBR booked in the next 30 days ->
-  escalated to the owner's manager (one Slack message per manager). Saved
+  escalated to the owner's manager (one Slack message per manager).
+  "Follow-up not picked up": a Scale follow-up named to a person, still
+  Open after 5 days -> their manager approves handing it back to the pool
+  ("Approve hand-back" button; actions.py then sends it to the pool). Saved
   to `data/flags_journey.csv`, same columns as the flags.
 - `team_report.py`: time to action by owner and manager (run `flags.py`
   and `journeys.py` first). Signal date = first day the account's 30-day
@@ -216,7 +221,7 @@ One JSON event per line, one file per day in `data/events/`.
   counts when the signal came in the 30 days before it, column via);
   a call up to 14 days before the signal counts as 0 days ("called
   early"). Also escalations and meetings in 90 days. Action status (view
-  action_status, from the action log): each task Open, Claimed (Slack),
+  action_status in cairnpath_db.py): each task Open, Claimed (Slack),
   Done (the right meeting since it was sent: churn -> churn call or QBR,
   expansion -> growth call or QBR, QBR -> the QBR, activation and
   escalations -> any meeting; a check-in never closes a churn task) or
@@ -261,7 +266,8 @@ One JSON event per line, one file per day in `data/events/`.
   Slack user who took the first one (never a new person; nobody took it =
   the pool, visible to the manager). Fatigue cap: one automated email per
   account per 14 days across all programmes; capped emails aren't logged,
-  so they go out on a later run.
+  so they go out on a later run. A follow-up the manager handed back goes
+  to the whole pool once ("<status> (follow-up, pool)").
   `none` and `report` rows aren't actions. The log only grows; delete it
   to start over.
 - `slack_loop.py`: shared Slack pieces (task cards, .env tokens, appending

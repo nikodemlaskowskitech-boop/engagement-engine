@@ -15,6 +15,9 @@ What each button does:
                      shows the call. The next pipeline run sees the call: the
                      escalation stops, the team report counts it, the
                      timeline shows it.
+  Approve hand-back -> (manager cards for "Follow-up not picked up") a
+                     handback_approved event; the next actions.py run sends
+                     the follow-up to the whole pool
   Open timeline   -> opens the account on the cockpit page (a link; nothing
                      to record)
 
@@ -111,6 +114,21 @@ def log_call_submitted(ack, body, view, client):
                                           "url": f"{SLACK['cockpit_url']}#{ref['a']}"}]},
     ])
     print(f"  call logged {ref['a']}  {ref['n']}  ({topic}, {OUTCOMES[outcome]})")
+
+
+@app.action("approve_handback")
+def approve_handback(ack, body, client):
+    ack()
+    ref = json.loads(body["actions"][0]["value"])
+    user = body["user"]["id"]
+    # the next actions.py run sends the follow-up to the whole pool
+    append_event(DAY, ref["a"], "handback_approved", ref["o"], "handback", user)
+    blocks = [b for b in body["message"]["blocks"] if b.get("block_id") != "task_actions"]
+    blocks.append({"type": "context", "elements": [
+        {"type": "mrkdwn", "text": f":leftwards_arrow_with_hook: Hand-back approved by <@{user}>: back to the pool"}]})
+    client.chat_update(channel=body["channel"]["id"], ts=body["message"]["ts"],
+                       blocks=blocks, text=f"{ref['n']}: hand-back approved")
+    print(f"  hand-back   {ref['a']}  {ref['n']}  (approved)")
 
 
 @app.action("open_timeline")
