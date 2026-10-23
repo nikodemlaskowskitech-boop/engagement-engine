@@ -101,7 +101,9 @@ touches = rows(con, """
            properties.topic AS topic, properties.owner_id AS owner_id,
            context.source AS source
     FROM engagement
-    ORDER BY "timestamp" """)
+    -- ties on the same minute broken by account and event: the same data always
+    -- exports in the same order, so two runs can be compared file to file
+    ORDER BY "timestamp", account_id, event_name, event_id""")
 
 export = {
     "as_of": as_of,
