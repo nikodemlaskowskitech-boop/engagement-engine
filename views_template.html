@@ -1020,7 +1020,8 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
   const TASKS = D.tasks || [];
   const taskInSeg = (t) => {
     const a = byId[t.account_id];
-    return (!seg.manager || t.manager === seg.manager) && (!seg.owner || t.routed_to === seg.owner)
+    // CS ops items with no account in the CRM (handoff gaps) belong to no team: every manager sees them
+    return (!seg.manager || t.manager === seg.manager || (t.manager == null && !seg.owner)) && (!seg.owner || t.routed_to === seg.owner)
       && (!seg.region || (a && a.region === seg.region)) && (!seg.tier || (a && a.tier === seg.tier));
   };
   const docId = (kind, t) => [kind, t.account_id, t.flag, t.status].join("~").replace(/[^A-Za-z0-9_.~:@+-]/g, "-");
