@@ -154,11 +154,14 @@ One JSON event per line, one file per day in `data/events/`.
 
 ## Files
 
+- `DATA_CONTRACT.md`: the five inputs, their columns and meaning, which
+  are required, what stops working without each, and what is still
+  hard-coded. Update it whenever an input or a column changes.
 - `settings.toml` + `settings.py`: every threshold and time window in one
   place (activation, churn, expansion, QBR, journeys, team report, email
   hour). Scripts read `SETTINGS[...]`; never hard-code a number in a script.
   Tiers, routing and the utilisation definition are still in the SQL (next:
-  the data contract).
+  move them into settings; see DATA_CONTRACT.md).
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
   declining, power_user, new_customer, shelfware, stalled, never_onboarded,
   handoff_gap) mixed by weight (new customers sign all through the window
