@@ -154,12 +154,17 @@ creates duplicates. The direction stays one-way for CS facts: the engine is
 the record for engagement, and the CRM gets a copy so sales and leadership see
 it where they already work.
 
-## Still hard-coded (next step: settings)
+## Fitting it to your company (settings.toml)
 
-To run on another company's data today you'd also need to change code for:
-- **Tier names and routing** (`Enterprise`/`Scale`/`Self-service`, who gets what).
-- **The utilisation definition**: committed event volume. A seat-based product
-  would divide active seats by bought seats; a usage-billed one, spend by commit.
-- **Region list and time zones** (email hour, in `actions.py`).
+Without touching the SQL:
+- **Tier names** (`[tiers]`): map your CRM's tiers onto the three coverage
+  models (tech touch, pooled, named CSM). Reports use the engine's names; your
+  own stays in the `crm_tier` column.
+- **What utilisation means** (`[utilisation]`): the daily usage event and the
+  CRM column with the annual commitment. Volume-based or spend-based both fit.
+- **Regions and time zones** (`[regions]`): for sending emails at a local hour.
+- Every threshold and time window.
 
-These move into `settings.toml` next, so a new team edits one file, not the SQL.
+Still fixed: the CRM's owner columns (`csm_owner`, `cs_pool`), the usage
+amount living in `properties.event_count`, and seat-based utilisation (active
+seats / bought seats), which would need a different formula.
