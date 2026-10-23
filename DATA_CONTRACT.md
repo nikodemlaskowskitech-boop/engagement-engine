@@ -137,6 +137,23 @@ Never into the inputs above: flags (`data/flags_*.csv`), the action log
 (`data/action_log.csv`, which also drives QBR slips), new engagement events
 (appended, never edited), QBR packs and briefs, and the views page.
 
+## CRM write-back (designed, not built)
+
+The demo has no CRM, so nothing is sent back. With a real one it's a small,
+safe step, because every engagement event already carries what a CRM activity
+needs:
+
+| Engagement event | CRM record | Fields |
+| --- | --- | --- |
+| `meeting_held` | Activity (meeting or call) on the account | date, owner, subject = topic, description = outcome + note |
+| `email_sent` | Activity (email) | date, owner (or "automated"), subject = topic |
+| `task_claimed` | Task owner update | who took it, when |
+
+Each event's `event_id` goes into an external-ID field, so a re-run never
+creates duplicates. The direction stays one-way for CS facts: the engine is
+the record for engagement, and the CRM gets a copy so sales and leadership see
+it where they already work.
+
 ## Still hard-coded (next step: settings)
 
 To run on another company's data today you'd also need to change code for:
