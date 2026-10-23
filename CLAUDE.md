@@ -6,7 +6,7 @@ when to act and what to do. Built locally first, then moved to AWS.
 
 The owner (Nikodem) is a Customer Success leader rebuilding hands-on
 technical skills. Explain changes in plain language, keep code readable
-with short comments, and prefer small steps he can review.
+with short comments, and work in small steps (one PR per change).
 
 ## Working rules
 
