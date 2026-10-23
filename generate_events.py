@@ -622,14 +622,18 @@ def in_window(rows):
 
 
 def write_engagement(accounts):
-    """One file per day with any CS activity in data/engagement/."""
+    """One file per day with any CS activity in data/engagement/.
+    Returns the number of rows and the accounts that had a churn call."""
     rng = random.Random(SEED + 4)         # own generator: no product number changes
     by_day = {START_DATE + timedelta(days=i): [] for i in range(DAYS)}
+    called = set()
     for acc in accounts:
         if not acc["in_crm"]:
             continue
         for e in engagement_for_account(rng, acc):
             by_day[date.fromisoformat(e["timestamp"][:10])].append(e)
+            if e["event_name"] == "meeting_held" and e["properties"]["topic"] == "churn_call":
+                called.add(acc["id"])
     out_dir = OUT_DIR / "engagement"
     out_dir.mkdir(parents=True, exist_ok=True)
     for old in out_dir.glob("*.jsonl"):
@@ -643,7 +647,45 @@ def write_engagement(accounts):
             for row in rows:
                 f.write(json.dumps(row) + "\n")
         total += len(rows)
-    return total
+    return total, called
+
+
+# --- Renewal outcomes: the future, for backtesting ---------------------------
+# What happened at each renewal in the OUTCOME_HORIZON_DAYS after the data
+# ends, as if we were looking back from later. Real teams get this from the
+# CRM (closed-won/lost renewals). It lets backtest.py ask: did the flags warn
+# us about the accounts that churned or shrank, and how early?
+# Mostly driven by personality, with surprises: a healthy account can still
+# churn (acquired, budget cut), and no flag can see that coming. A churn call
+# improves a declining account's odds: that is the "outcome after a call".
+
+OUTCOME_HORIZON_DAYS = 180
+OUTCOME_ODDS = {                      # renewed, expanded, downsized, churned
+    "healthy":      (0.90, 0.03, 0.04, 0.03),
+    "power_user":   (0.38, 0.60, 0.00, 0.02),
+    "shelfware":    (0.25, 0.00, 0.55, 0.20),
+    "declining":    (0.15, 0.00, 0.30, 0.55),
+    "declining_called": (0.40, 0.00, 0.30, 0.30),   # a churn call happened
+}
+OUTCOMES = ("renewed", "expanded", "downsized", "churned")
+
+
+def write_renewal_outcomes(accounts, called):
+    rng = random.Random(SEED + 7)         # own generator: nothing else changes
+    path = OUT_DIR / "renewal_outcomes.csv"
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["account_id", "renewal_date", "outcome"])
+        for acc in accounts:
+            renewal = acc["contract_start"] + timedelta(days=365)
+            if not acc["in_crm"] or not (END_DATE < renewal <= END_DATE + timedelta(days=OUTCOME_HORIZON_DAYS)):
+                continue
+            kind = acc["personality"]
+            if kind == "declining" and acc["id"] in called:
+                kind = "declining_called"
+            odds = OUTCOME_ODDS.get(kind, OUTCOME_ODDS["healthy"])
+            writer.writerow([acc["id"], renewal.isoformat(), rng.choices(OUTCOMES, weights=odds)[0]])
+    return path
 
 
 def write_holdout(accounts):
@@ -706,7 +748,8 @@ if __name__ == "__main__":
     key_path = write_answer_key(accounts)
     holdout_path = write_holdout(accounts)
     total = write_events(accounts)
-    cs_total = write_engagement(accounts)
+    cs_total, called = write_engagement(accounts)
+    outcomes_path = write_renewal_outcomes(accounts, called)
     # New data is a new world: actions logged against the old data no longer
     # match anything, and their email events were just wiped with data/engagement/
     old_log = OUT_DIR / "action_log.csv"
@@ -720,3 +763,4 @@ if __name__ == "__main__":
     print(f"Holdout:    {holdout_path} (no onboarding emails for these accounts)")
     print(f"Events:     {total:,} across {DAYS} daily files, {START_DATE} to {END_DATE}")
     print(f"Engagement: {cs_total:,} CS touches and responses in data/engagement/")
+    print(f"Outcomes:   {outcomes_path} (renewals in the {OUTCOME_HORIZON_DAYS} days after the data, for backtest.py)")

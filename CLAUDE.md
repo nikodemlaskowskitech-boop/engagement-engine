@@ -196,6 +196,8 @@ One JSON event per line, one file per day in `data/events/`.
   time, no weekend meetings.
   Also writes `data/onboarding_holdout.csv`: the control group as a
   real-world fact (the programme's own list), which every sender checks.
+  Also writes `data/renewal_outcomes.csv` (the renewals after the data
+  ends, for backtest.py; a real team exports closed renewals from the CRM).
   Also writes `data/answer_key.csv` (each account's personality and
   welcome group): for testing only, the flags must never read it.
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
@@ -218,6 +220,15 @@ One JSON event per line, one file per day in `data/events/`.
 - `check_flags.py`: tests the flags against the answer key (run `flags.py`
   first): share of each personality found, false alarms, and every miss by
   name. Re-run it after any change to a flag rule.
+- `backtest.py`: did the churn flags see it coming? (run `flags.py` first)
+  Against `data/renewal_outcomes.csv` (what happened at each renewal in the
+  180 days after the data: renewed, expanded, downsized, churned; written by
+  the generator with its own random generator, including surprise churn no
+  flag can see, and better odds for declining accounts that got a churn
+  call): recall, precision, warning time (first day under the churn line to
+  renewal; under [backtest] too_late_days = too late), misses by name, and
+  churn with vs. without a churn call. Not done yet: replaying the flags as
+  of an earlier date (needs a longer data window).
 - `journeys.py`: rules on the last touch (run `flags.py` first). "Email
   never opened": Self-service stalled/silent, getting-started email 5+ days
   old and unopened -> CS ops checks the contact. "No meeting in 30 days":

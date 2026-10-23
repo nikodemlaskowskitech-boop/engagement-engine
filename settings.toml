@@ -52,6 +52,9 @@ coming_up_days = 30       # a QBR in the next 30 days: prepare it
 overdue_after_days = 120  # last QBR this long ago (or never) and nothing booked: book one
 champion_ratio = 2        # the top user is the champion when doing 2x+ the next one
 
+[backtest]
+too_late_days = 30        # warning shorter than this before a renewal is too late to act on
+
 [journeys]
 unopened_after_days = 5   # give people a few days to open an email
 no_meeting_days = 30      # an Act account should have had a conversation by now...

@@ -41,6 +41,7 @@ python generate_events.py   # ~500 accounts, 90 days of events
 python explore.py           # the book of business at a glance
 python flags.py             # activation, churn, expansion and QBR flags, plus work queues
 python check_flags.py       # test the flags against the generator's answer key
+python backtest.py          # did the flags see churn coming? recall, precision, warning time
 python journeys.py          # follow-ups based on the last CS touch (unopened emails, no meeting in 30 days)
 python team_report.py       # how fast each CSM and pool acts on churn and expansion Act accounts
 python onboarding_report.py # does the getting-started email help? welcomed vs. control group
