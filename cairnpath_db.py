@@ -18,10 +18,14 @@ Every script calls connect() to get a connection with the same views:
   qbr_schedule   Enterprise accounts with their QBR timing: coming up in the
                  next 30 days, or overdue (live 4+ months, last QBR 120+ days
                  ago or never, nothing booked in the next 30 days)
+  qbr_slips      flags handed to a QBR whose date passed with no QBR held
+                 (from the action log; empty before the first actions.py run)
 
 Keeping this in one place means the schema and the utilisation rule are
 defined once, not copied into every script.
 """
+
+import os
 
 import duckdb
 
@@ -206,4 +210,29 @@ def connect():
         FROM engagement
         GROUP BY account_id
     """)
+
+    # QBR slips: flags handed to a QBR ("covered by the QBR on <date>" in the
+    # action log) whose date has passed with no QBR held since. A QBR that keeps
+    # moving must not hide a flag for ever: actions.py raises these as normal
+    # tasks (never folded into a QBR again) and journeys.py escalates them.
+    if os.path.exists("data/action_log.csv"):
+        con.sql("""
+            CREATE VIEW qbr_slips AS
+            WITH covered AS (
+                SELECT account_id, flag, status, logged_on::DATE AS logged_on,
+                       regexp_extract(outcome, '(\d{4}-\d{2}-\d{2})$', 1)::DATE AS promised_qbr
+                FROM read_csv('data/action_log.csv', all_varchar = true)
+                WHERE channel = 'qbr'
+            )
+            SELECT c.*
+            FROM covered c, as_of a
+            WHERE c.promised_qbr <= a.as_of_date      -- its day has come and gone
+              AND NOT EXISTS (SELECT 1 FROM engagement e
+                              WHERE e.account_id = c.account_id AND e.event_name = 'meeting_held'
+                                AND e.properties.topic = 'qbr' AND e.event_date >= c.logged_on)
+        """)
+    else:   # no actions yet, so nothing can have slipped
+        con.sql("""CREATE VIEW qbr_slips AS
+                   SELECT NULL::VARCHAR AS account_id, NULL::VARCHAR AS flag, NULL::VARCHAR AS status,
+                          NULL::DATE AS logged_on, NULL::DATE AS promised_qbr WHERE false""")
     return con

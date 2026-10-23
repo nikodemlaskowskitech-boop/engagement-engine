@@ -369,9 +369,12 @@ con.sql(f"""
                     || 'with links to the guides for each use case'
                 -- renewal close: no time for a slow ramp plan, so the call is about the renewal itself
                 WHEN (l.renewal_date::DATE - l.as_of_date) / 30.0 <= {RENEWAL_SOON_MONTHS} THEN
-                    format('Renewal in {{}} weeks: call this week. Agree what blocks the rollout and a '
+                    format('Renewal in {{}}: call this week. Agree what blocks the rollout and a '
                            || 'realistic volume for the renewal, so it is not a surprise cut',
-                           ((l.renewal_date::DATE - l.as_of_date) // 7)::INT)
+                           -- under two weeks in days ("9 days"), else in weeks ("8 weeks")
+                           CASE WHEN l.renewal_date::DATE - l.as_of_date < 14
+                                THEN (l.renewal_date::DATE - l.as_of_date)::VARCHAR || ' days'
+                                ELSE ((l.renewal_date::DATE - l.as_of_date) // 7)::VARCHAR || ' weeks' END)
                 WHEN l.tier = 'Scale' THEN
                     'Offer an adoption review: which teams and data sources are still to come? '
                     || 'Invite them to the next advanced workshop'

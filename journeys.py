@@ -19,7 +19,9 @@ it worked. Two rules for now:
                           who gets one Slack message listing their team's
                           accounts, not a task per account. Not when a
                           QBR is booked in the next 30 days: that meeting
-                          is the plan (QBR first, see actions.py).
+                          is the plan (QBR first, see actions.py). Only
+                          once: after a QBR has slipped, a newly booked one
+                          no longer holds the escalation back.
 
 Rows have the same columns as the flags and are saved to
 data/flags_journey.csv, so actions.py picks them up and does each one once.
@@ -93,8 +95,10 @@ con.sql(f"""
         WHERE (t.last_meeting_date IS NULL OR a.as_of_date - t.last_meeting_date > {NO_MEETING_DAYS})
           -- no signal date (Act from users and errors, not utilisation): keep it
           AND (s.signal_date IS NULL OR a.as_of_date - s.signal_date >= {ACT_FOR_DAYS})
-          -- QBR first: a QBR in the next 30 days is the meeting, no escalation
-          AND f.account_id NOT IN (SELECT account_id FROM qbr_schedule WHERE qbr_coming_up)
+          -- QBR first: a QBR in the next 30 days is the meeting, no escalation;
+          -- unless an earlier QBR for this account already slipped (qbr_slips)
+          AND f.account_id NOT IN (SELECT account_id FROM qbr_schedule WHERE qbr_coming_up
+                                   AND account_id NOT IN (SELECT account_id FROM qbr_slips))
     )
     SELECT * FROM email_never_opened
     UNION ALL
