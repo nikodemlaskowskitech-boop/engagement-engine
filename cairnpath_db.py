@@ -283,10 +283,13 @@ def connect():
             WITH tasks AS (
                 -- tasks for people (cards and Slack digests); the latest send of each
                 SELECT account_id, flag, status,
-                       arg_max(routed_to, logged_on) AS routed_to,
-                       arg_max(action, logged_on)    AS action,
+                       arg_max(routed_to, line)      AS routed_to,
+                       arg_min(routed_to, line)      AS first_owner,   -- before any reassignment
+                       arg_max(action, line)         AS action,
                        max(logged_on)::DATE          AS sent_on
-                FROM read_csv('data/action_log.csv', all_varchar = true)
+                -- line: the log's own order, so two sends on one day still have a last one
+                FROM (SELECT *, row_number() OVER () AS line
+                      FROM read_csv('data/action_log.csv', all_varchar = true))
                 WHERE channel IN ('card', 'queue')
                 GROUP BY account_id, flag, status
             ),
@@ -336,7 +339,8 @@ def connect():
                    d.done_on, c.claimed_by,
                    a.as_of_date + 1 - t.sent_on         AS age_days,  -- days since it was sent
                    g.assigned_by,                                     -- the manager, if reassigned
-                   CASE WHEN g.assigned_to IS NOT NULL THEN t.routed_to END AS assigned_from
+                   CASE WHEN g.assigned_to IS NOT NULL AND g.assigned_to <> t.first_owner
+                        THEN t.first_owner END          AS assigned_from
             FROM tasks t
             CROSS JOIN as_of a
             LEFT JOIN done d     USING (account_id, flag, status)

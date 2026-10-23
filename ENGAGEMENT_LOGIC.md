@@ -187,7 +187,7 @@ stateDiagram-v2
 
 A manager can also give any open or claimed task of their team to someone else,
 in the cockpit's Tasks tab. On the next run the task goes to its new owner in
-Slack, once; its status and age carry on (the customer has been waiting that
-long), and its follow-up later goes back to that same person.
+Slack, once; its age counts from when the new owner got it, and its
+follow-up later goes back to that same person.
 
 All the numbers above (14, 30 and 5 days) live in `settings.toml`.
