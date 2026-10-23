@@ -3,7 +3,7 @@ Journeys: rules that react to the last touch, not just to usage.
 
 The flags say "this account needs attention". Journeys look at the CS
 timeline (data/engagement/) and ask what has already happened, and whether
-it worked. Two rules for now:
+it worked. The rules:
 
   Email never opened      a Self-service account is stalled or silent, and its
                           getting-started email (5+ days ago) was never opened.
@@ -28,6 +28,10 @@ it worked. Two rules for now:
                           days. Their manager gets an approval: hand it back
                           to the pool (button in Slack). Then anyone in the
                           pool can take it (actions.py).
+
+  Reassigned, not picked up  a manager gave a task to someone in the cockpit
+                          and it's still not claimed or done 5 days later:
+                          back to that manager to check or reassign.
 
 Rows have the same columns as the flags and are saved to
 data/flags_journey.csv, so actions.py picks them up and does each one once.
@@ -124,11 +128,29 @@ con.sql(f"""
         WHERE s.status LIKE '%(follow-up)' AND s.action LIKE '%For <@%'   -- named to a person
           AND s.action_status = 'Open' AND s.age_days >= {HANDBACK_DAYS}
     )
+    ,
+    reassigned_waiting AS (
+        -- a manager gave a task to someone who hasn't picked it up in 5 days:
+        -- back to that manager, to check or give it to someone else
+        SELECT s.account_id, c.account_name, c.tier, c.region,
+               'Reassigned, not picked up' AS status,
+               format('{{}} {{}} given to {{}} {{}} days ago; not claimed or done since',
+                      s.flag, s.status, o.owner_name, s.age_days) AS reasons,
+               s.assigned_by AS routed_to,
+               format('Check with {{}}, or give it to someone else in the cockpit', o.owner_name) AS action
+        FROM action_status s                                -- cairnpath_db.py
+        JOIN cs_team o ON o.owner_id = s.routed_to
+        LEFT JOIN crm c USING (account_id)
+        WHERE s.assigned_by IS NOT NULL
+          AND s.action_status = 'Open' AND s.age_days >= {HANDBACK_DAYS}
+    )
     SELECT * FROM email_never_opened
     UNION ALL
     SELECT * FROM no_meeting
     UNION ALL
     SELECT * FROM handback
+    UNION ALL
+    SELECT * FROM reassigned_waiting
 """)
 
 print("\nJourneys: what happened since the flag, and did it work?\n")

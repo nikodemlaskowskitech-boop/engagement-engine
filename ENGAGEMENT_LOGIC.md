@@ -186,8 +186,10 @@ stateDiagram-v2
 | Manager hand-back approval | The manager clicks "Approve hand-back" (Slack or the cockpit) |
 
 A manager can also give any open or claimed task of their team to someone else,
-in the cockpit's Tasks tab. On the next run the task goes to its new owner in
-Slack, once; its age counts from when the new owner got it, and its
+in the cockpit's Tasks tab. On the next run the task goes to its new owner as
+a Slack DM, once. The old owner gets "no longer yours" (so nobody calls twice),
+and if it crossed teams the new owner's manager gets an FYI (capacity). Not
+picked up in 5 days: back to the manager who gave it. Its age counts from when the new owner got it, and its
 follow-up later goes back to that same person.
 
 All the numbers above (14, 30 and 5 days) live in `settings.toml`.

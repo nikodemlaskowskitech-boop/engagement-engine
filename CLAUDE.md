@@ -244,7 +244,9 @@ One JSON event per line, one file per day in `data/events/`.
   escalated to the owner's manager (one Slack message per manager).
   "Follow-up not picked up": a Scale follow-up named to a person, still
   Open after 5 days -> their manager approves handing it back to the pool
-  ("Approve hand-back" button; actions.py then sends it to the pool). Saved
+  ("Approve hand-back" button; actions.py then sends it to the pool).
+  "Reassigned, not picked up": a task a manager reassigned in the cockpit,
+  still Open after 5 days -> back to that manager. Saved
   to `data/flags_journey.csv`, same columns as the flags.
 - `team_report.py`: time to action by owner and manager (run `flags.py`
   and `journeys.py` first). Signal date = first day the account's 30-day
@@ -312,7 +314,9 @@ One JSON event per line, one file per day in `data/events/`.
   so they go out on a later run. A follow-up the manager handed back goes
   to the whole pool once ("<status> (follow-up, pool)"). Reassigned in the
   cockpit (task_assigned): the task goes to the new owner once ("Given to you
-  by ..."), and its follow-up later goes to that person too.
+  by ..."), as a DM card ([slack] dm_reassigned); the old owner gets a "no
+  longer yours" DM and, across teams, the new owner's manager an FYI (logged
+  with channel notice). Its follow-up later goes to that person too.
   `none` and `report` rows aren't actions. The log only grows; delete it
   to start over.
 - `cockpit_sync.py`: managers' decisions from the cockpit (Claude copies the

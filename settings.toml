@@ -78,4 +78,8 @@ handback_after_days = 5   # a named follow-up nobody picked up this long: the ma
 team_channel = "#cs-queue"                      # where task cards go
 interactive_owners = ["pool_dach", "csm_anna", "mgr_sophie"]   # their tasks get cards with buttons
 dm_owners = ["csm_anna"]                        # ...sent as DMs to SLACK_DEMO_USER (you play Anna)
+# A task a manager reassigns in the cockpit goes as a DM to its new owner, and the
+# old owner (and the other manager, across teams) get a short DM notice. In the
+# demo every DM goes to SLACK_DEMO_USER; a real team maps owner_id to a Slack user.
+dm_reassigned = true
 cockpit_url = "https://claude.ai/artifact/LGt2Q5S98GeVDK3kNzrhph"   # Open timeline links here
