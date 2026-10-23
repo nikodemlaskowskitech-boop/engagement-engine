@@ -268,9 +268,15 @@ One JSON event per line, one file per day in `data/events/`.
   reports' SQL through `team_report.add_views(con)` and
   `onboarding_report.add_views(con)`, so the page and the reports agree.
   Counts only, never real user IDs. Also builds `data/views.html` from
-  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): four
-  tabs (account timeline, onboarding, CS team, book of business), opens in any
-  browser offline. The page only draws; the numbers come from the export.
+  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): six
+  tabs. Overview (the engagement sieve: churn signals stage by stage, and
+  renewals in the next 180 days by today's flag), Did it work? (the backtest:
+  caught / missed / false alarm, warning time, calls), account timeline,
+  onboarding, CS team, book of business. Every bar, cell and stage lists its
+  accounts on click, and a row opens that account's timeline, so the logic can
+  be checked by hand. Also exports churn_signals and renewals (backtest.py's
+  view). Opens in any browser offline. The page only draws; the numbers come
+  from the export.
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to
