@@ -20,12 +20,16 @@ with surprises a flag can't see (a healthy customer acquired or out of budget).
 Warning time is a lower bound for accounts already under the line when the
 data starts: the true signal may be older.
 
-Run flags.py first, then:  python backtest.py
+  Sieve        every churn signal, stage by stage: sent to automation or a
+                 person, called, called fast, kept at renewal
+
+Run flags.py and journeys.py first, then:  python backtest.py
 """
 
 import os
 import sys
 
+import team_report
 from cairnpath_db import connect
 from settings import SETTINGS
 
@@ -33,6 +37,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 LINE = SETTINGS["churn"]["util_below"]                 # the churn line (settings.toml)
 TOO_LATE = SETTINGS["backtest"]["too_late_days"]       # less warning than this can't be acted on
+FAST = SETTINGS["journeys"]["act_for_days"]            # "called within" for the funnel (14 days)
 
 if not os.path.exists("data/renewal_outcomes.csv"):
     # not an error: older data has no outcomes yet (run_all.ps1 -Regenerate makes them)
@@ -127,15 +132,46 @@ con.sql("""
     ORDER BY tier, renewal_date
 """).show(max_rows=60)
 
-print("\n6. Calls: churn among flagged accounts, with and without a churn call")
+print("\n6. Calls: churn among Act accounts, with and without a churn call")
+print("   (Act only: comparing all flags would mix declining accounts, which get the")
+print("   calls, with Shelfware ones, which rarely churn, and make calls look harmful)")
 con.sql("""
     SELECT CASE WHEN had_churn_call THEN 'churn call held' ELSE 'no churn call' END AS cs_action,
-           count(*) AS flagged_accounts,
+           count(*) AS act_accounts,
            format('{} ({}%)', count(*) FILTER (WHERE outcome = 'churned'),
-                  round(100.0 * count(*) FILTER (WHERE outcome = 'churned') / count(*))::INT) AS churned
-    FROM backtest WHERE flagged AND tier <> 'Self-service'
+                  round(100.0 * count(*) FILTER (WHERE outcome = 'churned') / count(*))::INT) AS churned,
+           format('{} ({}%)', count(*) FILTER (WHERE NOT lost_revenue),
+                  round(100.0 * count(*) FILTER (WHERE NOT lost_revenue) / count(*))::INT) AS kept_whole
+    FROM backtest WHERE flag_status = 'Act' AND tier <> 'Self-service'
     GROUP BY ALL ORDER BY 1
 """).show()
 
+# --- 7. The engagement sieve, read like a funnel ---------------------------------
+# Every churn signal, stage by stage: who it went to, whether a person acted
+# and how fast, and what happened at renewal.
+team_report.add_views(con)                     # time_to_action: signal date and first call
+print("\n7. The sieve, read like a funnel: churn signals, stage by stage")
+con.sql(f"""
+    WITH churn AS (
+        SELECT f.account_id, f.status, c.tier,
+               t.call_date, t.days_to_call, b.outcome, b.lost_revenue
+        FROM read_csv('data/flags_churn.csv', all_varchar = true) f
+        JOIN crm c USING (account_id)
+        LEFT JOIN time_to_action t ON t.account_id = f.account_id AND t.flag = 'churn'
+        LEFT JOIN backtest b ON b.account_id = f.account_id
+    )
+    SELECT stage, accounts FROM (VALUES
+        (1, 'Churn signals (Watch, Act, Shelfware)', (SELECT count(*) FROM churn)),
+        (2, '  sieved to automation (Self-service)',  (SELECT count(*) FROM churn WHERE tier = 'Self-service')),
+        (3, '  sieved to a person (Scale, Enterprise)', (SELECT count(*) FROM churn WHERE tier <> 'Self-service')),
+        (4, '    at Act: need a call now',            (SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act')),
+        (5, '      called',                           (SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND call_date IS NOT NULL)),
+        (6, '      called within {FAST} days',         (SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND days_to_call <= {FAST})),
+        (7, '      renewing in the next 180 days',    (SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND outcome IS NOT NULL)),
+        (8, '        kept whole (renewed or grew)',   (SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND outcome IS NOT NULL AND NOT lost_revenue))
+    ) AS funnel(step, stage, accounts)
+    ORDER BY step
+""").show(max_width=200)
+
 print("Small groups: read the counts, not just the percentages. The outcomes are")
-print("generated, so section 6 shows the method, not proof that calls work.")
+print("generated, so sections 6 and 7 show the method, not proof that calls work.")

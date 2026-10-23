@@ -227,8 +227,12 @@ One JSON event per line, one file per day in `data/events/`.
   flag can see, and better odds for declining accounts that got a churn
   call): recall, precision, warning time (first day under the churn line to
   renewal; under [backtest] too_late_days = too late), misses by name, and
-  churn with vs. without a churn call. Not done yet: replaying the flags as
-  of an earlier date (needs a longer data window).
+  churn with vs. without a churn call (Act accounts only: mixing flag types
+  confounds it), and the sieve read like a funnel (churn signals -> to
+  automation or a person -> Act -> called -> called within 14 days ->
+  renewing -> kept whole). Runs after team_report.py (uses time_to_action).
+  Not done yet: replaying the flags as of an earlier date (needs a longer
+  data window).
 - `journeys.py`: rules on the last touch (run `flags.py` first). "Email
   never opened": Self-service stalled/silent, getting-started email 5+ days
   old and unopened -> CS ops checks the contact. "No meeting in 30 days":
