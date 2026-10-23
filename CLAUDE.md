@@ -93,9 +93,11 @@ One JSON event per line, one file per day in `data/events/`.
   invite_your_team, need_help_starting, use_case_inspiration; follow-ups
   invite_your_team_followup, need_help_starting_followup, customer_story). user_id = the customer user who
   responded or attended. context.source says who wrote it (cs_history from
-  the generator, actions.py for new actions, slack for clicks). Slack clicks
-  add task_claimed events and meeting_held with properties.outcome, .note
-  and .slack_user.
+  the generator, actions.py for new actions, slack for clicks, cockpit for
+  managers' decisions). Slack clicks add task_claimed events and meeting_held
+  with properties.outcome, .note and .slack_user. The cockpit adds
+  task_assigned (properties.owner_id = new owner, topic = flag, .status,
+  .manager) and handback_approved.
 
 ## The four flags
 
@@ -206,7 +208,8 @@ One JSON event per line, one file per day in `data/events/`.
   and utilisation, monthly_usage (utilisation and users per 30-day month),
   qbr_schedule (QBR coming up / overdue), qbr_slips (flags handed to a
   QBR that didn't happen, from the action log), action_status (every task
-  sent to a person: Open, Claimed, Done or Resolved, and its age),
+  sent to a person: Open, Claimed, Done or Resolved, and its age; routed_to
+  is whoever has it now, after a manager's reassignment),
   daily_util_30d (30-day
   utilisation on every day, rounded like the flags), last_touch (last CS touch,
   last meeting, getting-started email opened or not, per account).
@@ -268,15 +271,20 @@ One JSON event per line, one file per day in `data/events/`.
   reports' SQL through `team_report.add_views(con)` and
   `onboarding_report.add_views(con)`, so the page and the reports agree.
   Counts only, never real user IDs. Also builds `data/views.html` from
-  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): six
+  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): seven
   tabs. Overview (the engagement sieve: churn signals stage by stage, and
-  renewals in the next 180 days by today's flag), Did it work? (the backtest:
+  renewals in the next 180 days by today's flag), Tasks (the manager's queue:
+  every task sent to a person, its status and age; in the published cockpit a
+  manager gives one to someone else or approves a hand-back, saved in the
+  page's database), Did it work? (the backtest:
   caught / missed / false alarm, warning time, calls), account timeline,
   onboarding, CS team, book of business. Every bar, cell and stage lists its
   accounts on click, and a row opens that account's timeline, so the logic can
-  be checked by hand. Also exports churn_signals and renewals (backtest.py's
-  view). Opens in any browser offline. The page only draws; the numbers come
-  from the export.
+  be checked by hand. A segment bar (manager, region, tier, owner) filters
+  every tab but the timeline. Also exports churn_signals, renewals
+  (backtest.py's view) and tasks (action_status, with each task's manager).
+  Opens in any browser offline. The page only draws; the numbers come from
+  the export.
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to
@@ -302,9 +310,15 @@ One JSON event per line, one file per day in `data/events/`.
   the pool, visible to the manager). Fatigue cap: one automated email per
   account per 14 days across all programmes; capped emails aren't logged,
   so they go out on a later run. A follow-up the manager handed back goes
-  to the whole pool once ("<status> (follow-up, pool)").
+  to the whole pool once ("<status> (follow-up, pool)"). Reassigned in the
+  cockpit (task_assigned): the task goes to the new owner once ("Given to you
+  by ..."), and its follow-up later goes to that person too.
   `none` and `report` rows aren't actions. The log only grows; delete it
   to start over.
+- `cockpit_sync.py`: managers' decisions from the cockpit (Claude copies the
+  page's database to `data/cockpit_decisions.json` before a run) -> events in
+  `data/engagement/cockpit.jsonl`, rewritten each run, so nothing doubles.
+  Decisions on older data (another as-of) are skipped. First step of run_all.
 - `slack_loop.py`: shared Slack pieces (task cards, .env tokens, appending
   click events). `listener.py`: Socket Mode listener (`python listener.py`,
   leave it running): "I'll take it" -> task_claimed, "Log call" -> a form ->

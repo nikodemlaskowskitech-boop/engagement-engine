@@ -18,7 +18,7 @@ decides, grey = end state.
 | Tier | Touch model | Coverage | Who acts on a flag | Where it lands | Safety net |
 | --- | --- | --- | --- | --- | --- |
 | Self-service (300) | Tech touch | No CSM | Automation | Simulated email (#email-preview) | One follow-up, then the Self-service report |
-| Scale (150) | Pooled | One team per region | Whoever claims it | Shared queue (Slack cards) | Manager sees unclaimed tasks; approves hand-backs |
+| Scale (150) | Pooled | One team per region | Whoever claims it | Shared queue (Slack cards) | Manager sees unclaimed tasks, can give one to someone, approves hand-backs |
 | Enterprise (48) | High touch | Named CSM, 8 accounts each | The account's CSM | The CSM's own task | QBR first; manager escalation |
 
 ## 2. Overview
@@ -52,6 +52,7 @@ flowchart TB
         m1["Approves hand-back<br/>follow-up not picked up in 5 days"]
         m2["Escalation<br/>no meeting in 30 days"]
         m3["Sees CS ops items<br/>handoff gaps, no CSM"]
+        m4["Gives a task to someone else<br/>in the cockpit"]
     end
 
     sc3 -.-> m1
@@ -182,6 +183,11 @@ stateDiagram-v2
 | QBR | The QBR |
 | Activation, escalations | Any meeting |
 | CS ops (handoff gap, no CSM) | Only Resolved: the CRM record is fixed |
-| Manager hand-back approval | The manager clicks "Approve hand-back" |
+| Manager hand-back approval | The manager clicks "Approve hand-back" (Slack or the cockpit) |
+
+A manager can also give any open or claimed task of their team to someone else,
+in the cockpit's Tasks tab. On the next run the task goes to its new owner in
+Slack, once; its age counts from when the new owner got it, and its
+follow-up later goes back to that same person.
 
 All the numbers above (14, 30 and 5 days) live in `settings.toml`.

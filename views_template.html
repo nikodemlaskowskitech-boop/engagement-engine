@@ -133,6 +133,27 @@ table.matrix td { padding: 6px; }
 .cellbtn.good { border-left-color: var(--good); } .cellbtn.warning { border-left-color: var(--warning); }
 .cellbtn.critical { border-left-color: var(--critical); } .cellbtn.neutral { border-left-color: var(--rule); }
 .cellbtn:hover { border-color: var(--accent); }
+/* segment bar: who is looking, at which part of the book */
+.segbar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 10px 0 12px; }
+.segbar label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--ink-3); }
+.segbar select { padding: 5px 8px; font-size: 0.88rem; }
+.segbar .count { font-family: var(--font-data); font-size: 0.8rem; color: var(--ink-2); }
+.segbar button.reset { font: 500 0.82rem var(--font-body); color: var(--accent); background: none; border: 0; cursor: pointer; padding: 4px; }
+.segbar.on { box-shadow: inset 0 -2px 0 var(--accent-soft); }
+/* tasks */
+.badge { display: inline-block; font: 600 0.72rem var(--font-body); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+.badge.Open { background: var(--warning-bg); color: var(--warning-ink); }
+.badge.Claimed { background: var(--accent-soft); color: var(--accent); }
+.badge.Done { background: var(--good-bg); color: var(--good-ink); }
+.badge.Resolved { background: var(--bg); color: var(--ink-3); border: 1px solid var(--rule); }
+.pending { display: block; font-size: 0.78rem; color: var(--accent); margin-top: 3px; }
+td .act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+td .act select { padding: 4px 6px; font-size: 0.82rem; max-width: 190px; }
+button.small { font: 500 0.82rem var(--font-body); border: 1px solid var(--accent); color: var(--accent); background: var(--surface); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+button.small.primary { background: var(--accent); color: var(--surface); }
+button.small:disabled, td .act select:disabled { opacity: 0.5; cursor: not-allowed; }
+button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background: none; border: 0; text-decoration: underline; cursor: pointer; padding: 0; }
+.banner { font-size: 0.88rem; border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 8px 12px; border-radius: 4px; margin: 0; }
 @media (prefers-reduced-motion: no-preference) { .fade { animation: fade 0.25s ease-out; } @keyframes fade { from { opacity: 0.4; } to { opacity: 1; } } }
 </style>
 
@@ -142,15 +163,26 @@ table.matrix td { padding: 6px; }
       <h1>Cairnpath CS Cockpit</h1>
       <span class="asof" id="asof"></span>
     </div>
-    <p class="lede">Six views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
+    <p class="lede">Seven views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
     <nav role="tablist" aria-label="Views">
       <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
+      <button role="tab" id="tab-tasks" data-view="tasks" aria-selected="false">Tasks</button>
       <button role="tab" id="tab-outcomes" data-view="outcomes" aria-selected="false">Did it work?</button>
       <button role="tab" id="tab-timeline" data-view="timeline" aria-selected="false">Account timeline</button>
       <button role="tab" id="tab-onboarding" data-view="onboarding" aria-selected="false">Onboarding</button>
       <button role="tab" id="tab-team" data-view="team" aria-selected="false">CS team</button>
       <button role="tab" id="tab-book" data-view="book" aria-selected="false">Book of business</button>
     </nav>
+  </div>
+  <div class="wrap">
+    <div class="segbar" id="segbar" role="group" aria-label="Segment">
+      <label>Manager <select id="seg-manager"></select></label>
+      <label>Region <select id="seg-region"></select></label>
+      <label>Tier <select id="seg-tier"></select></label>
+      <label>Owner <select id="seg-owner"></select></label>
+      <span class="count" id="seg-count"></span>
+      <button class="reset" id="seg-reset" hidden>Whole book</button>
+    </div>
   </div>
 </header>
 
@@ -174,6 +206,20 @@ table.matrix td { padding: 6px; }
       <div class="panel">
         <h2 id="ov-list-title">Accounts</h2>
         <div class="tablewrap" id="ov-list"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-tasks" role="tabpanel" aria-labelledby="tab-tasks" hidden>
+      <p class="finding" id="tk-finding"></p>
+      <p class="sub">Every task the engine sent to a person, and what became of it: Done means the right meeting happened, Resolved that the flag went away. Pick your name under Manager to act on your team's tasks: give one to someone else, or approve a hand-back. A decision is saved here and applied on the next run, when the task goes to its new owner in Slack.</p>
+      <p class="banner" id="tk-banner" hidden></p>
+      <div class="controls">
+        <div class="chips" id="tk-status" aria-label="Status"></div>
+      </div>
+      <div class="panel">
+        <h2 id="tk-title">Tasks</h2>
+        <div class="tablewrap" id="tk-list"></div>
+        <p class="note">Oldest first. CS ops items (handoff gaps, no CSM) close only when the CRM is fixed, so they can't be reassigned here. A hand-back is approved by the manager it went to.</p>
       </div>
     </section>
 
@@ -319,6 +365,49 @@ table.matrix td { padding: 6px; }
   const byId = Object.fromEntries(D.accounts.map((a) => [a.account_id, a]));
   const ownerName = Object.fromEntries(D.team.map((t) => [t.owner_id, t.owner_name]));
   ownerName.automated = "Automated email";
+  ownerName.cs_ops = "CS ops";
+
+  // ---------------------------------------------------------------- segment
+  // The part of the book someone is looking at: a manager's team, a region, a
+  // tier, one owner. Every view except the single-account timeline draws only
+  // the accounts in it. Remembered in this browser only.
+  const REGIONS = ["UK&I", "DACH", "France & Benelux", "Nordics"], TIERS = ["Enterprise", "Scale", "Self-service"];
+  const managerName = (m) => (m || "").replace(/^mgr_/, "").replace(/^./, (c) => c.toUpperCase());
+  const MANAGERS = [...new Set(D.team.map((t) => t.manager))].sort();
+  for (const m of MANAGERS) ownerName[m] = managerName(m) + " (manager)";
+  const seg = { manager: "", region: "", tier: "", owner: "" };
+  try { const saved = JSON.parse(localStorage.getItem("cockpit-seg") || "{}"); for (const k in seg) if (typeof saved[k] === "string") seg[k] = saved[k]; } catch (e) { /* no storage here */ }
+  const saveSeg = () => { try { localStorage.setItem("cockpit-seg", JSON.stringify(seg)); } catch (e) { /* no storage here */ } };
+  const segOn = () => Object.values(seg).some(Boolean);
+  const inSeg = (a) => !!a && (!seg.manager || a.manager === seg.manager) && (!seg.region || a.region === seg.region)
+    && (!seg.tier || a.tier === seg.tier) && (!seg.owner || a.owner_id === seg.owner);
+  const inSegId = (id) => inSeg(byId[id]);
+  const segName = () => {
+    const parts = [seg.owner ? ownerName[seg.owner] : seg.manager ? managerName(seg.manager) + "'s team" : "", seg.region, seg.tier].filter(Boolean);
+    return parts.length ? parts.join(", ") : "The whole book";
+  };
+  const fillSelect = (node, opts, value) => {
+    node.innerHTML = ""; node.append(new Option("All", ""));
+    for (const [v, l] of opts) node.append(new Option(l, v));
+    node.value = opts.some(([v]) => v === value) ? value : "";
+  };
+  function drawSegbar() {
+    fillSelect($("seg-manager"), MANAGERS.map((m) => [m, managerName(m)]), seg.manager);
+    // regions narrow to the manager's (James: UK&I and Nordics)
+    fillSelect($("seg-region"), REGIONS.filter((r) => !seg.manager || D.team.some((t) => t.manager === seg.manager && t.region === r)).map((r) => [r, r]), seg.region);
+    fillSelect($("seg-tier"), TIERS.map((t) => [t, t]), seg.tier);
+    // owners narrow to the manager and region picked
+    const owners = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.region || t.region === seg.region));
+    fillSelect($("seg-owner"), owners.map((t) => [t.owner_id, t.owner_name]), seg.owner);
+    for (const k in seg) seg[k] = $("seg-" + k).value;     // drop a value the others ruled out
+    const n = D.accounts.filter(inSeg).length;
+    $("seg-count").textContent = segOn() ? `${n} of ${D.accounts.length} accounts` + (seg.manager && !seg.owner ? " · Self-service has no manager, so it's left out" : "") : `${n} accounts`;
+    $("seg-reset").hidden = !segOn();
+    $("segbar").classList.toggle("on", segOn());
+  }
+  function redraw() { drawSegbar(); drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes(); drawTasks(); }
+  for (const k of Object.keys(seg)) $("seg-" + k).addEventListener("change", (e) => { seg[k] = e.target.value; saveSeg(); redraw(); });
+  $("seg-reset").addEventListener("click", () => { for (const k in seg) seg[k] = ""; saveSeg(); redraw(); });
 
   // tooltip
   const tip = $("tip");
@@ -338,7 +427,7 @@ table.matrix td { padding: 6px; }
   };
 
   // tabs, with a bookmarkable #token per view
-  const views = ["overview", "outcomes", "timeline", "onboarding", "team", "book"];
+  const views = ["overview", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
   const show = (v) => {
     if (!views.includes(v)) v = "overview";
     for (const w of views) {
@@ -539,10 +628,11 @@ table.matrix td { padding: 6px; }
       old: old.length, act: act.length };
   }
   function drawOnboarding() {
-    const rows = D.onboarding.filter((r) => obTier === "all" || r.tier === obTier);
+    const rows = D.onboarding.filter((r) => (obTier === "all" || r.tier === obTier) && inSegId(r.account_id));
     const S = Object.fromEntries(GROUPS.map((g) => [g.key, obStats(rows.filter((r) => r.welcome_group === g.key))]));
     const w = S["welcomed"], c = S["control (no email)"];
-    $("ob-finding").textContent = `The email gets accounts started ${Math.round(c.mSdk - w.mSdk)} days sooner (median ${w.mSdk} vs ${c.mSdk} days to SDK), but about the same share activate: ${pct(w.act, w.old)}% vs ${pct(c.act, c.old)}%.`;
+    if (w.mSdk == null || c.mSdk == null) $("ob-finding").textContent = `${segName()}: too few new accounts to compare (${w.n} welcomed, ${c.n} in the control group).`;
+    else $("ob-finding").textContent = `${segOn() ? segName() + ": the" : "The"} email gets accounts started ${Math.round(c.mSdk - w.mSdk)} days sooner (median ${w.mSdk} vs ${c.mSdk} days to SDK), but about the same share activate: ${pct(w.act, w.old)}% vs ${pct(c.act, c.old)}%.`;
 
     // histogram: accounts per day from signing to SDK install, one row per group
     const host = $("ob-dots"); host.innerHTML = "";
@@ -590,18 +680,20 @@ table.matrix td { padding: 6px; }
   }
 
   // ---------------------------------------------------------------- team
-  const owners = D.team.filter((t) => D.time_to_action.some((r) => r.routed_to === t.owner_id));
-  const ownerRows = owners.map((o) => {
-    const rs = D.time_to_action.filter((r) => r.routed_to === o.owner_id);
+  function teamRows(TTA) {
+   return D.team.filter((t) => TTA.some((r) => r.routed_to === t.owner_id)).map((o) => {
+    const rs = TTA.filter((r) => r.routed_to === o.owner_id);
     const called = rs.filter((r) => r.call_date);
     return { o, rs, n: rs.length, called: called.length, med: median(called.map((r) => r.days_to_call)), early: rs.filter((r) => r.called_early).length, esc: rs.filter((r) => r.escalated).length };
-  }).sort((a, b) => (a.o.owner_type === b.o.owner_type ? (a.med ?? 99) - (b.med ?? 99) || a.o.owner_name.localeCompare(b.o.owner_name) : a.o.owner_type === "csm" ? -1 : 1));
+   }).sort((a, b) => (a.o.owner_type === b.o.owner_type ? (a.med ?? 99) - (b.med ?? 99) || a.o.owner_name.localeCompare(b.o.owner_name) : a.o.owner_type === "csm" ? -1 : 1));
+  }
 
   function drawTeam() {
-    const all = D.time_to_action, called = all.filter((r) => r.call_date);
+    const all = D.time_to_action.filter((r) => inSegId(r.account_id)), called = all.filter((r) => r.call_date);
+    const ownerRows = teamRows(all);
     const csm = ownerRows.filter((r) => r.o.owner_type === "csm"), pool = ownerRows.filter((r) => r.o.owner_type === "pool");
     const sum = (rs, k) => rs.reduce((s, r) => s + r[k], 0);
-    $("tm-finding").textContent = `CSMs called ${sum(csm, "called")} of ${sum(csm, "n")} Act accounts; the Scale pools called ${sum(pool, "called")} of ${sum(pool, "n")}. ${all.length - called.length} accounts that need action have had no call.`;
+    $("tm-finding").textContent = !all.length ? `${segName()}: no account at churn or expansion Act with a CSM or a pool.` : `${segOn() ? segName() + ": " : ""}CSMs called ${sum(csm, "called")} of ${sum(csm, "n")} Act accounts; the Scale pools called ${sum(pool, "called")} of ${sum(pool, "n")}. ${all.length - called.length} accounts that need action have had no call.`;
 
     // dot plot: one row per owner, days 0..20, plus a "no call" column
     const host = $("tm-dots"); host.innerHTML = "";
@@ -650,9 +742,11 @@ table.matrix td { padding: 6px; }
     // meetings per week heat grid
     const wh = $("tm-weeks"); wh.innerHTML = "";
     const weeks = D.week_ends;
-    const team = D.team;
+    const team = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.region || t.region === seg.region) && (!seg.owner || t.owner_id === seg.owner)
+      && (!seg.tier || (seg.tier === "Enterprise" ? t.owner_type === "csm" : seg.tier === "Scale" ? t.owner_type === "pool" : false)));
     const counts = team.map((t) => weeks.map((we) => D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > day(we) - 7 && day(x.date) <= day(we)).length));
     const max = Math.max(1, ...counts.flat());
+    if (!team.length) { wh.innerHTML = '<p class="note">Nobody on the CS team covers this segment.</p>'; return; }
     const GW = 360, GL = 120, cw = (GW - GL) / weeks.length, ch = 20, GH = team.length * (ch + 3) + 26;
     const gs = el("svg", { viewBox: `0 0 ${GW} ${GH}`, role: "img", "aria-label": "Meetings per week by owner" }, wh);
     const ramp = ["var(--seq-0)", "var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
@@ -675,14 +769,15 @@ table.matrix td { padding: 6px; }
     bkM = b.dataset.m; document.querySelectorAll("#bk-measure button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); drawBook();
   }));
   function drawBook() {
-    const regions = ["UK&I", "DACH", "France & Benelux", "Nordics"], tiers = ["Enterprise", "Scale", "Self-service"];
+    const regions = REGIONS, tiers = TIERS;
     const weeks = D.week_ends.filter((we) => day(we) >= day(D.util_dates[0]));
     const idx = weeks.map((we) => D.util_dates.indexOf(we));
     const test = bkM === "risk" ? (u) => u < 40 : (u) => u >= 80;
     $("bk-title").textContent = bkM === "risk" ? "Share of live accounts under 40% utilisation, by week" : "Share of live accounts at 80% utilisation and up, by week";
     const rows = [];
     for (const r of regions) for (const t of tiers) {
-      const accs = D.accounts.filter((a) => a.region === r && a.tier === t);
+      const accs = D.accounts.filter((a) => a.region === r && a.tier === t && inSeg(a));
+      if (!accs.length) continue;                       // outside the segment
       const cells = idx.map((i) => { const live = accs.filter((a) => a.util[i] != null); const hit = live.filter((a) => test(a.util[i])); return { live: live.length, hit: hit.length }; });
       rows.push({ r, t, n: accs.length, cells });
     }
@@ -690,23 +785,24 @@ table.matrix td { padding: 6px; }
     const tot = (cs) => cs.reduce((s, c) => ({ live: s.live + c.live, hit: s.hit + c.hit }), { live: 0, hit: 0 });
     const L = tot(last), F = tot(first);
     $("bk-finding").textContent = bkM === "risk"
-      ? `${L.hit} of ${L.live} live accounts (${pct(L.hit, L.live)}%) sit under the churn line today, up from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`
-      : `${L.hit} of ${L.live} live accounts (${pct(L.hit, L.live)}%) are at 80% of their contract or more today, from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`;
+      ? `${segOn() ? segName() + ": " : ""}${L.hit} of ${L.live} live accounts (${pct(L.hit, L.live)}%) sit under the churn line today, up from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`
+      : `${segOn() ? segName() + ": " : ""}${L.hit} of ${L.live} live accounts (${pct(L.hit, L.live)}%) are at 80% of their contract or more today, from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`;
     // shelfware by tier, counts next to shares (small segments mislead)
-    $("bk-shelf").textContent = tiers.map((t) => {
-      const accs = D.accounts.filter((a) => a.tier === t);
+    $("bk-shelf").textContent = tiers.filter((t) => D.accounts.some((a) => a.tier === t && inSeg(a))).map((t) => {
+      const accs = D.accounts.filter((a) => a.tier === t && inSeg(a));
       const hit = accs.filter((a) => a.flags.some((f) => f.flag === "churn" && f.status === "Shelfware")).length;
       return `${t}: ${hit} of ${accs.length} (${pct(hit, accs.length)}%)`;
     }).join(" · ");
     const shareMax = Math.max(0.01, ...rows.flatMap((x) => x.cells.map((c) => (c.live ? c.hit / c.live : 0))));
     const ramp = ["var(--seq-0)", "var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
     const host = $("bk-heat"); host.innerHTML = "";
+    if (!rows.length) { $("bk-finding").textContent = `${segName()}: no accounts.`; return; }
     const W = 880, LBL = 250, cw = (W - LBL) / weeks.length, ch = 24, H = rows.length * (ch + 3) + 54;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Book of business heatmap", style: "min-width:640px" }, host);
     weeks.forEach((we, j) => { el("text", { x: LBL + j * cw + cw / 2, y: 12, "text-anchor": "middle" }, svg).textContent = fmt(we); });
     rows.forEach((x, i) => {
       const y = 22 + i * (ch + 3);
-      if (i % 3 === 0) el("text", { x: 0, y: y + 16, class: "lbl", "font-weight": 600 }, svg).textContent = x.r;
+      if (i === 0 || rows[i - 1].r !== x.r) el("text", { x: 0, y: y + 16, class: "lbl", "font-weight": 600 }, svg).textContent = x.r;
       el("text", { x: 116, y: y + 16, class: "lbl" }, svg).textContent = `${x.t} (${x.n})`;
       x.cells.forEach((c, j) => {
         const s = c.live ? c.hit / c.live : 0;
@@ -771,15 +867,15 @@ table.matrix td { padding: 6px; }
     { label: "Called", r: true, get: (r) => r.call_date ? `${fmt(r.call_date)} <small>(${r.days_to_call} d)</small>` : "—" },
   ];
   function listStage(st) {
-    const items = D.churn_signals.filter(st.test);
+    const items = D.churn_signals.filter((r) => st.test(r) && inSegId(r.account_id));
     accountList($("ov-list"), $("ov-list-title"), st.label, items, SIG_COLS);
     document.querySelectorAll("#ov-sieve g.stage").forEach((g) => g.setAttribute("opacity", g.dataset.key === st.key ? 1 : 0.55));
   }
   function drawSieve() {
-    const S = D.churn_signals, total = S.length || 1, n = {};
+    const S = D.churn_signals.filter((r) => inSegId(r.account_id)), total = S.length || 1, n = {};
     for (const st of STAGES) n[st.key] = S.filter(st.test).length;
     const act = n.act, fast = n.fast;
-    $("ov-finding").textContent = `${S.length} churn signals: the sieve sent ${n.auto} (${pct(n.auto, S.length)}%) to automation and ${n.person} to people. Of the ${act} that needed a call, ${n.called} got one, ${fast} within ${FAST} days.`;
+    $("ov-finding").textContent = `${segOn() ? segName() + ": " : ""}${S.length} churn signals: the sieve sent ${n.auto} (${pct(n.auto, S.length)}%) to automation and ${n.person} to people. Of the ${act} that needed a call, ${n.called} got one, ${fast} within ${FAST} days.`;
     const host = $("ov-sieve"); host.innerHTML = "";
     const W = 880, LBL = 300, BAR = W - LBL - 150, RH = 34;
     const svg = el("svg", { viewBox: `0 0 ${W} ${STAGES.length * RH + 6}`, role: "img", "aria-label": "Engagement sieve" }, host);
@@ -800,7 +896,7 @@ table.matrix td { padding: 6px; }
   const REN_ORDER = ["Act", "Shelfware", "Watch", "No churn flag"];
   function drawRenewals() {
     const start = day(D.as_of), buckets = [0, 1, 2, 3, 4, 5].map((b) => ({ from: start + 1 + 30 * b, to: start + 30 * (b + 1), items: [] }));
-    for (const a of D.accounts) {
+    for (const a of D.accounts.filter(inSeg)) {
       const d = day(a.renewal_date), b = Math.floor((d - start - 1) / 30);
       if (b < 0 || b > 5) continue;
       const cf = churnFlag(a);
@@ -855,10 +951,12 @@ table.matrix td { padding: 6px; }
   ];
   function listOutcomes(title, items) { accountList($("oc-list"), $("oc-list-title"), title, items, OUT_COLS); }
   function drawOutcomes() {
-    const R = D.renewals, LATE = D.settings.too_late_days;
+    const R = D.renewals.filter((r) => inSegId(r.account_id)), LATE = D.settings.too_late_days;
     $("oc-late").textContent = LATE;
     if (!R.length) {
-      $("oc-finding").textContent = "No renewal outcomes yet: run .\\run_all.ps1 -Regenerate to create them.";
+      for (const id of ["oc-stats", "oc-matrix", "oc-warning", "oc-calls", "oc-list"]) $(id).innerHTML = "";
+      $("oc-finding").textContent = D.renewals.length ? `${segName()}: no renewals in the six months after the data.`
+        : "No renewal outcomes yet: run .\\run_all.ps1 -Regenerate to create them.";
       return;
     }
     const lost = R.filter((r) => r.lost_revenue), flagged = R.filter((r) => r.flagged);
@@ -866,7 +964,7 @@ table.matrix td { padding: 6px; }
     const fp = R.filter((r) => r.flagged && !r.lost_revenue), tn = R.filter((r) => !r.flagged && !r.lost_revenue);
     const warn = tp.map((r) => r.warning_days).filter((w) => w != null), med = warn.length ? Math.round(median(warn)) : null;
     const missesLookedFine = fn.every((r) => r.util_now == null || r.util_now >= D.settings.churn_line);
-    $("oc-finding").textContent = `The churn flags caught ${tp.length} of the ${lost.length} accounts that churned or shrank at renewal, a median of ${med} days before.` +
+    $("oc-finding").textContent = `${segOn() ? segName() + ": the" : "The"} churn flags caught ${tp.length} of the ${lost.length} accounts that churned or shrank at renewal, a median of ${med} days before.` +
       (fn.length && missesLookedFine ? ` All ${fn.length} misses were accounts whose usage looked fine.` : "");
     const stats = [
       ["Caught (recall)", `${tp.length} <small>of ${lost.length} · ${pct(tp.length, lost.length)}%</small>`],
@@ -908,10 +1006,126 @@ table.matrix td { padding: 6px; }
     listOutcomes("Missed", fn);
   }
 
+  // ---------------------------------------------------------------- tasks: the manager's queue
+  // Every task sent to a person (action_status), filtered by the segment. A
+  // manager acts on their own team's tasks: give one to someone else, or
+  // approve a hand-back. Decisions live in the published page's database
+  // (collection "decisions", one document per task and kind); cockpit_sync.py
+  // turns them into engagement events on the next run. Without the database
+  // (the offline file, or no permission) the list is read-only.
+  const TASK_STATES = ["Open", "Claimed", "Done", "Resolved"];
+  const tkShow = new Set(["Open", "Claimed"]);
+  const WAIT = D.settings.fast_days;                     // "waiting too long" in the finding
+  const teamById = Object.fromEntries(D.team.map((t) => [t.owner_id, t]));
+  const TASKS = D.tasks || [];
+  const taskInSeg = (t) => {
+    const a = byId[t.account_id];
+    return (!seg.manager || t.manager === seg.manager) && (!seg.owner || t.routed_to === seg.owner)
+      && (!seg.region || (a && a.region === seg.region)) && (!seg.tier || (a && a.tier === seg.tier));
+  };
+  const docId = (kind, t) => [kind, t.account_id, t.flag, t.status].join("~").replace(/[^A-Za-z0-9_.~:@+-]/g, "-");
+  const canAssign = (t) => !!teamById[t.routed_to] && (t.action_status === "Open" || t.action_status === "Claimed");
+  const canApprove = (t) => t.status === "Follow-up not picked up" && t.action_status === "Open";
+  let db = null, me = null, dbState = "loading", decisions = {}, saveError = "";
+
+  function assignSelect(t) {
+    // the manager's own team first, then everyone else; never the current owner
+    const mine = D.team.filter((o) => o.manager === seg.manager && o.owner_id !== t.routed_to);
+    const rest = D.team.filter((o) => o.manager !== seg.manager && o.owner_id !== t.routed_to);
+    const group = (label, os) => os.length ? `<optgroup label="${esc(label)}">` + os.map((o) => `<option value="${esc(o.owner_id)}">${esc(o.owner_name)}</option>`).join("") + "</optgroup>" : "";
+    return `<select data-assign="${esc(docId("assign", t))}" aria-label="Give this task to"><option value="">Give to…</option>` +
+      group("Your team", mine) + group("Other teams", rest) + "</select>";
+  }
+  function decisionCell(t) {
+    const live = dbState === "ready" && seg.manager && t.manager === seg.manager;
+    const a = decisions[docId("assign", t)], h = decisions[docId("handback", t)];
+    if (canApprove(t) && t.routed_to === seg.manager) {
+      if (h) return `<span class="pending">Hand-back approved: back to the pool on the next run</span> ${live ? `<button class="link" data-undo="${esc(docId("handback", t))}">Undo</button>` : ""}`;
+      return live ? `<button class="small primary" data-approve="${esc(docId("handback", t))}">Approve hand-back</button>` : "—";
+    }
+    if (!canAssign(t)) return "—";
+    if (a && a.to_owner !== t.routed_to)
+      return `<span class="pending">Going to ${esc(ownerName[a.to_owner] || a.to_owner)} on the next run</span> ${live ? `<button class="link" data-undo="${esc(docId("assign", t))}">Undo</button>` : ""}`;
+    return live ? `<div class="act">${assignSelect(t)}</div>` : "—";
+  }
+  function drawTasks() {
+    const T = TASKS.filter(taskInSeg);
+    const n = Object.fromEntries(TASK_STATES.map((s) => [s, T.filter((t) => t.action_status === s).length]));
+    const open = T.filter((t) => t.action_status === "Open");
+    const pooled = open.filter((t) => teamById[t.routed_to] && teamById[t.routed_to].owner_type === "pool").length;
+    $("tk-finding").textContent = !TASKS.length
+      ? "No tasks sent yet: run .\\run_all.ps1 -Actions to send them, and the cockpit shows what became of each."
+      : `${segName()}: ${n.Open} open and ${n.Claimed} claimed tasks, ${open.filter((t) => t.age_days >= WAIT).length} of them open ${WAIT}+ days. ${pooled} sit in a shared pool queue with nobody on them.`;
+    // what the viewer can do here
+    const banner = $("tk-banner");
+    const msg = !TASKS.length ? "" : saveError ? saveError
+      : dbState === "none" ? "This copy is read-only: decisions are saved in the published cockpit."
+      : dbState === "loading" ? "Loading saved decisions…"
+      : !seg.manager ? "Pick your name under Manager (top of the page) to give tasks to someone else or approve hand-backs." : "";
+    banner.textContent = msg; banner.hidden = !msg;
+    // status chips, with counts
+    $("tk-status").innerHTML = TASK_STATES.map((s) => `<button class="chip" data-s="${s}" aria-pressed="${tkShow.has(s)}">${s} <span class="num">${n[s]}</span></button>`).join("");
+    $("tk-status").querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => {
+      tkShow.has(b.dataset.s) ? tkShow.delete(b.dataset.s) : tkShow.add(b.dataset.s); drawTasks();
+    }));
+    const items = T.filter((t) => tkShow.has(t.action_status));
+    $("tk-title").textContent = `Tasks: ${items.length}`;
+    const host = $("tk-list");
+    if (!items.length) { host.innerHTML = '<p class="note">No tasks here.</p>'; return; }
+    const ownerCell = (t) => esc(ownerName[t.routed_to] || t.routed_to) +
+      (t.assigned_from ? `<small><br>given by ${esc(managerName(t.assigned_by))}, was with ${esc(ownerName[t.assigned_from] || t.assigned_from)}</small>` : "");
+    host.innerHTML = `<table><thead><tr><th>Account</th><th>Task</th><th>Owner</th><th class="r">Age</th><th>Status</th><th>Decision</th></tr></thead><tbody>` +
+      items.map((t) => `<tr><td><button class="link" data-open="${esc(t.account_id)}">${nameOf(t.account_id)}</button><small><br>${esc(byId[t.account_id] ? byId[t.account_id].tier : "not in the CRM")}</small></td>` +
+        `<td>${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small></td>` +
+        `<td>${ownerCell(t)}</td><td class="r num">${t.age_days} d</td>` +
+        `<td><span class="badge ${esc(t.action_status)}">${esc(t.action_status)}</span></td><td>${decisionCell(t)}</td></tr>`).join("") + "</tbody></table>";
+    const byDoc = Object.fromEntries(items.flatMap((t) => [[docId("assign", t), t], [docId("handback", t), t]]));
+    host.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
+    host.querySelectorAll("select[data-assign]").forEach((s) => s.addEventListener("change", () => { if (s.value) decide("assign", byDoc[s.dataset.assign], s.value, s); }));
+    host.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", () => decide("handback", byDoc[b.dataset.approve], null, b)));
+    host.querySelectorAll("[data-undo]").forEach((b) => b.addEventListener("click", () => undo(b.dataset.undo, b)));
+  }
+  async function decide(kind, t, to, control) {
+    control.disabled = true; saveError = "";
+    try {
+      await db.collection("decisions").doc(docId(kind, t)).set({
+        kind, account_id: t.account_id, flag: t.flag, status: t.status,
+        from_owner: t.routed_to, to_owner: to, manager: seg.manager,
+        as_of: D.as_of, decided_at: new Date().toISOString(), decided_by: me,
+      });
+    } catch (e) {
+      saveError = e && e.code === "invalid_argument" ? "You can see these tasks but not change them: ask the cockpit's owner for Contributor access."
+        : "That decision wasn't saved. Try again in a moment.";
+      control.disabled = false; drawTasks();
+    }
+  }
+  async function undo(id, control) {
+    control.disabled = true;
+    try { await db.collection("decisions").doc(id).delete(); } catch (e) { saveError = "The undo wasn't saved. Try again in a moment."; drawTasks(); }
+  }
+  // the database answers later (or never, in the offline file): the list draws first
+  (async () => {
+    const use = window.claude && window.claude.use;
+    if (!use) { dbState = "none"; drawTasks(); return; }
+    try {
+      db = await window.claude.use("db");
+      const user = await window.claude.use("user");
+      me = user ? await user.id() : null;
+    } catch (e) { db = null; }
+    if (!db) { dbState = "none"; drawTasks(); return; }
+    dbState = "ready";
+    db.collection("decisions").onSnapshot((snap) => {
+      decisions = {};
+      for (const d of snap.docs) { const v = d.data(); if (v && v.as_of === D.as_of) decisions[d.id] = v; }   // older data: ignored
+      drawTasks();
+    }, () => { dbState = "none"; drawTasks(); });
+    drawTasks();
+  })();
+
   // first paint: every view drawn, the one in the link shown
   const firstPick = picks.length ? picks[0].id : D.accounts[0].account_id;
   sel.value = firstPick; drawTimeline(firstPick);
-  drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes();
+  redraw();
   // a link like ...#acc_069 (from Slack's Open timeline) opens that account
   const hashToken = (location.hash || "").replace("#", "");
   if (byId[hashToken]) { sel.value = hashToken; drawTimeline(hashToken); show("timeline"); }

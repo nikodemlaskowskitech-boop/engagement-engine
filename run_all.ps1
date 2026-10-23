@@ -2,7 +2,7 @@
 # order, and save all the output to data\last_run.txt (Claude reads it from
 # there, so nothing needs pasting).
 #
-#   .\run_all.ps1                 pull + flags, checks, journeys, reports, views
+#   .\run_all.ps1                 pull + cockpit decisions, flags, checks, journeys, reports, views
 #   .\run_all.ps1 -Regenerate     ...starting with fresh fake data (wipes the action log)
 #   .\run_all.ps1 -Actions        ...and post the new tasks to Slack at the end
 #
@@ -35,11 +35,12 @@ if (-not $Pulled) {
 "Code at: $(git log --oneline -1)" | Out-File $log -Append -Encoding utf8
 
 # 2. The pipeline, in the order the scripts depend on each other
+# (actions.py runs before the reports, so the cockpit shows the tasks it just sent)
 $steps = @()
 if ($Regenerate) { $steps += "generate_events.py" }
-$steps += "flags.py", "check_flags.py", "journeys.py", "team_report.py", "backtest.py",
-          "onboarding_report.py", "export_views.py"
+$steps += "cockpit_sync.py", "flags.py", "check_flags.py", "journeys.py"
 if ($Actions) { $steps += "actions.py" }
+$steps += "team_report.py", "backtest.py", "onboarding_report.py", "export_views.py"
 
 $python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"   # the project's own Python
 $ok = 0
