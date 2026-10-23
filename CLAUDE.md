@@ -170,9 +170,13 @@ One JSON event per line, one file per day in `data/events/`.
   routing, follow-ups or escalations change.
 - `settings.toml` + `settings.py`: every threshold and time window in one
   place (activation, churn, expansion, QBR, journeys, team report, email
-  hour, follow-ups). Scripts read `SETTINGS[...]`; never hard-code a number in a script.
-  Tiers, routing and the utilisation definition are still in the SQL (next:
-  move them into settings; see DATA_CONTRACT.md).
+  hour, follow-ups), plus how the engine fits a company: [tiers] maps the
+  CRM's tier names onto the three coverage models, [utilisation] says which
+  usage event and CRM commitment column define utilisation, [regions] the
+  time zones. The crm view (cairnpath_db.py) applies [tiers] and
+  [utilisation], so the SQL downstream always speaks the engine's names
+  (Self-service, Scale, Enterprise; contracted_events). Scripts read
+  `SETTINGS[...]`; never hard-code a number in a script.
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
   declining, power_user, new_customer, shelfware, stalled, never_onboarded,
   handoff_gap) mixed by weight (new customers sign all through the window

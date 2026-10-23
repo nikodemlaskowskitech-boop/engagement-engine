@@ -34,6 +34,9 @@ import duckdb
 from settings import SETTINGS
 
 
+USAGE_EVENT = SETTINGS["utilisation"]["usage_event"]   # what counts as usage (settings.toml)
+
+
 def connect():
     con = duckdb.connect()
 
@@ -70,12 +73,29 @@ def connect():
             context:    'STRUCT(source VARCHAR)'
         })
     """)
-    con.sql("CREATE VIEW crm AS SELECT * FROM read_csv_auto('data/crm_accounts.csv')")
+    # The CRM, with your tier names mapped to the engine's three coverage models
+    # (settings.toml [tiers]) and your commitment column read as
+    # contracted_events ([utilisation]). Your own tier name stays in crm_tier.
+    # Everything downstream speaks the engine's names, so a new team edits
+    # settings.toml, not the SQL.
+    t, u = SETTINGS["tiers"], SETTINGS["utilisation"]
+    con.sql(f"""
+        CREATE VIEW crm AS
+        WITH raw AS (SELECT * FROM read_csv_auto('data/crm_accounts.csv'))
+        SELECT * EXCLUDE (tier, {u['contract_column']}),
+               CASE tier WHEN '{t['tech_touch']}' THEN 'Self-service'
+                         WHEN '{t['pooled']}'     THEN 'Scale'
+                         WHEN '{t['named_csm']}'  THEN 'Enterprise'
+                         ELSE tier END              AS tier,
+               tier                                 AS crm_tier,
+               {u['contract_column']}::BIGINT       AS contracted_events
+        FROM raw
+    """)
     con.sql("CREATE VIEW cs_team AS SELECT * FROM read_csv_auto('data/cs_team.csv')")
 
     # Utilisation per account, kept as a view so later queries (and the flags)
     # can reuse it instead of copying the logic.
-    con.sql("""
+    con.sql(f"""
         CREATE VIEW utilisation AS
         WITH as_of AS (
             -- the data's own 'today': the last day we have data for
@@ -91,7 +111,7 @@ def connect():
             -- total volume the account sent in the last 30 days
             SELECT account_id, sum(properties.event_count) AS events_30d
             FROM events, as_of
-            WHERE event_name = 'daily_event_volume'
+            WHERE event_name = '{USAGE_EVENT}'
               AND event_date > as_of_date - 30
             GROUP BY account_id
         )
@@ -120,7 +140,7 @@ def connect():
     # Month by month, for accounts live for the whole 90-day window.
     # m1 = 90 to 61 days ago, m2 = 60 to 31 days ago, m3 = the last 30 days.
     # Used by the churn and expansion flags, so both read the same numbers.
-    con.sql("""
+    con.sql(f"""
         CREATE VIEW monthly_usage AS
         WITH live AS (
             SELECT c.account_id, c.contracted_events, a.as_of_date
@@ -132,11 +152,11 @@ def connect():
         ),
         sums AS (
             SELECT l.account_id, l.contracted_events,
-                   sum(e.properties.event_count) FILTER (WHERE e.event_name = 'daily_event_volume'
+                   sum(e.properties.event_count) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
                        AND e.event_date <= l.as_of_date - 60) AS vol_m1,
-                   sum(e.properties.event_count) FILTER (WHERE e.event_name = 'daily_event_volume'
+                   sum(e.properties.event_count) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
                        AND e.event_date > l.as_of_date - 60 AND e.event_date <= l.as_of_date - 30) AS vol_m2,
-                   sum(e.properties.event_count) FILTER (WHERE e.event_name = 'daily_event_volume'
+                   sum(e.properties.event_count) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
                        AND e.event_date > l.as_of_date - 30) AS vol_m3,
                    count(DISTINCT e.user_id) FILTER (WHERE e.event_date <= l.as_of_date - 60) AS users_m1,
                    count(DISTINCT e.user_id) FILTER (WHERE e.event_date > l.as_of_date - 30) AS users_m3
@@ -174,12 +194,12 @@ def connect():
     # 30-day utilisation on every day, measured the way the flags measure it
     # (rounded, full 30 days only), so reports and journeys can find the day
     # an account first crossed a flag's line.
-    con.sql("""
+    con.sql(f"""
         CREATE VIEW daily_util_30d AS
         WITH daily AS (
             SELECT account_id, event_date, properties.event_count AS vol
             FROM events
-            WHERE event_name = 'daily_event_volume'
+            WHERE event_name = '{USAGE_EVENT}'
         ),
         rolling AS (
             SELECT account_id, event_date,

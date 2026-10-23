@@ -5,6 +5,26 @@
 #
 # Percentages are whole numbers (40 = 40%); shares are fractions (0.30 = 30%).
 
+[tiers]
+# Your CRM's tier names, mapped to the engine's three coverage models. Change
+# the right-hand side to your own names (e.g. "Digital", "Mid-market",
+# "Strategic"); the flags, routing and reports then work unchanged.
+tech_touch = "Self-service"   # no CSM: automated emails, the Self-service report
+pooled = "Scale"              # a shared team queue (the CRM's cs_pool column)
+named_csm = "Enterprise"      # a named CSM (csm_owner) and QBRs
+
+[utilisation]
+# What "utilisation" means: the daily usage event's total over 30 days,
+# divided by what the customer committed to (a CRM column), per year.
+# A spend-based product would point these at a daily spend event and a
+# committed-spend column.
+usage_event = "daily_event_volume"     # its properties.event_count is the day's usage
+contract_column = "contracted_events"  # the annual commitment in the CRM
+
+[regions]
+# Hours ahead of UTC (summer time), for sending emails at a local hour
+utc_offset = { "UK&I" = 1, "DACH" = 2, "France & Benelux" = 2, "Nordics" = 2 }
+
 [activation]
 scope_days = 45           # only contracts from the last 45 days are checked
 window_days = 14          # activation must happen within 14 days of contract start

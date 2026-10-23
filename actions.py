@@ -107,7 +107,7 @@ FOLLOW_UPS = {
 FOLLOW_UP_DAYS = SETTINGS["follow_ups"]["after_days"]
 EMAIL_CAP_DAYS = SETTINGS["follow_ups"]["email_cap_days"]
 EMAIL_HOUR = SETTINGS["actions"]["email_hour"]   # emails go out at this hour, local time
-UTC_OFFSET_HOURS = {"UK&I": 1, "DACH": 2, "France & Benelux": 2, "Nordics": 2}
+UTC_OFFSET_HOURS = SETTINGS["regions"]["utc_offset"]   # settings.toml [regions]
 
 
 def load_webhooks():
