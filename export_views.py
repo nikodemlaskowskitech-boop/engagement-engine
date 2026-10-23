@@ -17,6 +17,10 @@ What goes in:
   onboarding      welcomed vs. control, one row per new account
   time_to_action  one row per churn or expansion Act account with an owner
   team            the CS team (owners, types, managers)
+  churn_signals   every churn flag row, with its first call (the overview's sieve)
+  renewals        every renewal after the data ends, with its outcome and
+                  whether it was flagged (backtest.py's view; empty without outcomes)
+  settings        the few thresholds the page labels with
 
 Real user IDs never leave this script: weekly active users are counts.
 
@@ -29,8 +33,10 @@ import json
 import sys
 from pathlib import Path
 
+import backtest
 import onboarding_report
 import team_report
+from settings import SETTINGS
 from cairnpath_db import connect
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -49,6 +55,7 @@ def rows(con, sql):
 con = connect()
 team_report.add_views(con)          # time_to_action, meetings_90d
 onboarding_report.add_views(con)    # onboarding
+backtest.add_views(con)             # backtest (empty without renewal outcomes)
 
 as_of = str(con.sql("SELECT as_of_date FROM as_of").fetchone()[0])
 
@@ -117,6 +124,20 @@ export = {
         FROM time_to_action t JOIN cs_team o ON o.owner_id = t.routed_to
         ORDER BY t.account_id"""),
     "team": rows(con, "SELECT * FROM cs_team ORDER BY owner_type, owner_id"),
+    # the overview's sieve: every churn signal with who it went to and whether
+    # (and how fast) a person acted on it
+    "churn_signals": rows(con, """
+        SELECT f.account_id, c.tier, f.status, f.routed_to, f.reasons,
+               t.signal_date, t.call_date, t.days_to_call, t.via
+        FROM read_csv('data/flags_churn.csv', all_varchar = true) f
+        JOIN crm c USING (account_id)
+        LEFT JOIN time_to_action t ON t.account_id = f.account_id AND t.flag = 'churn'
+        ORDER BY f.account_id"""),
+    # "did it work?": every renewal after the data ends, flagged or not
+    "renewals": rows(con, "SELECT * EXCLUDE (account_name) FROM backtest ORDER BY renewal_date, account_id"),
+    "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
+                 "too_late_days": SETTINGS["backtest"]["too_late_days"],
+                 "churn_line": SETTINGS["churn"]["util_below"]},
 }
 
 out = DATA / "views_data.json"

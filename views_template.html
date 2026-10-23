@@ -122,6 +122,17 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
 .stat .k { font-size: 0.78rem; color: var(--ink-3); }
 .stat .v { font-family: var(--font-display); font-weight: 600; font-size: 1.35rem; }
 .stat .v small { font: 400 0.8rem var(--font-body); color: var(--ink-3); }
+tr.click { cursor: pointer; }
+tr.click:hover td, tr.click:focus td { background: var(--accent-soft); }
+td small { color: var(--ink-3); }
+table.matrix th { text-transform: none; font-size: 0.82rem; }
+table.matrix td { padding: 6px; }
+.cellbtn { width: 100%; display: grid; gap: 2px; text-align: left; background: var(--bg); border: 1px solid var(--rule); border-left-width: 3px; border-radius: 6px; padding: 10px 12px; cursor: pointer; font: inherit; color: var(--ink); }
+.cellbtn .v { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; }
+.cellbtn .k { font-size: 0.8rem; color: var(--ink-2); }
+.cellbtn.good { border-left-color: var(--good); } .cellbtn.warning { border-left-color: var(--warning); }
+.cellbtn.critical { border-left-color: var(--critical); } .cellbtn.neutral { border-left-color: var(--rule); }
+.cellbtn:hover { border-color: var(--accent); }
 @media (prefers-reduced-motion: no-preference) { .fade { animation: fade 0.25s ease-out; } @keyframes fade { from { opacity: 0.4; } to { opacity: 1; } } }
 </style>
 
@@ -131,9 +142,11 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
       <h1>Cairnpath CS Cockpit</h1>
       <span class="asof" id="asof"></span>
     </div>
-    <p class="lede">Four views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
+    <p class="lede">Six views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
     <nav role="tablist" aria-label="Views">
-      <button role="tab" id="tab-timeline" data-view="timeline" aria-selected="true">Account timeline</button>
+      <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
+      <button role="tab" id="tab-outcomes" data-view="outcomes" aria-selected="false">Did it work?</button>
+      <button role="tab" id="tab-timeline" data-view="timeline" aria-selected="false">Account timeline</button>
       <button role="tab" id="tab-onboarding" data-view="onboarding" aria-selected="false">Onboarding</button>
       <button role="tab" id="tab-team" data-view="team" aria-selected="false">CS team</button>
       <button role="tab" id="tab-book" data-view="book" aria-selected="false">Book of business</button>
@@ -144,7 +157,54 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
 <main>
   <div class="wrap">
 
-    <section class="view" id="view-timeline" role="tabpanel" aria-labelledby="tab-timeline">
+    <section class="view" id="view-overview" role="tabpanel" aria-labelledby="tab-overview">
+      <p class="finding" id="ov-finding"></p>
+      <p class="sub">The engagement sieve: every churn signal, and where it went. Automation takes the many accounts that only need a nudge; people get the ones that need a conversation. Click a stage or a month to list its accounts, and an account to open its timeline.</p>
+      <div class="panel">
+        <h2>The engagement sieve: churn signals, stage by stage</h2>
+        <div id="ov-sieve"></div>
+        <p class="note">Each bar is a share of all churn signals; the figure on the right is its share of the stage above. "Called" counts a churn call, or a QBR in the 30 days after the signal.</p>
+      </div>
+      <div class="panel">
+        <h2>Renewals in the next 180 days, by today's churn flag</h2>
+        <div id="ov-renewals"></div>
+        <div class="legend" id="ov-ren-legend"></div>
+        <p class="note">CRM renewal dates and today's flags only: what actually happened is on the "Did it work?" tab.</p>
+      </div>
+      <div class="panel">
+        <h2 id="ov-list-title">Accounts</h2>
+        <div class="tablewrap" id="ov-list"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-outcomes" role="tabpanel" aria-labelledby="tab-outcomes" hidden>
+      <p class="finding" id="oc-finding"></p>
+      <p class="sub">The backtest: today's churn flags against what happened at each renewal in the six months after the data. The outcomes are generated, with surprises no flag can see, so this shows the method, not proof.</p>
+      <div class="stat-row" id="oc-stats"></div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>Flagged vs. what happened at renewal</h2>
+          <div id="oc-matrix"></div>
+          <p class="note">Lost = churned or downsized. Click a cell to list its accounts.</p>
+        </div>
+        <div class="panel">
+          <h2>Warning time for the losses we caught</h2>
+          <div id="oc-warning"></div>
+          <p class="note">Days from the first signal to the renewal. Less than <span id="oc-late"></span> days is too late to act.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Did a churn call help? (Act accounts, Scale and Enterprise)</h2>
+        <div id="oc-calls"></div>
+        <p class="note">Act accounts only, so like is compared with like. Read the counts: with groups this small, chance can hide a real effect.</p>
+      </div>
+      <div class="panel">
+        <h2 id="oc-list-title">Accounts</h2>
+        <div class="tablewrap" id="oc-list"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-timeline" role="tabpanel" aria-labelledby="tab-timeline" hidden>
       <p class="finding" id="tl-finding">One account over 90 days: what it did, what CS did, and what the engine flagged.</p>
       <div class="controls">
         <select id="tl-account" aria-label="Account"></select>
@@ -278,9 +338,9 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
   };
 
   // tabs, with a bookmarkable #token per view
-  const views = ["timeline", "onboarding", "team", "book"];
+  const views = ["overview", "outcomes", "timeline", "onboarding", "team", "book"];
   const show = (v) => {
-    if (!views.includes(v)) v = "timeline";
+    if (!views.includes(v)) v = "overview";
     for (const w of views) {
       $("view-" + w).hidden = w !== v;
       $("tab-" + w).setAttribute("aria-selected", String(w === v));
@@ -668,10 +728,190 @@ tr.group td { font: 600 0.74rem var(--font-body); text-transform: uppercase; let
     el("text", { x: LBL + 24 + 6 * 26 + 4, y: ly + 10 }, svg).textContent = pct(shareMax, 1) + "% of the row";
   }
 
+  // ---------------------------------------------------------------- shared: account lists
+  // A clickable list under a chart: the accounts behind a bar or a cell. A row
+  // opens that account's timeline, so every number can be checked by hand.
+  function openAccount(id) { sel.value = id; drawTimeline(id); pressChips(id); show("timeline"); window.scrollTo(0, 0); }
+  function accountList(host, titleEl, title, items, cols) {
+    titleEl.textContent = `${title}: ${items.length} account${items.length === 1 ? "" : "s"}`;
+    if (!items.length) { host.innerHTML = '<p class="note">No accounts here.</p>'; return; }
+    const head = cols.map((c) => `<th${c.r ? ' class="r"' : ""}>${c.label}</th>`).join("");
+    const body = items.map((it) => `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` +
+      cols.map((c) => `<td${c.r ? ' class="r num"' : ""}>${c.get(it)}</td>`).join("") + "</tr>").join("");
+    host.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+    host.querySelectorAll("tr.click").forEach((tr) => {
+      tr.addEventListener("click", () => openAccount(tr.dataset.id));
+      tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); });
+    });
+  }
+  const nameOf = (id) => esc(byId[id] ? byId[id].account_name : id);
+  const ownerOf = (id) => esc(byId[id] ? (byId[id].owner || "None") : "");
+  const churnFlag = (a) => (a.flags.find((f) => f.flag === "churn") || null);
+  const STATUS_COLOR = { Act: "var(--critical)", Shelfware: "var(--warning)", Watch: "var(--serious)", "No churn flag": "var(--seq-2)" };
+
+  // ---------------------------------------------------------------- overview: the sieve
+  const FAST = D.settings.fast_days;
+  const person = (r) => r.tier !== "Self-service";
+  const atAct = (r) => person(r) && r.status === "Act";
+  const STAGES = [
+    { key: "all", label: "Churn signals", depth: 0, test: () => true },
+    { key: "auto", label: "To automation (Self-service)", depth: 1, parent: "all", test: (r) => !person(r), color: "var(--s3)" },
+    { key: "person", label: "To a person (Scale, Enterprise)", depth: 1, parent: "all", test: person },
+    { key: "act", label: "At Act: a call is needed", depth: 2, parent: "person", test: atAct },
+    { key: "nocall", label: "Not called yet", depth: 3, parent: "act", test: (r) => atAct(r) && !r.call_date, color: "var(--critical)" },
+    { key: "called", label: "Called", depth: 3, parent: "act", test: (r) => atAct(r) && r.call_date },
+    { key: "fast", label: `Called within ${FAST} days of the signal`, depth: 4, parent: "called", test: (r) => atAct(r) && r.call_date && r.days_to_call <= FAST },
+  ];
+  const SIG_COLS = [
+    { label: "Account", get: (r) => nameOf(r.account_id) },
+    { label: "Tier", get: (r) => esc(r.tier) },
+    { label: "Owner", get: (r) => ownerOf(r.account_id) },
+    { label: "Flag", get: (r) => esc(r.status) },
+    { label: "Why", get: (r) => esc(r.reasons) },
+    { label: "Called", r: true, get: (r) => r.call_date ? `${fmt(r.call_date)} <small>(${r.days_to_call} d)</small>` : "—" },
+  ];
+  function listStage(st) {
+    const items = D.churn_signals.filter(st.test);
+    accountList($("ov-list"), $("ov-list-title"), st.label, items, SIG_COLS);
+    document.querySelectorAll("#ov-sieve g.stage").forEach((g) => g.setAttribute("opacity", g.dataset.key === st.key ? 1 : 0.55));
+  }
+  function drawSieve() {
+    const S = D.churn_signals, total = S.length || 1, n = {};
+    for (const st of STAGES) n[st.key] = S.filter(st.test).length;
+    const act = n.act, fast = n.fast;
+    $("ov-finding").textContent = `${S.length} churn signals: the sieve sent ${n.auto} (${pct(n.auto, S.length)}%) to automation and ${n.person} to people. Of the ${act} that needed a call, ${n.called} got one, ${fast} within ${FAST} days.`;
+    const host = $("ov-sieve"); host.innerHTML = "";
+    const W = 880, LBL = 300, BAR = W - LBL - 150, RH = 34;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${STAGES.length * RH + 6}`, role: "img", "aria-label": "Engagement sieve" }, host);
+    STAGES.forEach((st, i) => {
+      const y = 4 + i * RH, w = Math.max(2, (BAR * n[st.key]) / total);
+      const g = el("g", { class: "stage", "data-key": st.key, style: "cursor:pointer" }, svg);
+      el("text", { x: 4 + st.depth * 18, y: y + 19, class: "lbl" }, g).textContent = (st.depth ? "└ " : "") + st.label;
+      el("rect", { x: LBL, y: y + 5, width: w, height: RH - 12, rx: 3, fill: st.color || "var(--accent)" }, g);
+      el("text", { x: LBL + w + 8, y: y + 19, class: "val" }, g).textContent = n[st.key];
+      if (st.parent) el("text", { x: W - 4, y: y + 19, "text-anchor": "end" }, g).textContent = `${pct(n[st.key], n[st.parent])}% of the stage above`;
+      g.addEventListener("click", () => listStage(st));
+      hover(g, `<b>${esc(st.label)}</b><br>${n[st.key]} accounts${st.parent ? `, ${pct(n[st.key], n[st.parent])}% of the stage above` : ""}<br>Click to list them`);
+    });
+    listStage(STAGES.find((s) => s.key === "nocall"));
+  }
+
+  // ---------------------------------------------------------------- overview: renewals ahead
+  const REN_ORDER = ["Act", "Shelfware", "Watch", "No churn flag"];
+  function drawRenewals() {
+    const start = day(D.as_of), buckets = [0, 1, 2, 3, 4, 5].map((b) => ({ from: start + 1 + 30 * b, to: start + 30 * (b + 1), items: [] }));
+    for (const a of D.accounts) {
+      const d = day(a.renewal_date), b = Math.floor((d - start - 1) / 30);
+      if (b < 0 || b > 5) continue;
+      const cf = churnFlag(a);
+      buckets[b].items.push({ ...a, churn: cf ? cf.status : "No churn flag", why: cf ? cf.reasons : "" });
+    }
+    const host = $("ov-renewals"); host.innerHTML = "";
+    const W = 880, H = 190, B = 30, L = 40, cw = (W - L) / 6, maxN = Math.max(1, ...buckets.map((k) => k.items.length));
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H + 40}`, role: "img", "aria-label": "Renewals by month and flag" }, host);
+    buckets.forEach((k, i) => {
+      const x = L + i * cw + 14, bw = cw - 28;
+      let y = H;
+      const g = el("g", { style: "cursor:pointer" }, svg);
+      for (const s of REN_ORDER) {
+        const c = k.items.filter((a) => a.churn === s).length;
+        if (!c) continue;
+        const h = ((H - B) * c) / maxN; y -= h;
+        el("rect", { x, y, width: bw, height: h, fill: STATUS_COLOR[s] }, g);
+      }
+      el("text", { x: x + bw / 2, y: y - 6, "text-anchor": "middle", class: "val" }, g).textContent = k.items.length;
+      const from = new Date(k.from * 864e5).toISOString().slice(0, 10), to = new Date(k.to * 864e5).toISOString().slice(0, 10);
+      el("text", { x: x + bw / 2, y: H + 18, "text-anchor": "middle" }, svg).textContent = `${fmt(from)} – ${fmt(to)}`;
+      const counts = REN_ORDER.map((s) => `${s}: ${k.items.filter((a) => a.churn === s).length}`).join("<br>");
+      hover(g, `<b>Renewing ${fmt(from)} – ${fmt(to)}</b><br>${counts}<br>Click to list them`);
+      g.addEventListener("click", () => {
+        const items = [...k.items].sort((a, b) => REN_ORDER.indexOf(a.churn) - REN_ORDER.indexOf(b.churn) || a.renewal_date.localeCompare(b.renewal_date));
+        accountList($("ov-list"), $("ov-list-title"), `Renewing ${fmt(from)} – ${fmt(to)}`, items, [
+          { label: "Account", get: (a) => esc(a.account_name) },
+          { label: "Tier", get: (a) => esc(a.tier) },
+          { label: "Owner", get: (a) => esc(a.owner || "None") },
+          { label: "Churn flag", get: (a) => esc(a.churn) },
+          { label: "Why", get: (a) => esc(a.why) },
+          { label: "Renewal", r: true, get: (a) => fmt(a.renewal_date) },
+        ]);
+      });
+    });
+    el("line", { x1: L, x2: W, y1: H, y2: H, stroke: "var(--rule)" }, svg);
+    const lg = $("ov-ren-legend"); lg.innerHTML = "";
+    for (const s of REN_ORDER) {
+      const sp = document.createElement("span"); sp.append(legendSwatch("square", STATUS_COLOR[s]), s); lg.append(sp);
+    }
+  }
+
+  // ---------------------------------------------------------------- did it work? (backtest)
+  const OUT_COLS = [
+    { label: "Account", get: (r) => nameOf(r.account_id) },
+    { label: "Tier", get: (r) => esc(r.tier) },
+    { label: "Flag", get: (r) => esc(r.flag_status || "None") },
+    { label: "Outcome", get: (r) => esc(r.outcome) },
+    { label: "Renewal", r: true, get: (r) => fmt(r.renewal_date) },
+    { label: "Warning", r: true, get: (r) => (r.flagged && r.warning_days != null ? `${r.warning_days} d` : "—") },
+    { label: "Usage now", r: true, get: (r) => (r.util_now != null ? `${Math.round(r.util_now)}%` : "—") },
+  ];
+  function listOutcomes(title, items) { accountList($("oc-list"), $("oc-list-title"), title, items, OUT_COLS); }
+  function drawOutcomes() {
+    const R = D.renewals, LATE = D.settings.too_late_days;
+    $("oc-late").textContent = LATE;
+    if (!R.length) {
+      $("oc-finding").textContent = "No renewal outcomes yet: run .\\run_all.ps1 -Regenerate to create them.";
+      return;
+    }
+    const lost = R.filter((r) => r.lost_revenue), flagged = R.filter((r) => r.flagged);
+    const tp = R.filter((r) => r.flagged && r.lost_revenue), fn = R.filter((r) => !r.flagged && r.lost_revenue);
+    const fp = R.filter((r) => r.flagged && !r.lost_revenue), tn = R.filter((r) => !r.flagged && !r.lost_revenue);
+    const warn = tp.map((r) => r.warning_days).filter((w) => w != null), med = warn.length ? Math.round(median(warn)) : null;
+    const missesLookedFine = fn.every((r) => r.util_now == null || r.util_now >= D.settings.churn_line);
+    $("oc-finding").textContent = `The churn flags caught ${tp.length} of the ${lost.length} accounts that churned or shrank at renewal, a median of ${med} days before.` +
+      (fn.length && missesLookedFine ? ` All ${fn.length} misses were accounts whose usage looked fine.` : "");
+    const stats = [
+      ["Caught (recall)", `${tp.length} <small>of ${lost.length} · ${pct(tp.length, lost.length)}%</small>`],
+      ["Right when flagged (precision)", `${tp.length} <small>of ${flagged.length} · ${pct(tp.length, flagged.length)}%</small>`],
+      ["Median warning", `${med ?? "—"} <small>days</small>`],
+      ["Too late to act", `${warn.filter((w) => w < LATE).length} <small>of ${warn.length} under ${LATE} days</small>`],
+    ];
+    $("oc-stats").innerHTML = stats.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+
+    // the 2x2: flagged or not, lost or kept
+    const cell = (items, name, cls) => `<td><button class="cellbtn ${cls}" data-name="${name}"><span class="v">${items.length}</span><span class="k">${name}</span></button></td>`;
+    $("oc-matrix").innerHTML = `<table class="matrix"><thead><tr><th></th><th>Lost at renewal</th><th>Kept or grew</th></tr></thead><tbody>
+      <tr><th>Flagged</th>${cell(tp, "Caught", "good")}${cell(fp, "False alarm", "warning")}</tr>
+      <tr><th>Not flagged</th>${cell(fn, "Missed", "critical")}${cell(tn, "Quiet, kept", "neutral")}</tr></tbody></table>`;
+    const groups = { Caught: tp, "False alarm": fp, Missed: fn, "Quiet, kept": tn };
+    document.querySelectorAll("#oc-matrix .cellbtn").forEach((b) => b.addEventListener("click", () => listOutcomes(b.dataset.name, groups[b.dataset.name])));
+
+    // warning time, in 30-day buckets
+    const edges = [0, 30, 60, 90, 120, 150, 180], host = $("oc-warning"); host.innerHTML = "";
+    const bins = edges.map((e, i) => ({ from: e, to: edges[i + 1], items: tp.filter((r) => r.warning_days != null && r.warning_days >= e && (edges[i + 1] == null || r.warning_days < edges[i + 1])) }));
+    const W = 340, H = 170, maxN = Math.max(1, ...bins.map((b) => b.items.length)), bw = W / bins.length;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H + 34}`, role: "img", "aria-label": "Warning time histogram" }, host);
+    bins.forEach((b, i) => {
+      const h = ((H - 20) * b.items.length) / maxN, x = i * bw + 6;
+      const g = el("g", { style: "cursor:pointer" }, svg);
+      el("rect", { x, y: H - h, width: bw - 12, height: h, rx: 2, fill: b.from < LATE ? "var(--critical)" : "var(--accent)" }, g);
+      el("text", { x: x + (bw - 12) / 2, y: H - h - 5, "text-anchor": "middle", class: "val" }, g).textContent = b.items.length;
+      el("text", { x: x + (bw - 12) / 2, y: H + 16, "text-anchor": "middle" }, svg).textContent = b.to == null ? `${b.from}+` : `${b.from}–${b.to}`;
+      g.addEventListener("click", () => listOutcomes(`Caught with ${b.to == null ? b.from + "+" : b.from + "–" + b.to} days of warning`, b.items));
+    });
+    el("text", { x: W / 2, y: H + 32, "text-anchor": "middle" }, svg).textContent = "days of warning";
+
+    // calls: Act accounts with a person, churn with and without a churn call
+    const act = R.filter((r) => r.flag_status === "Act" && r.tier !== "Self-service");
+    const rowsC = [["Churn call held", act.filter((r) => r.had_churn_call)], ["No churn call", act.filter((r) => !r.had_churn_call)]];
+    $("oc-calls").innerHTML = `<table><thead><tr><th>Act accounts</th><th class="r">Accounts</th><th class="r">Churned</th><th class="r">Kept whole</th></tr></thead><tbody>` +
+      rowsC.map(([k, xs]) => `<tr class="click" data-k="${k}"><td>${k}</td><td class="r num">${xs.length}</td><td class="r num">${xs.filter((r) => r.outcome === "churned").length} (${pct(xs.filter((r) => r.outcome === "churned").length, xs.length)}%)</td><td class="r num">${xs.filter((r) => !r.lost_revenue).length} (${pct(xs.filter((r) => !r.lost_revenue).length, xs.length)}%)</td></tr>`).join("") + "</tbody></table>";
+    document.querySelectorAll("#oc-calls tr.click").forEach((tr) => tr.addEventListener("click", () => listOutcomes(tr.dataset.k, rowsC.find(([k]) => k === tr.dataset.k)[1])));
+    listOutcomes("Missed", fn);
+  }
+
   // first paint: every view drawn, the one in the link shown
   const firstPick = picks.length ? picks[0].id : D.accounts[0].account_id;
   sel.value = firstPick; drawTimeline(firstPick);
-  drawOnboarding(); drawTeam(); drawBook();
+  drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes();
   // a link like ...#acc_069 (from Slack's Open timeline) opens that account
   const hashToken = (location.hash || "").replace("#", "");
   if (byId[hashToken]) { sel.value = hashToken; drawTimeline(hashToken); show("timeline"); }
