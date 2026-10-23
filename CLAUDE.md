@@ -214,8 +214,14 @@ One JSON event per line, one file per day in `data/events/`.
   first churn, growth or activation call (check-ins don't count; a QBR
   counts when the signal came in the 30 days before it, column via);
   a call up to 14 days before the signal counts as 0 days ("called
-  early"). Also escalations and meetings in 90 days. Outcome not measured
-  yet.
+  early"). Also escalations and meetings in 90 days. Action status (view
+  action_status, from the action log): each task Open, Claimed (Slack),
+  Done (the right meeting since it was sent: churn -> churn call or QBR,
+  expansion -> growth call or QBR, QBR -> the QBR, activation and
+  escalations -> any meeting; a check-in never closes a churn task) or
+  Resolved (the flag went away; the only way CS ops tasks close), with its
+  age. Managers see unclaimed pool tasks and CS ops items, oldest first.
+  Outcome not measured yet.
 - `onboarding_report.py`: welcomed vs. control (run `generate_events.py`
   first). New Self-service/Scale accounts that got the getting-started email
   vs. the onboarding holdout: SDK installed, median days to SDK and to first

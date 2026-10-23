@@ -20,6 +20,11 @@ Per owner, and rolled up per manager: Act accounts, how many got a call, the
 median days to call, how many were called early, how many were escalated
 (no meeting in 30 days, from journeys.py), and all meetings in the 90 days.
 
+Action status (sections 4 and 5): what happened to each task actions.py sent:
+Open, Claimed in Slack, Done (the right kind of meeting since) or Resolved
+(the flag went away). Managers see what nobody picked up: CS ops items and
+pool tasks no one has claimed, oldest first.
+
 Not measured yet: outcome (did the account recover after the call?). That
 needs the generator to make calls change usage, and time to pass.
 
@@ -29,6 +34,7 @@ and one account is an anecdote, not a pattern.
 Run flags.py and journeys.py first, then:  python team_report.py
 """
 
+import os
 import sys
 
 from cairnpath_db import connect
@@ -86,6 +92,73 @@ def add_views(con):
                                                                     AND s.signal_date + {QBR_WINDOW}))
         GROUP BY s.account_id, s.routed_to, s.flag, s.signal_date
     """)
+
+    # Action status: the action log says a task was SENT; this says what happened
+    # since, worked out from the data (nobody has to tick anything):
+    #   Done      the owner met the account about it after the task was sent:
+    #             churn -> churn call or QBR, expansion -> growth call or QBR,
+    #             QBR -> the QBR, activation and escalations -> any meeting.
+    #             A check-in doesn't close a churn task: the problem has to be raised.
+    #   Resolved  the flag went away on its own (usage recovered, CRM fixed).
+    #             CS ops tasks can only end this way: the CRM record is fixed.
+    #   Claimed   someone took it in Slack ("I'll take it"), nothing since
+    #   Open      sent, nothing since
+    if os.path.exists("data/action_log.csv"):
+        flag_files = " UNION ALL ".join(
+            f"SELECT account_id, '{f}' AS flag, status FROM read_csv('data/flags_{f}.csv', all_varchar = true)"
+            for f in ("activation", "churn", "expansion", "qbr", "journey"))
+        con.sql(f"""
+            CREATE VIEW action_status AS
+            WITH tasks AS (
+                -- tasks for people (cards and Slack digests); the latest send of each
+                SELECT account_id, flag, status,
+                       arg_max(routed_to, logged_on) AS routed_to,
+                       max(logged_on)::DATE          AS sent_on
+                FROM read_csv('data/action_log.csv', all_varchar = true)
+                WHERE channel IN ('card', 'queue')
+                GROUP BY account_id, flag, status
+            ),
+            open_flags AS ({flag_files}),
+            done AS (
+                SELECT t.account_id, t.flag, t.status, min(e.event_date) AS done_on
+                FROM tasks t
+                JOIN engagement e ON e.account_id = t.account_id AND e.event_date >= t.sent_on
+                WHERE e.event_name = 'meeting_held' AND t.routed_to <> 'cs_ops'
+                  AND CASE t.flag
+                          WHEN 'churn'     THEN e.properties.topic IN ('churn_call', 'qbr')
+                          WHEN 'expansion' THEN e.properties.topic IN ('growth_call', 'qbr')
+                          WHEN 'qbr'       THEN e.properties.topic = 'qbr'
+                          ELSE true                         -- activation, escalations
+                      END
+                GROUP BY ALL
+            ),
+            claimed AS (
+                SELECT t.account_id, t.flag, t.status, min(e.event_date) AS claimed_on,
+                       arg_min(e.properties.slack_user, e."timestamp") AS claimed_by
+                FROM tasks t
+                JOIN engagement e ON e.account_id = t.account_id AND e.event_date >= t.sent_on
+                WHERE e.event_name = 'task_claimed' AND e.properties.topic = t.flag
+                GROUP BY ALL
+            )
+            SELECT t.account_id, t.flag, t.status, t.routed_to, t.sent_on,
+                   CASE WHEN d.done_on IS NOT NULL      THEN 'Done'
+                        WHEN o.account_id IS NULL       THEN 'Resolved'
+                        WHEN c.claimed_on IS NOT NULL   THEN 'Claimed'
+                        ELSE 'Open' END                 AS action_status,
+                   d.done_on, c.claimed_by,
+                   a.as_of_date + 1 - t.sent_on         AS age_days   -- days since it was sent
+            FROM tasks t
+            CROSS JOIN as_of a
+            LEFT JOIN done d    USING (account_id, flag, status)
+            LEFT JOIN claimed c USING (account_id, flag, status)
+            LEFT JOIN (SELECT DISTINCT * FROM open_flags) o USING (account_id, flag, status)
+        """)
+    else:   # actions.py hasn't run yet: no tasks
+        con.sql("""CREATE VIEW action_status AS
+                   SELECT NULL::VARCHAR AS account_id, NULL::VARCHAR AS flag, NULL::VARCHAR AS status,
+                          NULL::VARCHAR AS routed_to, NULL::DATE AS sent_on, NULL::VARCHAR AS action_status,
+                          NULL::DATE AS done_on, NULL::VARCHAR AS claimed_by, NULL::INTEGER AS age_days
+                   WHERE false""")
 
     con.sql("""
         CREATE VIEW meetings_90d AS
@@ -147,4 +220,33 @@ if __name__ == "__main__":
     first_day = con.sql("SELECT min(event_date) + 29 FROM events").fetchone()[0]
     print(f"\nA signal on {first_day} (the first day a 30-day average exists) means the account")
     print("was already over the line before measuring could start; the true wait may be longer.")
+    print("\n4. Action status: sent is not done (from the action log; run actions.py first)")
+    con.sql("""
+        SELECT coalesce(o.owner_name, s.routed_to)                       AS owner,
+               count(*)                                                  AS tasks,
+               count(*) FILTER (WHERE action_status = 'Open')            AS open,
+               count(*) FILTER (WHERE action_status = 'Claimed')         AS claimed,
+               format('{} ({}%)', count(*) FILTER (WHERE action_status = 'Done'),
+                      round(100.0 * count(*) FILTER (WHERE action_status = 'Done') / count(*))::INT) AS done,
+               count(*) FILTER (WHERE action_status = 'Resolved')        AS resolved,
+               max(age_days) FILTER (WHERE action_status IN ('Open', 'Claimed')) AS oldest_open_days
+        FROM action_status s
+        LEFT JOIN cs_team o ON o.owner_id = s.routed_to
+        GROUP BY ALL
+        ORDER BY oldest_open_days DESC NULLS LAST, owner
+    """).show(max_rows=50)
+
+    print("\n5. For managers: what nobody has picked up, oldest first")
+    print("   CS ops items (handoff gaps, no CSM) and pool tasks no one has claimed")
+    con.sql("""
+        SELECT coalesce(o.manager, 'all managers') AS manager, s.routed_to, s.account_id,
+               coalesce(c.account_name, '(not in the CRM)') AS account_name,
+               s.flag, s.status, s.sent_on, s.age_days
+        FROM action_status s
+        LEFT JOIN cs_team o ON o.owner_id = s.routed_to
+        LEFT JOIN crm c USING (account_id)
+        WHERE s.action_status = 'Open' AND (s.routed_to = 'cs_ops' OR o.owner_type = 'pool')
+        ORDER BY s.age_days DESC, manager, s.routed_to, s.account_id
+    """).show(max_rows=100)
+
     print("\nNot measured yet: outcome (did the account recover after the call?).")
