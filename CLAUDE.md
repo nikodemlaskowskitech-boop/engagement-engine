@@ -158,6 +158,10 @@ One JSON event per line, one file per day in `data/events/`.
 - `DATA_CONTRACT.md`: the five inputs, their columns and meaning, which
   are required, what stops working without each, and what is still
   hard-coded. Update it whenever an input or a column changes.
+- `ENGAGEMENT_LOGIC.md`: the logic by tier as Mermaid diagrams (GitHub
+  renders them): coverage table, overview, Self-service journey, Scale
+  queue and hand-back, Enterprise QBR first, action status. Update it when
+  routing, follow-ups or escalations change.
 - `settings.toml` + `settings.py`: every threshold and time window in one
   place (activation, churn, expansion, QBR, journeys, team report, email
   hour, follow-ups). Scripts read `SETTINGS[...]`; never hard-code a number in a script.

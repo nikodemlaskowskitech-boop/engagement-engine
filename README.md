@@ -51,6 +51,12 @@ python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_AP
 To tune the engine, edit `settings.toml` (every threshold and time window,
 with a comment on each), then rerun `flags.py` and `check_flags.py`.
 
+## How each tier is handled
+
+[ENGAGEMENT_LOGIC.md](ENGAGEMENT_LOGIC.md) shows the logic as diagrams: who
+covers each tier, the Self-service email journey, the Scale shared queue with
+its hand-back, Enterprise's QBR-first rule, and what "done" means.
+
 ## Running it on your own data
 
 [DATA_CONTRACT.md](DATA_CONTRACT.md) lists the five inputs (events, CRM, CS team,
