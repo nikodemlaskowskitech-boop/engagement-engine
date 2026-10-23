@@ -1075,8 +1075,9 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
     if (!items.length) { host.innerHTML = '<p class="note">No tasks here.</p>'; return; }
     const ownerCell = (t) => esc(ownerName[t.routed_to] || t.routed_to) +
       (t.assigned_from ? `<small><br>given by ${esc(managerName(t.assigned_by))}, was with ${esc(ownerName[t.assigned_from] || t.assigned_from)}</small>` : "");
-    host.innerHTML = `<table><thead><tr><th>Account</th><th>Task</th><th>Owner</th><th class="r">Age</th><th>Status</th><th>Decision</th></tr></thead><tbody>` +
+    host.innerHTML = `<table><thead><tr><th>Account</th><th>Region</th><th>Task</th><th>Owner</th><th class="r">Age</th><th>Status</th><th>Decision</th></tr></thead><tbody>` +
       items.map((t) => `<tr><td><button class="link" data-open="${esc(t.account_id)}">${nameOf(t.account_id)}</button><small><br>${esc(byId[t.account_id] ? byId[t.account_id].tier : "not in the CRM")}</small></td>` +
+        `<td>${esc(byId[t.account_id] ? byId[t.account_id].region : "—")}</td>` +
         `<td>${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small></td>` +
         `<td>${ownerCell(t)}</td><td class="r num">${t.age_days} d</td>` +
         `<td><span class="badge ${esc(t.action_status)}">${esc(t.action_status)}</span></td><td>${decisionCell(t)}</td></tr>`).join("") + "</tbody></table>";
