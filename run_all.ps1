@@ -37,7 +37,7 @@ if (-not $Pulled) {
 # 2. The pipeline, in the order the scripts depend on each other
 $steps = @()
 if ($Regenerate) { $steps += "generate_events.py" }
-$steps += "flags.py", "check_flags.py", "backtest.py", "journeys.py", "team_report.py",
+$steps += "flags.py", "check_flags.py", "journeys.py", "team_report.py", "backtest.py",
           "onboarding_report.py", "export_views.py"
 if ($Actions) { $steps += "actions.py" }
 
