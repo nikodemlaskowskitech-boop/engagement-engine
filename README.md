@@ -8,6 +8,12 @@ Cairnpath is a fictional product analytics SaaS with about 500 European
 customers across three tiers. The data is generated, but the rules are the
 kind a real CS team runs.
 
+Why it exists: a CRM is built for sales. It knows opportunities and contracts,
+not how customers use the product or what CS did about it, so a CS team at
+scale ends up with a book of business it can't see. This engine joins usage
+and CS engagement into one view of the success book of business, and tells
+each CSM, pool and manager where to act.
+
 ## What it does today
 
 | Flag | Looks for | Who acts |
