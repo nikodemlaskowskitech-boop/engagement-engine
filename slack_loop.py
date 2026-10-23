@@ -65,17 +65,23 @@ def card_blocks(task, owner_name, last_touch=None):
                       "o": task["routed_to"], "n": name})     # carried by every button
     touch = (f"Last touch: {last_touch[0]}, {last_touch[1]}" if last_touch else "No CS touch on record")
     link = f"{SLACK['cockpit_url']}#{task['account_id']}"
+    if task["status"] == "Follow-up not picked up":
+        # a manager's approval, not a task to work: approve, or look first
+        buttons = [{"type": "button", "action_id": "approve_handback", "style": "primary",
+                    "text": {"type": "plain_text", "text": "Approve hand-back"}, "value": ref}]
+    else:
+        buttons = [
+            {"type": "button", "action_id": "claim", "text": {"type": "plain_text", "text": "I'll take it"},
+             "value": ref},
+            {"type": "button", "action_id": "log_call", "style": "primary",
+             "text": {"type": "plain_text", "text": "Log QBR" if task["flag"] == "qbr" else "Log call"},
+             "value": ref}]
     return [
         {"type": "section", "text": {"type": "mrkdwn", "text":
             f"*{name}* ({task['account_id']}) · {flag_label(task['flag'], task['status'])}\n"
             f"{task['reasons']}\n→ {task['action']}"}},
         {"type": "context", "elements": [{"type": "mrkdwn", "text": f"For *{owner_name}* · {touch}"}]},
-        {"type": "actions", "block_id": "task_actions", "elements": [
-            {"type": "button", "action_id": "claim", "text": {"type": "plain_text", "text": "I'll take it"},
-             "value": ref},
-            {"type": "button", "action_id": "log_call", "style": "primary",
-             "text": {"type": "plain_text", "text": "Log QBR" if task["flag"] == "qbr" else "Log call"},
-             "value": ref},
+        {"type": "actions", "block_id": "task_actions", "elements": buttons + [
             {"type": "button", "action_id": "open_timeline", "url": link,
              "text": {"type": "plain_text", "text": "Open timeline"}},
         ]},

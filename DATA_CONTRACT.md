@@ -100,6 +100,15 @@ Same JSON shape as the events, `event_type` = `engagement`. This is what CS did
 and how customers responded; the pipeline appends to it (emails it sends,
 Slack clicks), so it grows over time.
 
+This is usually the hardest input to get. In most companies the CRM holds it,
+but sales-shaped: emails auto-logged by a plugin, calls as generic "activities",
+no topic, no outcome. Good enough to start: **meetings and emails with account,
+date and owner**, plus a topic where one exists (often from the activity subject
+or type). Without a topic, journeys still work, but time to action can't tell a
+churn call from a check-in. Going forward, the pipeline's own actions and Slack
+clicks write proper engagement events, so the history gets better every day the
+engine runs.
+
 | event_name | properties | Meaning |
 | --- | --- | --- |
 | `email_sent` | owner_id, topic | An email went out (`automated` or a person) |
@@ -127,6 +136,23 @@ acc_074,2026-08-09
 Never into the inputs above: flags (`data/flags_*.csv`), the action log
 (`data/action_log.csv`, which also drives QBR slips), new engagement events
 (appended, never edited), QBR packs and briefs, and the views page.
+
+## CRM write-back (designed, not built)
+
+The demo has no CRM, so nothing is sent back. With a real one it's a small,
+safe step, because every engagement event already carries what a CRM activity
+needs:
+
+| Engagement event | CRM record | Fields |
+| --- | --- | --- |
+| `meeting_held` | Activity (meeting or call) on the account | date, owner, subject = topic, description = outcome + note |
+| `email_sent` | Activity (email) | date, owner (or "automated"), subject = topic |
+| `task_claimed` | Task owner update | who took it, when |
+
+Each event's `event_id` goes into an external-ID field, so a re-run never
+creates duplicates. The direction stays one-way for CS facts: the engine is
+the record for engagement, and the CRM gets a copy so sales and leadership see
+it where they already work.
 
 ## Still hard-coded (next step: settings)
 

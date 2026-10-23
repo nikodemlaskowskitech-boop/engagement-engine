@@ -23,6 +23,12 @@ it worked. Two rules for now:
                           once: after a QBR has slipped, a newly booked one
                           no longer holds the escalation back.
 
+  Follow-up not picked up  a Scale follow-up named to the person who took
+                          the first task, still not claimed or done after 5
+                          days. Their manager gets an approval: hand it back
+                          to the pool (button in Slack). Then anyone in the
+                          pool can take it (actions.py).
+
 Rows have the same columns as the flags and are saved to
 data/flags_journey.csv, so actions.py picks them up and does each one once.
 
@@ -39,6 +45,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 UNOPENED_AFTER_DAYS = SETTINGS["journeys"]["unopened_after_days"]   # all in settings.toml
 NO_MEETING_DAYS = SETTINGS["journeys"]["no_meeting_days"]
 ACT_FOR_DAYS = SETTINGS["journeys"]["act_for_days"]
+HANDBACK_DAYS = SETTINGS["follow_ups"]["handback_after_days"]
 
 con = connect()
 
@@ -100,9 +107,28 @@ con.sql(f"""
           AND f.account_id NOT IN (SELECT account_id FROM qbr_schedule WHERE qbr_coming_up
                                    AND account_id NOT IN (SELECT account_id FROM qbr_slips))
     )
+    ,
+    handback AS (
+        -- a Scale follow-up goes to the person who took the first task; if they
+        -- haven't picked it up in 5 days (holiday, left, swamped), their manager
+        -- approves handing it back to the pool. A person decides, not a timer.
+        SELECT s.account_id, c.account_name, c.tier, c.region,
+               'Follow-up not picked up' AS status,
+               format('{{}} {{}} sent {{}} ({{}} days ago) to the person who took the first task; '
+                      || 'not claimed or done since', s.flag, s.status, s.sent_on::VARCHAR, s.age_days) AS reasons,
+               o.manager AS routed_to,
+               format('Approve handing it back to {{}}, so anyone there can take it', o.owner_name) AS action
+        FROM action_status s                                -- cairnpath_db.py
+        JOIN cs_team o ON o.owner_id = s.routed_to AND o.owner_type = 'pool'
+        LEFT JOIN crm c USING (account_id)
+        WHERE s.status LIKE '%(follow-up)' AND s.action LIKE '%For <@%'   -- named to a person
+          AND s.action_status = 'Open' AND s.age_days >= {HANDBACK_DAYS}
+    )
     SELECT * FROM email_never_opened
     UNION ALL
     SELECT * FROM no_meeting
+    UNION ALL
+    SELECT * FROM handback
 """)
 
 print("\nJourneys: what happened since the flag, and did it work?\n")

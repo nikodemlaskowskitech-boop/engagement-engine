@@ -43,6 +43,14 @@ early_days = 14           # a call this many days before the signal still counts
 [actions]
 email_hour = 9            # customer emails go out at 9:00 local time
 
+[follow_ups]
+# One follow-up per programme flag (Stalled, Silent, Shelfware), Self-service
+# and Scale only, with a different angle; then stop. Per programme in real
+# life; one value each for the demo.
+after_days = 30           # follow up when the flag still stands this long after the first send
+email_cap_days = 14       # at most one automated email per account in this many days (all programmes)
+handback_after_days = 5   # a named follow-up nobody picked up this long: the manager approves handing it back
+
 [slack]
 team_channel = "#cs-queue"                      # where task cards go
 interactive_owners = ["pool_dach", "csm_anna", "mgr_sophie"]   # their tasks get cards with buttons

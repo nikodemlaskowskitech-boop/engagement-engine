@@ -63,7 +63,7 @@ import urllib.error
 import uuid
 import urllib.request
 from collections import defaultdict
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from time import sleep
 
@@ -84,7 +84,28 @@ COLUMNS = ["logged_on", "account_id", "flag", "status", "routed_to", "channel", 
 EMAIL_TOPICS = {("activation", "Activated"): "welcome_pack",
                 ("activation", "Stalled"):   "invite_your_team",
                 ("activation", "Silent"):    "need_help_starting",
-                ("churn", "Shelfware"):      "use_case_inspiration"}
+                ("churn", "Shelfware"):      "use_case_inspiration",
+                # follow-ups: same issue, a different angle
+                ("activation", "Stalled (follow-up)"):  "invite_your_team_followup",
+                ("activation", "Silent (follow-up)"):   "need_help_starting_followup",
+                ("churn", "Shelfware (follow-up)"):     "customer_story"}
+
+# Follow-ups: if a programme flag still stands after_days after the first send,
+# one more touch with a different angle, then stop (settings.toml [follow_ups]).
+# Self-service gets an email; Scale gets a task for whoever took the first one.
+FOLLOW_UPS = {
+    ("activation", "Stalled"): {
+        "automated": "Send the follow-up: a 3-step guide to inviting the team, with a 2-minute video",
+        "pool": "Follow up: offer a 20-minute session to get a second user going"},
+    ("activation", "Silent"): {
+        "automated": "Send the follow-up: a short note from a named person, with a link to book a call",
+        "pool": "Follow up on a different contact (CS ops can check the CRM for one)"},
+    ("churn", "Shelfware"): {
+        "automated": "Send the follow-up: a customer story from a similar company, and an invite to the next webinar",
+        "pool": "Follow up: offer a working session with the team that hasn't started yet, with a customer story"},
+}
+FOLLOW_UP_DAYS = SETTINGS["follow_ups"]["after_days"]
+EMAIL_CAP_DAYS = SETTINGS["follow_ups"]["email_cap_days"]
 EMAIL_HOUR = SETTINGS["actions"]["email_hour"]   # emails go out at this hour, local time
 UTC_OFFSET_HOURS = {"UK&I": 1, "DACH": 2, "France & Benelux": 2, "Nordics": 2}
 
@@ -169,7 +190,9 @@ queue_hook, email_hook = load_webhooks()
 bot_token, demo_user = load_env("SLACK_BOT_TOKEN", "SLACK_DEMO_USER")
 
 with (DATA / "cs_team.csv").open(encoding="utf-8") as f:
-    owner_names = {r["owner_id"]: r["owner_name"] for r in csv.DictReader(f)}
+    team = list(csv.DictReader(f))
+owner_names = {r["owner_id"]: r["owner_name"] for r in team}
+pools = {r["owner_id"] for r in team if r["owner_type"] == "pool"}
 owner_names["cs_ops"] = "CS ops"
 owner_names["email"] = "Customer emails"
 # managers aren't owners in cs_team, only a column: mgr_james -> "James (manager)"
@@ -194,18 +217,70 @@ done = set()
 slipped = {(a, fl, st): promised for a, fl, st, promised
            in con.sql("SELECT account_id, flag, status, max(promised_qbr) FROM qbr_slips GROUP BY ALL").fetchall()}
 
+first_sent = {}      # key -> when it first went out (follow-ups count from here)
 if LOG.exists():
     with LOG.open(encoding="utf-8") as f:
-        last_channel = {key(r): r["channel"] for r in csv.DictReader(f)}   # the log is in time order
+        log_rows = list(csv.DictReader(f))
+    last_channel = {key(r): r["channel"] for r in log_rows}   # the log is in time order
+    for r in log_rows:
+        if r["channel"] not in ("qbr", "none"):
+            first_sent.setdefault(key(r), date.fromisoformat(r["logged_on"]))
     done = set(last_channel)
     # a slipped flag whose last log entry is still "covered by the QBR" goes out again,
     # once: after that its last entry is the new task, so it counts as done
     slipped = {k: v for k, v in slipped.items() if last_channel.get(k) == "qbr"}
     done -= set(slipped)
 
+# Who took the first task in Slack (claimed it or logged a call), per account:
+# a follow-up goes back to that person, never to someone new
+slack_touches = defaultdict(list)
+for account_id, day, slack_user in con.sql("""
+        SELECT account_id, event_date, properties.slack_user FROM engagement
+        WHERE context.source = 'slack' AND properties.slack_user IS NOT NULL
+        ORDER BY "timestamp" """).fetchall():
+    slack_touches[account_id].append((day, slack_user))
+
+# Hand-backs a manager approved in Slack (journeys.py asks), per account: the latest
+handbacks = dict(con.sql("""
+    SELECT account_id, max(event_date) FROM engagement
+    WHERE event_name = 'handback_approved' GROUP BY account_id""").fetchall())
+
+# Email fatigue: the last automated email per account, from any programme
+last_email = dict(con.sql("""
+    SELECT account_id, max(event_date) FROM engagement
+    WHERE event_name = 'email_sent' AND properties.owner_id = 'automated'
+    GROUP BY account_id""").fetchall())
+
+
+def follow_up(task):
+    """The one follow-up for a programme flag that still stands, or None."""
+    sent = first_sent.get(key(task))
+    kind = "automated" if task["routed_to"] == "automated" else "pool" if task["routed_to"] in pools else None
+    texts = FOLLOW_UPS.get((task["flag"], task["status"]))
+    if not (texts and kind and sent) or (run_date - sent).days < FOLLOW_UP_DAYS:
+        return None
+    fu = dict(task, status=f"{task['status']} (follow-up)", action=texts[kind])
+    if key(fu) in done:
+        # already followed up once. One exception: the person it went to never
+        # picked it up and their manager approved handing it back to the pool
+        approved = handbacks.get(task["account_id"])
+        back = dict(fu, status=f"{task['status']} (follow-up, pool)",
+                    action=texts["pool"] + ". Handed back to the pool by the manager: anyone can take it")
+        if kind == "pool" and approved and approved >= first_sent.get(key(fu), approved) and key(back) not in done:
+            return back
+        return None                                  # otherwise stop: one follow-up only
+    fu["reasons"] = f"{task['reasons']}; first contact {sent}, {(run_date - sent).days} days ago, no change"
+    if kind == "pool":
+        took = [u for day, u in slack_touches[task["account_id"]] if day >= sent]
+        fu["action"] += (f". For <@{took[0]}>, who took the first one" if took
+                         else ". Nobody took the first one: the pool's manager can see it")
+    return fu
+
+
 # What the flags ask for today, grouped by where it goes
 new = defaultdict(list)        # owner (or "email") -> new tasks
 skipped = 0
+capped = 0           # emails held back by the fatigue cap
 for flag in FLAGS:
     path = DATA / f"flags_{flag}.csv"
     if not path.exists():
@@ -216,8 +291,10 @@ for flag in FLAGS:
                 continue
             task = dict(r, flag=flag)
             if key(task) in done:
-                skipped += 1
-                continue
+                task = follow_up(task)                  # still standing after the first touch?
+                if task is None:
+                    skipped += 1
+                    continue
             if key(task) in slipped:                    # its QBR came and went: don't wait again
                 task["action"] = (f"QBR due {slipped[key(task)]} didn't happen: act now, "
                                   f"don't wait for the next one. {task['action']}")
@@ -233,6 +310,13 @@ for flag in FLAGS:
                     continue
                 task["action"] += HOLDOUT_NOTE          # a person shouldn't send it by hand either
             if r["routed_to"] == "automated":
+                # fatigue cap: one automated email per account per EMAIL_CAP_DAYS;
+                # not logged, so it goes out on a later run
+                last = last_email.get(r["account_id"])
+                if last and (run_date - last).days < EMAIL_CAP_DAYS:
+                    capped += 1
+                    continue
+                last_email[r["account_id"]] = run_date
                 new["email"].append(task)
             elif interactive(r["routed_to"]) and bot_token:
                 new["card"].append(task)                # a card with buttons (settings.toml [slack])
@@ -325,6 +409,8 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
 print(f"\nAction log, run date {run_date}")
 print(f"  New actions logged: {logged}")
 print(f"  Already done, skipped: {skipped}")
+if capped:
+    print(f"  Emails held back by the {EMAIL_CAP_DAYS}-day cap (they go out on a later run): {capped}")
 if not (queue_hook and email_hook):
     print("  Slack: no webhook in .env for "
           + " and ".join(n for n, h in (("#cs-queue", queue_hook), ("#email-preview", email_hook)) if not h)

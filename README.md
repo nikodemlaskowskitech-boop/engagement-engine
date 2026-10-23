@@ -8,6 +8,12 @@ Cairnpath is a fictional product analytics SaaS with about 500 European
 customers across three tiers. The data is generated, but the rules are the
 kind a real CS team runs.
 
+Why it exists: a CRM is built for sales. It knows opportunities and contracts,
+not how customers use the product or what CS did about it, so a CS team at
+scale ends up with a book of business it can't see. This engine joins usage
+and CS engagement into one view of the success book of business, and tells
+each CSM, pool and manager where to act.
+
 ## What it does today
 
 | Flag | Looks for | Who acts |
@@ -44,6 +50,12 @@ python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_AP
 
 To tune the engine, edit `settings.toml` (every threshold and time window,
 with a comment on each), then rerun `flags.py` and `check_flags.py`.
+
+## How each tier is handled
+
+[ENGAGEMENT_LOGIC.md](ENGAGEMENT_LOGIC.md) shows the logic as diagrams: who
+covers each tier, the Self-service email journey, the Scale shared queue with
+its hand-back, Enterprise's QBR-first rule, and what "done" means.
 
 ## Running it on your own data
 

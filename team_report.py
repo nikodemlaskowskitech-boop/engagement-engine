@@ -20,6 +20,11 @@ Per owner, and rolled up per manager: Act accounts, how many got a call, the
 median days to call, how many were called early, how many were escalated
 (no meeting in 30 days, from journeys.py), and all meetings in the 90 days.
 
+Action status (sections 4 and 5): what happened to each task actions.py sent:
+Open, Claimed in Slack, Done (the right kind of meeting since) or Resolved
+(the flag went away). Managers see what nobody picked up: CS ops items and
+pool tasks no one has claimed, oldest first.
+
 Not measured yet: outcome (did the account recover after the call?). That
 needs the generator to make calls change usage, and time to pass.
 
@@ -147,4 +152,33 @@ if __name__ == "__main__":
     first_day = con.sql("SELECT min(event_date) + 29 FROM events").fetchone()[0]
     print(f"\nA signal on {first_day} (the first day a 30-day average exists) means the account")
     print("was already over the line before measuring could start; the true wait may be longer.")
+    print("\n4. Action status: sent is not done (from the action log; run actions.py first)")
+    con.sql("""
+        SELECT coalesce(o.owner_name, s.routed_to)                       AS owner,
+               count(*)                                                  AS tasks,
+               count(*) FILTER (WHERE action_status = 'Open')            AS open,
+               count(*) FILTER (WHERE action_status = 'Claimed')         AS claimed,
+               format('{} ({}%)', count(*) FILTER (WHERE action_status = 'Done'),
+                      round(100.0 * count(*) FILTER (WHERE action_status = 'Done') / count(*))::INT) AS done,
+               count(*) FILTER (WHERE action_status = 'Resolved')        AS resolved,
+               max(age_days) FILTER (WHERE action_status IN ('Open', 'Claimed')) AS oldest_open_days
+        FROM action_status s
+        LEFT JOIN cs_team o ON o.owner_id = s.routed_to
+        GROUP BY ALL
+        ORDER BY oldest_open_days DESC NULLS LAST, owner
+    """).show(max_rows=50)
+
+    print("\n5. For managers: what nobody has picked up, oldest first")
+    print("   CS ops items (handoff gaps, no CSM) and pool tasks no one has claimed")
+    con.sql("""
+        SELECT coalesce(o.manager, 'all managers') AS manager, s.routed_to, s.account_id,
+               coalesce(c.account_name, '(not in the CRM)') AS account_name,
+               s.flag, s.status, s.sent_on, s.age_days
+        FROM action_status s
+        LEFT JOIN cs_team o ON o.owner_id = s.routed_to
+        LEFT JOIN crm c USING (account_id)
+        WHERE s.action_status = 'Open' AND (s.routed_to = 'cs_ops' OR o.owner_type = 'pool')
+        ORDER BY s.age_days DESC, manager, s.routed_to, s.account_id
+    """).show(max_rows=100)
+
     print("\nNot measured yet: outcome (did the account recover after the call?).")

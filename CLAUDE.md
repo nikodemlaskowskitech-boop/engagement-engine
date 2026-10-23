@@ -84,7 +84,8 @@ One JSON event per line, one file per day in `data/events/`.
   with properties.owner_id (csm_*, pool_*, automated) and properties.topic
   (getting_started, onboarding_workshop, advanced_workshop, qbr, kickoff,
   check_in, churn_call, activation_call, growth_call, follow_up; from actions.py: welcome_pack,
-  invite_your_team, need_help_starting, use_case_inspiration). user_id = the customer user who
+  invite_your_team, need_help_starting, use_case_inspiration; follow-ups
+  invite_your_team_followup, need_help_starting_followup, customer_story). user_id = the customer user who
   responded or attended. context.source says who wrote it (cs_history from
   the generator, actions.py for new actions, slack for clicks). Slack clicks
   add task_claimed events and meeting_held with properties.outcome, .note
@@ -157,9 +158,13 @@ One JSON event per line, one file per day in `data/events/`.
 - `DATA_CONTRACT.md`: the five inputs, their columns and meaning, which
   are required, what stops working without each, and what is still
   hard-coded. Update it whenever an input or a column changes.
+- `ENGAGEMENT_LOGIC.md`: the logic by tier as Mermaid diagrams (GitHub
+  renders them): coverage table, overview, Self-service journey, Scale
+  queue and hand-back, Enterprise QBR first, action status. Update it when
+  routing, follow-ups or escalations change.
 - `settings.toml` + `settings.py`: every threshold and time window in one
   place (activation, churn, expansion, QBR, journeys, team report, email
-  hour). Scripts read `SETTINGS[...]`; never hard-code a number in a script.
+  hour, follow-ups). Scripts read `SETTINGS[...]`; never hard-code a number in a script.
   Tiers, routing and the utilisation definition are still in the SQL (next:
   move them into settings; see DATA_CONTRACT.md).
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
@@ -188,7 +193,9 @@ One JSON event per line, one file per day in `data/events/`.
   history, same schema), crm, cs_team, as_of
   and utilisation, monthly_usage (utilisation and users per 30-day month),
   qbr_schedule (QBR coming up / overdue), qbr_slips (flags handed to a
-  QBR that didn't happen, from the action log), daily_util_30d (30-day
+  QBR that didn't happen, from the action log), action_status (every task
+  sent to a person: Open, Claimed, Done or Resolved, and its age),
+  daily_util_30d (30-day
   utilisation on every day, rounded like the flags), last_touch (last CS touch,
   last meeting, getting-started email opened or not, per account).
   Every script uses it; define views here, once.
@@ -206,7 +213,10 @@ One JSON event per line, one file per day in `data/events/`.
   old and unopened -> CS ops checks the contact. "No meeting in 30 days":
   churn or expansion Act (Scale/Enterprise) for 14+ days with no meeting
   in 30 days, and no QBR booked in the next 30 days ->
-  escalated to the owner's manager (one Slack message per manager). Saved
+  escalated to the owner's manager (one Slack message per manager).
+  "Follow-up not picked up": a Scale follow-up named to a person, still
+  Open after 5 days -> their manager approves handing it back to the pool
+  ("Approve hand-back" button; actions.py then sends it to the pool). Saved
   to `data/flags_journey.csv`, same columns as the flags.
 - `team_report.py`: time to action by owner and manager (run `flags.py`
   and `journeys.py` first). Signal date = first day the account's 30-day
@@ -214,8 +224,14 @@ One JSON event per line, one file per day in `data/events/`.
   first churn, growth or activation call (check-ins don't count; a QBR
   counts when the signal came in the 30 days before it, column via);
   a call up to 14 days before the signal counts as 0 days ("called
-  early"). Also escalations and meetings in 90 days. Outcome not measured
-  yet.
+  early"). Also escalations and meetings in 90 days. Action status (view
+  action_status in cairnpath_db.py): each task Open, Claimed (Slack),
+  Done (the right meeting since it was sent: churn -> churn call or QBR,
+  expansion -> growth call or QBR, QBR -> the QBR, activation and
+  escalations -> any meeting; a check-in never closes a churn task) or
+  Resolved (the flag went away; the only way CS ops tasks close), with its
+  age. Managers see unclaimed pool tasks and CS ops items, oldest first.
+  Outcome not measured yet.
 - `onboarding_report.py`: welcomed vs. control (run `generate_events.py`
   first). New Self-service/Scale accounts that got the getting-started email
   vs. the onboarding holdout: SDK installed, median days to SDK and to first
@@ -247,6 +263,15 @@ One JSON event per line, one file per day in `data/events/`.
   card per task with buttons (via the bot token, one a second) instead of
   the digest. QBR first: churn/expansion rows of an account with a QBR in
   the next 30 days are logged "covered by the QBR" and named on its QBR task.
+  Follow-ups ([follow_ups] in settings): a programme flag (Stalled, Silent,
+  Shelfware) on Self-service or Scale still standing 30 days after the first
+  send gets one follow-up with a different angle (status "<status>
+  (follow-up)"), then stops. Self-service: an email; Scale: a task for the
+  Slack user who took the first one (never a new person; nobody took it =
+  the pool, visible to the manager). Fatigue cap: one automated email per
+  account per 14 days across all programmes; capped emails aren't logged,
+  so they go out on a later run. A follow-up the manager handed back goes
+  to the whole pool once ("<status> (follow-up, pool)").
   `none` and `report` rows aren't actions. The log only grows; delete it
   to start over.
 - `slack_loop.py`: shared Slack pieces (task cards, .env tokens, appending
