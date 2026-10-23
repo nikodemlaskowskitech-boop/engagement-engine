@@ -69,7 +69,8 @@ def connect():
             timestamp:  'TIMESTAMP',
             account_id: 'VARCHAR',
             user_id:    'VARCHAR',
-            properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR)',
+            -- status and manager: a manager's decision in the cockpit (cockpit_sync.py)
+            properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR)',
             context:    'STRUCT(source VARCHAR)'
         })
     """)
@@ -267,6 +268,8 @@ def connect():
     #   Resolved  the flag went away on its own (usage recovered, CRM fixed).
     #             CS ops tasks can only end this way: the CRM record is fixed.
     #   Claimed   someone took it in Slack ("I'll take it"), nothing since
+    #   (a manager can give a task to someone else in the cockpit: routed_to is then
+    #    the new owner, assigned_from the old one, assigned_by the manager)
     #   (a manager's "Follow-up not picked up" task is Done once they approve the hand-back)
     #   Open      sent, nothing since
     flag_names = ("activation", "churn", "expansion", "qbr", "journey")
@@ -311,18 +314,34 @@ def connect():
                 JOIN engagement e ON e.account_id = t.account_id AND e.event_date >= t.sent_on
                 WHERE e.event_name = 'task_claimed' AND e.properties.topic = t.flag
                 GROUP BY ALL
+            ),
+            assigned AS (
+                -- a manager gave the task to someone else in the cockpit: the latest decision wins
+                SELECT t.account_id, t.flag, t.status,
+                       arg_max(e.properties.owner_id, e."timestamp") AS assigned_to,
+                       arg_max(e.properties.manager, e."timestamp")  AS assigned_by
+                FROM tasks t
+                JOIN engagement e ON e.account_id = t.account_id AND e.event_date >= t.sent_on
+                WHERE e.event_name = 'task_assigned' AND e.properties.topic = t.flag
+                  AND e.properties.status = t.status
+                GROUP BY ALL
             )
-            SELECT t.account_id, t.flag, t.status, t.routed_to, t.action, t.sent_on,
+            SELECT t.account_id, t.flag, t.status,
+                   coalesce(g.assigned_to, t.routed_to) AS routed_to,   -- who has it now
+                   t.action, t.sent_on,
                    CASE WHEN d.done_on IS NOT NULL      THEN 'Done'
                         WHEN o.account_id IS NULL       THEN 'Resolved'
                         WHEN c.claimed_on IS NOT NULL   THEN 'Claimed'
                         ELSE 'Open' END                 AS action_status,
                    d.done_on, c.claimed_by,
-                   a.as_of_date + 1 - t.sent_on         AS age_days   -- days since it was sent
+                   a.as_of_date + 1 - t.sent_on         AS age_days,  -- days since it was sent
+                   g.assigned_by,                                     -- the manager, if reassigned
+                   CASE WHEN g.assigned_to IS NOT NULL THEN t.routed_to END AS assigned_from
             FROM tasks t
             CROSS JOIN as_of a
-            LEFT JOIN done d    USING (account_id, flag, status)
-            LEFT JOIN claimed c USING (account_id, flag, status)
+            LEFT JOIN done d     USING (account_id, flag, status)
+            LEFT JOIN claimed c  USING (account_id, flag, status)
+            LEFT JOIN assigned g USING (account_id, flag, status)
             -- a follow-up ("Shelfware (follow-up)") is resolved when its original flag is gone
             LEFT JOIN (SELECT DISTINCT * FROM open_flags) o
                    ON o.account_id = t.account_id AND o.flag = t.flag
@@ -332,6 +351,7 @@ def connect():
         con.sql("""CREATE VIEW action_status AS
                    SELECT NULL::VARCHAR AS account_id, NULL::VARCHAR AS flag, NULL::VARCHAR AS status,
                           NULL::VARCHAR AS routed_to, NULL::VARCHAR AS action, NULL::DATE AS sent_on, NULL::VARCHAR AS action_status,
-                          NULL::DATE AS done_on, NULL::VARCHAR AS claimed_by, NULL::INTEGER AS age_days
+                          NULL::DATE AS done_on, NULL::VARCHAR AS claimed_by, NULL::INTEGER AS age_days,
+                          NULL::VARCHAR AS assigned_by, NULL::VARCHAR AS assigned_from
                    WHERE false""")
     return con

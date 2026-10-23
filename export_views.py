@@ -20,6 +20,9 @@ What goes in:
   churn_signals   every churn flag row, with its first call (the overview's sieve)
   renewals        every renewal after the data ends, with its outcome and
                   whether it was flagged (backtest.py's view; empty without outcomes)
+  tasks           every task sent to a person (action_status): who has it,
+                  its manager, Open/Claimed/Done/Resolved and its age, and
+                  whether a manager reassigned it (empty before actions.py runs)
   settings        the few thresholds the page labels with
 
 Real user IDs never leave this script: weekly active users are counts.
@@ -135,6 +138,19 @@ export = {
         ORDER BY f.account_id"""),
     # "did it work?": every renewal after the data ends, flagged or not
     "renewals": rows(con, "SELECT * EXCLUDE (account_name) FROM backtest ORDER BY renewal_date, account_id"),
+    # the manager's queue: every task sent to a person and what became of it.
+    # Its manager is the owner's manager; a manager's own task (an escalation,
+    # a hand-back to approve) is theirs; CS ops items go to the account's manager
+    "tasks": rows(con, """
+        SELECT s.account_id, s.flag, s.status, s.routed_to, s.action, s.sent_on,
+               s.action_status, s.age_days, s.assigned_by, s.assigned_from,
+               coalesce(o.manager, CASE WHEN s.routed_to LIKE 'mgr_%' THEN s.routed_to END,
+                        ao.manager) AS manager
+        FROM action_status s
+        LEFT JOIN cs_team o  ON o.owner_id = s.routed_to
+        LEFT JOIN crm c      USING (account_id)
+        LEFT JOIN cs_team ao ON ao.owner_id = coalesce(c.csm_owner, c.cs_pool)
+        ORDER BY s.age_days DESC, s.account_id, s.flag, s.status"""),
     "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"]},
@@ -153,6 +169,7 @@ page.write_text("<!doctype html>\n<meta charset=\"utf-8\">\n"
                 + template.replace("__VIEWS_DATA__", data_json.replace("</", "<\\/")),
                 encoding="utf-8")
 print(f"\nViews data as of {as_of}: {len(accounts)} accounts, {len(touches)} touches, "
-      f"{len(export['onboarding'])} onboarding rows, {len(export['time_to_action'])} Act accounts")
+      f"{len(export['onboarding'])} onboarding rows, {len(export['time_to_action'])} Act accounts, "
+      f"{len(export['tasks'])} tasks")
 print(f"Saved {out.relative_to(DATA.parent)} ({out.stat().st_size // 1024} KB)")
 print(f"Saved {page.relative_to(DATA.parent)}: open it in a browser")

@@ -46,6 +46,10 @@ flag is raised again as a normal task (the QBR slipped; the problem didn't),
 and it is never handed to a QBR again: a customer who keeps moving the QBR
 can't park a problem for months.
 
+Reassigned in the cockpit: a manager can give a task to someone else (a
+task_assigned event, cockpit_sync.py). The task goes to its new owner once,
+logged under them, and its follow-up later goes back to that person too.
+
 Facts the pipeline creates ("welcome sent") live here, never in the CRM.
 Each customer email also becomes an email_sent event in the engagement stream
 (data/engagement/<run date>.jsonl), so the CS history and new actions sit on
@@ -58,6 +62,7 @@ Run it twice: the second run should post and log nothing new.
 import csv
 import json
 import os
+import re
 import sys
 import urllib.error
 import uuid
@@ -218,10 +223,14 @@ slipped = {(a, fl, st): promised for a, fl, st, promised
            in con.sql("SELECT account_id, flag, status, max(promised_qbr) FROM qbr_slips GROUP BY ALL").fetchall()}
 
 first_sent = {}      # key -> when it first went out (follow-ups count from here)
+last_owner = {}      # key -> who the log last sent it to
+last_action = {}     # key -> what it said
 if LOG.exists():
     with LOG.open(encoding="utf-8") as f:
         log_rows = list(csv.DictReader(f))
     last_channel = {key(r): r["channel"] for r in log_rows}   # the log is in time order
+    last_owner = {key(r): r["routed_to"] for r in log_rows if r["channel"] in ("card", "queue")}
+    last_action = {key(r): r["action"] for r in log_rows if r["channel"] in ("card", "queue")}
     for r in log_rows:
         if r["channel"] not in ("qbr", "none"):
             first_sent.setdefault(key(r), date.fromisoformat(r["logged_on"]))
@@ -244,6 +253,14 @@ for account_id, day, slack_user in con.sql("""
 handbacks = dict(con.sql("""
     SELECT account_id, max(event_date) FROM engagement
     WHERE event_name = 'handback_approved' GROUP BY account_id""").fetchall())
+
+# Tasks a manager gave to someone else in the cockpit (cockpit_sync.py):
+# key -> (new owner, manager). The latest decision per task wins.
+assigned = {(a, fl, st): (to, mgr) for a, fl, st, to, mgr in con.sql("""
+    SELECT account_id, properties.topic, properties.status,
+           arg_max(properties.owner_id, "timestamp"), arg_max(properties.manager, "timestamp")
+    FROM engagement WHERE event_name = 'task_assigned'
+    GROUP BY ALL""").fetchall()}
 
 # Email fatigue: the last automated email per account, from any programme
 last_email = dict(con.sql("""
@@ -270,6 +287,12 @@ def follow_up(task):
             return back
         return None                                  # otherwise stop: one follow-up only
     fu["reasons"] = f"{task['reasons']}; first contact {sent}, {(run_date - sent).days} days ago, no change"
+    given = assigned.get(key(task))
+    if given:
+        # a manager gave the first task to someone: the follow-up goes back to them
+        fu["routed_to"] = given[0]
+        fu["action"] += f". For {owner_names.get(given[0], given[0])}, who was given the first one"
+        return fu
     if kind == "pool":
         took = [u for day, u in slack_touches[task["account_id"]] if day >= sent]
         fu["action"] += (f". For <@{took[0]}>, who took the first one" if took
@@ -279,6 +302,7 @@ def follow_up(task):
 
 # What the flags ask for today, grouped by where it goes
 new = defaultdict(list)        # owner (or "email") -> new tasks
+flag_rows = {}                 # key -> today's flag row, for reassigned tasks
 skipped = 0
 capped = 0           # emails held back by the fatigue cap
 for flag in FLAGS:
@@ -290,6 +314,7 @@ for flag in FLAGS:
             if r["routed_to"] in NOT_ACTIONS:
                 continue
             task = dict(r, flag=flag)
+            flag_rows[key(task)] = task
             if key(task) in done:
                 task = follow_up(task)                  # still standing after the first touch?
                 if task is None:
@@ -323,6 +348,21 @@ for flag in FLAGS:
             else:
                 new[r["routed_to"]].append(task)        # the owner's digest message
             done.add(key(task))   # so a duplicate row in the same run is only done once
+
+# Reassigned in the cockpit: the task goes to its new owner, once, while its flag
+# still stands (a follow-up counts as standing while its original flag does)
+reassigned = 0
+for k, (to, manager) in sorted(assigned.items()):
+    account_id, flag, status = k
+    base = flag_rows.get((account_id, flag, re.sub(r" \(follow-up.*\)$", "", status)))
+    if base is None or last_owner.get(k) in (None, to):
+        continue                    # flag gone, never sent, or already with the new owner
+    was = owner_names.get(last_owner[k], last_owner[k])
+    task = dict(base, status=status, routed_to=to,
+                action=f"Given to you by {owner_names.get(manager, manager)} (was with {was}). "
+                       + re.sub(r"^Given to you by .*?\)\. ", "", last_action.get(k, base["action"])))
+    new["card" if interactive(to) and bot_token else to].append(task)
+    reassigned += 1
 
 # The QBR task names what it now covers, so the CSM sees it in one place
 for tasks in new.values():
@@ -409,6 +449,8 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
 print(f"\nAction log, run date {run_date}")
 print(f"  New actions logged: {logged}")
 print(f"  Already done, skipped: {skipped}")
+if reassigned:
+    print(f"  Reassigned by a manager in the cockpit, sent to the new owner: {reassigned}")
 if capped:
     print(f"  Emails held back by the {EMAIL_CAP_DAYS}-day cap (they go out on a later run): {capped}")
 if not (queue_hook and email_hook):

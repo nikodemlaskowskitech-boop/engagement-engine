@@ -1,8 +1,8 @@
 # Data contract
 
-What the engine needs to run on someone else's book of business: six inputs,
+What the engine needs to run on someone else's book of business: seven inputs,
 their columns, what each column means, and which flags stop working without it.
-Today `generate_events.py` writes all five. A real team would export them from
+Today `generate_events.py` writes the first six and the cockpit the seventh. A real team would export them from
 their product analytics, CRM and CS tools instead, in this shape.
 
 The rule of thumb: **the engine reads the CRM, it doesn't replace it.** Facts the
@@ -19,6 +19,7 @@ back into these inputs.
 | Engagement history | `data/engagement/*.jsonl` | No | No journeys, no time to action, no "last touch"; flags still work |
 | Onboarding holdout | `data/onboarding_holdout.csv` | No | Everyone gets onboarding emails; no welcomed vs. control report |
 | Renewal outcomes | `data/renewal_outcomes.csv` | No | No backtest (recall, precision, warning time) |
+| Cockpit decisions | `data/cockpit_decisions.json` | No | Managers can't reassign tasks or approve hand-backs from the cockpit (Slack still can) |
 
 ## 1. Product events
 
@@ -117,10 +118,12 @@ engine runs.
 | `workshop_attended` | owner_id, topic | A customer user attended |
 | `meeting_held` | owner_id, topic (+ outcome, note, slack_user from Slack) | A call or meeting took place |
 | `task_claimed` | owner_id, topic, slack_user | Someone took a task in Slack |
+| `task_assigned` | owner_id (the new owner), topic (the flag), status, manager | A manager gave a task to someone else in the cockpit |
+| `handback_approved` | owner_id (the manager), topic `handback`, slack_user or manager | A manager approved handing a follow-up back to the pool |
 
 Topics that matter: `getting_started` (journeys), `churn_call`, `growth_call`,
 `activation_call` (time to action), `qbr` (QBR first and slips), `check_in`.
-`context.source` says who wrote the row: `cs_history`, `actions.py` or `slack`.
+`context.source` says who wrote the row: `cs_history`, `actions.py`, `slack` or `cockpit`.
 
 ## 5. Onboarding holdout (optional)
 
@@ -144,6 +147,23 @@ acc_003,2027-02-10,downsized
 
 `outcome` is one of `renewed`, `expanded`, `downsized`, `churned`.
 
+## 7. Cockpit decisions (optional)
+
+What managers decided in the published cockpit's Tasks tab. The page keeps them
+in its own small database; today Claude copies them to this file before a run
+(with a real backend, the pipeline reads the store directly). `cockpit_sync.py`
+turns them into `task_assigned` and `handback_approved` events in
+`data/engagement/cockpit.jsonl`; decisions made on older data (another
+`as_of`) are skipped.
+
+```json
+[{"kind": "assign", "account_id": "acc_018", "flag": "churn", "status": "Act",
+  "from_owner": "pool_dach", "to_owner": "csm_lukas", "manager": "mgr_sophie",
+  "as_of": "2026-10-18", "decided_at": "2026-10-23T11:21:07Z", "decided_by": "<viewer id>"}]
+```
+
+`kind` is `assign` (with `to_owner`) or `handback`. The latest decision per task wins.
+
 ## What the engine writes
 
 Never into the inputs above: flags (`data/flags_*.csv`), the action log
@@ -161,6 +181,7 @@ needs:
 | `meeting_held` | Activity (meeting or call) on the account | date, owner, subject = topic, description = outcome + note |
 | `email_sent` | Activity (email) | date, owner (or "automated"), subject = topic |
 | `task_claimed` | Task owner update | who took it, when |
+| `task_assigned` | Task owner update | the new owner, the manager who decided, when |
 
 Each event's `event_id` goes into an external-ID field, so a re-run never
 creates duplicates. The direction stays one-way for CS facts: the engine is
