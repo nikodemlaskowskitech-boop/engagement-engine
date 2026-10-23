@@ -147,5 +147,9 @@ con.sql("""
     ORDER BY routed_to, status, account_id
 """).show(max_rows=100, max_width=250)
 
-con.sql("COPY (SELECT * FROM journey ORDER BY status, account_id) TO 'data/flags_journey.csv' (HEADER)")
+# Work the rows out first, then write: the journey view reads the old
+# flags_journey.csv (through action_status), and Windows won't replace a file
+# that is still open for reading
+con.sql("CREATE TABLE journey_rows AS SELECT * FROM journey ORDER BY status, account_id")
+con.sql("COPY journey_rows TO 'data/flags_journey.csv' (HEADER)")
 print("\nSaved every row to data/flags_journey.csv (actions.py picks it up)")

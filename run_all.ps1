@@ -13,13 +13,15 @@ param([switch]$Regenerate, [switch]$Actions)
 
 Set-Location $PSScriptRoot                       # always run from the repo root
 $env:PYTHONIOENCODING = "utf-8"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8    # read Python's output as UTF-8 (table borders)
 $log = Join-Path $PSScriptRoot "data\last_run.txt"
 New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
 "Run started $(Get-Date -Format 'yyyy-MM-dd HH:mm')" | Out-File $log -Encoding utf8
 
 # 1. The latest merged code
-git checkout main 2>&1 | Out-File $log -Append -Encoding utf8
-git pull 2>&1 | Out-File $log -Append -Encoding utf8
+# (git writes progress to stderr; "$_" keeps just the text, not PowerShell's error wrapper)
+git checkout -q main 2>&1 | ForEach-Object { "$_" } | Out-File $log -Append -Encoding utf8
+git pull 2>&1 | ForEach-Object { "$_" } | Out-File $log -Append -Encoding utf8
 "Code at: $(git log --oneline -1)" | Out-File $log -Append -Encoding utf8
 
 # 2. The pipeline, in the order the scripts depend on each other
@@ -34,7 +36,8 @@ $ok = 0
 foreach ($step in $steps) {
     "`n===== python $step =====" | Out-File $log -Append -Encoding utf8
     Write-Host "Running $step ..."
-    & $python $step 2>&1 | ForEach-Object { "$_" } | Out-File $log -Append -Encoding utf8
+    & $python $step 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -ne "System.Management.Automation.RemoteException" } |
+        Out-File $log -Append -Encoding utf8
     if ($LASTEXITCODE -ne 0) {
         Write-Host "$step failed. The details are in data\last_run.txt" -ForegroundColor Red
         "FAILED: $step" | Out-File $log -Append -Encoding utf8
