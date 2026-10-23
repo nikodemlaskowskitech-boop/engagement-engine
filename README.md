@@ -45,6 +45,12 @@ python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_AP
 To tune the engine, edit `settings.toml` (every threshold and time window,
 with a comment on each), then rerun `flags.py` and `check_flags.py`.
 
+## Running it on your own data
+
+[DATA_CONTRACT.md](DATA_CONTRACT.md) lists the five inputs (events, CRM, CS team,
+engagement history, onboarding holdout), their columns, and which flags stop
+working when one is missing.
+
 ## Design choices
 
 - **SQL computes the facts; the LLM only writes them up.** The model gets a
