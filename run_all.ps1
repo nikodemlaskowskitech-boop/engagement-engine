@@ -9,19 +9,29 @@
 # The Slack listener isn't included: it keeps running, so it gets its own
 # window (python listener.py).
 
-param([switch]$Regenerate, [switch]$Actions)
+param([switch]$Regenerate, [switch]$Actions, [switch]$Pulled)
 
 Set-Location $PSScriptRoot                       # always run from the repo root
 $env:PYTHONIOENCODING = "utf-8"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8    # read Python's output as UTF-8 (table borders)
 $log = Join-Path $PSScriptRoot "data\last_run.txt"
 New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
-"Run started $(Get-Date -Format 'yyyy-MM-dd HH:mm')" | Out-File $log -Encoding utf8
+if (-not $Pulled) { "Run started $(Get-Date -Format 'yyyy-MM-dd HH:mm')" | Out-File $log -Encoding utf8 }
 
 # 1. The latest merged code
 # (git writes progress to stderr; "$_" keeps just the text, not PowerShell's error wrapper)
-git checkout -q main 2>&1 | ForEach-Object { "$_" } | Out-File $log -Append -Encoding utf8
-git pull 2>&1 | ForEach-Object { "$_" } | Out-File $log -Append -Encoding utf8
+if (-not $Pulled) {
+    $before = (Get-FileHash $PSCommandPath).Hash
+    git checkout -q main 2>&1 | ForEach-Object { "$_" } | Out-File $log -Append -Encoding utf8
+    git pull 2>&1 | ForEach-Object { "$_" } | Out-File $log -Append -Encoding utf8
+    # If the pull changed this script, PowerShell is still running the old copy:
+    # start the new one instead (without pulling again) and stop here
+    if ((Get-FileHash $PSCommandPath).Hash -ne $before) {
+        "run_all.ps1 itself was updated: restarting with the new version" | Out-File $log -Append -Encoding utf8
+        & $PSCommandPath -Regenerate:$Regenerate -Actions:$Actions -Pulled
+        exit $LASTEXITCODE
+    }
+}
 "Code at: $(git log --oneline -1)" | Out-File $log -Append -Encoding utf8
 
 # 2. The pipeline, in the order the scripts depend on each other
