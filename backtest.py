@@ -1,0 +1,141 @@
+"""
+Backtest: did the churn flags warn us about the accounts that churned or
+shrank at renewal, and how early?
+
+The flags run on the data as it stands (data/flags_churn.csv). The outcomes
+are what happened at each renewal in the months after the data ends
+(data/renewal_outcomes.csv): renewed, expanded, downsized or churned. In real
+life they come from the CRM's closed renewals; here the generator writes them,
+with surprises a flag can't see (a healthy customer acquired or out of budget).
+
+  Recall         of the accounts that churned or downsized, how many were
+                 flagged beforehand (Watch, Act or Shelfware)
+  Precision      of the flagged accounts that renewed in the period, how many
+                 really churned or downsized (the rest were false alarms)
+  Warning time   days from the first signal (30-day utilisation under the
+                 churn line) to the renewal. Under 30 days is too late to act.
+  Calls          for flagged accounts, churn with and without a churn call:
+                 the first look at "outcome after a call"
+
+Warning time is a lower bound for accounts already under the line when the
+data starts: the true signal may be older.
+
+Run flags.py first, then:  python backtest.py
+"""
+
+import os
+import sys
+
+from cairnpath_db import connect
+from settings import SETTINGS
+
+sys.stdout.reconfigure(encoding="utf-8")
+
+LINE = SETTINGS["churn"]["util_below"]                 # the churn line (settings.toml)
+TOO_LATE = SETTINGS["backtest"]["too_late_days"]       # less warning than this can't be acted on
+
+if not os.path.exists("data/renewal_outcomes.csv"):
+    # not an error: older data has no outcomes yet (run_all.ps1 -Regenerate makes them)
+    print("No data/renewal_outcomes.csv yet: run python generate_events.py, then backtest.py")
+    sys.exit(0)
+
+con = connect()
+con.sql(f"""
+    CREATE VIEW backtest AS
+    WITH outcomes AS (
+        SELECT account_id, renewal_date::DATE AS renewal_date, outcome
+        FROM read_csv('data/renewal_outcomes.csv', all_varchar = true)
+    ),
+    flagged AS (
+        SELECT account_id, status
+        FROM read_csv('data/flags_churn.csv', all_varchar = true)
+    ),
+    signal AS (
+        -- the first day the account's 30-day utilisation was under the churn line
+        SELECT account_id, min(event_date) FILTER (WHERE util < {LINE}) AS signal_date
+        FROM daily_util_30d
+        GROUP BY account_id
+    ),
+    called AS (
+        SELECT DISTINCT account_id FROM engagement
+        WHERE event_name = 'meeting_held' AND properties.topic = 'churn_call'
+    )
+    SELECT o.account_id, c.account_name, c.tier, o.renewal_date, o.outcome,
+           o.outcome IN ('churned', 'downsized')           AS lost_revenue,
+           f.status                                         AS flag_status,
+           f.status IS NOT NULL                             AS flagged,
+           s.signal_date,
+           o.renewal_date - s.signal_date                   AS warning_days,
+           o.account_id IN (SELECT account_id FROM called)  AS had_churn_call,
+           u.utilisation_pct                                AS util_now
+    FROM outcomes o
+    JOIN crm c USING (account_id)
+    LEFT JOIN flagged f USING (account_id)
+    LEFT JOIN signal s USING (account_id)
+    LEFT JOIN utilisation u USING (account_id)
+""")
+
+print("\nBacktest: did the churn flags see it coming?")
+first, last = con.sql("SELECT min(renewal_date), max(renewal_date) FROM backtest").fetchone()
+print(f"Renewals from {first} to {last}, after the data ends\n")
+
+print("1. What happened at renewal, by tier")
+con.sql("""
+    SELECT tier, count(*) AS renewals,
+           count(*) FILTER (WHERE outcome = 'renewed')   AS renewed,
+           count(*) FILTER (WHERE outcome = 'expanded')  AS expanded,
+           count(*) FILTER (WHERE outcome = 'downsized') AS downsized,
+           count(*) FILTER (WHERE outcome = 'churned')   AS churned
+    FROM backtest GROUP BY tier ORDER BY tier
+""").show()
+
+print("\n2. Recall: of the accounts that churned or downsized, how many were flagged?")
+con.sql("""
+    SELECT coalesce(tier, 'All tiers') AS tier,
+           count(*) FILTER (WHERE lost_revenue)                           AS churned_or_downsized,
+           format('{} ({}%)', count(*) FILTER (WHERE lost_revenue AND flagged),
+                  round(100.0 * count(*) FILTER (WHERE lost_revenue AND flagged)
+                        / nullif(count(*) FILTER (WHERE lost_revenue), 0))::INT) AS flagged_before
+    FROM backtest GROUP BY ROLLUP (tier) ORDER BY grouping(tier), tier
+""").show()
+
+print("\n3. Precision: of the flagged accounts, how many really churned or downsized?")
+con.sql("""
+    SELECT coalesce(flag_status, 'All flags') AS flag_status,
+           count(*)                                AS flagged,
+           format('{} ({}%)', count(*) FILTER (WHERE lost_revenue),
+                  round(100.0 * count(*) FILTER (WHERE lost_revenue) / count(*))::INT) AS churned_or_downsized,
+           count(*) FILTER (WHERE NOT lost_revenue) AS false_alarms
+    FROM backtest WHERE flagged GROUP BY ROLLUP (flag_status) ORDER BY grouping(flag_status), flag_status
+""").show()
+
+print(f"\n4. Warning time: days from the first signal to the renewal (caught accounts)")
+con.sql(f"""
+    SELECT count(*)                                          AS caught,
+           median(warning_days)::INT                         AS median_days,
+           min(warning_days)                                 AS shortest,
+           max(warning_days)                                 AS longest,
+           count(*) FILTER (WHERE warning_days < {TOO_LATE}) AS under_{TOO_LATE}_days
+    FROM backtest WHERE lost_revenue AND flagged
+""").show()
+
+print("\n5. Misses: churned or downsized with no flag, to judge one by one")
+con.sql("""
+    SELECT account_id, account_name, tier, outcome, renewal_date,
+           util_now AS util_now_pct
+    FROM backtest WHERE lost_revenue AND NOT flagged
+    ORDER BY tier, renewal_date
+""").show(max_rows=60)
+
+print("\n6. Calls: churn among flagged accounts, with and without a churn call")
+con.sql("""
+    SELECT CASE WHEN had_churn_call THEN 'churn call held' ELSE 'no churn call' END AS cs_action,
+           count(*) AS flagged_accounts,
+           format('{} ({}%)', count(*) FILTER (WHERE outcome = 'churned'),
+                  round(100.0 * count(*) FILTER (WHERE outcome = 'churned') / count(*))::INT) AS churned
+    FROM backtest WHERE flagged AND tier <> 'Self-service'
+    GROUP BY ALL ORDER BY 1
+""").show()
+
+print("Small groups: read the counts, not just the percentages. The outcomes are")
+print("generated, so section 6 shows the method, not proof that calls work.")

@@ -1,6 +1,6 @@
 # Data contract
 
-What the engine needs to run on someone else's book of business: five inputs,
+What the engine needs to run on someone else's book of business: six inputs,
 their columns, what each column means, and which flags stop working without it.
 Today `generate_events.py` writes all five. A real team would export them from
 their product analytics, CRM and CS tools instead, in this shape.
@@ -18,6 +18,7 @@ back into these inputs.
 | CS team | `data/cs_team.csv` | Yes, if any tier has people | Tasks can't name an owner or a manager; no escalations, no team report |
 | Engagement history | `data/engagement/*.jsonl` | No | No journeys, no time to action, no "last touch"; flags still work |
 | Onboarding holdout | `data/onboarding_holdout.csv` | No | Everyone gets onboarding emails; no welcomed vs. control report |
+| Renewal outcomes | `data/renewal_outcomes.csv` | No | No backtest (recall, precision, warning time) |
 
 ## 1. Product events
 
@@ -130,6 +131,18 @@ emails, so the welcomed vs. control report can measure the effect.
 account_id,held_out_since
 acc_074,2026-08-09
 ```
+
+## 6. Renewal outcomes (optional, for the backtest)
+
+What happened at each renewal: the CRM's closed renewals, exported. Without it
+the engine still runs; you just can't measure how well the flags predict.
+
+```csv
+account_id,renewal_date,outcome
+acc_003,2027-02-10,downsized
+```
+
+`outcome` is one of `renewed`, `expanded`, `downsized`, `churned`.
 
 ## What the engine writes
 
