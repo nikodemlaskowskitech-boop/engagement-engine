@@ -151,7 +151,10 @@ def add_views(con):
             CROSS JOIN as_of a
             LEFT JOIN done d    USING (account_id, flag, status)
             LEFT JOIN claimed c USING (account_id, flag, status)
-            LEFT JOIN (SELECT DISTINCT * FROM open_flags) o USING (account_id, flag, status)
+            -- a follow-up ("Shelfware (follow-up)") is resolved when its original flag is gone
+            LEFT JOIN (SELECT DISTINCT * FROM open_flags) o
+                   ON o.account_id = t.account_id AND o.flag = t.flag
+                  AND o.status = regexp_replace(t.status, ' \\(follow-up\\)$', '')
         """)
     else:   # actions.py hasn't run yet: no tasks
         con.sql("""CREATE VIEW action_status AS

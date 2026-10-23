@@ -84,7 +84,8 @@ One JSON event per line, one file per day in `data/events/`.
   with properties.owner_id (csm_*, pool_*, automated) and properties.topic
   (getting_started, onboarding_workshop, advanced_workshop, qbr, kickoff,
   check_in, churn_call, activation_call, growth_call, follow_up; from actions.py: welcome_pack,
-  invite_your_team, need_help_starting, use_case_inspiration). user_id = the customer user who
+  invite_your_team, need_help_starting, use_case_inspiration; follow-ups
+  invite_your_team_followup, need_help_starting_followup, customer_story). user_id = the customer user who
   responded or attended. context.source says who wrote it (cs_history from
   the generator, actions.py for new actions, slack for clicks). Slack clicks
   add task_claimed events and meeting_held with properties.outcome, .note
@@ -159,7 +160,7 @@ One JSON event per line, one file per day in `data/events/`.
   hard-coded. Update it whenever an input or a column changes.
 - `settings.toml` + `settings.py`: every threshold and time window in one
   place (activation, churn, expansion, QBR, journeys, team report, email
-  hour). Scripts read `SETTINGS[...]`; never hard-code a number in a script.
+  hour, follow-ups). Scripts read `SETTINGS[...]`; never hard-code a number in a script.
   Tiers, routing and the utilisation definition are still in the SQL (next:
   move them into settings; see DATA_CONTRACT.md).
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
@@ -253,6 +254,14 @@ One JSON event per line, one file per day in `data/events/`.
   card per task with buttons (via the bot token, one a second) instead of
   the digest. QBR first: churn/expansion rows of an account with a QBR in
   the next 30 days are logged "covered by the QBR" and named on its QBR task.
+  Follow-ups ([follow_ups] in settings): a programme flag (Stalled, Silent,
+  Shelfware) on Self-service or Scale still standing 30 days after the first
+  send gets one follow-up with a different angle (status "<status>
+  (follow-up)"), then stops. Self-service: an email; Scale: a task for the
+  Slack user who took the first one (never a new person; nobody took it =
+  the pool, visible to the manager). Fatigue cap: one automated email per
+  account per 14 days across all programmes; capped emails aren't logged,
+  so they go out on a later run.
   `none` and `report` rows aren't actions. The log only grows; delete it
   to start over.
 - `slack_loop.py`: shared Slack pieces (task cards, .env tokens, appending
