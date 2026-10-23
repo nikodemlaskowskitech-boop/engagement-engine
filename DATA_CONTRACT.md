@@ -100,6 +100,15 @@ Same JSON shape as the events, `event_type` = `engagement`. This is what CS did
 and how customers responded; the pipeline appends to it (emails it sends,
 Slack clicks), so it grows over time.
 
+This is usually the hardest input to get. In most companies the CRM holds it,
+but sales-shaped: emails auto-logged by a plugin, calls as generic "activities",
+no topic, no outcome. Good enough to start: **meetings and emails with account,
+date and owner**, plus a topic where one exists (often from the activity subject
+or type). Without a topic, journeys still work, but time to action can't tell a
+churn call from a check-in. Going forward, the pipeline's own actions and Slack
+clicks write proper engagement events, so the history gets better every day the
+engine runs.
+
 | event_name | properties | Meaning |
 | --- | --- | --- |
 | `email_sent` | owner_id, topic | An email went out (`automated` or a person) |
