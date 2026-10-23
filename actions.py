@@ -197,6 +197,8 @@ bot_token, demo_user = load_env("SLACK_BOT_TOKEN", "SLACK_DEMO_USER")
 with (DATA / "cs_team.csv").open(encoding="utf-8") as f:
     team = list(csv.DictReader(f))
 owner_names = {r["owner_id"]: r["owner_name"] for r in team}
+team_manager = {r["owner_id"]: r["manager"] for r in team}
+SLACK_DM_REASSIGNED = SETTINGS["slack"].get("dm_reassigned", False)
 pools = {r["owner_id"] for r in team if r["owner_type"] == "pool"}
 owner_names["cs_ops"] = "CS ops"
 owner_names["email"] = "Customer emails"
@@ -361,7 +363,20 @@ for k, (to, manager) in sorted(assigned.items()):
     task = dict(base, status=status, routed_to=to,
                 action=f"Given to you by {owner_names.get(manager, manager)} (was with {was}). "
                        + re.sub(r"^Given to you by .*?\)\. ", "", last_action.get(k, base["action"])))
-    new["card" if interactive(to) and bot_token else to].append(task)
+    # three audiences: the new owner (do it), the old owner (stop), and the new
+    # owner's manager when the task crosses teams (capacity)
+    giver, old_mgr = owner_names.get(manager, manager), team_manager.get(last_owner[k])
+    new_mgr = team_manager.get(to)
+    task["_notices"] = [(last_owner[k], f"No longer yours: {giver} gave *{base['account_name']}* "
+                                        f"({flag} {status}) to {owner_names.get(to, to)}. Nothing more to do on it.")]
+    if new_mgr and new_mgr != manager:
+        task["_notices"].append((new_mgr, f"FYI: {giver} gave your team member {owner_names.get(to, to)} "
+                                          f"*{base['account_name']}* ({flag} {status}), from {was}."))
+    if bot_token and SLACK_DM_REASSIGNED:
+        task["_dm"] = True                       # straight to the person, not the team channel
+        new["card"].append(task)
+    else:
+        new["card" if interactive(to) and bot_token else to].append(task)
     reassigned += 1
 
 # The QBR task names what it now covers, so the CSM sees it in one place
@@ -373,6 +388,7 @@ for tasks in new.values():
 # Do the actions: one Slack message per group, then log the group if it worked
 first_run = not LOG.exists()
 logged = 0
+notices = 0          # "no longer yours" and cross-team FYIs for reassigned tasks
 with LOG.open("a", newline="", encoding="utf-8") as f:
     writer = csv.DictWriter(f, fieldnames=COLUMNS)
     if first_run:
@@ -387,7 +403,10 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
             for t in tasks:
                 owner = owner_names.get(t["routed_to"], t["routed_to"])
                 try:
-                    client.chat_postMessage(channel=card_channel(t["routed_to"], demo_user or SETTINGS["slack"]["team_channel"]),
+                    # a reassigned task goes by DM (settings.toml [slack] dm_reassigned)
+                    channel = (demo_user if t.get("_dm") and demo_user
+                               else card_channel(t["routed_to"], demo_user or SETTINGS["slack"]["team_channel"]))
+                    client.chat_postMessage(channel=channel,
                                             blocks=card_blocks(t, owner, last_touch.get(t["account_id"])),
                                             text=f"{t['account_name']}: {t['flag']} {t['status']} for {owner}")
                 except SlackApiError as error:
@@ -401,6 +420,21 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
                                  "action": t["action"], "outcome": "card posted"})
                 f.flush()
                 posted += 1
+                # reassigned: tell the old owner to stop, and the other manager if it
+                # crossed teams. In the demo every DM goes to you, so each says who it's for
+                for who, text in t.get("_notices", []):
+                    sleep(1.1)
+                    try:
+                        client.chat_postMessage(channel=demo_user or SETTINGS["slack"]["team_channel"],
+                                                text=f"*For {owner_names.get(who, who)}* · {text}")
+                    except SlackApiError as error:
+                        print(f"  Slack notice failed for {t['account_id']} ({error.response['error']})")
+                        continue
+                    writer.writerow({"logged_on": run_date, "account_id": t["account_id"], "flag": t["flag"],
+                                     "status": t["status"], "routed_to": who, "channel": "notice",
+                                     "action": text, "outcome": "DM sent"})
+                    f.flush()
+                    notices += 1
                 sleep(1.1)                              # Slack allows about one message a second
             logged += posted
             print(f"  {'card':<6} {'Interactive owners':<20} {posted:>3}  task cards with buttons")
@@ -450,7 +484,8 @@ print(f"\nAction log, run date {run_date}")
 print(f"  New actions logged: {logged}")
 print(f"  Already done, skipped: {skipped}")
 if reassigned:
-    print(f"  Reassigned by a manager in the cockpit, sent to the new owner: {reassigned}")
+    print(f"  Reassigned by a manager in the cockpit, sent to the new owner: {reassigned}"
+          f" ({notices} notices to old owners and other managers)")
 if capped:
     print(f"  Emails held back by the {EMAIL_CAP_DAYS}-day cap (they go out on a later run): {capped}")
 if not (queue_hook and email_hook):
