@@ -1,0 +1,46 @@
+# One command for the whole pipeline: get the latest code, run every step in
+# order, and save all the output to data\last_run.txt (Claude reads it from
+# there, so nothing needs pasting).
+#
+#   .\run_all.ps1                 pull + flags, checks, journeys, reports, views
+#   .\run_all.ps1 -Regenerate     ...starting with fresh fake data (wipes the action log)
+#   .\run_all.ps1 -Actions        ...and post the new tasks to Slack at the end
+#
+# The Slack listener isn't included: it keeps running, so it gets its own
+# window (python listener.py).
+
+param([switch]$Regenerate, [switch]$Actions)
+
+Set-Location $PSScriptRoot                       # always run from the repo root
+$env:PYTHONIOENCODING = "utf-8"
+$log = Join-Path $PSScriptRoot "data\last_run.txt"
+New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
+"Run started $(Get-Date -Format 'yyyy-MM-dd HH:mm')" | Out-File $log -Encoding utf8
+
+# 1. The latest merged code
+git checkout main 2>&1 | Out-File $log -Append -Encoding utf8
+git pull 2>&1 | Out-File $log -Append -Encoding utf8
+"Code at: $(git log --oneline -1)" | Out-File $log -Append -Encoding utf8
+
+# 2. The pipeline, in the order the scripts depend on each other
+$steps = @()
+if ($Regenerate) { $steps += "generate_events.py" }
+$steps += "flags.py", "check_flags.py", "journeys.py", "team_report.py",
+          "onboarding_report.py", "export_views.py"
+if ($Actions) { $steps += "actions.py" }
+
+$python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"   # the project's own Python
+$ok = 0
+foreach ($step in $steps) {
+    "`n===== python $step =====" | Out-File $log -Append -Encoding utf8
+    Write-Host "Running $step ..."
+    & $python $step 2>&1 | ForEach-Object { "$_" } | Out-File $log -Append -Encoding utf8
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "$step failed. The details are in data\last_run.txt" -ForegroundColor Red
+        "FAILED: $step" | Out-File $log -Append -Encoding utf8
+        exit 1
+    }
+    $ok++
+}
+"`nDONE: $ok of $($steps.Count) steps" | Out-File $log -Append -Encoding utf8
+Write-Host "Done: $ok of $($steps.Count) steps. Output saved to data\last_run.txt" -ForegroundColor Green

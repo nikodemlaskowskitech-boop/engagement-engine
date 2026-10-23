@@ -10,7 +10,13 @@ with short comments, and prefer small steps he can review.
 
 ## Working rules
 
-- Never commit or push unless asked. Show the change and let him commit.
+- How we work (a low-stakes demo; keep Nikodem's effort minimal): Claude
+  writes the code, pushes a `claude/...` branch, opens a PR, checks it as
+  far as it can, then merges it itself. Never push to main directly, never
+  commit secrets. Nikodem doesn't review code; he runs `.\run_all.ps1`
+  when asked (pull + the whole pipeline), and Claude reads the output from
+  `data/last_run.txt` on his laptop. Ask him only for things only he can do:
+  Slack clicks, app settings, decisions about CS logic.
 - Windows + PowerShell. Activate the env with `.venv\Scripts\Activate.ps1`,
   run scripts from the repo root (paths are relative to it).
 - Pinned dependencies live in `requirements.txt`. Add, never overwrite.

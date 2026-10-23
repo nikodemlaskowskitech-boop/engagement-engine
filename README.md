@@ -28,7 +28,10 @@ Every flag shows the numbers behind it (for example *"Utilisation 52%, then
 
 ## Run it
 
-Windows / PowerShell, from the repo root:
+Windows / PowerShell, from the repo root. The quick way, after the one-time
+setup below: `.\run_all.ps1` pulls the latest code and runs everything in
+order (`-Regenerate` for fresh data, `-Actions` to post to Slack); the output
+goes to `data\last_run.txt`. Step by step:
 
 ```
 python -m venv .venv
