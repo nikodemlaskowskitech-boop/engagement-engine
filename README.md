@@ -14,6 +14,12 @@ scale ends up with a book of business it can't see. This engine joins usage
 and CS engagement into one view of the success book of business, and tells
 each CSM, pool and manager where to act.
 
+It doesn't replace CSMs. It lets a CS organisation scale: automation covers
+the many accounts that only need a nudge, so people's time goes where it
+changes the outcome. Think of it as an engagement funnel, measured at every
+stage: signal (flags) -> task (actions) -> action taken (action status, time
+to action) -> outcome at renewal (backtest).
+
 ## What it does today
 
 | Flag | Looks for | Who acts |
