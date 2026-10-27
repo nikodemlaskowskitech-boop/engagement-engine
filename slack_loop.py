@@ -48,9 +48,18 @@ def interactive(owner_id):
     return owner_id in SLACK["interactive_owners"]
 
 
+def dm_target(owner_id, demo_user):
+    """Where a DM for this owner goes: their own Slack user if settings.toml
+    [slack.users] knows them, otherwise the demo user (who plays everyone)."""
+    return SLACK.get("users", {}).get(owner_id) or demo_user
+
+
 def card_channel(owner_id, demo_user):
-    """DM owners' cards go to the demo user's DMs; everyone else's to the team channel."""
-    return demo_user if owner_id in SLACK["dm_owners"] else SLACK["team_channel"]
+    """Owners with a Slack user, and the demo's DM owners, get their cards as DMs;
+    everyone else's go to the team channel."""
+    if owner_id in SLACK.get("users", {}) or owner_id in SLACK["dm_owners"]:
+        return dm_target(owner_id, demo_user)
+    return SLACK["team_channel"]
 
 
 def flag_label(flag, status):
