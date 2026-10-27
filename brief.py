@@ -31,13 +31,16 @@ from pathlib import Path
 
 import anthropic
 
+from settings import SETTINGS
+
 sys.stdout.reconfigure(encoding="utf-8")
 
 REPO = Path(__file__).resolve().parent   # the repo root, wherever the terminal is
 
-MODEL = "claude-sonnet-5-5"
-PRICE_PER_MILLION = {"input": 2.00, "output": 10.00}   # USD, Claude Sonnet 5.5 list price
-MAX_OUTPUT_TOKENS = 1500
+LLM = SETTINGS["llm"]                     # model and price: settings.toml [llm]
+MODEL = LLM["model"]
+PRICE_PER_MILLION = {"input": LLM["price_input_per_million"], "output": LLM["price_output_per_million"]}
+MAX_OUTPUT_TOKENS = LLM["max_output_tokens"]
 
 SYSTEM_PROMPT = """You write one-page QBR preparation briefs for a Customer Success Manager.
 

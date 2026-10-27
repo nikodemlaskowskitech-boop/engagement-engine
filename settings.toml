@@ -75,7 +75,12 @@ email_cap_days = 14       # at most one automated email per account in this many
 handback_after_days = 5   # a named follow-up nobody picked up this long: the manager approves handing it back
 
 [slack]
-team_channel = "#cs-queue"                      # where task cards go
+# Everything tied to one Slack workspace lives here (secrets in .env). Moving to a
+# new workspace: install the app there, put its tokens and webhooks in .env
+# (SLACK_BOT_TOKEN, SLACK_APP_TOKEN, SLACK_WEBHOOK_QUEUE, SLACK_WEBHOOK_EMAIL,
+# SLACK_DEMO_USER), then change this section. No Slack name or ID is in the code.
+team_channel = "#cs-queue"                      # where task cards and digests go
+email_channel = "#email-preview"                # where simulated customer emails are previewed
 interactive_owners = ["pool_dach", "csm_anna", "mgr_sophie"]   # their tasks get cards with buttons
 dm_owners = ["csm_anna"]                        # ...sent as DMs to SLACK_DEMO_USER (you play Anna)
 # A task a manager reassigns in the cockpit goes as a DM to its new owner, and the
@@ -83,3 +88,16 @@ dm_owners = ["csm_anna"]                        # ...sent as DMs to SLACK_DEMO_U
 # demo every DM goes to SLACK_DEMO_USER; a real team maps owner_id to a Slack user.
 dm_reassigned = true
 cockpit_url = "https://claude.ai/artifact/LGt2Q5S98GeVDK3kNzrhph"   # Open timeline links here
+
+[slack.users]
+# owner_id -> their Slack member ID (profile > ⋮ > Copy member ID; not a secret).
+# Owners listed here get their own DMs; everyone else's DMs go to SLACK_DEMO_USER.
+# csm_tom = "U0000000000"
+
+[llm]
+# The model that writes the QBR briefs (brief.py) and its list price, for the cost line.
+# Phase 6 swaps the provider for Bedrock here, not in the code.
+model = "claude-sonnet-5-5"
+price_input_per_million = 2.00    # USD
+price_output_per_million = 10.00  # USD
+max_output_tokens = 1500

@@ -74,7 +74,7 @@ from time import sleep
 
 from cairnpath_db import connect
 from settings import SETTINGS
-from slack_loop import card_blocks, card_channel, interactive, load_env
+from slack_loop import card_blocks, card_channel, dm_target, interactive, load_env
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -360,18 +360,19 @@ for k, (to, manager) in sorted(assigned.items()):
     if base is None or last_owner.get(k) in (None, to):
         continue                    # flag gone, never sent, or already with the new owner
     was = owner_names.get(last_owner[k], last_owner[k])
+    giver = owner_names.get(manager, manager).removesuffix(" (manager)")
+    what = status if flag.lower() in status.lower() else f"{flag} {status}"   # not "qbr QBR coming up"
     task = dict(base, status=status, routed_to=to,
-                action=f"Given to you by {owner_names.get(manager, manager)} (was with {was}). "
+                action=f"Given to you by {giver} (was with {was}). "
                        + re.sub(r"^Given to you by .*?\)\. ", "", last_action.get(k, base["action"])))
     # three audiences: the new owner (do it), the old owner (stop), and the new
     # owner's manager when the task crosses teams (capacity)
-    giver, old_mgr = owner_names.get(manager, manager), team_manager.get(last_owner[k])
     new_mgr = team_manager.get(to)
     task["_notices"] = [(last_owner[k], f"No longer yours: {giver} gave *{base['account_name']}* "
-                                        f"({flag} {status}) to {owner_names.get(to, to)}. Nothing more to do on it.")]
+                                        f"({what}) to {owner_names.get(to, to)}. Nothing more to do on it.")]
     if new_mgr and new_mgr != manager:
         task["_notices"].append((new_mgr, f"FYI: {giver} gave your team member {owner_names.get(to, to)} "
-                                          f"*{base['account_name']}* ({flag} {status}), from {was}."))
+                                          f"*{base['account_name']}* ({what}), from {was}."))
     if bot_token and SLACK_DM_REASSIGNED:
         task["_dm"] = True                       # straight to the person, not the team channel
         new["card"].append(task)
@@ -404,7 +405,7 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
                 owner = owner_names.get(t["routed_to"], t["routed_to"])
                 try:
                     # a reassigned task goes by DM (settings.toml [slack] dm_reassigned)
-                    channel = (demo_user if t.get("_dm") and demo_user
+                    channel = (dm_target(t["routed_to"], demo_user) if t.get("_dm") and demo_user
                                else card_channel(t["routed_to"], demo_user or SETTINGS["slack"]["team_channel"]))
                     client.chat_postMessage(channel=channel,
                                             blocks=card_blocks(t, owner, last_touch.get(t["account_id"])),
@@ -425,8 +426,11 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
                 for who, text in t.get("_notices", []):
                     sleep(1.1)
                     try:
-                        client.chat_postMessage(channel=demo_user or SETTINGS["slack"]["team_channel"],
-                                                text=f"*For {owner_names.get(who, who)}* · {text}")
+                        client.chat_postMessage(channel=dm_target(who, demo_user) or SETTINGS["slack"]["team_channel"],
+                                                # with no Slack user of their own, it lands with the demo
+                                                # user, so it says who it's for
+                                                text=(text if who in SETTINGS["slack"].get("users", {})
+                                                      else f"*For {owner_names.get(who, who)}* · {text}"))
                     except SlackApiError as error:
                         print(f"  Slack notice failed for {t['account_id']} ({error.response['error']})")
                         continue
@@ -490,6 +494,6 @@ if capped:
     print(f"  Emails held back by the {EMAIL_CAP_DAYS}-day cap (they go out on a later run): {capped}")
 if not (queue_hook and email_hook):
     print("  Slack: no webhook in .env for "
-          + " and ".join(n for n, h in (("#cs-queue", queue_hook), ("#email-preview", email_hook)) if not h)
+          + " and ".join(n for n, h in ((SETTINGS["slack"]["team_channel"], queue_hook), (SETTINGS["slack"]["email_channel"], email_hook)) if not h)
           + ", so those actions are only logged")
 print(f"\nSaved to {LOG.relative_to(REPO)}")
