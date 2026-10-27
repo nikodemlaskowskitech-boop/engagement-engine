@@ -14,9 +14,16 @@
   --ink-2: #4b5753;         /* secondary text */
   --ink-3: #7b8682;         /* muted: axes, captions */
   --rule: #dfe3e1;          /* hairlines, grid */
+  --neutral-fill: #c9cfcc;  /* "nothing to flag" in charts: visible, but recedes */
   --accent: #1f6f5c;        /* cairn green: selection, links, focus */
   --accent-soft: #e3efeb;
-  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;   /* touch types */
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;   /* categories (fixed order) */
+  /* Palette rules (validated with the dataviz validator, light and dark):
+     - status colours (good, warning, critical) only for state; amber is always a warning
+     - stacked categories: blue, aqua, violet in that order (never blue next to violet:
+       they read as one); a neutral slate between them is fine
+     - "nothing to flag" is --neutral-fill, never the hairline colour
+     - stacked segments are separated by a 2px gap in the surface colour */
   --seq-0: #edf3fb; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #5598e7; --seq-4: #256abf; --seq-5: #104281;
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
   --good-ink: #0b6b1f; --warning-ink: #8a5a00; --serious-ink: #a4461f; --critical-ink: #b02a2a;
@@ -28,7 +35,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #111715; --surface: #18201d; --ink: #e9eeec; --ink-2: #b4bfbb; --ink-3: #85918c;
-    --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32;
+    --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32; --neutral-fill: #4a5652;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
     --seq-0: #1b2530; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
     --good-ink: #6fd16f; --warning-ink: #fab219; --serious-ink: #f0a07f; --critical-ink: #f08080;
@@ -38,7 +45,7 @@
 }
 :root[data-theme="dark"] {
   --bg: #111715; --surface: #18201d; --ink: #e9eeec; --ink-2: #b4bfbb; --ink-3: #85918c;
-  --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32;
+  --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32; --neutral-fill: #4a5652;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
   --seq-0: #1b2530; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
   --good-ink: #6fd16f; --warning-ink: #fab219; --serious-ink: #f0a07f; --critical-ink: #f08080;
@@ -666,7 +673,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   function pressChips(id) { document.querySelectorAll("#tl-picks .chip").forEach((c) => c.setAttribute("aria-pressed", String(c.id === "pick-" + id))); }
 
   // ---------------------------------------------------------------- onboarding
-  const GROUPS = [{ key: "welcomed", name: "Welcomed", color: "var(--s1)" }, { key: "control (no email)", name: "Control (no email)", color: "var(--s2)" }];
+  const GROUPS = [{ key: "welcomed", name: "Welcomed", color: "var(--s1)" }, { key: "control (no email)", name: "Control (no email)", color: "var(--ink-3)" }];
   for (const g of GROUPS) { const s = document.createElement("span"); s.append(legendSwatch("circle", g.color), g.name); $("ob-legend").appendChild(s); }
   let obTier = "all";
   document.querySelectorAll("#ob-tier button").forEach((b) => b.addEventListener("click", () => {
@@ -774,7 +781,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         const cx = (a.call_date ? X(Math.min(a.days_to_call, maxD)) : noCallX) + (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 8;
         const isGrowth = a.flag === "expansion";
         const m = a.call_date
-          ? el("circle", { cx, cy, r: 4.5, fill: isGrowth ? "var(--s3)" : "var(--s1)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg)
+          ? el("circle", { cx, cy, r: 4.5, fill: isGrowth ? "var(--good)" : "var(--s1)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg)
           : el("circle", { cx, cy, r: 4.5, fill: "var(--surface)", stroke: "var(--critical)", "stroke-width": 2 }, svg);
         const name = byId[a.account_id]?.account_name || a.account_id;
         hover(m, `<b>${esc(name)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>${a.call_date ? (a.via === "qbr" ? "Covered by the QBR on " + fmt(a.call_date) + ", " + a.days_to_call + " days later" : a.called_early ? "Called " + fmt(a.call_date) + ", before the signal" : "Called " + fmt(a.call_date) + ", " + a.days_to_call + " days later") : "No call yet"}${a.escalated ? "<br>Escalated to the manager" : ""}`);
@@ -783,7 +790,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       }
     });
     $("tm-legend").innerHTML = "";
-    for (const [shape, color, name] of [["circle", "var(--s1)", "Churn Act, called"], ["circle", "var(--s3)", "Expansion Act, called"], ["circle-open", "var(--critical)", "No call yet"]]) {
+    for (const [shape, color, name] of [["circle", "var(--s1)", "Churn Act, called"], ["circle", "var(--good)", "Expansion Act, called"], ["circle-open", "var(--critical)", "No call yet"]]) {
       const s = document.createElement("span"); s.append(legendSwatch(shape, color), name); $("tm-legend").appendChild(s);
     }
     { const s = document.createElement("span"); s.textContent = "Click a dot to open its timeline."; $("tm-legend").appendChild(s); }
@@ -906,7 +913,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const ownerOf = (id) => esc(byId[id] ? (byId[id].owner || "None") : "");
   const churnFlag = (a) => (a.flags.find((f) => f.flag === "churn") || null);
   // one meaning per colour: red = act now, amber = needs attention, neutrals for the rest
-  const STATUS_COLOR = { Act: "var(--critical)", Watch: "var(--warning)", Shelfware: "var(--ink-3)", "No churn flag": "var(--rule)" };
+  const STATUS_COLOR = { Act: "var(--critical)", Watch: "var(--warning)", Shelfware: "var(--ink-3)", "No churn flag": "var(--neutral-fill)" };
 
   // ---------------------------------------------------------------- overview: the sieve
   const FAST = D.settings.fast_days;
@@ -978,7 +985,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         const c = k.items.filter((a) => a.churn === s).length;
         if (!c) continue;
         const h = ((H - B) * c) / maxN; y -= h;
-        el("rect", { x, y, width: bw, height: h, fill: STATUS_COLOR[s] }, g);
+        el("rect", { x, y, width: bw, height: Math.max(1, h - 2), fill: STATUS_COLOR[s] }, g);   // 2px gap below
       }
       el("text", { x: x + bw / 2, y: y - 6, "text-anchor": "middle", class: "val" }, g).textContent = k.items.length;
       const from = new Date(k.from * 864e5).toISOString().slice(0, 10), to = new Date(k.to * 864e5).toISOString().slice(0, 10);
@@ -1200,8 +1207,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const accountsOf = (o) => D.accounts.filter((a) => a.owner_id === o);
   const peersOf = (o) => D.team.filter((t) => t.owner_type === (teamById[o] || {}).owner_type).map((t) => t.owner_id);
   const MEET_KIND = (topic) => topic === "qbr" ? "qbr" : ["churn_call", "growth_call", "activation_call", "follow_up"].includes(topic) ? "call" : "other";
-  const MEET = [{ k: "qbr", name: "QBR", color: "var(--s1)" }, { k: "call", name: "Churn, growth or activation call", color: "var(--s4)" }, { k: "other", name: "Kickoff, check-in, other", color: "var(--seq-2)" }];
-  const PIPE = [{ k: "qbr", name: "QBR booked", color: "var(--s1)" }, { k: "renewal", name: "Renewal", color: "var(--s4)" }, { k: "followup", name: "Follow-up due", color: "var(--seq-2)" }];
+  // one colour per meaning on this page: QBR blue, other meetings aqua, problem calls and
+  // follow-ups violet; a renewal is a date, not a meeting: slate. Never blue next to violet.
+  const MEET = [{ k: "qbr", name: "QBR", color: "var(--s1)" }, { k: "other", name: "Kickoff, check-in, other", color: "var(--s3)" }, { k: "call", name: "Churn, growth, activation call or follow-up", color: "var(--s4)" }];
+  const PIPE = [{ k: "qbr", name: "QBR booked", color: "var(--s1)" }, { k: "renewal", name: "Renewal", color: "var(--ink-3)" }, { k: "followup", name: "Follow-up due", color: "var(--s4)" }];
   const lastTouch = (id) => { const t = touchesBy[id]; return t && t.length ? t[t.length - 1] : null; };
   const met30 = (id) => (touchesBy[id] || []).some((t) => t.event === "meeting_held" && day(t.date) > RUN - 31);
   const fmtFull = (s) => fmt(s) + " " + s.slice(0, 4);
@@ -1283,7 +1292,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     el("text", { x: L - 4, y: 10, "text-anchor": "end", class: "val" }, svg).textContent = top;
     counts.forEach((c, i) => {
       let y = H; const total = c.qbr + c.call + c.other;
-      for (const m of MEET) { if (!c[m.k]) continue; const h = ((H - 14) * c[m.k]) / top; y -= h; el("rect", { x: L + i * bw + 3, y, width: bw - 6, height: h, fill: m.color }, svg); }
+      for (const m of MEET) { if (!c[m.k]) continue; const h = ((H - 14) * c[m.k]) / top; y -= h; el("rect", { x: L + i * bw + 3, y, width: bw - 6, height: Math.max(1, h - 2), fill: m.color }, svg); }
       const hit = el("rect", { x: L + i * bw, y: 0, width: bw, height: H, fill: "transparent" }, svg);
       hover(hit, `<b>Week ending ${fmt(weeks[i])}</b><br>${plural(total, "meeting")}` + MEET.map((m) => c[m.k] ? `<br>${m.name}: ${c[m.k]}` : "").join(""));
     });
@@ -1360,7 +1369,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     };
     wk.forEach((w, i) => {
       let y = PH; const g = el("g", { style: "cursor:pointer" }, psvg);
-      for (const p of PIPE) { const n = w.items.filter((it) => it.k === p.k).length; if (!n) continue; const h = ((PH - 16) * n) / ptop; y -= h; el("rect", { x: PL + i * pbw + 8, y, width: pbw - 16, height: h, fill: p.color }, g); }
+      for (const p of PIPE) { const n = w.items.filter((it) => it.k === p.k).length; if (!n) continue; const h = ((PH - 16) * n) / ptop; y -= h; el("rect", { x: PL + i * pbw + 8, y, width: pbw - 16, height: Math.max(1, h - 2), fill: p.color }, g); }
       el("text", { x: PL + i * pbw + pbw / 2, y: y - 5, "text-anchor": "middle", class: "val" }, g).textContent = w.items.length || "";
       el("rect", { x: PL + i * pbw, y: 0, width: pbw, height: PH, fill: "transparent" }, g);
       el("text", { x: PL + i * pbw + pbw / 2, y: PH + 16, "text-anchor": "middle" }, psvg).textContent = fmt(new Date(w.from * 864e5).toISOString().slice(0, 10));
