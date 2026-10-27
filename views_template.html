@@ -747,7 +747,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const ownerRows = teamRows(all);
     const csm = ownerRows.filter((r) => r.o.owner_type === "csm"), pool = ownerRows.filter((r) => r.o.owner_type === "pool");
     const sum = (rs, k) => rs.reduce((s, r) => s + r[k], 0);
-    $("tm-finding").textContent = !all.length ? `${segName()}: no account at churn or expansion Act with a CSM or a pool.` : `${segOn() ? segName() + ": " : ""}CSMs called ${sum(csm, "called")} of ${sum(csm, "n")} Act accounts; the Scale pools called ${sum(pool, "called")} of ${sum(pool, "n")}. ${all.length - called.length} accounts that need action have had no call.`;
+    $("tm-finding").textContent = !all.length ? `${segName()}: no account at churn or expansion Act with a CSM or a pool.` : `${segOn() ? segName() + ": " : ""}${all.length - called.length} of ${all.length} Act accounts have had no call: ${sum(pool, "n") - sum(pool, "called")} with the Scale pools, ${sum(csm, "n") - sum(csm, "called")} with named CSMs.`;
 
     // dot plot: one row per owner, days 0..20, plus a "no call" column
     const host = $("tm-dots"); host.innerHTML = "";
@@ -791,7 +791,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // owner table
     const head = `<tr><th>Owner</th><th class="r">Act</th><th class="r">Called</th><th class="r">Median days</th><th class="r">Escalated</th></tr>`;
     const line = (r) => `<tr><td>${esc(r.o.owner_name)}</td><td class="r num">${r.n}</td><td class="r num${r.called < r.n ? " bad" : ""}">${r.called} (${pct(r.called, r.n)}%)</td><td class="r num">${r.med == null ? "–" : r.med}</td><td class="r num">${r.esc || "–"}</td></tr>`;
-    $("tm-table").innerHTML = head + `<tr class="group"><td colspan="5">Named CSMs</td></tr>` + csm.map(line).join("") + `<tr class="group"><td colspan="5">Scale pools</td></tr>` + pool.map(line).join("");
+    // each group ends with its median, so every owner's number has a reference
+    const medRow = (rs) => { if (rs.length < 2) return ""; const m = (f) => { const v = median(rs.map(f).filter((x) => x != null)); return v == null ? "–" : Math.round(v * 10) / 10; };
+      return `<tr><td><small>Median</small></td><td class="r num"><small>${m((r) => r.n)}</small></td><td class="r num"><small>${m((r) => pct(r.called, r.n))}%</small></td><td class="r num"><small>${m((r) => r.med)}</small></td><td class="r num"><small>${m((r) => r.esc)}</small></td></tr>`; };
+    $("tm-table").innerHTML = head + `<tr class="group"><td colspan="5">Named CSMs</td></tr>` + csm.map(line).join("") + medRow(csm) + `<tr class="group"><td colspan="5">Scale pools</td></tr>` + pool.map(line).join("") + medRow(pool);
 
     // meetings per week heat grid
     const wh = $("tm-weeks"); wh.innerHTML = "";
@@ -882,13 +885,18 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // A clickable list under a chart: the accounts behind a bar or a cell. A row
   // opens that account's timeline, so every number can be checked by hand.
   function openAccount(id) { sel.value = id; drawTimeline(id); pressChips(id); show("timeline"); window.scrollTo(0, 0); }
-  function accountList(host, titleEl, title, items, cols) {
+  // short = true for the list a view opens with: two example rows and "View all (n)"
+  // (a summary, not a dump); a click on a bar or cell asks for the list, so it gets all of it
+  function accountList(host, titleEl, title, items, cols, short) {
     titleEl.textContent = `${title}: ${items.length} account${items.length === 1 ? "" : "s"}`;
     if (!items.length) { host.innerHTML = '<p class="note">No accounts here.</p>'; return; }
     const head = cols.map((c) => `<th${c.r ? ' class="r"' : ""}>${c.label}</th>`).join("");
-    const body = items.map((it) => `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` +
+    const body = (short ? items.slice(0, 2) : items).map((it) => `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` +
       cols.map((c) => `<td${c.r ? ' class="r num"' : ""}>${c.get(it)}</td>`).join("") + "</tr>").join("");
-    host.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+    host.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` +
+      (short && items.length > 2 ? `<button class="link" data-all>View all (${items.length})</button>` : "");
+    const all = host.querySelector("[data-all]");
+    if (all) all.addEventListener("click", () => accountList(host, titleEl, title, items, cols, false));
     host.querySelectorAll("tr.click").forEach((tr) => {
       tr.addEventListener("click", () => openAccount(tr.dataset.id));
       tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); });
@@ -897,7 +905,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const nameOf = (id) => esc(byId[id] ? byId[id].account_name : id);
   const ownerOf = (id) => esc(byId[id] ? (byId[id].owner || "None") : "");
   const churnFlag = (a) => (a.flags.find((f) => f.flag === "churn") || null);
-  const STATUS_COLOR = { Act: "var(--critical)", Shelfware: "var(--warning)", Watch: "var(--serious)", "No churn flag": "var(--seq-2)" };
+  // one meaning per colour: red = act now, amber = needs attention, neutrals for the rest
+  const STATUS_COLOR = { Act: "var(--critical)", Watch: "var(--warning)", Shelfware: "var(--ink-3)", "No churn flag": "var(--rule)" };
 
   // ---------------------------------------------------------------- overview: the sieve
   const FAST = D.settings.fast_days;
@@ -905,7 +914,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const atAct = (r) => person(r) && r.status === "Act";
   const STAGES = [
     { key: "all", label: "Churn signals", depth: 0, test: () => true },
-    { key: "auto", label: "To automation (Self-service)", depth: 1, parent: "all", test: (r) => !person(r), color: "var(--s3)" },
+    { key: "auto", label: "To automation (Self-service)", depth: 1, parent: "all", test: (r) => !person(r) },
     { key: "person", label: "To a person (Scale, Enterprise)", depth: 1, parent: "all", test: person },
     { key: "act", label: "At Act: a call is needed", depth: 2, parent: "person", test: atAct },
     { key: "nocall", label: "Not called yet", depth: 3, parent: "act", test: (r) => atAct(r) && !r.call_date, color: "var(--critical)" },
@@ -920,16 +929,18 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     { label: "Why", get: (r) => esc(r.reasons) },
     { label: "Called", r: true, get: (r) => r.call_date ? `${fmt(r.call_date)} <small>(${r.days_to_call} d)</small>` : "—" },
   ];
-  function listStage(st) {
+  function listStage(st, short) {
     const items = D.churn_signals.filter((r) => st.test(r) && inSegId(r.account_id));
-    accountList($("ov-list"), $("ov-list-title"), st.label, items, SIG_COLS);
+    accountList($("ov-list"), $("ov-list-title"), st.label, items, SIG_COLS, short);
     document.querySelectorAll("#ov-sieve g.stage").forEach((g) => g.setAttribute("opacity", g.dataset.key === st.key ? 1 : 0.55));
   }
   function drawSieve() {
     const S = D.churn_signals.filter((r) => inSegId(r.account_id)), total = S.length || 1, n = {};
     for (const st of STAGES) n[st.key] = S.filter(st.test).length;
     const act = n.act, fast = n.fast;
-    $("ov-finding").textContent = `${segOn() ? segName() + ": " : ""}${S.length} churn signals: the sieve sent ${n.auto} (${pct(n.auto, S.length)}%) to automation and ${n.person} to people. Of the ${act} that needed a call, ${n.called} got one, ${fast} within ${FAST} days.`;
+    $("ov-finding").textContent = act
+      ? `${segOn() ? segName() + ": " : ""}${n.nocall} of the ${act} accounts that need a call (${pct(n.nocall, act)}%) haven't had one yet.`
+      : `${segOn() ? segName() + ": " : ""}no account at Act needs a call.`;
     const host = $("ov-sieve"); host.innerHTML = "";
     const W = 880, LBL = 300, BAR = W - LBL - 150, RH = 34;
     const svg = el("svg", { viewBox: `0 0 ${W} ${STAGES.length * RH + 6}`, role: "img", "aria-label": "Engagement sieve" }, host);
@@ -943,7 +954,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       g.addEventListener("click", () => listStage(st));
       hover(g, `<b>${esc(st.label)}</b><br>${n[st.key]} accounts${st.parent ? `, ${pct(n[st.key], n[st.parent])}% of the stage above` : ""}<br>Click to list them`);
     });
-    listStage(STAGES.find((s) => s.key === "nocall"));
+    listStage(STAGES.find((s) => s.key === "nocall"), true);
   }
 
   // ---------------------------------------------------------------- overview: renewals ahead
@@ -1003,7 +1014,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     { label: "Warning", r: true, get: (r) => (r.flagged && r.warning_days != null ? `${r.warning_days} d` : "—") },
     { label: "Usage now", r: true, get: (r) => (r.util_now != null ? `${Math.round(r.util_now)}%` : "—") },
   ];
-  function listOutcomes(title, items) { accountList($("oc-list"), $("oc-list-title"), title, items, OUT_COLS); }
+  function listOutcomes(title, items, short) { accountList($("oc-list"), $("oc-list-title"), title, items, OUT_COLS, short); }
   function drawOutcomes() {
     const R = D.renewals.filter((r) => inSegId(r.account_id)), LATE = D.settings.too_late_days;
     $("oc-late").textContent = LATE;
@@ -1017,9 +1028,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const tp = R.filter((r) => r.flagged && r.lost_revenue), fn = R.filter((r) => !r.flagged && r.lost_revenue);
     const fp = R.filter((r) => r.flagged && !r.lost_revenue), tn = R.filter((r) => !r.flagged && !r.lost_revenue);
     const warn = tp.map((r) => r.warning_days).filter((w) => w != null), med = warn.length ? Math.round(median(warn)) : null;
-    const missesLookedFine = fn.every((r) => r.util_now == null || r.util_now >= D.settings.churn_line);
-    $("oc-finding").textContent = `${segOn() ? segName() + ": the" : "The"} churn flags caught ${tp.length} of the ${lost.length} accounts that churned or shrank at renewal, a median of ${med} days before.` +
-      (fn.length && missesLookedFine ? ` All ${fn.length} misses were accounts whose usage looked fine.` : "");
+    $("oc-finding").textContent = `${segOn() ? segName() + ": the" : "The"} churn flags caught ${tp.length} of the ${lost.length} accounts that churned or shrank at renewal (${pct(tp.length, lost.length)}%), a median of ${med} days before.`;
     const stats = [
       ["Caught (recall)", `${tp.length} <small>of ${lost.length} · ${pct(tp.length, lost.length)}%</small>`],
       ["Right when flagged (precision)", `${tp.length} <small>of ${flagged.length} · ${pct(tp.length, flagged.length)}%</small>`],
@@ -1057,7 +1066,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("oc-calls").innerHTML = `<table><thead><tr><th>Act accounts</th><th class="r">Accounts</th><th class="r">Churned</th><th class="r">Kept whole</th></tr></thead><tbody>` +
       rowsC.map(([k, xs]) => `<tr class="click" data-k="${k}"><td>${k}</td><td class="r num">${xs.length}</td><td class="r num">${xs.filter((r) => r.outcome === "churned").length} (${pct(xs.filter((r) => r.outcome === "churned").length, xs.length)}%)</td><td class="r num">${xs.filter((r) => !r.lost_revenue).length} (${pct(xs.filter((r) => !r.lost_revenue).length, xs.length)}%)</td></tr>`).join("") + "</tbody></table>";
     document.querySelectorAll("#oc-calls tr.click").forEach((tr) => tr.addEventListener("click", () => listOutcomes(tr.dataset.k, rowsC.find(([k]) => k === tr.dataset.k)[1])));
-    listOutcomes("Missed", fn);
+    listOutcomes("Missed", fn, true);
   }
 
   // ---------------------------------------------------------------- tasks: the manager's queue
