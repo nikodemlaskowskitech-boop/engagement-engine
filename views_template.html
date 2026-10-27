@@ -218,7 +218,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <p class="note">Each bar is a share of all churn signals; the figure on the right is its share of the stage above. "Called" counts a churn call, or a QBR in the 30 days after the signal.</p>
       </div>
       <div class="panel">
-        <h2>Renewals in the next 180 days, by today's churn flag</h2>
+        <h2>Renewals at churn risk in the next 180 days</h2>
         <div id="ov-renewals"></div>
         <div class="legend" id="ov-ren-legend"></div>
         <p class="note">CRM renewal dates and today's flags only: what actually happened is on the "Did it work?" tab.</p>
@@ -975,19 +975,24 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       buckets[b].items.push({ ...a, churn: cf ? cf.status : "No churn flag", why: cf ? cf.reasons : "" });
     }
     const host = $("ov-renewals"); host.innerHTML = "";
-    const W = 880, H = 190, B = 30, L = 40, cw = (W - L) / 6, maxN = Math.max(1, ...buckets.map((k) => k.items.length));
+    // the bars show only renewals with a churn flag, on their own scale; the healthy majority
+    // would otherwise fill 85% of every bar. "of N renewing" above each bar keeps the reference.
+    const risky = (k) => k.items.filter((a) => a.churn !== "No churn flag");
+    const W = 880, H = 190, B = 34, L = 40, cw = (W - L) / 6, maxN = Math.max(1, ...buckets.map((k) => risky(k).length));
     const svg = el("svg", { viewBox: `0 0 ${W} ${H + 40}`, role: "img", "aria-label": "Renewals by month and flag" }, host);
     buckets.forEach((k, i) => {
       const x = L + i * cw + 14, bw = cw - 28;
       let y = H;
       const g = el("g", { style: "cursor:pointer" }, svg);
-      for (const s of REN_ORDER) {
+      for (const s of REN_ORDER.filter((x) => x !== "No churn flag")) {
         const c = k.items.filter((a) => a.churn === s).length;
         if (!c) continue;
         const h = ((H - B) * c) / maxN; y -= h;
         el("rect", { x, y, width: bw, height: Math.max(1, h - 2), fill: STATUS_COLOR[s] }, g);   // 2px gap below
       }
-      el("text", { x: x + bw / 2, y: y - 6, "text-anchor": "middle", class: "val" }, g).textContent = k.items.length;
+      el("text", { x: x + bw / 2, y: y - 20, "text-anchor": "middle", class: "val" }, g).textContent = risky(k).length;
+      el("text", { x: x + bw / 2, y: y - 6, "text-anchor": "middle" }, g).textContent = `of ${k.items.length} renewing`;
+      el("rect", { x, y: 0, width: bw, height: H, fill: "transparent" }, g);      // the whole column is clickable
       const from = new Date(k.from * 864e5).toISOString().slice(0, 10), to = new Date(k.to * 864e5).toISOString().slice(0, 10);
       el("text", { x: x + bw / 2, y: H + 18, "text-anchor": "middle" }, svg).textContent = `${fmt(from)} – ${fmt(to)}`;
       const counts = REN_ORDER.map((s) => `${s}: ${k.items.filter((a) => a.churn === s).length}`).join("<br>");
@@ -1006,9 +1011,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     });
     el("line", { x1: L, x2: W, y1: H, y2: H, stroke: "var(--rule)" }, svg);
     const lg = $("ov-ren-legend"); lg.innerHTML = "";
-    for (const s of REN_ORDER) {
+    for (const s of REN_ORDER.filter((x) => x !== "No churn flag")) {
       const sp = document.createElement("span"); sp.append(legendSwatch("square", STATUS_COLOR[s]), s); lg.append(sp);
     }
+    { const sp = document.createElement("span"); sp.textContent = "Bars: renewals with a churn flag. Click a month to list all its renewals, risk first."; lg.append(sp); }
   }
 
   // ---------------------------------------------------------------- did it work? (backtest)
