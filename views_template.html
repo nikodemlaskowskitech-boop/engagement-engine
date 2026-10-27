@@ -15,13 +15,15 @@
   --ink-3: #7b8682;         /* muted: axes, captions */
   --rule: #dfe3e1;          /* hairlines, grid */
   --neutral-fill: #c9cfcc;  /* "nothing to flag" in charts: visible, but recedes */
+  --routine-1: #4f9a90; --routine-2: #a8d2cb;   /* routine work in charts (teal, two steps) */
   --accent: #1f6f5c;        /* cairn green: selection, links, focus */
   --accent-soft: #e3efeb;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;   /* categories (fixed order) */
   /* Palette rules (validated with the dataviz validator, light and dark):
      - status colours (good, warning, critical) only for state; amber is always a warning
      - stacked categories: one highlight colour (violet) for what needs attention, the
-       routine in two neutrals (slate, light grey); never blue next to violet
+       routine in two teal steps (--routine-1, --routine-2); never blue next to violet.
+       Greys are only for "nothing to flag": dark grey on a dark surface disappears
      - "nothing to flag" is --neutral-fill, never the hairline colour
      - stacked segments are separated by a 2px gap in the surface colour */
   --seq-0: #edf3fb; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #5598e7; --seq-4: #256abf; --seq-5: #104281;
@@ -35,7 +37,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #111715; --surface: #18201d; --ink: #e9eeec; --ink-2: #b4bfbb; --ink-3: #85918c;
-    --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32; --neutral-fill: #4a5652;
+    --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32; --neutral-fill: #4a5652; --routine-1: #52a99d; --routine-2: #2c5c56;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
     --seq-0: #1b2530; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
     --good-ink: #6fd16f; --warning-ink: #fab219; --serious-ink: #f0a07f; --critical-ink: #f08080;
@@ -45,7 +47,7 @@
 }
 :root[data-theme="dark"] {
   --bg: #111715; --surface: #18201d; --ink: #e9eeec; --ink-2: #b4bfbb; --ink-3: #85918c;
-  --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32; --neutral-fill: #4a5652;
+  --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32; --neutral-fill: #4a5652; --routine-1: #52a99d; --routine-2: #2c5c56;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
   --seq-0: #1b2530; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
   --good-ink: #6fd16f; --warning-ink: #fab219; --serious-ink: #f0a07f; --critical-ink: #f08080;
@@ -244,7 +246,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         </div>
         <div class="grid2">
           <div class="panel">
-            <h2>2. Engagement: meetings per week</h2>
+            <h2>2. Engagement: meetings per week, looking back 13 weeks</h2>
             <p class="finding" style="font-size:1rem" id="mb-eng-finding"></p>
             <div id="mb-eng-chart"></div>
             <div class="legend" id="mb-eng-legend"></div>
@@ -262,13 +264,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <p class="note">Action planned needs a next step with a date on each account; none are recorded yet. Growth is sorted by renewal date until accounts carry ARR.</p>
         </div>
         <div class="panel">
-          <h2>4. Engagement pipeline: the next 8 weeks</h2>
+          <h2>4. Engagement pipeline: looking forward 8 weeks</h2>
           <p class="finding" style="font-size:1rem" id="mb-pipe-finding"></p>
           <div id="mb-pipe"></div>
           <div class="legend" id="mb-pipe-legend"></div>
           <h2 id="mb-pipe-title" style="margin-top:14px">Click a week to list it</h2>
           <div class="tablewrap" id="mb-pipe-list"></div>
-          <p class="note">Booked: QBRs and renewals from the CRM, and follow-ups the engine will raise if the flag still stands. Watch accounts may turn into calls, so they're counted beside the chart, not in it.</p>
+          <p class="note">Weeks start the day after the latest data (the demo's "today"); section 2 looks back from the same day. Booked: QBRs and renewals from the CRM, and follow-ups the engine will raise if the flag still stands. Watch accounts may turn into calls, so they're counted beside the chart, not in it.</p>
         </div>
       </div>
     </section>
@@ -1217,11 +1219,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const peersOf = (o) => D.team.filter((t) => t.owner_type === (teamById[o] || {}).owner_type).map((t) => t.owner_id);
   const MEET_KIND = (topic) => topic === "qbr" ? "qbr" : ["churn_call", "growth_call", "activation_call", "follow_up"].includes(topic) ? "call" : "other";
   // one colour per meaning on this page: QBR blue, other meetings aqua, problem calls and
-  // follow-ups violet; a renewal is a date, not a meeting: slate. Never blue next to violet.
+  // follow-ups violet; routine in two teal steps. Never blue next to violet.
   // calm on dark and light: one highlight colour for what needs a conversation (problem calls,
   // follow-ups), two neutrals for the routine cadence. Order keeps violet between the greys.
-  const MEET = [{ k: "qbr", name: "QBR", color: "var(--ink-3)" }, { k: "call", name: "Churn, growth, activation call or follow-up", color: "var(--s4)" }, { k: "other", name: "Kickoff, check-in, other", color: "var(--neutral-fill)" }];
-  const PIPE = [{ k: "qbr", name: "QBR booked", color: "var(--ink-3)" }, { k: "followup", name: "Follow-up due", color: "var(--s4)" }, { k: "renewal", name: "Renewal", color: "var(--neutral-fill)" }];
+  const MEET = [{ k: "qbr", name: "QBR", color: "var(--routine-1)" }, { k: "call", name: "Churn, growth, activation call or follow-up", color: "var(--s4)" }, { k: "other", name: "Kickoff, check-in, other", color: "var(--routine-2)" }];
+  const PIPE = [{ k: "qbr", name: "QBR booked", color: "var(--routine-1)" }, { k: "followup", name: "Follow-up due", color: "var(--s4)" }, { k: "renewal", name: "Renewal", color: "var(--routine-2)" }];
   const lastTouch = (id) => { const t = touchesBy[id]; return t && t.length ? t[t.length - 1] : null; };
   const met30 = (id) => (touchesBy[id] || []).some((t) => t.event === "meeting_held" && day(t.date) > RUN - 31);
   const fmtFull = (s) => fmt(s) + " " + s.slice(0, 4);
@@ -1351,18 +1353,28 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const growth = accs.filter((a) => !fl(a, "churn") && fl(a, "expansion")).sort((a, b) => a.renewal_date.localeCompare(b.renewal_date));
     const rest = accs.filter((a) => !fl(a, "churn") && !fl(a, "expansion")).sort((a, b) => a.renewal_date.localeCompare(b.renewal_date));
     $("mb-port-finding").textContent = `${churn.length} of ${plural(accs.length, "account")} in ${name}'s book ${churn.length === 1 ? "is" : "are"} at churn risk.`;
+    // the last thing CS did on the account, whatever it was, with its date and age
+    // customer-facing actions only: a task claimed or reassigned is internal, not contact
+    const CS_ACTION = { meeting_held: (t) => topicName(t.topic).replace(/^follow up$/, "follow-up call"), email_sent: (t) => `email: ${topicName(t.topic)}`,
+      workshop_attended: (t) => `workshop: ${topicName(t.topic)}` };
+    const lastActionCell = (id) => {
+      const acts = (touchesBy[id] || []).filter((t) => CS_ACTION[t.event]);
+      if (!acts.length) return '<span class="muted">nothing on record</span>';
+      const t = acts[acts.length - 1], ago = Math.round(RUN - day(t.date));   // RUN = the demo's today
+      return `${esc(CS_ACTION[t.event](t))}<small><br>${fmtFull(t.date)} · ${ago ? plural(ago, "day") + " ago" : "today"}</small>`;
+    };
     const row = (a, f, topics) => {
       const flag = f ? fl(a, f) : null, m = f ? lastMeeting(a.account_id, topics) : null;
       const sev = flag ? (f === "churn" ? (flag.status === "Act" ? "critical" : "warning") : "good") : "";
       return `<tr class="click" tabindex="0" data-id="${esc(a.account_id)}"><td>${esc(a.account_name)}<small><br>${esc(a.tier)}</small></td><td>${spark(a.util)}</td>` +
         `<td>${fmtFull(a.renewal_date)}<small><br>in ${Math.round(day(a.renewal_date) - RUN)} d</small></td>` +
         `<td>${flag ? `<div class="flag ${sev}"><span class="pill">${esc(flag.status)}</span><p>${esc(flag.reasons)}</p></div>` : '<span class="muted">no flags</span>'}</td>` +
-        `<td>${f ? (m ? `${esc(topicName(m.topic))}, ${fmt(m.date)}` : '<span class="muted">none yet</span>') : ""}</td>` +
+        `<td>${lastActionCell(a.account_id)}${f && !m ? `<small class="muted"><br>no ${f === "churn" ? "churn" : "growth"} call or QBR yet</small>` : ""}</td>` +
         `<td>${f ? '<span class="muted">no next step recorded</span>' : ""}</td></tr>`;
     };
     let restOpen = false;
     const drawPort = () => {
-      $("mb-port").innerHTML = `<table><thead><tr><th>Account</th><th>Utilisation, 90 days</th><th>Renewal</th><th>Why</th><th>Action taken</th><th>Action planned</th></tr></thead><tbody>` +
+      $("mb-port").innerHTML = `<table><thead><tr><th>Account</th><th>Utilisation, 90 days</th><th>Renewal</th><th>Why</th><th>Last action</th><th>Action planned</th></tr></thead><tbody>` +
         `<tr class="group"><td colspan="6">Churn risk (${churn.length})</td></tr>` + churn.map((a) => row(a, "churn", ["churn_call", "qbr"])).join("") +
         `<tr class="group"><td colspan="6">Growth (${growth.length})</td></tr>` + growth.map((a) => row(a, "expansion", ["growth_call", "qbr"])).join("") +
         `<tr class="group"><td colspan="6">No flags (${rest.length}) <button class="link" data-rest>${restOpen ? "hide" : "show"}</button></td></tr>` + (restOpen ? rest.map((a) => row(a, null)).join("") : "") +
