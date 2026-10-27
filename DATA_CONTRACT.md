@@ -9,6 +9,10 @@ The rule of thumb: **the engine reads the CRM, it doesn't replace it.** Facts th
 pipeline creates (actions, "covered by the QBR") go in its own action log, never
 back into these inputs.
 
+Before the first run on new data, check it: `python check_inputs.py <folder>`
+reads every input below, reports what's missing or broken in plain English,
+and ends with what the engine can and can't do with that data.
+
 ## At a glance
 
 | Input | File | Required? | Without it |
