@@ -8,7 +8,7 @@ same views the reports use (cairnpath_db.py, team_report.py and
 onboarding_report.py), so the page and the reports can never disagree.
 
 What goes in:
-  accounts        every CRM account: tier, region, owner, contract dates,
+  accounts        every CRM account: tier, region, owner, contract and QBR dates,
                   30-day utilisation for each day it can be measured, weekly
                   active users for each of the 13 weeks, and its open flags
                   (activation, churn, expansion, QBR, journeys)
@@ -96,7 +96,9 @@ for flag in FLAGS:
 
 accounts = rows(con, """
     SELECT c.account_id, c.account_name, c.tier, c.region, c.contract_start, c.renewal_date,
-           c.contracted_events, c.add_ons, coalesce(c.csm_owner, c.cs_pool) AS owner_id,
+           c.contracted_events, c.add_ons, c.last_qbr_date, c.next_qbr_date,
+           coalesce(c.csm_owner, c.cs_pool) AS owner_id,
+           c.last_qbr_date, c.next_qbr_date,
            t.owner_name AS owner, t.manager
     FROM crm c
     LEFT JOIN cs_team t ON t.owner_id = coalesce(c.csm_owner, c.cs_pool)
@@ -153,7 +155,8 @@ export = {
         ORDER BY s.age_days DESC, s.account_id, s.flag, s.status"""),
     "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
-                 "churn_line": SETTINGS["churn"]["util_below"]},
+                 "churn_line": SETTINGS["churn"]["util_below"],
+                 "follow_up_days": SETTINGS["follow_ups"]["after_days"]},
 }
 
 out = DATA / "views_data.json"

@@ -154,6 +154,18 @@ button.small.primary { background: var(--accent); color: var(--surface); }
 button.small:disabled, td .act select:disabled { opacity: 0.5; cursor: not-allowed; }
 button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background: none; border: 0; text-decoration: underline; cursor: pointer; padding: 0; }
 .banner { font-size: 0.88rem; border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 8px 12px; border-radius: 4px; margin: 0; }
+/* my book: one owner's morning page */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
+.tile .k { font-size: 0.8rem; color: var(--ink-3); }
+.tile .v { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; line-height: 1.2; }
+.tile .ref { font-size: 0.78rem; color: var(--ink-3); }
+.tile.alert { border-left: 3px solid var(--warning); }
+.examples { margin-top: 12px; }
+#mb-body { display: grid; gap: 20px; min-width: 0; }   /* min-width: wide tables scroll inside, not the page */
+svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: middle; margin-right: 6px; }
+.muted { color: var(--ink-3); }
+.pickers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 @media (prefers-reduced-motion: no-preference) { .fade { animation: fade 0.25s ease-out; } @keyframes fade { from { opacity: 0.4; } to { opacity: 1; } } }
 </style>
 
@@ -163,9 +175,10 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
       <h1>Cairnpath CS Cockpit</h1>
       <span class="asof" id="asof"></span>
     </div>
-    <p class="lede">Seven views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
+    <p class="lede">Eight views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
     <nav role="tablist" aria-label="Views">
       <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
+      <button role="tab" id="tab-mybook" data-view="mybook" aria-selected="false">My book</button>
       <button role="tab" id="tab-tasks" data-view="tasks" aria-selected="false">Tasks</button>
       <button role="tab" id="tab-outcomes" data-view="outcomes" aria-selected="false">Did it work?</button>
       <button role="tab" id="tab-timeline" data-view="timeline" aria-selected="false">Account timeline</button>
@@ -206,6 +219,47 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
       <div class="panel">
         <h2 id="ov-list-title">Accounts</h2>
         <div class="tablewrap" id="ov-list"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-mybook" role="tabpanel" aria-labelledby="tab-mybook" hidden>
+      <p class="finding" id="mb-finding"></p>
+      <p class="sub" id="mb-sub">One owner's morning page: what's on their plate, whether they're in front of their customers, where the risk and growth sit in their book, and what's coming in the next 8 weeks. Pick an owner at the top of the page.</p>
+      <div id="mb-pick" class="pickers"></div>
+      <div id="mb-body">
+        <div class="panel">
+          <h2>1. Current workload</h2>
+          <div class="tiles" id="mb-work"></div>
+          <div class="examples tablewrap" id="mb-work-list"></div>
+        </div>
+        <div class="grid2">
+          <div class="panel">
+            <h2>2. Engagement: meetings per week</h2>
+            <p class="finding" style="font-size:1rem" id="mb-eng-finding"></p>
+            <div id="mb-eng-chart"></div>
+            <div class="legend" id="mb-eng-legend"></div>
+          </div>
+          <div class="panel">
+            <h2>Gone quiet: no touch in 30+ days</h2>
+            <div class="tiles" id="mb-eng-tiles"></div>
+            <div class="examples tablewrap" id="mb-quiet"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>3. Accounts in the portfolio: risk first</h2>
+          <p class="finding" style="font-size:1rem" id="mb-port-finding"></p>
+          <div class="tablewrap" id="mb-port"></div>
+          <p class="note">Action planned needs a next step with a date on each account; none are recorded yet. Growth is sorted by renewal date until accounts carry ARR.</p>
+        </div>
+        <div class="panel">
+          <h2>4. Engagement pipeline: the next 8 weeks</h2>
+          <p class="finding" style="font-size:1rem" id="mb-pipe-finding"></p>
+          <div id="mb-pipe"></div>
+          <div class="legend" id="mb-pipe-legend"></div>
+          <h2 id="mb-pipe-title" style="margin-top:14px">Click a week to list it</h2>
+          <div class="tablewrap" id="mb-pipe-list"></div>
+          <p class="note">Booked: QBRs and renewals from the CRM, and follow-ups the engine will raise if the flag still stands. Watch accounts may turn into calls, so they're counted beside the chart, not in it.</p>
+        </div>
       </div>
     </section>
 
@@ -405,7 +459,7 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
     $("seg-reset").hidden = !segOn();
     $("segbar").classList.toggle("on", segOn());
   }
-  function redraw() { drawSegbar(); drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes(); drawTasks(); }
+  function redraw() { drawSegbar(); drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes(); drawTasks(); drawMyBook(); }
   for (const k of Object.keys(seg)) $("seg-" + k).addEventListener("change", (e) => { seg[k] = e.target.value; saveSeg(); redraw(); });
   $("seg-reset").addEventListener("click", () => { for (const k in seg) seg[k] = ""; saveSeg(); redraw(); });
 
@@ -427,7 +481,7 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
   };
 
   // tabs, with a bookmarkable #token per view
-  const views = ["overview", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
+  const views = ["overview", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
   const show = (v) => {
     if (!views.includes(v)) v = "overview";
     for (const w of views) {
@@ -1123,6 +1177,192 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
     }, () => { dbState = "none"; drawTasks(); });
     drawTasks();
   })();
+
+
+  // ---------------------------------------------------------------- my book: one owner's morning page
+  // "What do I do today, and why?" for one CSM or pool: workload, engagement,
+  // the portfolio risk first, and what's coming in the next 8 weeks. Comparisons
+  // are against the median of owners of the same kind (CSMs with CSMs, pools with
+  // pools), never against named colleagues.
+  const RUN = day(D.as_of) + 1;                                  // the pipeline's "today"
+  const FOLLOW_DAYS = D.settings.follow_up_days || 30;
+  const PROGRAMME = new Set(["Stalled", "Silent", "Shelfware"]);
+  const LIVE = (t) => t.action_status === "Open" || t.action_status === "Claimed";
+  const accountsOf = (o) => D.accounts.filter((a) => a.owner_id === o);
+  const peersOf = (o) => D.team.filter((t) => t.owner_type === (teamById[o] || {}).owner_type).map((t) => t.owner_id);
+  const MEET_KIND = (topic) => topic === "qbr" ? "qbr" : ["churn_call", "growth_call", "activation_call", "follow_up"].includes(topic) ? "call" : "other";
+  const MEET = [{ k: "qbr", name: "QBR", color: "var(--s1)" }, { k: "call", name: "Churn, growth or activation call", color: "var(--s4)" }, { k: "other", name: "Kickoff, check-in, other", color: "var(--seq-2)" }];
+  const PIPE = [{ k: "qbr", name: "QBR booked", color: "var(--s1)" }, { k: "renewal", name: "Renewal", color: "var(--s4)" }, { k: "followup", name: "Follow-up due", color: "var(--seq-2)" }];
+  const lastTouch = (id) => { const t = touchesBy[id]; return t && t.length ? t[t.length - 1] : null; };
+  const met30 = (id) => (touchesBy[id] || []).some((t) => t.event === "meeting_held" && day(t.date) > RUN - 31);
+  const fmtFull = (s) => fmt(s) + " " + s.slice(0, 4);
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  function spark(util) {
+    const v = util.map((u, i) => [i, u]).filter(([, u]) => u != null);
+    if (v.length < 2) return '<span class="muted">no usage yet</span>';
+    const W = 90, H = 22, max = Math.max(100, ...v.map(([, u]) => u)), n = util.length - 1;
+    const pts = v.map(([i, u]) => `${(i / n) * W},${H - 2 - (u / max) * (H - 4)}`).join(" ");
+    const y40 = H - 2 - (40 / max) * (H - 4);
+    return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><line x1="0" x2="${W}" y1="${y40}" y2="${y40}" stroke="var(--rule)" stroke-dasharray="2 2"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>${v[v.length - 1][1]}%`;
+  }
+  const tile = (k, v, ref, alert) => `<div class="tile${alert ? " alert" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="ref">${ref}</div></div>`;
+  // a list that shows two rows and a "View all (n)" that opens the rest in place
+  function shortList(host, items, cols, empty) {
+    let all = false;
+    const draw = () => {
+      if (!items.length) { host.innerHTML = `<p class="note">${empty}</p>`; return; }
+      const rows = all ? items : items.slice(0, 2);
+      host.innerHTML = `<table><thead><tr>${cols.map((c) => `<th${c.r ? ' class="r"' : ""}>${c.label}</th>`).join("")}</tr></thead><tbody>` +
+        rows.map((it) => `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` + cols.map((c) => `<td${c.r ? ' class="r num"' : ""}>${c.get(it)}</td>`).join("") + "</tr>").join("") + "</tbody></table>" +
+        (items.length > 2 ? `<button class="link" data-more>${all ? "Show fewer" : `View all (${items.length})`}</button>` : "");
+      host.querySelectorAll("tr.click").forEach((tr) => { tr.addEventListener("click", () => openAccount(tr.dataset.id)); tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); }); });
+      const more = host.querySelector("[data-more]"); if (more) more.addEventListener("click", () => { all = !all; draw(); });
+    };
+    draw();
+  }
+
+  function drawMyBook() {
+    const o = seg.owner, name = ownerName[o] || o;
+    $("mb-pick").innerHTML = "";
+    $("mb-body").hidden = !o;
+    if (!o) {
+      $("mb-finding").textContent = "Pick an owner to see their book.";
+      const owners = D.team.filter((t) => !seg.manager || t.manager === seg.manager);
+      $("mb-pick").innerHTML = owners.map((t) => `<button class="chip" data-o="${esc(t.owner_id)}">${esc(t.owner_name)}</button>`).join("");
+      $("mb-pick").querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => { seg.owner = b.dataset.o; seg.region = seg.tier = ""; saveSeg(); redraw(); }));
+      return;
+    }
+    const peers = peersOf(o), kind = (teamById[o] || {}).owner_type === "pool" ? "pools" : "CSMs";
+    const med = (f) => { const m = median(peers.map(f)); return m == null ? "–" : Math.round(m * 10) / 10; };
+
+    // 1. workload
+    const mine = (p) => TASKS.filter((t) => t.routed_to === p && LIVE(t));
+    const live = mine(o).sort((a, b) => b.age_days - a.age_days);
+    const open = live.filter((t) => t.action_status === "Open");
+    const old = live.filter((t) => t.age_days >= FAST), given = live.filter((t) => t.assigned_from);
+    const qbr30 = accountsOf(o).filter((a) => a.next_qbr_date && day(a.next_qbr_date) >= RUN && day(a.next_qbr_date) < RUN + 30);
+    $("mb-finding").textContent = !live.length ? `${name}: nothing on the plate right now.`
+      : live[0].age_days ? `${name}: ${plural(live.length, "task")} on the plate; the oldest has waited ${plural(live[0].age_days, "day")}.`
+      : `${name}: ${plural(live.length, "task")} on the plate, all sent today.`;
+    $("mb-work").innerHTML =
+      tile("Open", open.length, `median for ${kind}: ${med((p) => mine(p).filter((t) => t.action_status === "Open").length)}`, false) +
+      tile("Claimed, not done", live.length - open.length, "taken in Slack, no meeting yet", false) +
+      tile(`Waiting ${FAST}+ days`, old.length, `of ${live.length} on the plate`, old.length > 0) +
+      tile("Given to me by a manager", given.length, given.length ? `from ${[...new Set(given.map((t) => ownerName[t.assigned_from] || t.assigned_from))].join(", ")}` : "none", false) +
+      tile("QBRs in the next 30 days", qbr30.length, `of ${plural(accountsOf(o).filter((a) => a.tier === "Enterprise").length, "Enterprise account")}`, false);
+    shortList($("mb-work-list"), live, [
+      { label: "Oldest first", get: (t) => nameOf(t.account_id) },
+      { label: "Task", get: (t) => `${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small>` },
+      { label: "Status", get: (t) => `<span class="badge ${esc(t.action_status)}">${esc(t.action_status)}</span>` },
+      { label: "Age", r: true, get: (t) => `${t.age_days} d` },
+    ], "No open or claimed tasks.");
+
+    // 2. engagement
+    const accs = accountsOf(o), ids = new Set(accs.map((a) => a.account_id));
+    const share = (p) => { const as = accountsOf(p); return as.length ? as.filter((a) => met30(a.account_id)).length / as.length : null; };
+    const m30 = accs.filter((a) => met30(a.account_id)).length;
+    $("mb-eng-finding").textContent = `${name} met ${m30} of ${plural(accs.length, "account")} (${pct(m30, accs.length)}%) in the last 30 days; the median for ${kind} is ${Math.round(100 * (median(peers.map(share).filter((x) => x != null)) || 0))}%.`;
+    const weeks = D.week_ends, counts = weeks.map((we) => {
+      const c = { qbr: 0, call: 0, other: 0 };
+      for (const t of D.touches) if (t.event === "meeting_held" && ids.has(t.account_id) && day(t.date) > day(we) - 7 && day(t.date) <= day(we)) c[MEET_KIND(t.topic)]++;
+      return c;
+    });
+    const host = $("mb-eng-chart"); host.innerHTML = "";
+    const W = 520, H = 150, L = 24, bw = (W - L) / weeks.length, top = Math.max(1, ...counts.map((c) => c.qbr + c.call + c.other));
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H + 22}`, role: "img", "aria-label": `Meetings per week for ${name}` }, host);
+    el("line", { x1: L, x2: W, y1: H, y2: H, stroke: "var(--rule)" }, svg);
+    el("text", { x: L - 4, y: 10, "text-anchor": "end", class: "val" }, svg).textContent = top;
+    counts.forEach((c, i) => {
+      let y = H; const total = c.qbr + c.call + c.other;
+      for (const m of MEET) { if (!c[m.k]) continue; const h = ((H - 14) * c[m.k]) / top; y -= h; el("rect", { x: L + i * bw + 3, y, width: bw - 6, height: h, fill: m.color }, svg); }
+      const hit = el("rect", { x: L + i * bw, y: 0, width: bw, height: H, fill: "transparent" }, svg);
+      hover(hit, `<b>Week ending ${fmt(weeks[i])}</b><br>${plural(total, "meeting")}` + MEET.map((m) => c[m.k] ? `<br>${m.name}: ${c[m.k]}` : "").join(""));
+    });
+    [0, 6, 12].forEach((i) => { el("text", { x: L + i * bw + bw / 2, y: H + 16, "text-anchor": "middle" }, svg).textContent = fmt(weeks[i]); });
+    $("mb-eng-legend").innerHTML = "";
+    for (const m of MEET) { const sp = document.createElement("span"); sp.append(legendSwatch("square", m.color), m.name); $("mb-eng-legend").append(sp); }
+    const quiet = accs.map((a) => ({ ...a, last: lastTouch(a.account_id) }))
+      .filter((a) => !a.last || day(a.last.date) <= RUN - 31)
+      .sort((a, b) => (a.last ? day(a.last.date) : 0) - (b.last ? day(b.last.date) : 0));
+    const myCalls = D.time_to_action.filter((r) => ids.has(r.account_id) && r.call_date).map((r) => r.days_to_call);
+    const teamCalls = (p) => median(D.time_to_action.filter((r) => r.routed_to === p && r.call_date).map((r) => r.days_to_call));
+    $("mb-eng-tiles").innerHTML =
+      tile("Gone quiet", quiet.length, `of ${plural(accs.length, "account")}`, quiet.length > 0) +
+      tile("Days from signal to call", myCalls.length ? median(myCalls) : "–", `median for ${kind}: ${med(teamCalls)}`, false);
+    shortList($("mb-quiet"), quiet, [
+      { label: "Account", get: (a) => esc(a.account_name) },
+      { label: "Last touch", get: (a) => a.last ? `${fmtFull(a.last.date)} <small>${esc(topicName(a.last.topic))}</small>` : '<span class="muted">none on record</span>' },
+    ], "Every account had a touch in the last 30 days.");
+
+    // 3. portfolio, risk first: churn, then growth, then the rest
+    const fl = (a, f) => a.flags.find((x) => x.flag === f);
+    const lastMeeting = (id, topics) => { const ms = (touchesBy[id] || []).filter((t) => t.event === "meeting_held" && (!topics || topics.includes(t.topic))); return ms.length ? ms[ms.length - 1] : null; };
+    const CHURN_ORDER = { Act: 0, Shelfware: 1, Watch: 2 };
+    const churn = accs.filter((a) => fl(a, "churn")).sort((a, b) => CHURN_ORDER[fl(a, "churn").status] - CHURN_ORDER[fl(b, "churn").status] || a.renewal_date.localeCompare(b.renewal_date));
+    const growth = accs.filter((a) => !fl(a, "churn") && fl(a, "expansion")).sort((a, b) => a.renewal_date.localeCompare(b.renewal_date));
+    const rest = accs.filter((a) => !fl(a, "churn") && !fl(a, "expansion")).sort((a, b) => a.renewal_date.localeCompare(b.renewal_date));
+    $("mb-port-finding").textContent = `${churn.length} of ${plural(accs.length, "account")} in ${name}'s book ${churn.length === 1 ? "is" : "are"} at churn risk.`;
+    const row = (a, f, topics) => {
+      const flag = f ? fl(a, f) : null, m = f ? lastMeeting(a.account_id, topics) : null;
+      const sev = flag ? (f === "churn" ? (flag.status === "Act" ? "critical" : "warning") : "good") : "";
+      return `<tr class="click" tabindex="0" data-id="${esc(a.account_id)}"><td>${esc(a.account_name)}<small><br>${esc(a.tier)}</small></td><td>${spark(a.util)}</td>` +
+        `<td>${fmtFull(a.renewal_date)}<small><br>in ${Math.round(day(a.renewal_date) - RUN)} d</small></td>` +
+        `<td>${flag ? `<div class="flag ${sev}"><span class="pill">${esc(flag.status)}</span><p>${esc(flag.reasons)}</p></div>` : '<span class="muted">no flags</span>'}</td>` +
+        `<td>${f ? (m ? `${esc(topicName(m.topic))}, ${fmt(m.date)}` : '<span class="muted">none yet</span>') : ""}</td>` +
+        `<td>${f ? '<span class="muted">no next step recorded</span>' : ""}</td></tr>`;
+    };
+    let restOpen = false;
+    const drawPort = () => {
+      $("mb-port").innerHTML = `<table><thead><tr><th>Account</th><th>Utilisation, 90 days</th><th>Renewal</th><th>Why</th><th>Action taken</th><th>Action planned</th></tr></thead><tbody>` +
+        `<tr class="group"><td colspan="6">Churn risk (${churn.length})</td></tr>` + churn.map((a) => row(a, "churn", ["churn_call", "qbr"])).join("") +
+        `<tr class="group"><td colspan="6">Growth (${growth.length})</td></tr>` + growth.map((a) => row(a, "expansion", ["growth_call", "qbr"])).join("") +
+        `<tr class="group"><td colspan="6">No flags (${rest.length}) <button class="link" data-rest>${restOpen ? "hide" : "show"}</button></td></tr>` + (restOpen ? rest.map((a) => row(a, null)).join("") : "") +
+        "</tbody></table>";
+      $("mb-port").querySelectorAll("tr.click").forEach((tr) => { tr.addEventListener("click", () => openAccount(tr.dataset.id)); tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); }); });
+      const b = $("mb-port").querySelector("[data-rest]"); if (b) b.addEventListener("click", (e) => { e.stopPropagation(); restOpen = !restOpen; drawPort(); });
+    };
+    drawPort();
+
+    // 4. pipeline: what's booked in the next 8 weeks, on top of today's plate
+    const items = [];
+    for (const a of accs) {
+      if (a.next_qbr_date) items.push({ account_id: a.account_id, k: "qbr", date: a.next_qbr_date, what: "QBR" });
+      items.push({ account_id: a.account_id, k: "renewal", date: a.renewal_date, what: "Renewal" });
+    }
+    // follow-ups go to people only on Scale (Self-service gets an email, Enterprise none)
+    for (const t of live) if (PROGRAMME.has(t.status) && t.sent_on && (teamById[t.routed_to] || {}).owner_type === "pool") {
+      const due = new Date((day(t.sent_on) + FOLLOW_DAYS) * 864e5).toISOString().slice(0, 10);
+      items.push({ account_id: t.account_id, k: "followup", date: due, what: `Follow-up: ${t.status}` });
+    }
+    const wk = [...Array(8)].map((_, i) => ({ from: RUN + 7 * i, items: [] }));
+    for (const it of items) { const w = Math.floor((day(it.date) - RUN) / 7); if (w >= 0 && w < 8) wk[w].items.push(it); }
+    const total = wk.reduce((s, w) => s + w.items.length, 0);
+    const watching = accs.filter((a) => a.flags.some((f) => f.status === "Watch")).length;
+    $("mb-pipe-finding").textContent = `${name} has ${plural(total, "booked engagement")} in the next 8 weeks, on top of ${plural(live.length, "task")} on the plate today.`;
+    const ph = $("mb-pipe"); ph.innerHTML = "";
+    const PW = 880, PH = 150, PL = 24, pbw = (PW - PL) / 8, ptop = Math.max(1, ...wk.map((w) => w.items.length));
+    const psvg = el("svg", { viewBox: `0 0 ${PW} ${PH + 22}`, role: "img", "aria-label": `Booked engagements per week for ${name}` }, ph);
+    el("line", { x1: PL, x2: PW, y1: PH, y2: PH, stroke: "var(--rule)" }, psvg);
+    const listWeek = (w) => {
+      $("mb-pipe-title").textContent = `Week of ${fmt(new Date(w.from * 864e5).toISOString().slice(0, 10))}: ${plural(w.items.length, "engagement")}`;
+      shortList($("mb-pipe-list"), [...w.items].sort((a, b) => a.date.localeCompare(b.date)), [
+        { label: "Account", get: (it) => nameOf(it.account_id) }, { label: "What", get: (it) => esc(it.what) }, { label: "Date", r: true, get: (it) => fmt(it.date) },
+      ], "Nothing booked this week.");
+    };
+    wk.forEach((w, i) => {
+      let y = PH; const g = el("g", { style: "cursor:pointer" }, psvg);
+      for (const p of PIPE) { const n = w.items.filter((it) => it.k === p.k).length; if (!n) continue; const h = ((PH - 16) * n) / ptop; y -= h; el("rect", { x: PL + i * pbw + 8, y, width: pbw - 16, height: h, fill: p.color }, g); }
+      el("text", { x: PL + i * pbw + pbw / 2, y: y - 5, "text-anchor": "middle", class: "val" }, g).textContent = w.items.length || "";
+      el("rect", { x: PL + i * pbw, y: 0, width: pbw, height: PH, fill: "transparent" }, g);
+      el("text", { x: PL + i * pbw + pbw / 2, y: PH + 16, "text-anchor": "middle" }, psvg).textContent = fmt(new Date(w.from * 864e5).toISOString().slice(0, 10));
+      hover(g, `<b>Week of ${fmt(new Date(w.from * 864e5).toISOString().slice(0, 10))}</b>` + PIPE.map((p) => `<br>${p.name}: ${w.items.filter((it) => it.k === p.k).length}`).join("") + "<br>Click to list them");
+      g.addEventListener("click", () => listWeek(w));
+    });
+    $("mb-pipe-legend").innerHTML = "";
+    for (const p of PIPE) { const sp = document.createElement("span"); sp.append(legendSwatch("square", p.color), p.name); $("mb-pipe-legend").append(sp); }
+    { const sp = document.createElement("span"); sp.textContent = `Plus ${plural(watching, "account")} on Watch that may need a call.`; $("mb-pipe-legend").append(sp); }
+    listWeek(wk.find((w) => w.items.length) || wk[0]);
+  }
 
   // first paint: every view drawn, the one in the link shown
   const firstPick = picks.length ? picks[0].id : D.accounts[0].account_id;

@@ -287,9 +287,12 @@ One JSON event per line, one file per day in `data/events/`.
   reports' SQL through `team_report.add_views(con)` and
   `onboarding_report.add_views(con)`, so the page and the reports agree.
   Counts only, never real user IDs. Also builds `data/views.html` from
-  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): seven
+  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): eight
   tabs. Overview (the engagement sieve: churn signals stage by stage, and
-  renewals in the next 180 days by today's flag), Tasks (the manager's queue:
+  renewals in the next 180 days by today's flag), My book (one owner's
+  morning page: workload, engagement against the median of owners of the same
+  kind, the portfolio risk first with action taken and planned, and booked
+  engagements over the next 8 weeks: QBRs, renewals, Scale follow-ups), Tasks (the manager's queue:
   every task sent to a person, its status and age; in the published cockpit a
   manager gives one to someone else or approves a hand-back, saved in the
   page's database), Did it work? (the backtest:
