@@ -20,8 +20,8 @@
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;   /* categories (fixed order) */
   /* Palette rules (validated with the dataviz validator, light and dark):
      - status colours (good, warning, critical) only for state; amber is always a warning
-     - stacked categories: blue, aqua, violet in that order (never blue next to violet:
-       they read as one); a neutral slate between them is fine
+     - stacked categories: one highlight colour (violet) for what needs attention, the
+       routine in two neutrals (slate, light grey); never blue next to violet
      - "nothing to flag" is --neutral-fill, never the hairline colour
      - stacked segments are separated by a 2px gap in the surface colour */
   --seq-0: #edf3fb; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #5598e7; --seq-4: #256abf; --seq-5: #104281;
@@ -171,6 +171,9 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
 .examples { margin-top: 12px; }
 #mb-body { display: grid; gap: 20px; min-width: 0; }   /* min-width: wide tables scroll inside, not the page */
 svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: middle; margin-right: 6px; }
+.sparkcell { white-space: nowrap; }
+.trend { font-size: 0.8rem; margin-left: 4px; color: var(--ink-2); }   /* the number stays ink; the arrow carries the colour */
+.trend.down b { color: var(--critical-ink); } .trend.up b { color: var(--good-ink); } .trend.flat { color: var(--ink-3); }
 .muted { color: var(--ink-3); }
 .pickers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 @media (prefers-reduced-motion: no-preference) { .fade { animation: fade 0.25s ease-out; } @keyframes fade { from { opacity: 0.4; } to { opacity: 1; } } }
@@ -1215,19 +1218,41 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const MEET_KIND = (topic) => topic === "qbr" ? "qbr" : ["churn_call", "growth_call", "activation_call", "follow_up"].includes(topic) ? "call" : "other";
   // one colour per meaning on this page: QBR blue, other meetings aqua, problem calls and
   // follow-ups violet; a renewal is a date, not a meeting: slate. Never blue next to violet.
-  const MEET = [{ k: "qbr", name: "QBR", color: "var(--s1)" }, { k: "other", name: "Kickoff, check-in, other", color: "var(--s3)" }, { k: "call", name: "Churn, growth, activation call or follow-up", color: "var(--s4)" }];
-  const PIPE = [{ k: "qbr", name: "QBR booked", color: "var(--s1)" }, { k: "renewal", name: "Renewal", color: "var(--ink-3)" }, { k: "followup", name: "Follow-up due", color: "var(--s4)" }];
+  // calm on dark and light: one highlight colour for what needs a conversation (problem calls,
+  // follow-ups), two neutrals for the routine cadence. Order keeps violet between the greys.
+  const MEET = [{ k: "qbr", name: "QBR", color: "var(--ink-3)" }, { k: "call", name: "Churn, growth, activation call or follow-up", color: "var(--s4)" }, { k: "other", name: "Kickoff, check-in, other", color: "var(--neutral-fill)" }];
+  const PIPE = [{ k: "qbr", name: "QBR booked", color: "var(--ink-3)" }, { k: "followup", name: "Follow-up due", color: "var(--s4)" }, { k: "renewal", name: "Renewal", color: "var(--neutral-fill)" }];
   const lastTouch = (id) => { const t = touchesBy[id]; return t && t.length ? t[t.length - 1] : null; };
   const met30 = (id) => (touchesBy[id] || []).some((t) => t.event === "meeting_held" && day(t.date) > RUN - 31);
   const fmtFull = (s) => fmt(s) + " " + s.slice(0, 4);
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  // Usage trend for one account: the sparkline uses the account's own range (at least 20
+  // points tall, so a small wobble isn't blown up), and a trend marker says the change over
+  // 60 days in words: a drop of 5+ points is a red down arrow, a rise a green up arrow.
+  const TREND_DAYS = 60, TREND_MIN = 5;
+  function trend(util) {
+    const v = util.filter((u) => u != null);
+    if (v.length < 2) return null;
+    const back = util.length - 1 - TREND_DAYS, then = util.slice(Math.max(0, back)).find((u) => u != null);
+    return { now: v[v.length - 1], change: v[v.length - 1] - then, days: Math.min(TREND_DAYS, util.length - 1 - util.indexOf(then)) };
+  }
+  function trendMarker(util) {
+    const t = trend(util);
+    if (!t) return '<span class="muted">no trend yet</span>';
+    const d = Math.round(t.change);
+    if (Math.abs(d) < TREND_MIN) return `<span class="trend flat" title="${d >= 0 ? "+" : ""}${d} points in ${t.days} days">→ flat</span>`;
+    return `<span class="trend ${d < 0 ? "down" : "up"}" title="${d > 0 ? "+" : ""}${d} points in ${t.days} days"><b>${d < 0 ? "▼" : "▲"}</b> ${Math.abs(d)} pts</span>`;
+  }
   function spark(util) {
     const v = util.map((u, i) => [i, u]).filter(([, u]) => u != null);
     if (v.length < 2) return '<span class="muted">no usage yet</span>';
-    const W = 90, H = 22, max = Math.max(100, ...v.map(([, u]) => u)), n = util.length - 1;
-    const pts = v.map(([i, u]) => `${(i / n) * W},${H - 2 - (u / max) * (H - 4)}`).join(" ");
-    const y40 = H - 2 - (40 / max) * (H - 4);
-    return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><line x1="0" x2="${W}" y1="${y40}" y2="${y40}" stroke="var(--rule)" stroke-dasharray="2 2"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>${v[v.length - 1][1]}%`;
+    const vals = v.map(([, u]) => u), lo0 = Math.min(...vals), hi0 = Math.max(...vals);
+    const span = Math.max(20, hi0 - lo0), mid = (lo0 + hi0) / 2, lo = mid - span / 2, hi = mid + span / 2;
+    const W = 90, H = 22, n = util.length - 1, Y = (u) => H - 3 - ((u - lo) / (hi - lo)) * (H - 6);
+    const pts = v.map(([i, u]) => `${((i / n) * (W - 4)).toFixed(1)},${Y(u).toFixed(1)}`).join(" ");
+    const last = v[v.length - 1];
+    const line40 = 40 >= lo && 40 <= hi ? `<line x1="0" x2="${W}" y1="${Y(40)}" y2="${Y(40)}" stroke="var(--ink-3)" stroke-dasharray="2 2" stroke-width="0.8"/>` : "";
+    return `<span class="sparkcell"><svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true">${line40}<polyline points="${pts}" fill="none" stroke="var(--ink-2)" stroke-width="1.5" stroke-linejoin="round"/><circle cx="${((last[0] / n) * (W - 4)).toFixed(1)}" cy="${Y(last[1]).toFixed(1)}" r="2.5" fill="var(--ink)"/></svg><span class="num">${last[1]}%</span> ${trendMarker(util)}</span>`;
   }
   const tile = (k, v, ref, alert) => `<div class="tile${alert ? " alert" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="ref">${ref}</div></div>`;
   // a list that shows two rows and a "View all (n)" that opens the rest in place
