@@ -38,7 +38,7 @@ if (-not $Pulled) {
 # (actions.py runs before the reports, so the cockpit shows the tasks it just sent)
 $steps = @()
 if ($Regenerate) { $steps += "generate_events.py" }
-$steps += "cockpit_sync.py", "flags.py", "check_flags.py", "journeys.py"
+$steps += "check_inputs.py", "cockpit_sync.py", "flags.py", "check_flags.py", "journeys.py"
 if ($Actions) { $steps += "actions.py" }
 $steps += "team_report.py", "backtest.py", "onboarding_report.py", "export_views.py"
 

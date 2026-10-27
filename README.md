@@ -44,6 +44,7 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python generate_events.py   # ~500 accounts, 90 days of events
+python check_inputs.py      # are the inputs complete? what will and won't work
 python explore.py           # the book of business at a glance
 python flags.py             # activation, churn, expansion and QBR flags, plus work queues
 python check_flags.py       # test the flags against the generator's answer key

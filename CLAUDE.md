@@ -170,6 +170,12 @@ One JSON event per line, one file per day in `data/events/`.
   renders them): coverage table, overview, Self-service journey, Scale
   queue and hand-back, Enterprise QBR first, action status. Update it when
   routing, follow-ups or escalations change.
+- `check_inputs.py`: checks a folder of inputs against the data contract
+  before anything runs (plain Python, no DuckDB): missing columns, duplicate
+  IDs, unreadable dates, tiers or regions not in settings, accounts in the
+  events but not the CRM, too few days of data; ends with what the engine can
+  and can't do with this data. `python check_inputs.py [folder]`. ERROR = exit
+  1 (run_all stops), WARN = runs with gaps. First step of run_all.
 - `settings.toml` + `settings.py`: every threshold and time window in one
   place (activation, churn, expansion, QBR, journeys, team report, email
   hour, follow-ups), plus how the engine fits a company: [tiers] maps the
