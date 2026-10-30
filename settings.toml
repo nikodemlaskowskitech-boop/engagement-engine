@@ -74,6 +74,14 @@ stories_folder = "stories"
 support_file = "support_cases.csv"   # helpdesk ticket export
 email_folder = "emails"              # .eml files
 calls_folder = "calls"               # call transcripts
+# A brief is rewritten only when one of these changed since the last one (a prompt or
+# model change always counts). Leave one out to stop it triggering a rewrite.
+#   documents    a new or edited email, ticket or call transcript
+#   flag_status  a flag appears, goes, or changes status (e.g. Watch -> Act)
+#   qbr_booked   a QBR newly booked or moved
+#   owner        the account changes owner
+# Daily number moves (utilisation, users, the date) never trigger one, nor does a scheduled call.
+rewrite_on = ["documents", "flag_status", "qbr_booked", "owner"]
 max_output_tokens = 4000     # room to write; a brief cut short is refused, never saved
 
 [regions]

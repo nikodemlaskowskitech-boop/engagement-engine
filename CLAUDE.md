@@ -458,6 +458,12 @@ One JSON event per line, one file per day in `data/events/`.
   in settings.toml [handover]. Not in run_all (it costs a few cents a run).
   Only a finished answer is saved: a reply cut short (stop_reason max_tokens)
   or empty writes no brief, just the reason in `_check.json` (brief.py too).
+  Cache: a brief is rewritten only when its context changed since the last one
+  ([handover] rewrite_on: documents new, edited or removed, by their own IDs;
+  a flag's status; a newly booked QBR; the owner), or the prompt or model
+  changed. Daily number moves and scheduled calls don't count. The fingerprint
+  and the reason for the last rewrite sit in `<acc>_meta.json`; `--force`
+  rewrites anyway, `--dry-run` says what would happen.
 - `stories/`: three hand-written account stories (Yarrow Studio: champion
   leaving and a budget cut; Nettle Foods: expansion with a competitor and an
   overage dispute; Driftwood Labs: shelfware with a renewal in two weeks).
@@ -469,6 +475,11 @@ One JSON event per line, one file per day in `data/events/`.
   when a brief is missing after a run, empty, not a finished answer, finds
   under half the planted facts or claims a forbidden one. Run it
   on every PR that touches handover.py or stories/.
+- `tests/handover_cache_test.py`: the cache, with a stand-in model that counts
+  its calls (no key, no cost; temporary copies, real briefs untouched): no
+  call when nothing changed or only daily numbers moved; a call for a flag
+  status change, a booked QBR, a new email (even with a repeated subject and
+  date), a reopened ticket and --force; none on --dry-run. Same PRs as above.
 
 ## Planned next
 
@@ -476,6 +487,11 @@ One JSON event per line, one file per day in `data/events/`.
   library's Bedrock client), so the key disappears in favour of an IAM role.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
+- Handover brief, long histories (needs years of data we don't have): keep a
+  stored account-history layer (e.g. the first contract years: trends, key
+  events), confirmed by a person, and mine fresh insight only from activity
+  since the last renewal; re-read everything from scratch now and then, so
+  errors in the stored layer don't compound.
 - Engagement: history, new email_sent events, the first journeys and the
   team report (time to action) and the welcomed vs. control report exist;
   the views page is built; next, outcome after a call and the move to AWS.
