@@ -108,7 +108,9 @@ One JSON event per line, one file per day in `data/events/`.
   task_assigned (properties.owner_id = new owner, topic = flag, .status,
   .manager), handback_approved and forecast_set (a renewal forecast: .status =
   renew | downsize | churn, .amount, .note = reason, .owner_id = who,
-  .outcome = owner | manager; internal, never a customer touch).
+  .outcome = owner | manager; internal, never a customer touch) and
+  next_step_set (action planned: .status = call | qbr | email | internal,
+  .due, .note, .owner_id, .outcome; internal too).
 
 ## The four flags
 
@@ -324,7 +326,10 @@ One JSON event per line, one file per day in `data/events/`.
   flag (My book sorts by them). Renewal forecast on the timeline: the data's
   number, then the owner's or their manager's call (renew, downsize to an
   amount, churn) with a reason, saved in the page's database with its history;
-  a quarter of the ARR apart from the data = flagged "≠ data". Also exports
+  a quarter of the ARR apart from the data = flagged "≠ data". Action planned
+  on the timeline too: the owner's (or manager's) next step with a date, else a
+  QBR booked in the CRM; overdue when the date passes with no meeting since it
+  was set; shown in My book's portfolio. Also exports next_steps,
   forecasts (forecast_set events), churn_signals, renewals
   (backtest.py's view) and tasks (action_status, with each task's manager).
   Opens in any browser offline. The page only draws; the numbers come from
@@ -366,8 +371,8 @@ One JSON event per line, one file per day in `data/events/`.
 - `cockpit_sync.py`: managers' decisions from the cockpit (Claude copies the
   page's database to `data/cockpit_decisions.json` before a run) -> events in
   `data/engagement/cockpit.jsonl`, rewritten each run, so nothing doubles.
-  Decisions on older data (another as-of) are skipped; renewal forecasts are
-  all kept (forecast_set, the history). First step of run_all.
+  Decisions on older data (another as-of) are skipped; renewal forecasts and
+  next steps are all kept (forecast_set, next_step_set: the history). First step of run_all.
 - `slack_loop.py`: shared Slack pieces (task cards, .env tokens, appending
   click events). `listener.py`: Socket Mode listener (`python listener.py`,
   leave it running): "I'll take it" -> task_claimed, "Log call" -> a form ->

@@ -124,7 +124,7 @@ touches = rows(con, """
            properties.topic AS topic, properties.owner_id AS owner_id,
            context.source AS source
     FROM engagement
-    WHERE event_name <> 'forecast_set'         -- internal: exported as forecasts below
+    WHERE event_name NOT IN ('forecast_set', 'next_step_set')   -- internal: exported below
     -- ties on the same minute broken by account and event: the same data always
     -- exports in the same order, so two runs can be compared file to file
     ORDER BY "timestamp", account_id, event_name, event_id""")
@@ -143,6 +143,13 @@ export = {
                properties.amount AS amount, properties.note AS reason
         FROM engagement WHERE event_name = 'forecast_set'
         ORDER BY "timestamp", event_id"""),
+    # next steps planned in the cockpit ("action planned"), oldest first
+    "next_steps": rows(con, """
+        SELECT e.account_id, e."timestamp" AS decided_at, e.properties.owner_id AS by,
+               e.properties.outcome AS role, e.properties.status AS type,
+               e.properties.due AS due, e.properties.note AS note, a.as_of_date AS as_of
+        FROM engagement e, as_of a WHERE e.event_name = 'next_step_set'
+        ORDER BY e."timestamp", e.event_id"""),
     "onboarding": rows(con, "SELECT * FROM onboarding ORDER BY account_id"),
     "time_to_action": rows(con, """
         SELECT t.*, o.owner_name AS owner, o.owner_type, o.manager

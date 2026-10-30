@@ -125,6 +125,7 @@ engine runs.
 | `task_claimed` | owner_id, topic, slack_user | Someone took a task in Slack |
 | `task_assigned` | owner_id (the new owner), topic (the flag), status, manager | A manager gave a task to someone else in the cockpit |
 | `handback_approved` | owner_id (the manager), topic `handback`, slack_user or manager | A manager approved handing a follow-up back to the pool |
+| `next_step_set` | owner_id (who), topic `next_step`, status (call, qbr, email, internal), due (date), note, outcome (owner or manager) | The next step planned on an account ("action planned"). Internal |
 | `forecast_set` | owner_id (who), topic `renewal_forecast`, status (renew, downsize, churn), amount (value expected at renewal), note (reason), outcome (owner or manager) | An owner or their manager set the account's renewal forecast in the cockpit. Internal: never a customer touch |
 
 Topics that matter: `getting_started` (journeys), `churn_call`, `growth_call`,
@@ -170,7 +171,8 @@ turns them into `task_assigned` and `handback_approved` events in
 
 `kind` is `assign` (with `to_owner`) or `handback`. The latest decision per task wins.
 
-Renewal forecasts sit in the same file, `kind` `forecast`. Every one is kept
+Renewal forecasts (`kind` `forecast`) and next steps (`kind` `next_step`, with
+`type`, `due`, `note`, `by`, `role`) sit in the same file. Every one is kept
 (the history shows how a forecast moved) and none is skipped for older data:
 like a CRM forecast field, it's about the renewal, not today's numbers.
 

@@ -85,7 +85,7 @@ section.view { display: grid; gap: 20px; }
 
 /* controls */
 .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-select, input[type="search"], input[type="text"], input[type="number"] { font: 0.92rem var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; max-width: 100%; }
+select, input[type="search"], input[type="text"], input[type="number"], input[type="date"] { font: 0.92rem var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; max-width: 100%; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { font: 500 0.82rem var(--font-body); color: var(--ink-2); background: var(--bg); border: 1px solid var(--rule); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
 .chip:hover, .chip[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
@@ -288,7 +288,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <h2>3. Accounts in the portfolio: risk first</h2>
           <p class="finding" style="font-size:1rem" id="mb-port-finding"></p>
           <div class="tablewrap" id="mb-port"></div>
-          <p class="note">Sorted by value at stake. At risk: the whole ARR at Act (they may leave), the unused part at Watch and Shelfware (customers cut their commitment to what they use). Upside: forecast usage above the contract at renewal. "≠ data" marks a forecast a quarter of the ARR away from the data's number. Value guides the work; it isn't anyone's credit. Action planned needs a next step with a date; none are recorded yet.</p>
+          <p class="note">Sorted by value at stake. At risk: the whole ARR at Act (they may leave), the unused part at Watch and Shelfware (customers cut their commitment to what they use). Upside: forecast usage above the contract at renewal. "≠ data" marks a forecast a quarter of the ARR away from the data's number. Value guides the work; it isn't anyone's credit. Action planned: the owner's next step with a date (set it on the account's timeline), or a QBR booked in the CRM; overdue when the date passes with no meeting.</p>
         </div>
         <div class="panel">
           <h2>4. Engagement pipeline: looking forward 8 weeks</h2>
@@ -361,6 +361,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <h2>Account</h2>
           <dl class="facts" id="tl-facts"></dl>
           <div class="flags" id="tl-flags"></div>
+          <div class="forecast" id="tl-next"></div>
           <div class="forecast" id="tl-forecast"></div>
         </div>
       </div>
@@ -481,6 +482,16 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const groupForecasts = (list) => { const m = {}; for (const f of list) (m[f.account_id] = m[f.account_id] || []).push(f);
     for (const k in m) m[k].sort((x, y) => String(x.decided_at).localeCompare(String(y.decided_at))); return m; };
   forecasts = groupForecasts(D.forecasts || []);
+  // Next steps ("action planned"), account -> oldest first; the latest is the plan
+  let nextSteps = groupForecasts(D.next_steps || []);
+  const STEP_TYPES = { call: "Customer call", qbr: "QBR", email: "Email", internal: "Internal review" };
+  // the plan for an account: the owner's next step, else a QBR booked in the CRM
+  const planOf = (a) => {
+    const s = (nextSteps[a.account_id] || []).slice(-1)[0];
+    if (s) return { kind: "step", type: STEP_TYPES[s.type] || s.type, due: s.due, note: s.note, by: s.by, role: s.role, set_on: s.as_of };
+    if (a.next_qbr_date && a.next_qbr_date > D.as_of) return { kind: "crm", type: "QBR", due: a.next_qbr_date, note: "booked in the CRM" };
+    return null;
+  };
   const CALLS = { renew: "Renew in full", downsize: "Downsize", churn: "Churn" };
   const callText = (f) => f.call === "downsize" && f.amount != null ? `Downsize to ${money(f.amount)}` : CALLS[f.call] || f.call;
   // what the person expects to lose at renewal, next to what the data says
@@ -564,7 +575,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("seg-reset").hidden = !segOn();
     $("segbar").classList.toggle("on", segOn());
   }
-  function redraw() { drawSegbar(); drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes(); drawTasks(); drawMyBook(); }
+  function redraw() { drawSegbar(); drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes(); drawTasks(); drawMyBook();
+    if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } }   // who may plan or forecast depends on the segment
   for (const k of Object.keys(seg)) $("seg-" + k).addEventListener("change", (e) => { seg[k] = e.target.value; saveSeg(); redraw(); });
   $("seg-reset").addEventListener("click", () => { for (const k in seg) seg[k] = ""; saveSeg(); redraw(); });
 
@@ -767,10 +779,58 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           (valueOf(f) != null ? `<p><b>${money(valueOf(f))} ${f.flag === "churn" ? "ARR at risk" : "upside"}</b> · ${esc(f.value_basis)}</p>` : "") + `</div>`).join("")
       : '<p class="note">No open flags.</p>';
     const tc = (touchesBy[id] || []).length;
+    drawNext(id);
     drawForecast(id);
     $("tl-find").placeholder = `${a.account_name} (${a.account_id}): search another account`;
     $("tl-finding").textContent = `${a.account_name}: ${a.flags.length ? a.flags.length + " open flag" + (a.flags.length > 1 ? "s" : "") : "no open flags"}, ${tc} CS touch${tc === 1 ? "" : "es"} in 90 days.`;
   }
+  // Next step ("action planned"): what the owner will do next and by when.
+  // Overdue when the date passes with no meeting since it was set. A QBR
+  // booked in the CRM counts as the plan until the owner records one.
+  const TODAY = day(D.as_of) + 1;                        // the pipeline's "today"
+  const planStatus = (a, p) => {
+    if (!p) return null;
+    const left = Math.round(day(p.due) - TODAY);
+    if (left >= 0) return { overdue: false, text: left === 0 ? "today" : `in ${left} d` };
+    const met = (touchesBy[a.account_id] || []).some((t) => t.event === "meeting_held" && t.date >= (p.set_on || p.due));
+    return met ? { overdue: false, text: "done (meeting held)" } : { overdue: true, text: `${-left} d overdue` };
+  };
+  const planText = (a, p) => { const st = planStatus(a, p);
+    return p ? `${esc(p.type)}, ${fmt(p.due)}${st ? ` <span class="${st.overdue ? "bad" : "muted"}">${st.text}</span>` : ""}` : ""; };
+  function drawNext(id) {
+    const a = byId[id], host = $("tl-next"); if (!a) return;
+    if (a.tier === "Self-service") { host.innerHTML = ""; return; }
+    const hist = nextSteps[id] || [], p = planOf(a);
+    let h = `<h3>Action planned</h3>`;
+    h += p ? `<p><b>${planText(a, p)}</b>${p.kind === "step" ? ` · ${p.role === "manager" ? esc(managerName(p.by)) + " (manager)" : esc(ownerName[p.by] || p.by)}` : ""}${p.note ? `<br><small>${esc(p.note)}</small>` : ""}</p>`
+      : `<p class="${a.flags.some((f) => f.flag === "churn" && f.status === "Act") ? "bad" : "muted"}">No next step recorded.</p>`;
+    const who = forecastRole(a);
+    if (dbState !== "ready") h += `<p class="note">Next steps are recorded in the published cockpit.</p>`;
+    else if (!who) h += `<p class="note">To plan a next step, pick yourself at the top: Owner (this account's owner) or Manager (theirs).</p>`;
+    else h += `<div class="fc-form"><select id="ns-type" aria-label="Next step">${Object.entries(STEP_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>` +
+      `<input id="ns-due" type="date" min="${new Date(TODAY * 864e5).toISOString().slice(0, 10)}" aria-label="Due date">` +
+      `<input id="ns-note" type="text" maxlength="200" placeholder="What and with whom (optional)" aria-label="Note">` +
+      `<button class="small primary" id="ns-save">Plan it</button></div><p class="note" id="ns-msg"></p>`;
+    if (hist.length > 1) h += `<ul class="fc-hist">` + hist.slice(0, -1).reverse().slice(0, 3).map((s) =>
+      `<li>${whenText(s.decided_at)} · ${esc(STEP_TYPES[s.type] || s.type)}, ${fmt(s.due)}${s.note ? " · " + esc(s.note) : ""}</li>`).join("") + "</ul>";
+    host.innerHTML = h;
+    if (!who || dbState !== "ready") return;
+    $("ns-save").addEventListener("click", async () => {
+      const due = $("ns-due").value, msg = (t) => { $("ns-msg").textContent = t; };
+      if (!due || day(due) < TODAY) return msg(`Pick a date from ${fmt(new Date(TODAY * 864e5).toISOString().slice(0, 10))} on.`);
+      $("ns-save").disabled = true;
+      const at = new Date().toISOString();
+      try {
+        await db.collection("decisions").doc(`next_step~${id}~${at.replace(/[^0-9]/g, "")}`).set({
+          kind: "next_step", account_id: id, type: $("ns-type").value, due, note: $("ns-note").value.trim(),
+          by: who.by, role: who.role, as_of: D.as_of, decided_at: at, decided_by: me });
+      } catch (e) {
+        $("ns-save").disabled = false;
+        msg(e && e.code === "invalid_argument" ? "You can see this cockpit but not change it: ask its owner for Contributor access." : "That next step wasn't saved. Try again in a moment.");
+      }
+    });
+  }
+
   // Renewal forecast: the data's number, then the owner's (or manager's) call
   // with a reason, and its history. Like a CRM forecast field; the gap between
   // the person and the data is worth a conversation.
@@ -1365,25 +1425,26 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // the database answers later (or never, in the offline file): the list draws first
   (async () => {
     const use = window.claude && window.claude.use;
-    if (!use) { dbState = "none"; drawTasks(); if (sel.value) drawForecast(sel.value); return; }
+    if (!use) { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } return; }
     try {
       db = await window.claude.use("db");
       const user = await window.claude.use("user");
       me = user ? await user.id() : null;
     } catch (e) { db = null; }
-    if (!db) { dbState = "none"; drawTasks(); if (sel.value) drawForecast(sel.value); return; }
+    if (!db) { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } return; }
     dbState = "ready";
     db.collection("decisions").onSnapshot((snap) => {
       decisions = {}; const fs = [];
       for (const d of snap.docs) {
         const v = d.data(); if (!v) continue;
-        if (v.kind === "forecast") fs.push(v);                       // forecasts: kept whatever the data
+        if (v.kind === "forecast" || v.kind === "next_step") fs.push(v);   // plans and forecasts: kept whatever the data
         else if (v.as_of === D.as_of) decisions[d.id] = v;           // task decisions on older data: ignored
       }
-      forecasts = groupForecasts(fs);
-      drawTasks(); drawMyBook(); if (sel.value) drawForecast(sel.value);
-    }, () => { dbState = "none"; drawTasks(); if (sel.value) drawForecast(sel.value); });
-    drawTasks(); if (sel.value) drawForecast(sel.value);
+      forecasts = groupForecasts(fs.filter((v) => v.kind === "forecast"));
+      nextSteps = groupForecasts(fs.filter((v) => v.kind === "next_step"));
+      drawTasks(); drawMyBook(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); }
+    }, () => { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } });
+    drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); }
   })();
 
 
@@ -1563,7 +1624,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         `<td>${fmtFull(a.renewal_date)}<small><br>in ${Math.round(day(a.renewal_date) - RUN)} d</small></td>` +
         `<td>${flag ? `<div class="flag ${sev}"><span class="pill">${esc(flag.status)}</span><p>${esc(flag.reasons)}</p></div>` : '<span class="muted">no flags</span>'}</td>` +
         `<td>${lastActionCell(a.account_id)}${f && !m ? `<small class="muted"><br>no ${f === "churn" ? "churn" : "growth"} call or QBR yet</small>` : ""}</td>` +
-        `<td>${f ? '<span class="muted">no next step recorded</span>' : ""}</td></tr>`;
+        `<td>${(() => { const p = planOf(a); if (p) return planText(a, p) + (p.note ? `<small><br>${esc(p.note)}</small>` : "");
+          return f ? `<span class="${flag && flag.status === "Act" ? "bad" : "muted"}">no next step recorded</span>` : ""; })()}</td></tr>`;
     };
     let restOpen = false;
     const drawPort = () => {

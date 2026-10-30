@@ -70,8 +70,9 @@ def connect():
             account_id: 'VARCHAR',
             user_id:    'VARCHAR',
             -- status and manager: a manager's decision in the cockpit (cockpit_sync.py);
-            -- amount: a renewal forecast's value (forecast_set, also from the cockpit)
-            properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE)',
+            -- amount: a renewal forecast's value (forecast_set); due: a next step's
+            -- date (next_step_set); both from the cockpit
+            properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE, due VARCHAR)',
             context:    'STRUCT(source VARCHAR)'
         })
     """)
