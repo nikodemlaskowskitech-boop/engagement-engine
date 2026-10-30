@@ -49,13 +49,23 @@ outcomes_file = "renewal_outcomes.csv"    # optional
 currency = "EUR"
 arr_column = "arr"
 price_per_1k = { "Self-service" = 0.65, "Scale" = 0.55, "Enterprise" = 0.45 }
-# ARR at risk. Act (usage and users falling): the whole ARR, they may leave.
-# Watch and Shelfware: the unused part, ARR x (100% - utilisation), since a
-# customer tends to cut its commitment to what it uses at renewal.
 # Opportunity: forecast usage at renewal above 100% x ARR (straight line from
-# the last two months, capped). Expansion Watch counts at this share.
+# the last two months, capped at max_forecast_pct). Expansion Watch counts at
+# watch_opportunity_share of that (volume alone may be over-tracking).
 watch_opportunity_share = 0.5
 max_forecast_pct = 200
+# When an owner's renewal forecast is this share of ARR away from the data's
+# number, the cockpit marks it "≠ data" (worth a conversation).
+forecast_gap_share = 0.25
+
+# ARR at risk, per churn status. A number = that share of the ARR (1.0 = all
+# of it: usage and users falling, they may leave). "unused" = the unused part,
+# ARR x (100% - utilisation): customers cut their commitment to what they use
+# at renewal. E.g. Act = 0.8 if your Act accounts usually downsize rather than leave.
+[money.at_risk]
+Act = 1.0
+Watch = "unused"
+Shelfware = "unused"
 
 [regions]
 # Hours ahead of UTC (summer time), for sending emails at a local hour

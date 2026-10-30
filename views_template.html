@@ -365,8 +365,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       </div>
       <div class="panel">
         <h2>Did a churn call help? (Act accounts, Scale and Enterprise)</h2>
-        <div id="oc-calls"></div>
+        <div class="tablewrap" id="oc-calls"></div>
         <p class="note">Act accounts only, so like is compared with like. Read the counts: with groups this small, chance can hide a real effect.</p>
+      </div>
+      <div class="panel">
+        <h2>ARR at risk vs. ARR really lost at renewal</h2>
+        <p class="finding small" id="oc-value-finding"></p>
+        <div class="tablewrap" id="oc-value"></div>
+        <p class="note">At risk: the data's rule ([money.at_risk] in settings.toml: the whole ARR at Act, the unused part at Watch and Shelfware). Lost: ARR minus what the account renewed at. Under 100% the rule over-calls the risk, or CS saved some of it; over 100% it's too relaxed. The renewal values are generated (a downsize shrinks to about what the account uses), so this shows the method, not proof the rule is right. Owners' forecasts join this table once their accounts renew.</p>
       </div>
       <div class="panel">
         <h2 id="oc-list-title">Accounts</h2>
@@ -538,7 +544,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const dataRisk = (a) => valueOf(a.flags.find((x) => x.flag === "churn")) || 0;
   const forecastGap = (a, f) => {
     const mine = expectedLoss(a, f), data = dataRisk(a);
-    return Math.abs(mine - data) >= 0.25 * a.arr ? { mine, data } : null;   // a quarter of the ARR apart: worth a conversation
+    return Math.abs(mine - data) >= (D.settings.forecast_gap_share ?? 0.25) * a.arr ? { mine, data } : null;   // [money] forecast_gap_share: worth a conversation
   };
 
   $("asof").textContent = "Data as of " + fmt(D.as_of) + " 2026";
@@ -1358,7 +1364,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const R = D.renewals.filter((r) => inSegId(r.account_id)), LATE = D.settings.too_late_days;
     $("oc-late").textContent = LATE;
     if (!R.length) {
-      for (const id of ["oc-stats", "oc-matrix", "oc-warning", "oc-calls", "oc-list"]) $(id).innerHTML = "";
+      for (const id of ["oc-stats", "oc-matrix", "oc-warning", "oc-calls", "oc-list", "oc-value", "oc-value-finding"]) $(id).innerHTML = "";
       $("oc-finding").textContent = D.renewals.length ? `${segName()}: no renewals in the six months after the data.`
         : "No renewal outcomes yet: run .\\run_all.ps1 -Regenerate to create them.";
       return;
@@ -1405,6 +1411,21 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("oc-calls").innerHTML = `<table><thead><tr><th>Act accounts</th><th class="r">Accounts</th><th class="r">Churned</th><th class="r">Kept whole</th></tr></thead><tbody>` +
       rowsC.map(([k, xs]) => `<tr class="click" data-k="${k}"><td>${k}</td><td class="r num">${xs.length}</td><td class="r num">${xs.filter((r) => r.outcome === "churned").length} (${pct(xs.filter((r) => r.outcome === "churned").length, xs.length)}%)</td><td class="r num">${xs.filter((r) => !r.lost_revenue).length} (${pct(xs.filter((r) => !r.lost_revenue).length, xs.length)}%)</td></tr>`).join("") + "</tbody></table>";
     document.querySelectorAll("#oc-calls tr.click").forEach((tr) => tr.addEventListener("click", () => listOutcomes(tr.dataset.k, rowsC.find(([k]) => k === tr.dataset.k)[1])));
+
+    // value: the data's ARR at risk next to the ARR really lost, by status
+    const V = R.filter((r) => r.renewal_arr != null);
+    if (!V.length) { $("oc-value").innerHTML = ""; $("oc-value-finding").textContent = "The renewal outcomes have no renewal_arr column, so the value comparison is off."; }
+    else {
+      const sumV = (xs, k) => xs.reduce((t, r) => t + (r[k] || 0), 0);
+      const groups = ["Act", "Watch", "Shelfware", "No churn flag"].map((g) => [g, V.filter((r) => (r.flag_status || "No churn flag") === g)]).filter(([, xs]) => xs.length);
+      groups.push(["All renewals", V]);
+      const fl = V.filter((r) => r.flagged), lostF = sumV(fl, "lost_arr"), ruleF = sumV(fl, "data_at_risk"), wholeF = sumV(fl, "arr");
+      $("oc-value-finding").textContent = fl.length ? `Flagged accounts lost ${money(lostF)}; the rule said ${money(ruleF)} at risk, and counting their whole ARR would have said ${money(wholeF)}.` : "No flagged account renewed in the period.";
+      $("oc-value").innerHTML = `<table><thead><tr><th>Status today</th><th class="r">Renewals</th><th class="r">ARR</th><th class="r">At risk (rule)</th><th class="r">Really lost</th><th class="r">Lost / at risk</th></tr></thead><tbody>` +
+        groups.map(([g, xs]) => { const ar = sumV(xs, "data_at_risk"), lo = sumV(xs, "lost_arr");
+          return `<tr class="click" tabindex="0" data-k="${g}"><td>${g === "All renewals" ? "<b>All renewals</b>" : esc(g)}</td><td class="r num">${xs.length}</td><td class="r num">${money(sumV(xs, "arr"))}</td><td class="r num">${ar ? money(ar) : "–"}</td><td class="r num">${money(lo)}</td><td class="r num">${ar ? pct(lo, ar) + "%" : "–"}</td></tr>`; }).join("") + "</tbody></table>";
+      document.querySelectorAll("#oc-value tr.click").forEach((tr) => tr.addEventListener("click", () => listOutcomes(tr.dataset.k, groups.find(([k]) => k === tr.dataset.k)[1])));
+    }
     listOutcomes("Missed", fn, true);
   }
 
