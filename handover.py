@@ -98,13 +98,20 @@ def engine_facts(account_id):
         f"Weekly active users: {a['wau'][0]} thirteen weeks ago, {a['wau'][-1]} last week.",
     ]
     for f in a["flags"]:
-        v = f" Value at stake: {f['value']:,.0f}." if f.get("value") else ""
+        kind = "growth upside" if f["flag"] == "expansion" else "ARR at risk"
+        basis = f" ({f['value_basis']})" if f.get("value_basis") else ""      # why it isn't the whole ARR
+        v = f" Engine's estimate of the {kind}: {f['value']:,.0f}{basis}." if f.get("value") else ""
         lines.append(f"Engine flag: {f['flag']} {f['status']}: {f['reasons']}.{v}")
     if a.get("next_qbr_date"):
         lines.append(f"Next QBR booked: {a['next_qbr_date']}.")
+    # say who did what: "by UK&I Scale team" on a workshop read as if only our team attended
+    did = {"meeting_held": "meeting held ({topic}) by {who}",
+           "email_sent": "email ({topic}) sent by {who}",
+           "workshop_attended": "the customer attended a workshop ({topic}) hosted by {who}"}
     for t in touches[-6:]:
-        lines.append(f"CS touch on {t['date']}: {t['event'].replace('_', ' ')} ({(t['topic'] or '').replace('_', ' ')}) "
-                     f"by {names.get(t['owner_id'], t['owner_id'])}.")
+        what = did[t["event"]].format(topic=(t["topic"] or "").replace("_", " "),
+                                      who=names.get(t["owner_id"], t["owner_id"]))
+        lines.append(f"CS touch on {t['date']}: {what}.")
     for fc in [x for x in d.get("forecasts", []) if x["account_id"] == account_id][-1:]:
         lines.append(f"Owner's renewal forecast: {fc['call']}{' to ' + format(fc['amount'], ',.0f') if fc.get('amount') else ''} "
                      f"({fc.get('reason') or 'no reason given'}).")
@@ -233,7 +240,8 @@ def check(brief, sent, ids):
     uncited = []
     for line in brief.splitlines():
         s = line.strip(" -*")
-        if len(s) > 40 and not s.startswith("#") and not re.search(r"\[[A-Z0-9, ]+\]", s):
+        honest_gap = s.lower().startswith("not in the sources")   # saying what's missing needs no source
+        if len(s) > 40 and not s.startswith("#") and not honest_gap and not re.search(r"\[[A-Z0-9, ]+\]", s):
             uncited.append(s[:120])
     numbers = sorted((x for x in numbers_in(brief) - numbers_in(sent) if float(x) > 3), key=float)
     return {"unknown_citations": unknown, "uncited_sentences": uncited, "unverified_numbers": numbers}

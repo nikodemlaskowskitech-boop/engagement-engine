@@ -2,43 +2,318 @@
   "_about": "What a good handover brief must surface (must_find) and must not claim (must_not), per story. Each fact passes when every group in 'all' has at least one of its words in the brief (case-insensitive). Used by tests/handover_test.py; never shown to the model.",
   "acc_024": {
     "must_find": [
-      {"id": "champion_leaving", "fact": "Barry White (the champion) leaves at the end of November", "all": [["barry"], ["leav", "depart", "exit"], ["november", "nov"]]},
-      {"id": "new_sponsor", "fact": "Ines Keller, Director of Digital, now owns the budget and is sceptical", "all": [["ines"], ["budget", "sponsor", "owns", "takes over", "took over"]]},
-      {"id": "board_date", "fact": "The board decides on 12 November, with a ~30% budget cut", "all": [["12 nov", "12th", "twelfth", "november 12"], ["board"]]},
-      {"id": "price_promise", "fact": "Mia promised in writing to hold the price per event if they renew by 31 January", "all": [["31 jan", "january"], ["price", "per event", "pricing"]]},
-      {"id": "ios_bug", "fact": "An open P2 case: iOS SDK 3.0.1 drops events; fix 3.0.3 expected 28 October; part of the usage drop is tracking, not adoption", "all": [["ios"], ["sdk", "bug", "tracking"], ["28 oct", "3.0.3", "fix"]]},
-      {"id": "volume_talk", "fact": "They talked about ~100M events a year instead of ~520M", "all": [["100 million", "100m", "100 m"]]}
+      {
+        "id": "champion_leaving",
+        "fact": "Barry White (the champion) leaves at the end of November",
+        "all": [
+          [
+            "barry"
+          ],
+          [
+            "leav",
+            "depart",
+            "exit"
+          ],
+          [
+            "november",
+            "nov"
+          ]
+        ]
+      },
+      {
+        "id": "new_sponsor",
+        "fact": "Ines Keller, Director of Digital, now owns the budget and is sceptical",
+        "all": [
+          [
+            "ines"
+          ],
+          [
+            "budget",
+            "sponsor",
+            "owns",
+            "takes over",
+            "took over"
+          ]
+        ]
+      },
+      {
+        "id": "board_date",
+        "fact": "The board decides on 12 November, with a ~30% budget cut",
+        "all": [
+          [
+            "12 nov",
+            "12th",
+            "twelfth",
+            "november 12"
+          ],
+          [
+            "board"
+          ]
+        ]
+      },
+      {
+        "id": "price_promise",
+        "fact": "Mia promised in writing to hold the price per event if they renew by 31 January",
+        "all": [
+          [
+            "31 jan",
+            "january"
+          ],
+          [
+            "price",
+            "per event",
+            "pricing"
+          ]
+        ]
+      },
+      {
+        "id": "ios_bug",
+        "fact": "An open P2 case: iOS SDK 3.0.1 drops events; fix 3.0.3 expected 28 October; part of the usage drop is tracking, not adoption",
+        "all": [
+          [
+            "ios"
+          ],
+          [
+            "sdk",
+            "bug",
+            "tracking"
+          ],
+          [
+            "28 oct",
+            "3.0.3",
+            "fix"
+          ]
+        ]
+      },
+      {
+        "id": "volume_talk",
+        "fact": "They talked about ~100M events a year instead of ~520M",
+        "all": [
+          [
+            "100 million",
+            "100m",
+            "100 m"
+          ]
+        ]
+      }
     ],
     "must_not": [
-      {"id": "no_signed_renewal", "claim": "the renewal is signed or agreed", "any": ["renewal is signed", "has renewed", "signed the renewal", "agreed to renew"]},
-      {"id": "no_competitor", "claim": "a competitor is being evaluated", "any": ["competitor", "lumenly"]}
+      {
+        "id": "no_signed_renewal",
+        "claim": "the renewal is signed or agreed",
+        "any": [
+          "renewal is signed",
+          "has renewed",
+          "signed the renewal",
+          "agreed to renew"
+        ]
+      },
+      {
+        "id": "no_competitor",
+        "claim": "a competitor is being evaluated",
+        "any": [
+          "competitor",
+          "lumenly"
+        ]
+      }
     ]
   },
   "acc_012": {
     "must_find": [
-      {"id": "new_vp", "fact": "Raj Patel, new VP Marketing, owns the budget for the three brands", "all": [["raj"], ["vp", "marketing", "budget"]]},
-      {"id": "competitor", "fact": "Raj asked them to look at Lumenly before renewing", "all": [["lumenly"]]},
-      {"id": "overage_dispute", "fact": "Finance disputes overage invoice INV-30418 for EUR 8,300", "all": [["overage", "invoice"], ["8,300", "8300", "8.3k", "8.3 k"]]},
-      {"id": "credit_promise", "fact": "Tom offered to credit half the overage if the expanded renewal is signed by 15 December", "all": [["half", "50%", "50 %"], ["credit"]]},
-      {"id": "sso_blocker", "fact": "An open P2 request: SAML SSO is required before 60 more users can join; on the roadmap for Q1, no date", "all": [["sso", "saml"], ["60", "rollout", "block"]]},
-      {"id": "three_brands", "fact": "Three brands (Hedgerow, Pantry Lane, Greenmill) want to expand; pricing asked by 15 November", "all": [["three brands", "3 brands", "hedgerow", "pantry lane", "greenmill"]]}
+      {
+        "id": "new_vp",
+        "fact": "Raj Patel, new VP Marketing, owns the budget for the three brands",
+        "all": [
+          [
+            "raj"
+          ],
+          [
+            "vp",
+            "marketing",
+            "budget"
+          ]
+        ]
+      },
+      {
+        "id": "competitor",
+        "fact": "Raj asked them to look at Lumenly before renewing",
+        "all": [
+          [
+            "lumenly"
+          ]
+        ]
+      },
+      {
+        "id": "overage_dispute",
+        "fact": "Finance disputes overage invoice INV-30418 for EUR 7,640",
+        "all": [
+          [
+            "overage",
+            "invoice"
+          ],
+          [
+            "7,640",
+            "7640",
+            "7.6k"
+          ]
+        ]
+      },
+      {
+        "id": "credit_promise",
+        "fact": "Tom offered to credit half the overage if the expanded renewal is signed by 15 December",
+        "all": [
+          [
+            "half",
+            "50%",
+            "50 %"
+          ],
+          [
+            "credit"
+          ]
+        ]
+      },
+      {
+        "id": "sso_blocker",
+        "fact": "An open P2 request: SAML SSO is required before 60 more users can join; on the roadmap for Q1, no date",
+        "all": [
+          [
+            "sso",
+            "saml"
+          ],
+          [
+            "60",
+            "rollout",
+            "block"
+          ]
+        ]
+      },
+      {
+        "id": "three_brands",
+        "fact": "Three brands (Hedgerow, Pantry Lane, Greenmill) want to expand; pricing asked by 15 November",
+        "all": [
+          [
+            "three brands",
+            "3 brands",
+            "hedgerow",
+            "pantry lane",
+            "greenmill"
+          ]
+        ]
+      }
     ],
     "must_not": [
-      {"id": "no_churn_claim", "claim": "the account is at churn risk because usage is falling", "any": ["usage is falling", "usage is declining", "falling usage"]},
-      {"id": "no_downsize", "claim": "they plan to downsize", "any": ["downsize", "reduce their volume"]}
+      {
+        "id": "no_churn_claim",
+        "claim": "the account is at churn risk because usage is falling",
+        "any": [
+          "usage is falling",
+          "usage is declining",
+          "falling usage"
+        ]
+      },
+      {
+        "id": "no_downsize",
+        "claim": "they plan to downsize",
+        "any": [
+          "downsize",
+          "reduce their volume"
+        ]
+      }
     ]
   },
   "acc_156": {
     "must_find": [
-      {"id": "one_team", "fact": "Only the growth team (about eight people) is live", "all": [["growth team"]]},
-      {"id": "hire_fell_through", "fact": "The product team rollout is on hold because the data engineer hire fell through", "all": [["engineer", "hire", "hiring"], ["hold", "fell through", "stalled", "paused", "blocked"]]},
-      {"id": "finance_volume", "fact": "Finance questions whether they need 106 million events a year", "all": [["106"], ["finance", "volume", "events"]]},
-      {"id": "experiments_unused", "fact": "The experiments add-on is unused and has no owner", "all": [["experiment"], ["unused", "no one", "nobody", "no owner", "not used", "hasn't", "haven't"]]},
-      {"id": "renewal_soon", "fact": "Renewal is on 13 November, under a month away", "all": [["13 nov", "november 13", "13th"]]}
+      {
+        "id": "one_team",
+        "fact": "Only the growth team (about eight people) is live",
+        "all": [
+          [
+            "growth team"
+          ]
+        ]
+      },
+      {
+        "id": "hire_fell_through",
+        "fact": "The product team rollout is on hold because the data engineer hire fell through",
+        "all": [
+          [
+            "engineer",
+            "hire",
+            "hiring"
+          ],
+          [
+            "hold",
+            "fell through",
+            "stalled",
+            "paused",
+            "blocked"
+          ]
+        ]
+      },
+      {
+        "id": "finance_volume",
+        "fact": "Finance questions whether they need 106 million events a year",
+        "all": [
+          [
+            "106"
+          ],
+          [
+            "finance",
+            "volume",
+            "events"
+          ]
+        ]
+      },
+      {
+        "id": "experiments_unused",
+        "fact": "The experiments add-on is unused and has no owner",
+        "all": [
+          [
+            "experiment"
+          ],
+          [
+            "unused",
+            "no one",
+            "nobody",
+            "no owner",
+            "not used",
+            "hasn't",
+            "haven't"
+          ]
+        ]
+      },
+      {
+        "id": "renewal_soon",
+        "fact": "Renewal is on 13 November, under a month away",
+        "all": [
+          [
+            "13 nov",
+            "november 13",
+            "13th",
+            "2026-11-13"
+          ]
+        ]
+      }
     ],
     "must_not": [
-      {"id": "no_invented_sponsor", "claim": "an executive sponsor or champion other than Lucas", "any": ["vp ", "cfo", "director", "head of"]},
-      {"id": "no_competitor", "claim": "a competitor is being evaluated", "any": ["competitor", "lumenly"]}
+      {
+        "id": "no_invented_sponsor",
+        "claim": "an executive sponsor or champion other than Lucas",
+        "any": [
+          "vp ",
+          "cfo",
+          "director",
+          "head of"
+        ]
+      },
+      {
+        "id": "no_competitor",
+        "claim": "a competitor is being evaluated",
+        "any": [
+          "competitor",
+          "lumenly"
+        ]
+      }
     ]
   }
 }
