@@ -124,6 +124,7 @@ touches = rows(con, """
            properties.topic AS topic, properties.owner_id AS owner_id,
            context.source AS source
     FROM engagement
+    WHERE event_name <> 'forecast_set'         -- internal: exported as forecasts below
     -- ties on the same minute broken by account and event: the same data always
     -- exports in the same order, so two runs can be compared file to file
     ORDER BY "timestamp", account_id, event_name, event_id""")
@@ -134,6 +135,14 @@ export = {
     "week_ends": week_ends,
     "accounts": accounts,
     "touches": touches,
+    # renewal forecasts set in the cockpit (cockpit_sync.py), oldest first: the
+    # offline page shows them; the published page reads its own database
+    "forecasts": rows(con, """
+        SELECT account_id, "timestamp" AS decided_at, properties.owner_id AS by,
+               properties.outcome AS role, properties.status AS call,
+               properties.amount AS amount, properties.note AS reason
+        FROM engagement WHERE event_name = 'forecast_set'
+        ORDER BY "timestamp", event_id"""),
     "onboarding": rows(con, "SELECT * FROM onboarding ORDER BY account_id"),
     "time_to_action": rows(con, """
         SELECT t.*, o.owner_name AS owner, o.owner_type, o.manager

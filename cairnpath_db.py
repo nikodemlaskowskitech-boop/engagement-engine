@@ -69,8 +69,9 @@ def connect():
             timestamp:  'TIMESTAMP',
             account_id: 'VARCHAR',
             user_id:    'VARCHAR',
-            -- status and manager: a manager's decision in the cockpit (cockpit_sync.py)
-            properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR)',
+            -- status and manager: a manager's decision in the cockpit (cockpit_sync.py);
+            -- amount: a renewal forecast's value (forecast_set, also from the cockpit)
+            properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE)',
             context:    'STRUCT(source VARCHAR)'
         })
     """)
@@ -228,7 +229,8 @@ def connect():
     """)
 
     # The last touch per account, for journeys ("no meeting in 30 days") and
-    # for context on every task ("last touch: QBR on 12 Sep").
+    # for context on every task ("last touch: QBR on 12 Sep"). Customer-facing
+    # touches only: a task claimed, reassigned or a forecast is internal work.
     con.sql("""
         CREATE VIEW last_touch AS
         SELECT account_id,
@@ -241,6 +243,7 @@ def connect():
                count(*) FILTER (WHERE event_name = 'email_opened'
                                   AND properties.topic = 'getting_started') > 0  AS getting_started_opened
         FROM engagement
+        WHERE event_name IN ('email_sent', 'email_opened', 'workshop_attended', 'meeting_held')
         GROUP BY account_id
     """)
 
