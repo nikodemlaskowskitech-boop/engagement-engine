@@ -55,6 +55,7 @@ python team_report.py       # how fast each CSM and pool acts on churn and expan
 python onboarding_report.py # does the getting-started email help? welcomed vs. control group
 python export_views.py      # the views page: open data/views.html in a browser
 node tests/cockpit_test.js  # optional: tests the cockpit in a headless browser (needs Node + Playwright)
+node tests/scenarios_test.js # optional: the 23 acceptance scenarios by role, automated
 python actions.py           # tasks to Slack: digests, plus cards with buttons for the demo owners
 python listener.py          # in a second window: handles the buttons; clicks flow back as events           # post new tasks to Slack and log each action once (run it twice: the second run adds nothing)
 python qbr.py               # facts pack for each QBR in the next 30 days
