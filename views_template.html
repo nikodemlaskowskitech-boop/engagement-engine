@@ -152,6 +152,17 @@ table.matrix td { padding: 6px; }
 .segbar .grp { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
 .segbar .grp + label { margin-left: -2px; }
 .segbar .grp:not(:first-child) { margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--rule); }
+.acc-find { position: relative; }
+.acc-find label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--ink-3); }
+.acc-find input { width: 210px; }
+.acc-find.wide input { width: 340px; }
+.acc-list { position: absolute; z-index: 30; left: 0; top: calc(100% + 4px); min-width: 100%; width: max-content; max-width: min(460px, calc(100vw - 32px)); margin: 0; padding: 4px; list-style: none;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); max-height: 340px; overflow-y: auto; }
+.acc-list li { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; color: var(--ink); }
+.acc-list li small { display: block; color: var(--ink-3); font-size: 0.76rem; }
+.acc-list li[aria-selected="true"] { background: var(--accent-soft); }
+.acc-list li.empty { cursor: default; color: var(--ink-3); }
+@media (max-width: 640px) { .acc-find input, .acc-find.wide input { width: 100%; } .acc-find, .acc-find.wide { flex: 1 1 100%; } .acc-find label { display: flex; } }
 .segbar.on { box-shadow: inset 0 -2px 0 var(--accent-soft); }
 /* tasks */
 .badge { display: inline-block; font: 600 0.72rem var(--font-body); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
@@ -220,6 +231,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <span class="grp">Accounts</span>
       <label>Region <select id="seg-region"></select></label>
       <label>Tier <select id="seg-tier"></select></label>
+      <div class="acc-find"><label>Find <input type="search" id="seg-find" placeholder="Account name or ID" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="seg-find-list"></label><ul class="acc-list" id="seg-find-list" role="listbox" hidden></ul></div>
       <span class="count" id="seg-count"></span>
       <button class="reset" id="seg-reset" hidden>Whole book</button>
     </div>
@@ -334,7 +346,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     <section class="view" id="view-timeline" role="tabpanel" aria-labelledby="tab-timeline" hidden>
       <p class="finding" id="tl-finding">One account over 90 days: what it did, what CS did, and what the engine flagged.</p>
       <div class="controls">
-        <select id="tl-account" aria-label="Account"></select>
+        <div class="acc-find wide"><input type="search" id="tl-find" placeholder="Search an account by name or ID" autocomplete="off" role="combobox" aria-label="Account" aria-autocomplete="list" aria-expanded="false" aria-controls="tl-find-list"><ul class="acc-list" id="tl-find-list" role="listbox" hidden></ul></div>
+        <select id="tl-account" aria-label="Account" hidden></select>
         <div class="chips" id="tl-picks" aria-label="Accounts worth a look"></div>
       </div>
       <div class="grid2">
@@ -739,6 +752,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       : '<p class="note">No open flags.</p>';
     const tc = (touchesBy[id] || []).length;
     drawForecast(id);
+    $("tl-find").placeholder = `${a.account_name} (${a.account_id}): search another account`;
     $("tl-finding").textContent = `${a.account_name}: ${a.flags.length ? a.flags.length + " open flag" + (a.flags.length > 1 ? "s" : "") : "no open flags"}, ${tc} CS touch${tc === 1 ? "" : "es"} in 90 days.`;
   }
   // Renewal forecast: the data's number, then the owner's (or manager's) call
@@ -1593,6 +1607,36 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   sel.value = firstPick; drawTimeline(firstPick);
   redraw();
   // a link like ...#acc_069 (from Slack's Open timeline) opens that account
+  // Account search: type part of a name or an ID; accounts in the current
+  // segment come first, then flagged ones. Enter or a click opens the timeline.
+  function accountSearch(input, list) {
+    let items = [], active = -1;
+    const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
+    const render = () => {
+      const q = input.value.trim().toLowerCase();
+      const rank = (a) => (inSeg(a) ? 0 : 2) + (a.flags.length ? 0 : 1);
+      items = D.accounts.filter((a) => !q || a.account_name.toLowerCase().includes(q) || a.account_id.includes(q))
+        .sort((a, b) => rank(a) - rank(b) || a.account_name.localeCompare(b.account_name)).slice(0, 8);
+      list.innerHTML = items.length ? items.map((a, i) => `<li role="option" id="${input.id}-o${i}" data-id="${esc(a.account_id)}" aria-selected="${i === active}">${esc(a.account_name)}` +
+        `<small>${esc(a.account_id)} · ${esc(a.tier)} · ${esc(a.region)}${a.owner ? " · " + esc(a.owner) : ""}${a.flags.length ? " · " + a.flags.map((f) => f.flag + " " + f.status).join(", ") : ""}</small></li>`).join("")
+        : '<li class="empty">No account matches</li>';
+      list.hidden = false; input.setAttribute("aria-expanded", "true");
+      if (active >= 0) input.setAttribute("aria-activedescendant", `${input.id}-o${active}`); else input.removeAttribute("aria-activedescendant");
+    };
+    const pick = (id) => { close(); input.value = ""; input.blur(); openAccount(id); };
+    input.addEventListener("input", () => { active = -1; render(); });
+    input.addEventListener("focus", render);
+    input.addEventListener("blur", () => setTimeout(close, 150));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (list.hidden) render(); active = (active + (e.key === "ArrowDown" ? 1 : -1) + items.length) % Math.max(1, items.length); render(); }
+      else if (e.key === "Enter") { e.preventDefault(); const a = items[active >= 0 ? active : 0]; if (a) pick(a.account_id); }
+      else if (e.key === "Escape") close();
+    });
+    list.addEventListener("mousedown", (e) => { const li = e.target.closest("li[data-id]"); if (li) { e.preventDefault(); pick(li.dataset.id); } });
+  }
+  accountSearch($("seg-find"), $("seg-find-list"));
+  accountSearch($("tl-find"), $("tl-find-list"));
+
   const hashToken = (location.hash || "").replace("#", "");
   if (byId[hashToken]) { sel.value = hashToken; drawTimeline(hashToken); show("timeline"); }
   else show(hashToken);
