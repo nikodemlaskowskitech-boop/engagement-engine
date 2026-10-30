@@ -194,7 +194,8 @@ One JSON event per line, one file per day in `data/events/`.
   (Self-service, Scale, Enterprise; contracted_events). Scripts read
   `SETTINGS[...]`; never hard-code a number in a script.
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
-  declining, power_user, new_customer, shelfware, stalled, never_onboarded,
+  declining, slipping (volume sliding, users steady: one signal, churn Watch),
+  power_user, new_customer, shelfware, stalled, never_onboarded,
   handoff_gap) mixed by weight (new customers sign all through the window
   and ramp their volume up over the first month; shelfware is flat at about
   a quarter of the contract;
@@ -314,8 +315,10 @@ One JSON event per line, one file per day in `data/events/`.
   Holdout accounts get no onboarding emails (logged as "held out", never
   sent) and their queue tasks carry a note not to send one by hand.
   Each customer email is also written as an email_sent event to
-  `data/engagement/<run date>.jsonl`. `generate_events.py` clears the log,
-  since new data makes old actions meaningless.
+  `data/engagement/<run date>.jsonl`. `generate_events.py` replaces the log
+  with the new data's own task history (write_task_history: tasks sent on the
+  day each planted problem showed, some taken in Slack, two QBRs that slipped),
+  so tasks have real ages and Open/Claimed/Done/Resolved all occur.
   Reads the journey rows too, and shows each account's last CS touch under
   every Slack task. Owners in settings.toml [slack] interactive_owners get one
   card per task with buttons (via the bot token, one a second) instead of

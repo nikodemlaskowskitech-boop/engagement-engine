@@ -86,6 +86,8 @@ EXPECTATIONS = [
     ("Handoff gaps are caught",                  "activation", {"Handoff gap"}, "handoff_gap",     100),
     ("New customers (last 45 days) activate",    "activation", {"Activated", "Activating"}, "new_customer", 90),
     ("Declining accounts raise a churn flag",    "churn",      {"Act", "Watch"}, "declining",      90),
+    # Usage sliding but the same people using it: one signal only, so Watch, not Act
+    ("Slipping accounts show as churn Watch",     "churn",      {"Watch"},        "slipping",       70),
     # A shelfware account with a random bad week can land in Watch instead, so not 100%
     ("Shelfware accounts show as Shelfware",     "churn",      {"Shelfware"},    "shelfware",      80),
     # Power users are engaged, but some bought far more than they use: with
