@@ -97,7 +97,8 @@ OWNER_STYLE = {
 # How customers respond, by personality
 OPEN_RATE = {"new_customer": 0.80, "stalled": 0.45, "never_onboarded": 0.10}
 ONBOARDING_WORKSHOP_RATE = {"new_customer": 0.65, "stalled": 0.15, "never_onboarded": 0.03}
-ADVANCED_WORKSHOP_RATE = {"healthy": 0.08, "power_user": 0.20, "declining": 0.10, "shelfware": 0.03}
+ADVANCED_WORKSHOP_RATE = {"healthy": 0.08, "power_user": 0.20, "declining": 0.10, "shelfware": 0.03,
+                          "slipping": 0.06}
 TRAILING_LAG_DAYS = 15     # a 30-day average crosses a line about 15 days after daily usage does
 
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
@@ -137,7 +138,7 @@ CS_TEAM = [
 
 PERSONALITIES = {
     "healthy": dict(
-        weight=0.46, lifecycle="existing",
+        weight=0.41, lifecycle="existing",
         activity=(0.6, 0.6), util=(0.65, 0.70), user_growth=1.1, errors=(0.02, 0.02),
         features=["chart_created", "dashboard_shared", "cohort_created", "data_export"],
     ),
@@ -145,6 +146,11 @@ PERSONALITIES = {
         weight=0.13, lifecycle="existing",
         activity=(0.6, 0.05), util=(0.55, 0.22), user_growth=1.0, errors=(0.02, 0.35),
         features=["chart_created", "dashboard_shared"],
+    ),
+    "slipping": dict(          # volume sliding under the line, but the same people still use it:
+        weight=0.05, lifecycle="existing",       # one churn signal only, so churn Watch
+        activity=(0.6, 0.6), util=(0.58, 0.31), user_growth=1.0, errors=(0.02, 0.02),
+        features=["chart_created", "dashboard_shared", "cohort_created"],
     ),
     "power_user": dict(
         weight=0.10, lifecycle="existing",
@@ -588,7 +594,7 @@ def engagement_for_account(rng, acc):
             meeting(acc["last_qbr"], "qbr")
         if p["lifecycle"] == "new":
             meeting(start + timedelta(days=rng.randint(*style["act_days"])), "kickoff")
-        elif acc["personality"] in ("healthy", "power_user", "declining", "shelfware"):
+        elif acc["personality"] in ("healthy", "power_user", "declining", "shelfware", "slipping"):
             day = START_DATE + timedelta(days=rng.randint(0, style["check_in_days"]))
             while day <= END_DATE:
                 near_qbr = acc["last_qbr"] and abs((day - acc["last_qbr"]).days) < 10
@@ -650,6 +656,85 @@ def write_engagement(accounts):
     return total, called
 
 
+# --- Task history: as if the engine had been running for a few weeks ----------
+# A fresh run sends every task on the same day, so every task is 0 days old,
+# Open, and the cockpit looks frozen. Real teams have tasks of every age: some
+# done, some taken in Slack and in progress, some open for weeks, some resolved
+# because the flag went away. This writes that history into the action log
+# (data/action_log.csv), dated the day each account's problem showed, plus the
+# Slack "I'll take it" clicks for some of them. The pipeline then works it out
+# like real data: a churn call after the task makes it Done (action_status),
+# a claim makes it Claimed, a flag that's gone makes it Resolved. Tasks with
+# the same account, flag and status aren't sent again (actions.py).
+# Its own random generator, so nothing else in the data changes.
+
+HISTORY_CLAIM_RATE = 0.4        # share of open pool tasks someone took in Slack
+HISTORY_QBR_SLIPS = 2           # Enterprise accounts whose promised QBR came and went
+
+TASK_HISTORY = {                # personality -> flag, status, when it showed, the action
+    "declining": ("churn", "Act", dict(below=0.40), "Call this week: usage and breadth are dropping"),
+    "slipping":  ("churn", "Watch", dict(below=0.40), "Check in: usage is sliding, users are steady"),
+    "power_user": ("expansion", "Act", dict(above=0.80), "Build the growth case: usage and users are up"),
+}
+
+
+def write_task_history(accounts):
+    rng = random.Random(SEED + 9)
+    rows, claims = [], []
+    log = lambda day, acc, flag, status, owner, channel, action, outcome: rows.append(
+        [day.isoformat(), acc["id"], flag, status, owner, channel, action, outcome])
+    slips = 0
+    for acc in accounts:
+        owner = acc["csm"] or acc["pool"]
+        if not (acc["in_crm"] and owner):
+            continue                       # Self-service: emails, not tasks for people
+        kind = acc["personality"]
+        if kind in TASK_HISTORY:
+            flag, status, line, action = TASK_HISTORY[kind]
+            seen = visible_day(acc, **line)
+            if not seen or seen > END_DATE - timedelta(days=2):
+                continue                   # too recent: the next run sends it
+            sent = nearest_weekday(seen + timedelta(days=1))
+            # a couple of Enterprise accounts were handed to a QBR that never happened
+            if (kind == "declining" and acc["tier"] == "Enterprise" and slips < HISTORY_QBR_SLIPS
+                    and (not acc["last_qbr"] or acc["last_qbr"] < sent)):
+                promised = END_DATE - timedelta(days=rng.randint(5, 15))
+                log(sent, acc, flag, status, owner, "qbr", action, f"covered by the QBR on {promised.isoformat()}")
+                slips += 1
+                continue
+            log(sent, acc, flag, status, owner, "queue", action, "posted to Slack (history)")
+            # some pool tasks were taken in Slack a day or three later
+            if acc["pool"] and rng.random() < HISTORY_CLAIM_RATE:
+                when = local_time(rng, nearest_weekday(sent + timedelta(days=rng.randint(1, 3))), acc["region"], 10)
+                if when.date() <= END_DATE:
+                    claims.append({"event_id": str(uuid.UUID(int=rng.getrandbits(128), version=4)),
+                                   "event_name": "task_claimed", "event_type": "engagement",
+                                   "timestamp": when.strftime("%Y-%m-%dT%H:%M:%SZ"), "account_id": acc["id"],
+                                   "user_id": None, "properties": {"owner_id": owner, "topic": flag},
+                                   "context": {"source": "slack"}})
+        elif kind == "shelfware":
+            # flagged weeks ago, so a Scale follow-up falls due on the next run
+            sent = nearest_weekday(END_DATE - timedelta(days=rng.randint(31, 45)))
+            log(sent, acc, "churn", "Shelfware", owner, "queue",
+                "Adoption review: agree a ramp plan before renewal", "posted to Slack (history)")
+        elif kind == "stalled" and acc["pool"]:
+            sent = nearest_weekday(acc["contract_start"] + timedelta(days=15))
+            if sent <= END_DATE - timedelta(days=2):
+                log(sent, acc, "activation", "Stalled", owner, "queue",
+                    "Help them get a second person started", "posted to Slack (history)")
+    rows.sort()
+    path = OUT_DIR / "action_log.csv"
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["logged_on", "account_id", "flag", "status", "routed_to", "channel", "action", "outcome"])
+        writer.writerows(rows)
+    claims.sort(key=lambda e: e["timestamp"])
+    with (OUT_DIR / "engagement" / "task_history.jsonl").open("w") as f:
+        for e in claims:
+            f.write(json.dumps(e) + "\n")
+    return len(rows), len(claims), slips
+
+
 # --- Renewal outcomes: the future, for backtesting ---------------------------
 # What happened at each renewal in the OUTCOME_HORIZON_DAYS after the data
 # ends, as if we were looking back from later. Real teams get this from the
@@ -665,6 +750,7 @@ OUTCOME_ODDS = {                      # renewed, expanded, downsized, churned
     "power_user":   (0.38, 0.60, 0.00, 0.02),
     "shelfware":    (0.25, 0.00, 0.55, 0.20),
     "declining":    (0.15, 0.00, 0.30, 0.55),
+    "slipping":     (0.55, 0.00, 0.35, 0.10),     # usually a smaller renewal, rarely a loss
     "declining_called": (0.40, 0.00, 0.30, 0.30),   # a churn call happened
 }
 OUTCOMES = ("renewed", "expanded", "downsized", "churned")
@@ -750,12 +836,9 @@ if __name__ == "__main__":
     total = write_events(accounts)
     cs_total, called = write_engagement(accounts)
     outcomes_path = write_renewal_outcomes(accounts, called)
-    # New data is a new world: actions logged against the old data no longer
-    # match anything, and their email events were just wiped with data/engagement/
-    old_log = OUT_DIR / "action_log.csv"
-    if old_log.exists():
-        old_log.unlink()
-        print("Action log: cleared (it belonged to the previous data)")
+    # New data is a new world: the old action log is replaced by this data's own
+    # history (tasks of every age), and the old email events went with data/engagement/
+    tasks, claimed, slipped = write_task_history(accounts)
     print(f"Accounts:   {len(accounts)} ({sum(a['in_crm'] for a in accounts)} in the CRM)")
     print(f"CS team:    {team_path}")
     print(f"CRM table:  {crm_path}")
@@ -763,4 +846,6 @@ if __name__ == "__main__":
     print(f"Holdout:    {holdout_path} (no onboarding emails for these accounts)")
     print(f"Events:     {total:,} across {DAYS} daily files, {START_DATE} to {END_DATE}")
     print(f"Engagement: {cs_total:,} CS touches and responses in data/engagement/")
+    print(f"Task history: {tasks} earlier tasks in data/action_log.csv, {claimed} taken in Slack, "
+          f"{slipped} QBRs that slipped")
     print(f"Outcomes:   {outcomes_path} (renewals in the {OUTCOME_HORIZON_DAYS} days after the data, for backtest.py)")
