@@ -31,18 +31,19 @@ import sys
 
 import team_report
 from cairnpath_db import connect
-from settings import SETTINGS
+from settings import SETTINGS, input_path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
 LINE = SETTINGS["churn"]["util_below"]                 # the churn line (settings.toml)
 TOO_LATE = SETTINGS["backtest"]["too_late_days"]       # less warning than this can't be acted on
+OUTCOMES = str(input_path("outcomes_file")).replace("\\", "/")   # closed renewals ([data] in settings)
 FAST = SETTINGS["journeys"]["act_for_days"]            # "called within" for the funnel (14 days)
 
 def add_views(con):
     """Create the backtest view (also used by export_views.py). Empty, with the
     same columns, when there are no renewal outcomes yet."""
-    if not os.path.exists("data/renewal_outcomes.csv"):
+    if not input_path("outcomes_file").exists():
         con.sql("""CREATE VIEW backtest AS SELECT
                    NULL::VARCHAR AS account_id, NULL::VARCHAR AS account_name, NULL::VARCHAR AS tier,
                    NULL::DATE AS renewal_date, NULL::VARCHAR AS outcome, NULL::BOOLEAN AS lost_revenue,
@@ -54,7 +55,7 @@ def add_views(con):
     CREATE VIEW backtest AS
     WITH outcomes AS (
         SELECT account_id, renewal_date::DATE AS renewal_date, outcome
-        FROM read_csv('data/renewal_outcomes.csv', all_varchar = true)
+        FROM read_csv('{OUTCOMES}', all_varchar = true)
     ),
     flagged AS (
         SELECT account_id, status
@@ -87,9 +88,9 @@ def add_views(con):
 
 
 # Run as a script: the report. Imported (export_views.py): just add_views.
-if __name__ == "__main__" and not os.path.exists("data/renewal_outcomes.csv"):
+if __name__ == "__main__" and not input_path("outcomes_file").exists():
     # not an error: older data has no outcomes yet (run_all.ps1 -Regenerate makes them)
-    print("No data/renewal_outcomes.csv yet: run python generate_events.py, then backtest.py")
+    print(f"No {OUTCOMES} yet: run python generate_events.py (demo data) or add your closed renewals, then backtest.py")
     sys.exit(0)
 
 if __name__ == "__main__":

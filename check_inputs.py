@@ -25,11 +25,14 @@ from collections import Counter
 from datetime import date
 from pathlib import Path
 
-from settings import SETTINGS
+from settings import INPUTS, SETTINGS
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-FOLDER = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent / "data"
+# the folder in [data] inputs (settings.local.toml for your own exports), or one given here
+FOLDER = Path(sys.argv[1]) if len(sys.argv) > 1 else INPUTS
+FILES = SETTINGS["data"]                  # file names in that folder
+COLUMNS = SETTINGS.get("columns", {})     # your column names -> the engine's
 TIERS = SETTINGS["tiers"]
 CONTRACT = SETTINGS["utilisation"]["contract_column"]
 USAGE_EVENT = SETTINGS["utilisation"]["usage_event"]
@@ -67,13 +70,14 @@ def to_date(text):
         return None
 
 
-def read_csv(name, required, label):
-    """Read a CSV with a header. None (and an ERROR or a note) if it can't be used."""
+def read_csv(name, required, label, mapping=None):
+    """Read a CSV with a header. None (and an ERROR or a note) if it can't be used.
+    mapping: your column names -> the engine's ([columns.*] in settings)."""
     path = FOLDER / name
     if not path.exists():
         return None
     with path.open(encoding="utf-8-sig", newline="") as f:      # -sig: Excel's byte-order mark
-        rows = list(csv.DictReader(f))
+        rows = [{(mapping or {}).get(k, k): v for k, v in r.items()} for r in csv.DictReader(f)]
     columns = set(rows[0]) if rows else set()
     missing = [c for c in required if c not in columns]
     if missing:
@@ -89,9 +93,9 @@ print(f"\nChecking the inputs in {FOLDER}\n")
 print("1. CRM accounts")
 crm_cols = ["account_id", "account_name", "tier", "region", "contract_start", "renewal_date",
             CONTRACT, "csm_owner", "cs_pool"]
-crm = read_csv("crm_accounts.csv", crm_cols, "CRM")
-if crm is None and not (FOLDER / "crm_accounts.csv").exists():
-    say("ERROR", "CRM: crm_accounts.csv not found. Nothing can run without it")
+crm = read_csv(FILES["crm_file"], crm_cols, "CRM", COLUMNS.get("crm"))
+if crm is None and not (FOLDER / FILES["crm_file"]).exists():
+    say("ERROR", f"CRM: {FILES['crm_file']} not found. Nothing can run without it")
 accounts = {}
 if crm:
     ids = Counter(r["account_id"] for r in crm)
@@ -142,7 +146,7 @@ if crm:
 
 # --- 2. CS team (required when a tier has people) ---------------------------------
 print("\n2. CS team")
-team = read_csv("cs_team.csv", ["owner_id", "owner_name", "owner_type", "region", "manager"], "CS team")
+team = read_csv(FILES["team_file"], ["owner_id", "owner_name", "owner_type", "region", "manager"], "CS team", COLUMNS.get("team"))
 owners = {}
 if team:
     owners = {r["owner_id"]: r for r in team}
@@ -155,12 +159,12 @@ if team:
         if unknown := named - set(owners):
             say("WARN", f"CS team: owners named in the CRM but not in the team table "
                         f"(tasks without a name or a manager): {examples(unknown)}")
-elif not (FOLDER / "cs_team.csv").exists():
-    say("WARN", "CS team: cs_team.csv not found. Tasks can't name an owner or a manager")
+elif not (FOLDER / FILES["team_file"]).exists():
+    say("WARN", f"CS team: {FILES['team_file']} not found. Tasks can't name an owner or a manager")
 
 # --- 3. Product events (required) -------------------------------------------------
 print("\n3. Product events")
-event_files = sorted((FOLDER / "events").glob("*.jsonl")) if (FOLDER / "events").exists() else []
+event_files = sorted(FOLDER.glob(FILES["events_glob"]))
 first = last = None
 by_name, broken, usage_days, users_seen, event_accounts = Counter(), 0, Counter(), set(), set()
 if not event_files:
@@ -211,7 +215,7 @@ else:
 
 # --- 4. Engagement history (optional) ---------------------------------------------
 print("\n4. Engagement history (optional)")
-eng_files = sorted((FOLDER / "engagement").glob("*.jsonl")) if (FOLDER / "engagement").exists() else []
+eng_files = sorted(FOLDER.glob(FILES["engagement_glob"]))
 eng, no_topic, eng_broken = Counter(), 0, 0
 for path in eng_files:
     with path.open(encoding="utf-8") as f:
@@ -237,17 +241,17 @@ else:
 
 # --- 5. Onboarding holdout and 6. renewal outcomes (optional) ---------------------
 print("\n5. Onboarding holdout (optional)")
-holdout = read_csv("onboarding_holdout.csv", ["account_id"], "Holdout")
-if holdout is None and not (FOLDER / "onboarding_holdout.csv").exists():
+holdout = read_csv(FILES["holdout_file"], ["account_id"], "Holdout")
+if holdout is None and not (FOLDER / FILES["holdout_file"]).exists():
     say("WARN", "Holdout: none. Everyone gets onboarding emails; no welcomed vs. control report")
 
 print("\n6. Renewal outcomes (optional)")
-outcomes = read_csv("renewal_outcomes.csv", ["account_id", "renewal_date", "outcome"], "Outcomes")
+outcomes = read_csv(FILES["outcomes_file"], ["account_id", "renewal_date", "outcome"], "Outcomes")
 if outcomes:
     if odd := Counter(r["outcome"] for r in outcomes if r["outcome"] not in OUTCOMES):
         say("WARN", f"Outcomes: unknown values (use {', '.join(sorted(OUTCOMES))}): "
                     + ", ".join(f"{o!r} ({n})" for o, n in odd.items()))
-elif not (FOLDER / "renewal_outcomes.csv").exists():
+elif not (FOLDER / FILES["outcomes_file"]).exists():
     say("WARN", "Outcomes: none. No backtest (recall, precision, warning time)")
 
 # --- What works with this data ----------------------------------------------------

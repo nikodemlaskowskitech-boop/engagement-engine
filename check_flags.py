@@ -24,7 +24,7 @@ from collections import Counter
 from pathlib import Path
 
 from cairnpath_db import connect
-from settings import SETTINGS
+from settings import DEMO, SETTINGS
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -38,6 +38,14 @@ def read(name):
     with path.open(encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
+
+# The answer key only exists for the generated demo data. On a company's own
+# data there is no truth to check against here: the backtest against its
+# closed renewals (backtest.py) is the real test.
+if not DEMO:
+    print("Running on your own data ([data] inputs): no answer key, so this check is skipped. "
+          "backtest.py tests the flags against your closed renewals.")
+    sys.exit(0)
 
 key = {r["account_id"]: r for r in read("answer_key.csv")}
 flags = {name: read(f"flags_{name}.csv") for name in ("activation", "churn", "expansion")}

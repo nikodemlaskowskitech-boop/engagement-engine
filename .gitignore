@@ -221,3 +221,6 @@ __marimo__/
 
 # Cairnpath: generated data, rebuilt by generate_events.py
 data/
+
+# Your own settings (data folder, column names): never committed
+settings.local.toml

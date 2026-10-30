@@ -45,6 +45,7 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 python generate_events.py   # ~500 accounts, 90 days of events
 python check_inputs.py      # are the inputs complete? what will and won't work
+# your own data instead of the fake one: see "Running on your own data" in DATA_CONTRACT.md
 python explore.py           # the book of business at a glance
 python flags.py             # activation, churn, expansion and QBR flags, plus work queues
 python check_flags.py       # test the flags against the generator's answer key

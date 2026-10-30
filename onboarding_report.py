@@ -31,7 +31,7 @@ Run generate_events.py first (no flags needed), then:  python onboarding_report.
 import sys
 
 from cairnpath_db import connect
-from settings import SETTINGS
+from settings import SETTINGS, input_path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -40,6 +40,10 @@ MIN_USERS = SETTINGS["activation"]["min_users"]
 
 def add_views(con):
     """Create the onboarding view (also used by export_views.py)."""
+    # the holdout list ([data] holdout_file) is optional: without it, nobody is a control
+    h = input_path("holdout_file")
+    HOLDOUT_SQL = (f"SELECT account_id FROM read_csv_auto('{str(h).replace(chr(92), '/')}')" if h.exists()
+                   else "SELECT NULL::VARCHAR AS account_id WHERE false")
     con.sql(f"""
         CREATE VIEW onboarding AS
         WITH welcomed AS (
@@ -48,7 +52,7 @@ def add_views(con):
             WHERE event_name = 'email_sent' AND properties.topic = 'getting_started'
         ),
         holdout AS (
-            SELECT account_id FROM read_csv_auto('data/onboarding_holdout.csv')
+            {HOLDOUT_SQL}
         ),
         cohort AS (
             SELECT c.account_id, c.tier, c.contract_start,
