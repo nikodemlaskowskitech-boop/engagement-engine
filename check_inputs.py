@@ -125,6 +125,12 @@ if crm:
     if no_contract:
         say("WARN", f"CRM: {count(len(no_contract), 'account')} without a usable {CONTRACT}, so no utilisation, "
                     f"churn or expansion for them: {examples(no_contract)}")
+    arr_col = SETTINGS["money"]["arr_column"]
+    if arr_col not in crm[0]:
+        say("WARN", f"CRM: no {arr_col} column, so ARR is estimated from {CONTRACT} x the list price "
+                    f"in settings.toml [money]")
+    elif bad := [r["account_id"] for r in crm if not usable(r[arr_col])]:
+        say("WARN", f"CRM: {count(len(bad), 'account')} without a usable {arr_col}: {examples(bad)}")
     no_csm = [r["account_id"] for r in crm if r["tier"] == TIERS["named_csm"] and not r["csm_owner"].strip()]
     if no_csm:
         say("WARN", f"CRM: {count(len(no_csm), TIERS['named_csm'] + ' account')} with no csm_owner "

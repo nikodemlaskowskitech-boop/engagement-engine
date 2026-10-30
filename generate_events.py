@@ -43,12 +43,18 @@ TIER_COUNTS = {"Enterprise": 48, "Scale": 150, "Self-service": 300}
 ENTERPRISE_PER_REGION = {"UK&I": 16, "DACH": 16, "France & Benelux": 8, "Nordics": 8}
 REGION_WEIGHTS = {"UK&I": 0.35, "DACH": 0.30, "France & Benelux": 0.20, "Nordics": 0.15}
 
-# Contracted events per year, by tier
+# Contracted events per year, by tier: the middle of the range. Each account
+# gets its own size, from half to double this (own random generator, so the
+# rest of the data doesn't change).
 CONTRACT_SIZE = {
     "Enterprise": 300_000_000,
     "Scale": 60_000_000,
     "Self-service": 12_000_000,
 }
+# What the company charges, in EUR per 1,000 contracted events (volume
+# discount: bigger tiers pay less per event). ARR = contract x price; it goes
+# into the CRM, like a real company's ARR or annual order value field.
+PRICE_PER_1K = {"Enterprise": 0.45, "Scale": 0.55, "Self-service": 0.65}
 
 # Typical starting user pool, by tier (min, max)
 USERS_BY_TIER = {"Enterprise": (10, 25), "Scale": (4, 10), "Self-service": (2, 5)}
@@ -328,6 +334,10 @@ def build_accounts():
     set_qbr_dates(accounts)
     set_champions(accounts)
     set_welcome_group(accounts)
+    # Each account's own contract size, rounded like a real order form
+    size_rng = random.Random(SEED + 10)
+    for acc in accounts:
+        acc["contract"] = round(CONTRACT_SIZE[acc["tier"]] * 2 ** size_rng.uniform(-1, 1), -6)
     return accounts
 
 
@@ -408,7 +418,7 @@ def write_crm(accounts):
     path = OUT_DIR / "crm_accounts.csv"
     columns = ["account_id", "account_name", "tier", "region", "contract_start", "renewal_date",
                "contracted_events", "add_ons", "csm_owner", "cs_pool", "last_qbr_date",
-               "next_qbr_date"]
+               "next_qbr_date", "arr"]
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
@@ -423,12 +433,13 @@ def write_crm(accounts):
                 "region": acc["region"],
                 "contract_start": start.isoformat(),
                 "renewal_date": (start + timedelta(days=365)).isoformat(),
-                "contracted_events": CONTRACT_SIZE[acc["tier"]],
+                "contracted_events": int(acc["contract"]),
                 "add_ons": acc["add_ons"],
                 "csm_owner": acc["csm"],
                 "cs_pool": acc["pool"],
                 "last_qbr_date": acc["last_qbr"].isoformat() if acc["last_qbr"] else "",
                 "next_qbr_date": acc["next_qbr"].isoformat() if acc["next_qbr"] else "",
+                "arr": int(round(acc["contract"] / 1000 * PRICE_PER_1K[acc["tier"]], -2)),
             })
     return path
 
@@ -479,7 +490,7 @@ def events_for_day(acc, day_index, day, pool):
                 out.append(event(random.choice(p["features"]), "product", day, acc["id"], user))
 
     # System: how many events the customer sent us today (this is what they pay for)
-    daily_contract = CONTRACT_SIZE[acc["tier"]] / 365
+    daily_contract = acc["contract"] / 365
     if p.get("ramp_days"):
         # new customers ramp up: more data sources and teams come on over the first month
         ramp = min(1.0, (day - onboard_day).days / p["ramp_days"])
