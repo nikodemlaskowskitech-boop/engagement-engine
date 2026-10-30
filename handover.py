@@ -270,7 +270,18 @@ def run(account_id, dry_run):
         messages=[{"role": "user", "content":
                    f"The account is moving from {previous} to a new owner. Sources:\n\n{sent}"}])
     draft = "".join(b.text for b in response.content if b.type == "text")
+    usage = (response.usage.input_tokens, response.usage.output_tokens)
+    # Only a finished answer counts. "max_tokens" = cut short; an empty draft = nothing written.
+    # Either way, save no brief: an empty or half brief would pass every citation check.
+    if response.stop_reason != "end_turn" or not draft.strip():
+        problem = {"incomplete": f"model stopped with '{response.stop_reason}' after {usage[1]} tokens, "
+                                 f"{len(draft)} characters written"}
+        (OUT / f"{account_id}.md").unlink(missing_ok=True)
+        (OUT / f"{account_id}_check.json").write_text(json.dumps(problem, indent=1), encoding="utf-8")
+        print(f"           NO BRIEF: {problem['incomplete']} (raise [handover] max_output_tokens?)")
+        return usage
     checks = check(draft, sent, {"DATA"} | {d["id"] for d in docs})
+    checks["stop_reason"] = response.stop_reason
     brief = restore(draft, key)
     sources = "\n".join(f"- **{d['id']}** {d['title']} ({d['date']})" for d in docs)
     flags = []
@@ -287,7 +298,7 @@ def run(account_id, dry_run):
     (OUT / f"{account_id}_check.json").write_text(json.dumps(checks, indent=1), encoding="utf-8")
     print(f"           brief -> data/handover/{account_id}.md"
           + (f"  ({'; '.join(flags)})" if flags else "  (all checks passed)"))
-    return response.usage.input_tokens, response.usage.output_tokens
+    return usage
 
 
 if __name__ == "__main__":

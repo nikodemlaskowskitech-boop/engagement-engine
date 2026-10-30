@@ -12,8 +12,9 @@ Handover brief test: privacy first, then quality.
    claimed anything it must not, and the brief's own checks (citations to
    sources that don't exist, numbers found in no source).
 
-Plain Python. Exit 1 if any privacy check fails or a brief claims something
-it must not.
+Plain Python. Exit 1 if any privacy check fails, a brief is missing after a
+run (cut short or empty), finds under half the planted facts, or claims
+something it must not.
 """
 
 import json
@@ -48,16 +49,26 @@ print("\n2. Quality: the brief against the answer key")
 for account, story in KEY.items():
     if account.startswith("_"):
         continue
-    brief_path = OUT / f"{account}.md"
+    brief_path, check_path = OUT / f"{account}.md", OUT / f"{account}_check.json"
+    checks = json.loads(check_path.read_text(encoding="utf-8")) if check_path.exists() else {}
+    if "incomplete" in checks:                       # the model ran but no brief was saved
+        failed += 1
+        print(f"  FAIL  {account}: no brief, {checks['incomplete']}"); continue
     if not brief_path.exists():
         print(f"  SKIP  {account}: no brief yet (python handover.py {account})"); continue
+    if checks.get("stop_reason") != "end_turn":      # only a finished answer counts (older runs didn't record it)
+        failed += 1
+        print(f"  FAIL  {account}: not known to be a finished answer (stopped: {checks.get('stop_reason', 'not recorded')}); re-run handover.py"); continue
     body = brief_path.read_text(encoding="utf-8").split("\n---\n")[0].lower()   # the brief, not its source list
+    if len(body.strip()) < 200:                      # empty or nearly: "fully cited" means nothing then
+        failed += 1
+        print(f"  FAIL  {account}: the brief is empty or almost ({len(body.strip())} characters)"); continue
     found = [f for f in story["must_find"] if all(any(w in body for w in group) for group in f["all"])]
     missed = [f["id"] for f in story["must_find"] if f not in found]
     wrong = [m["id"] for m in story["must_not"] if any(w in body for w in m["any"])]
-    checks = json.loads((OUT / f"{account}_check.json").read_text(encoding="utf-8")) if (OUT / f"{account}_check.json").exists() else {}
-    failed += bool(wrong)
-    print(f"  {'PASS' if not wrong else 'FAIL'}  {account}: found {len(found)} of {len(story['must_find'])} planted facts"
+    too_few = len(found) < len(story["must_find"]) / 2      # a brief that misses most of the story failed its job
+    failed += bool(wrong) or too_few
+    print(f"  {'PASS' if not (wrong or too_few) else 'FAIL'}  {account}: found {len(found)} of {len(story['must_find'])} planted facts"
           + (f" (missed: {', '.join(missed)})" if missed else "")
           + f"; claimed {len(wrong)} thing(s) it must not" + (f" ({', '.join(wrong)})" if wrong else "")
           + f"; {len(checks.get('unknown_citations', []))} unknown citations, {len(checks.get('unverified_numbers', []))} unverified numbers")

@@ -74,7 +74,7 @@ stories_folder = "stories"
 support_file = "support_cases.csv"   # helpdesk ticket export
 email_folder = "emails"              # .eml files
 calls_folder = "calls"               # call transcripts
-max_output_tokens = 900
+max_output_tokens = 4000     # room to write; a brief cut short is refused, never saved
 
 [regions]
 # Hours ahead of UTC (summer time), for sending emails at a local hour
