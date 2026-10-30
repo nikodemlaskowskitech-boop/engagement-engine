@@ -106,6 +106,10 @@ TRAILING_LAG_DAYS = 15     # a 30-day average crosses a line about 15 days after
 # customer is rare (it gets escalated fast).
 TIER_WEIGHT_OVERRIDES = {"Enterprise": {"handoff_gap": 0.0, "never_onboarded": 0.01}}
 
+# Enterprise customers covered from another region's team (region, the CSM who covers it):
+# a smaller book in London picks up Nordic and Benelux accounts
+CROSS_REGION_COVER = [("Nordics", "csm_anna"), ("Nordics", "csm_tom"), ("France & Benelux", "csm_lukas")]
+
 # --- CS team ----------------------------------------------------------------
 # Enterprise accounts have a named CSM; Scale accounts go to a regional pool;
 # Self-service has no human coverage.
@@ -304,6 +308,17 @@ def build_accounts():
             elif tier == "Scale":
                 acc["pool"] = pools_by_region[region][0]
             accounts.append(acc)
+
+    # A few customers are covered from another region's team: the CSM speaks the
+    # language, or the account followed its CSM. Picked by rule, not at random,
+    # so nothing else in the data moves. (Team = where the CSM sits; region =
+    # where the customer is. The cockpit filters on both.)
+    for region, csm in CROSS_REGION_COVER:
+        home = {c[0]: c[3] for c in CS_TEAM}             # owner -> the region they sit in
+        candidates = [a for a in accounts if a["tier"] == "Enterprise" and a["region"] == region
+                      and a["csm"] and home[a["csm"]] == region]  # not one already moved
+        if candidates:
+            candidates[-1]["csm"] = csm
 
     # A few new Enterprise accounts were never handed to a CSM (a handoff miss)
     new_enterprise = [a for a in accounts if a["tier"] == "Enterprise"

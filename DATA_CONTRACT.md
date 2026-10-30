@@ -92,7 +92,7 @@ acc_003,Driftwood Banking,Enterprise,UK&I,2026-02-10,2027-02-10,300000000,experi
 | owner_id | Matches csm_owner / cs_pool in the CRM |
 | owner_name | Shown on tasks |
 | owner_type | `csm` or `pool` |
-| region | Their region |
+| region | The region they sit in: their team. Not always the region of their accounts (a CSM can cover a customer elsewhere) |
 | manager | Who gets the escalations (e.g. `mgr_james`) |
 
 ```csv
