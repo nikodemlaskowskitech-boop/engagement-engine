@@ -6,6 +6,12 @@ data scattered across separate systems, in one page with its sources.
     python handover.py acc_024 --dry-run  everything but the model call: shows
                                           exactly what would be sent
     python handover.py                    every account in the stories directory
+    python handover.py --force            rewrite even when nothing changed
+
+A brief is rewritten only when its context changed (settings.toml [handover]
+rewrite_on): new or changed documents, a flag's status, a newly booked QBR or
+an owner change, plus any change to the prompt or model. Daily number moves
+don't count. Otherwise the stored brief is kept and the model isn't called.
 
 The steps, and who does what:
 
@@ -28,7 +34,8 @@ The steps, and who does what:
 
 Outputs in data/handover/ (git-ignored): <account>.md (the brief),
 <account>_sent.txt (exactly what the model saw), <account>_key.json (the
-redaction key: local only) and <account>_check.json (the checks).
+redaction key: local only), <account>_check.json (the checks) and
+<account>_meta.json (the fingerprint the last brief was written from).
 tests/handover_test.py grades a brief against stories/answer_key.json.
 
 Needs ANTHROPIC_API_KEY in .env (like brief.py), except with --dry-run.
@@ -36,6 +43,7 @@ Needs ANTHROPIC_API_KEY in .env (like brief.py), except with --dry-run.
 
 import csv
 import email
+import hashlib
 import json
 import re
 import sys
@@ -50,6 +58,7 @@ REPO = Path(__file__).resolve().parent
 CONF = SETTINGS["handover"]
 STORIES = REPO / CONF["stories_folder"]
 OUT = REPO / "data" / "handover"
+VIEWS = REPO / "data" / "views_data.json"      # the engine's export (module-level so tests can point elsewhere)
 LLM = SETTINGS["llm"]
 
 SYSTEM_PROMPT = """You write handover briefs for a Customer Success manager taking over an
@@ -82,7 +91,7 @@ def directory():
 
 def engine_facts(account_id):
     """The engine's own facts for the account, from the export (no model involved)."""
-    d = json.loads((REPO / "data" / "views_data.json").read_text(encoding="utf-8"))
+    d = json.loads(VIEWS.read_text(encoding="utf-8"))
     a = next((x for x in d["accounts"] if x["account_id"] == account_id), None)
     if not a:
         sys.exit(f"{account_id} is not in data/views_data.json: run .\\run_all.ps1 first")
@@ -123,7 +132,8 @@ def engine_facts(account_id):
 def tickets(entry):
     with (STORIES / CONF["support_file"]).open(encoding="utf-8") as f:
         rows = [r for r in csv.DictReader(f) if r["organization"] == entry["helpdesk_org"]]
-    return [{"kind": "S", "date": r["created_at"], "title": f"Ticket {r['ticket_id']} ({r['priority']}, {r['status']}): {r['subject']}",
+    # "source" = each document's own ID in its system: what the cache recognises it by
+    return [{"kind": "S", "source": f"ticket {r['ticket_id']}", "date": r["created_at"], "title": f"Ticket {r['ticket_id']} ({r['priority']}, {r['status']}): {r['subject']}",
              "text": f"Opened {r['created_at']} by {r['requester_name']} <{r['requester_email']}>, last updated {r['updated_at']}.\n"
                      f"{r['description']}\nLatest comment: {r['latest_comment']}"} for r in rows]
 
@@ -136,7 +146,7 @@ def emails(entry):
         if "@" + entry["email_domain"] not in people:
             continue                         # joined by email domain, like a mail archive would be
         body = m.get_body(preferencelist=("plain",)).get_content().strip()
-        out.append({"kind": "E", "date": m["Date"].datetime.date().isoformat(), "title": f"Email: {m['Subject']}",
+        out.append({"kind": "E", "source": f"email {m['Message-ID'] or p.name}", "date": m["Date"].datetime.date().isoformat(), "title": f"Email: {m['Subject']}",
                     "text": f"From: {m['From']}\nTo: {m['To']}\n" + (f"Cc: {m['Cc']}\n" if m["Cc"] else "") + f"\n{body}"})
     return out
 
@@ -148,7 +158,7 @@ def calls(account_id):
         head = dict(re.findall(r"^(\w[\w ]*): (.*)$", text.split("\n\n")[0], re.M))
         if head.get("CRM account") != account_id:
             continue                         # joined by the CRM account ID the recorder stores
-        out.append({"kind": "C", "date": head["Date"][:10], "title": f"Call: {head['Title']}", "text": text})
+        out.append({"kind": "C", "source": f"call {p.name}", "date": head["Date"][:10], "title": f"Call: {head['Title']}", "text": text})
     return out
 
 
@@ -255,7 +265,55 @@ def restore(text, key):
 
 # --- run ---------------------------------------------------------------------------
 
-def run(account_id, dry_run):
+# --- fingerprint: has the context changed since the last brief? -------------------
+
+def _h(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def fingerprint(account_id, entry, docs):
+    """What the brief depends on, part by part (settings.toml [handover] rewrite_on).
+    Daily numbers (utilisation, users, the date) are left out on purpose."""
+    d = json.loads(VIEWS.read_text(encoding="utf-8"))
+    a = next(x for x in d["accounts"] if x["account_id"] == account_id)
+    parts = {
+        # one entry per document, by its own ID in its system (E2-style IDs renumber when one
+        # is added; titles repeat, e.g. two replies with the same subject on the same day).
+        # The hash covers the title too, so a ticket changing status counts as changed.
+        "documents": {doc["source"]: _h(doc["title"] + doc["text"]) for doc in docs},
+        "flag_status": sorted(f"{f['flag']} {f['status']}" for f in a["flags"]),
+        "qbr_booked": a.get("next_qbr_date") or "",
+        "owner": f"{entry['handover_from']} -> {entry['handover_to']}",
+    }
+    parts = {k: v for k, v in parts.items() if k in CONF["rewrite_on"]}
+    parts["prompt"] = _h(SYSTEM_PROMPT + LLM["model"] + str(CONF["max_output_tokens"]))   # always: new prompt = new brief
+    return parts
+
+
+def what_changed(old, new):
+    """Plain words for why a brief is being rewritten."""
+    if not old:
+        return ["no brief yet"]
+    out = []
+    for part in new:
+        if part == "documents":
+            added = [t for t in new[part] if t not in old.get(part, {})]
+            edited = [t for t in new[part] if t in old.get(part, {}) and old[part][t] != new[part][t]]
+            gone = [t for t in old.get(part, {}) if t not in new[part]]
+            out += [f"new {t}" for t in added] + [f"changed {t}" for t in edited] + [f"removed {t}" for t in gone]
+        elif old.get(part) != new[part]:
+            out.append(f"{part.replace('_', ' ')}: {old.get(part) or 'none'} -> {new[part] or 'none'}")
+    return out
+
+
+def kept_brief_ok(account_id):
+    """The stored brief exists and was a finished answer."""
+    check = OUT / f"{account_id}_check.json"
+    return ((OUT / f"{account_id}.md").exists() and check.exists()
+            and json.loads(check.read_text(encoding="utf-8")).get("stop_reason") == "end_turn")
+
+
+def run(account_id, dry_run, force=False):
     entry, account, team, facts, docs = gather(account_id)
     sent, key = redact(entry, team, facts, docs)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -264,6 +322,14 @@ def run(account_id, dry_run):
     kinds = {k: sum(d["kind"] == k for d in docs) for k in "SEC"}
     print(f"  {account_id}  {entry['company']:<16} {kinds['S']} tickets, {kinds['E']} emails, {kinds['C']} calls; "
           f"{len(key) - 1} people redacted -> data/handover/{account_id}_sent.txt")
+    meta_path = OUT / f"{account_id}_meta.json"
+    new = fingerprint(account_id, entry, docs)
+    old = json.loads(meta_path.read_text(encoding="utf-8"))["parts"] if meta_path.exists() else {}
+    changes = what_changed(old, new) if kept_brief_ok(account_id) else ["no finished brief yet"]
+    if not changes and not force:
+        print(f"           unchanged since the last brief: kept, no model call")
+        return 0, 0
+    print(f"           {'would rewrite' if dry_run else 'rewriting'}: " + "; ".join(changes or ["--force"]))
     if dry_run:
         return 0, 0
     import anthropic                        # only needed for the real call
@@ -304,6 +370,9 @@ def run(account_id, dry_run):
     brief += "\n\n_Draft: the previous owner confirms it before the new owner relies on it._\n"
     (OUT / f"{account_id}.md").write_text(brief, encoding="utf-8")
     (OUT / f"{account_id}_check.json").write_text(json.dumps(checks, indent=1), encoding="utf-8")
+    # remember what this brief was written from, so an unchanged account isn't rewritten
+    meta_path.write_text(json.dumps({"written_as_of": json.loads(VIEWS.read_text(encoding="utf-8"))["as_of"], "why": changes or ["--force"],
+                                     "parts": new}, indent=1), encoding="utf-8")
     print(f"           brief -> data/handover/{account_id}.md"
           + (f"  ({'; '.join(flags)})" if flags else "  (all checks passed)"))
     return usage
@@ -312,11 +381,12 @@ def run(account_id, dry_run):
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     dry = "--dry-run" in sys.argv
+    force = "--force" in sys.argv
     ids = args or list(directory())
     tin = tout = 0
     for account_id in ids:
-        i, o = run(account_id, dry)
+        i, o = run(account_id, dry, force)
         tin, tout = tin + i, tout + o
     if not dry:
         cost = (tin * LLM["price_input_per_million"] + tout * LLM["price_output_per_million"]) / 1e6
-        print(f"\n{len(ids)} briefs, {tin:,} tokens in, {tout:,} out, about ${cost:.3f}")
+        print(f"\n{len(ids)} accounts, {tin:,} tokens in, {tout:,} out, about ${cost:.3f}")
