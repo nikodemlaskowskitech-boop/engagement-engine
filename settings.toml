@@ -21,6 +21,27 @@ named_csm = "Enterprise"      # a named CSM (csm_owner) and QBRs
 usage_event = "daily_event_volume"     # its properties.event_count is the day's usage
 contract_column = "contracted_events"  # the annual commitment in the CRM
 
+[data]
+# Where the inputs come from. "data" = the generated demo data. To run on your
+# own exports, set these in settings.local.toml (see settings.local.example.toml)
+# rather than here, so a pull never overwrites them. Whatever the engine
+# produces (flags, the action log, new engagement events, the views) is always
+# written to data/, never into your export folder.
+inputs = "data"
+crm_file = "crm_accounts.csv"
+team_file = "cs_team.csv"
+events_glob = "events/*.jsonl"            # product and system events, one JSON per line
+engagement_glob = "engagement/*.jsonl"    # CS history (optional)
+holdout_file = "onboarding_holdout.csv"   # optional
+outcomes_file = "renewal_outcomes.csv"    # optional
+
+# Your column names -> the engine's (see DATA_CONTRACT.md). Only list the ones
+# that differ, e.g. "Account ID" = "account_id". Empty = your files already
+# use the engine's names.
+[columns.crm]
+
+[columns.team]
+
 [money]
 # Account value: what guides the work, never claimed as a CSM's credit.
 # ARR comes from the CRM column below. A CRM without it gets an estimate:

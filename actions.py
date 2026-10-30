@@ -73,7 +73,7 @@ from pathlib import Path
 from time import sleep
 
 from cairnpath_db import connect
-from settings import SETTINGS
+from settings import SETTINGS, input_path
 from slack_loop import card_blocks, card_channel, dm_target, interactive, load_env
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -194,8 +194,9 @@ queue_hook, email_hook = load_webhooks()
 # the bot token posts task cards with buttons; without it, everything stays a digest
 bot_token, demo_user = load_env("SLACK_BOT_TOKEN", "SLACK_DEMO_USER")
 
-with (DATA / "cs_team.csv").open(encoding="utf-8") as f:
-    team = list(csv.DictReader(f))
+# the CS team through the view, so your own column names ([columns.team]) work
+team = [dict(zip(("owner_id", "owner_name", "owner_type", "manager"), r))
+        for r in con.sql("SELECT owner_id, owner_name, owner_type, manager FROM cs_team").fetchall()]
 owner_names = {r["owner_id"]: r["owner_name"] for r in team}
 team_manager = {r["owner_id"]: r["manager"] for r in team}
 SLACK_DM_REASSIGNED = SETTINGS["slack"].get("dm_reassigned", False)
@@ -203,12 +204,14 @@ pools = {r["owner_id"] for r in team if r["owner_type"] == "pool"}
 owner_names["cs_ops"] = "CS ops"
 owner_names["email"] = "Customer emails"
 # managers aren't owners in cs_team, only a column: mgr_james -> "James (manager)"
-with (DATA / "cs_team.csv").open(encoding="utf-8") as f:
-    for r in csv.DictReader(f):
-        owner_names.setdefault(r["manager"], f"{r['manager'].removeprefix('mgr_').title()} (manager)")
+for r in team:
+    owner_names.setdefault(r["manager"], f"{r['manager'].removeprefix('mgr_').title()} (manager)")
 
-with (DATA / "onboarding_holdout.csv").open(encoding="utf-8") as f:
-    holdout = {r["account_id"] for r in csv.DictReader(f)}
+# the onboarding holdout list is optional: no file = nobody held out
+holdout = set()
+if input_path("holdout_file").exists():
+    with input_path("holdout_file").open(encoding="utf-8") as f:
+        holdout = {r["account_id"] for r in csv.DictReader(f)}
 HOLDOUT_NOTE = " (onboarding holdout: no welcome email or onboarding pack; help if they ask)"
 
 # QBR first: Enterprise accounts with a QBR coming up, and its date

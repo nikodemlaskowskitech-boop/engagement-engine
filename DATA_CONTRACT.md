@@ -207,6 +207,26 @@ creates duplicates. The direction stays one-way for CS facts: the engine is
 the record for engagement, and the CRM gets a copy so sales and leadership see
 it where they already work.
 
+## Running on your own data
+
+1. Copy `settings.local.example.toml` to `settings.local.toml` (git-ignored, so
+   a pull never overwrites it). Anything in it replaces the same key in
+   `settings.toml`.
+2. Under `[data]`, point `inputs` at the folder with your exports and name
+   your files (`crm_file`, `team_file`, `events_glob`, and the optional
+   `engagement_glob`, `holdout_file`, `outcomes_file`).
+3. Under `[columns.crm]` and `[columns.team]`, map your column names to the
+   engine's (`"Account ID" = "account_id"`). Only the ones that differ.
+4. Map your tier names under `[tiers]` and your regions under `[regions]`.
+5. Run `python check_inputs.py`: it reads the same settings and tells you
+   what's missing and what the engine can and can't do with your data.
+
+Your export folder is only ever read. Everything the engine produces (flags,
+the action log, new engagement events, the views) goes to `data/`. Without CS
+history the flags still run; journeys and time to action stay empty. Without
+an answer key, `check_flags.py` is skipped: the backtest against your closed
+renewals is the real test.
+
 ## Fitting it to your company (settings.toml)
 
 Without touching the SQL:
@@ -218,6 +238,9 @@ Without touching the SQL:
 - **Regions and time zones** (`[regions]`): for sending emails at a local hour.
 - Every threshold and time window.
 
-Still fixed: the CRM's owner columns (`csm_owner`, `cs_pool`), the usage
-amount living in `properties.event_count`, and seat-based utilisation (active
-seats / bought seats), which would need a different formula.
+Still fixed: the events' JSON field names (event_name, timestamp, account_id,
+user_id and the usage amount in `properties.event_count`: convert your
+events to this shape once, e.g. in the warehouse export), and seat-based
+utilisation (active seats / bought seats), which would need a different
+formula. The cockpit shows the engine's tier names (your own stay in
+`crm_tier`).

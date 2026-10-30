@@ -27,26 +27,47 @@ Keeping this in one place means the schema and the utilisation rule are
 defined once, not copied into every script.
 """
 
+import glob
 import os
 
 import duckdb
 
-from settings import SETTINGS
+from settings import OUTPUTS, SETTINGS, input_path
 
 
 USAGE_EVENT = SETTINGS["utilisation"]["usage_event"]   # what counts as usage (settings.toml)
 
 
+def _sql_path(p):
+    return str(p).replace("\\", "/").replace("'", "''")
+
+
+def _renames(section):
+    """[columns.<section>] in settings: your column names -> the engine's, as a RENAME clause."""
+    pairs = SETTINGS.get("columns", {}).get(section, {})
+    if not pairs:
+        return ""
+    return " RENAME (" + ", ".join(f'"{mine}" AS {theirs}' for mine, theirs in pairs.items()) + ")"
+
+
 def connect():
     con = duckdb.connect()
+    events_glob = _sql_path(input_path("events_glob"))
+    # CS history: your export (if any) plus what the engine itself wrote to
+    # data/engagement (emails, Slack clicks, cockpit decisions). The same
+    # folder once when you run on the demo data.
+    eng = {_sql_path(input_path("engagement_glob")), _sql_path(OUTPUTS / "engagement" / "*.jsonl")}
+    eng_globs = [g for g in sorted(eng) if glob.glob(g)]
+    eng_list = "[" + ", ".join(f"'{g}'" for g in eng_globs) + "]"
+    crm_file, team_file = _sql_path(input_path("crm_file")), _sql_path(input_path("team_file"))
 
     # Treat the files as tables.
     # We spell out the schema instead of letting DuckDB guess it: this is the
     # schema we agreed, and a file that breaks it fails loudly instead of quietly.
-    con.sql("""
+    con.sql(f"""
         CREATE VIEW events AS
         SELECT *, "timestamp"::DATE AS event_date
-        FROM read_json('data/events/*.jsonl', format = 'newline_delimited', columns = {
+        FROM read_json('{events_glob}', format = 'newline_delimited', columns = {{
             event_id:   'VARCHAR',
             event_name: 'VARCHAR',
             event_type: 'VARCHAR',
@@ -55,27 +76,39 @@ def connect():
             user_id:    'VARCHAR',
             properties: 'STRUCT(event_count BIGINT, invited_user VARCHAR, error_code VARCHAR)',
             context:    'STRUCT(sdk_version VARCHAR, source VARCHAR)'
-        })
+        }})
     """)
     # What CS did and how customers responded. Same schema as the product
     # events, but its own properties: who owns the touch and what it was about.
-    con.sql("""
-        CREATE VIEW engagement AS
-        SELECT *, "timestamp"::DATE AS event_date
-        FROM read_json('data/engagement/*.jsonl', format = 'newline_delimited', columns = {
-            event_id:   'VARCHAR',
-            event_name: 'VARCHAR',
-            event_type: 'VARCHAR',
-            timestamp:  'TIMESTAMP',
-            account_id: 'VARCHAR',
-            user_id:    'VARCHAR',
-            -- status and manager: a manager's decision in the cockpit (cockpit_sync.py);
-            -- amount: a renewal forecast's value (forecast_set); due: a next step's
-            -- date (next_step_set); both from the cockpit
-            properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE, due VARCHAR)',
-            context:    'STRUCT(source VARCHAR)'
-        })
-    """)
+    if eng_globs:
+        con.sql(f"""
+            CREATE VIEW engagement AS
+            SELECT *, "timestamp"::DATE AS event_date
+            FROM read_json({eng_list}, format = 'newline_delimited', columns = {{
+                event_id:   'VARCHAR',
+                event_name: 'VARCHAR',
+                event_type: 'VARCHAR',
+                timestamp:  'TIMESTAMP',
+                account_id: 'VARCHAR',
+                user_id:    'VARCHAR',
+                -- status and manager: a manager's decision in the cockpit (cockpit_sync.py);
+                -- amount: a renewal forecast's value (forecast_set); due: a next step's
+                -- date (next_step_set); both from the cockpit
+                properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE, due VARCHAR)',
+                context:    'STRUCT(source VARCHAR)'
+            }})
+        """)
+    else:
+        # no CS history yet (a company's first run): an empty view with the same
+        # columns, so flags still run; journeys and time to action stay empty
+        con.sql("""
+            CREATE VIEW engagement AS
+            SELECT NULL::VARCHAR AS event_id, NULL::VARCHAR AS event_name, NULL::VARCHAR AS event_type,
+                   NULL::TIMESTAMP AS "timestamp", NULL::VARCHAR AS account_id, NULL::VARCHAR AS user_id,
+                   NULL::STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE, due VARCHAR) AS properties,
+                   NULL::STRUCT(source VARCHAR) AS context, NULL::DATE AS event_date
+            WHERE false
+        """)
     # The CRM, with your tier names mapped to the engine's three coverage models
     # (settings.toml [tiers]) and your commitment column read as
     # contracted_events ([utilisation]). Your own tier name stays in crm_tier.
@@ -84,7 +117,8 @@ def connect():
     t, u, money = SETTINGS["tiers"], SETTINGS["utilisation"], SETTINGS["money"]
     # ARR from the CRM; without that column, an estimate from the list price
     # ([money] in settings.toml), so the value views still work
-    crm_cols = {r[0] for r in con.sql("DESCRIBE SELECT * FROM read_csv_auto('data/crm_accounts.csv')").fetchall()}
+    crm_raw = f"SELECT *{_renames('crm')} FROM read_csv_auto('{crm_file}')"   # your column names -> the engine's
+    crm_cols = {r[0] for r in con.sql(f"DESCRIBE {crm_raw}").fetchall()}
     price = "CASE tier " + " ".join(f"WHEN '{t[k]}' THEN {money['price_per_1k'][n]}" for k, n in
                                      (("tech_touch", "Self-service"), ("pooled", "Scale"), ("named_csm", "Enterprise"))) + " END"
     arr = (f"{money['arr_column']}::DOUBLE" if money["arr_column"] in crm_cols
@@ -92,7 +126,7 @@ def connect():
     arr_exclude = f", {money['arr_column']}" if money["arr_column"] in crm_cols else ""
     con.sql(f"""
         CREATE VIEW crm AS
-        WITH raw AS (SELECT * FROM read_csv_auto('data/crm_accounts.csv'))
+        WITH raw AS ({crm_raw})
         SELECT * EXCLUDE (tier, {u['contract_column']}{arr_exclude}),
                {arr}                                 AS arr,
                {'false' if money['arr_column'] in crm_cols else 'true'} AS arr_estimated,
@@ -104,7 +138,7 @@ def connect():
                {u['contract_column']}::BIGINT       AS contracted_events
         FROM raw
     """)
-    con.sql("CREATE VIEW cs_team AS SELECT * FROM read_csv_auto('data/cs_team.csv')")
+    con.sql(f"CREATE VIEW cs_team AS SELECT *{_renames('team')} FROM read_csv_auto('{team_file}')")
 
     # Utilisation per account, kept as a view so later queries (and the flags)
     # can reuse it instead of copying the logic.

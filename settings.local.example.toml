@@ -1,0 +1,37 @@
+# Copy this file to settings.local.toml (git-ignored) to run the engine on your
+# own exports. Anything here replaces the same key in settings.toml.
+# Then: python check_inputs.py  (tells you what's missing before anything runs)
+
+[data]
+inputs = "C:/Users/you/exports/cairnpath"    # your folder; forward slashes work on Windows
+crm_file = "salesforce_accounts.csv"
+team_file = "cs_team.csv"
+events_glob = "events/*.jsonl"
+engagement_glob = "engagement/*.jsonl"       # leave as is if you have no CS history yet
+
+# Your CRM's column names -> the engine's. Only the ones that differ.
+[columns.crm]
+"Account ID" = "account_id"
+"Account Name" = "account_name"
+"Segment" = "tier"
+"Sub Region" = "region"
+"Contract Start" = "contract_start"
+"Renewal Date" = "renewal_date"
+"Committed Events" = "contracted_events"
+"CSM" = "csm_owner"
+"CS Pool" = "cs_pool"
+"ARR (EUR)" = "arr"
+
+[columns.team]
+"User ID" = "owner_id"
+"Name" = "owner_name"
+
+# Your segment names -> the three coverage models
+[tiers]
+tech_touch = "SMB"
+pooled = "Mid-Market"
+named_csm = "Strategic"
+
+# Your regions: hours ahead of UTC, for sending emails at a local hour
+# [regions]
+# utc_offset = { "North" = 1, "South" = 2 }

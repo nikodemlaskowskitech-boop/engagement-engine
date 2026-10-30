@@ -189,6 +189,13 @@ One JSON event per line, one file per day in `data/events/`.
   events but not the CRM, too few days of data; ends with what the engine can
   and can't do with this data. `python check_inputs.py [folder]`. ERROR = exit
   1 (run_all stops), WARN = runs with gaps. First step of run_all.
+- Your own data: `settings.local.toml` (git-ignored; copy
+  `settings.local.example.toml`) overrides settings.toml key by key. [data]
+  says where the inputs live (folder and file names) and [columns.crm] /
+  [columns.team] map a company's column names to the engine's (a RENAME in
+  the crm and cs_team views). The input folder is only read; outputs always
+  go to data/. settings.py exposes INPUTS, OUTPUTS, DEMO and input_path();
+  no CS history = an empty engagement view; check_flags skips off the demo.
 - `settings.toml` + `settings.py`: every threshold and time window in one
   place (activation, churn, expansion, QBR, journeys, team report, email
   hour, follow-ups), plus how the engine fits a company: [tiers] maps the
