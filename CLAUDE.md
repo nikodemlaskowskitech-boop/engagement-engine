@@ -456,6 +456,8 @@ One JSON event per line, one file per day in `data/events/`.
   saw), `_key.json` (the redaction key: local only, never sent), `_check.json`
   and `<acc>.md` (a draft until the outgoing owner confirms it). File names
   in settings.toml [handover]. Not in run_all (it costs a few cents a run).
+  Only a finished answer is saved: a reply cut short (stop_reason max_tokens)
+  or empty writes no brief, just the reason in `_check.json` (brief.py too).
 - `stories/`: three hand-written account stories (Yarrow Studio: champion
   leaving and a budget cut; Nettle Foods: expansion with a competitor and an
   overage dispute; Driftwood Labs: shelfware with a renewal in two weeks).
@@ -463,7 +465,9 @@ One JSON event per line, one file per day in `data/events/`.
   claim; for testing only, never shown to the model.
 - `tests/handover_test.py`: privacy first (no real name, first name, email,
   phone or company in any `_sent.txt`; runs without a key), then quality once
-  briefs exist (planted facts found, forbidden claims, citation checks). Run it
+  briefs exist (planted facts found, forbidden claims, citation checks). FAIL
+  when a brief is missing after a run, empty, not a finished answer, finds
+  under half the planted facts or claims a forbidden one. Run it
   on every PR that touches handover.py or stories/.
 
 ## Planned next

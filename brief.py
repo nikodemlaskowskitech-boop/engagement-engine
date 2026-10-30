@@ -163,6 +163,12 @@ def main():
         draft = "".join(block.text for block in response.content if block.type == "text")
         total_in += response.usage.input_tokens
         total_out += response.usage.output_tokens
+        # only a finished answer counts: a brief cut short ("max_tokens") or empty is not saved
+        if response.stop_reason != "end_turn" or not draft.strip():
+            print(f"  {account_id}  NO BRIEF: model stopped with '{response.stop_reason}' after "
+                  f"{response.usage.output_tokens} tokens (raise [llm] max_output_tokens?)")
+            (out_dir / f"{account_id}.md").unlink(missing_ok=True)
+            continue
 
         # check the draft before the real IDs go back in (the pack only has aliases)
         unchecked = unverified_numbers(draft, pack)
