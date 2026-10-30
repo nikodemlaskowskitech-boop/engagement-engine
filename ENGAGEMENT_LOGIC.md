@@ -18,7 +18,7 @@ decides, grey = end state.
 | Tier | Touch model | Coverage | Who acts on a flag | Where it lands | Safety net |
 | --- | --- | --- | --- | --- | --- |
 | Self-service (300) | Tech touch | No CSM | Automation | Simulated email (#email-preview) | One follow-up, then the Self-service report |
-| Scale (150) | Pooled | One team per region | Whoever claims it | Shared queue (Slack cards) | Manager sees unclaimed tasks, can give one to someone, approves hand-backs |
+| Scale (150) | Pooled | One team per region, a named owner per account | Whoever claims it | Shared queue (Slack cards) | Manager sees unclaimed tasks, can give one to someone, approves hand-backs |
 | Enterprise (48) | High touch | Named CSM, 8 accounts each | The account's CSM | The CSM's own task | QBR first; manager escalation |
 
 ## 2. Overview
@@ -102,6 +102,12 @@ Anyone in the regional pool can pick a task up, which spreads the load and
 avoids peaks and troughs. Once someone has taken it, the follow-up comes back
 to them, so the customer hears from the same person. If that person can't pick
 it up (holiday, left, swamped), the manager decides: a person, not a timer.
+
+Every Scale account also has a named owner from the pool (CRM `pool_owner`),
+about 1 per 15-20 accounts. The owner keeps the renewal forecast and the next
+step and sees the account in their own My book; new tasks still go to the
+queue, so the load stays shared. A manager can give a queue task straight to
+the owner from the Tasks tab.
 
 ```mermaid
 flowchart TB

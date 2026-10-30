@@ -121,17 +121,28 @@ CROSS_REGION_COVER = [("Nordics", "csm_anna"), ("Nordics", "csm_tom"), ("France 
 # Self-service has no human coverage.
 
 CS_TEAM = [
-    # owner_id,        name,              type,  region,              manager
-    ("csm_anna",       "Anna Whitfield",  "csm",  "UK&I",             "mgr_james"),
-    ("csm_tom",        "Tom Brennan",     "csm",  "UK&I",             "mgr_james"),
-    ("csm_lukas",      "Lukas Brandt",    "csm",  "DACH",             "mgr_sophie"),
-    ("csm_mia",        "Mia Hofer",       "csm",  "DACH",             "mgr_sophie"),
-    ("csm_claire",     "Claire Dubois",   "csm",  "France & Benelux", "mgr_sophie"),
-    ("csm_erik",       "Erik Lindqvist",  "csm",  "Nordics",          "mgr_james"),
-    ("pool_uki",       "UK&I Scale team", "pool", "UK&I",             "mgr_james"),
-    ("pool_dach",      "DACH Scale team", "pool", "DACH",             "mgr_sophie"),
-    ("pool_fb",        "F&B Scale team",  "pool", "France & Benelux", "mgr_sophie"),
-    ("pool_nordics",   "Nordics Scale team", "pool", "Nordics",       "mgr_james"),
+    # owner_id,        name,              type,    region,             manager,      pool
+    ("csm_anna",       "Anna Whitfield",  "csm",    "UK&I",             "mgr_james",  ""),
+    ("csm_tom",        "Tom Brennan",     "csm",    "UK&I",             "mgr_james",  ""),
+    ("csm_lukas",      "Lukas Brandt",    "csm",    "DACH",             "mgr_sophie", ""),
+    ("csm_mia",        "Mia Hofer",       "csm",    "DACH",             "mgr_sophie", ""),
+    ("csm_claire",     "Claire Dubois",   "csm",    "France & Benelux", "mgr_sophie", ""),
+    ("csm_erik",       "Erik Lindqvist",  "csm",    "Nordics",          "mgr_james",  ""),
+    # the regional queues: new Scale tasks land here, anyone in the pool takes them
+    ("pool_uki",       "UK&I Scale team", "pool",   "UK&I",             "mgr_james",  ""),
+    ("pool_dach",      "DACH Scale team", "pool",   "DACH",             "mgr_sophie", ""),
+    ("pool_fb",        "F&B Scale team",  "pool",   "France & Benelux", "mgr_sophie", ""),
+    ("pool_nordics",   "Nordics Scale team", "pool", "Nordics",         "mgr_james",  ""),
+    # the people in each pool, about 1 per 15-20 Scale accounts; each owns some
+    # Scale accounts by name (forecasts, next steps, their own My book)
+    ("pm_priya",       "Priya Shah",      "member", "UK&I",             "mgr_james",  "pool_uki"),
+    ("pm_owen",        "Owen Clarke",     "member", "UK&I",             "mgr_james",  "pool_uki"),
+    ("pm_hannah",      "Hannah Doyle",    "member", "UK&I",             "mgr_james",  "pool_uki"),
+    ("pm_jonas",       "Jonas Weber",     "member", "DACH",             "mgr_sophie", "pool_dach"),
+    ("pm_lena",        "Lena Fischer",    "member", "DACH",             "mgr_sophie", "pool_dach"),
+    ("pm_camille",     "Camille Martin",  "member", "France & Benelux", "mgr_sophie", "pool_fb"),
+    ("pm_bram",        "Bram Janssen",    "member", "France & Benelux", "mgr_sophie", "pool_fb"),
+    ("pm_sofie",       "Sofie Nilsen",    "member", "Nordics",          "mgr_james",  "pool_nordics"),
 ]
 
 # --- Personalities --------------------------------------------------------
@@ -277,8 +288,9 @@ def build_accounts():
 
     csms_by_region = {}
     pools_by_region = {}
-    for owner_id, _, kind, region, _ in CS_TEAM:
-        (csms_by_region if kind == "csm" else pools_by_region).setdefault(region, []).append(owner_id)
+    for owner_id, _, kind, region, _, _ in CS_TEAM:
+        if kind in ("csm", "pool"):
+            (csms_by_region if kind == "csm" else pools_by_region).setdefault(region, []).append(owner_id)
 
     accounts = []
     n = 0
@@ -325,6 +337,19 @@ def build_accounts():
                       and a["csm"] and home[a["csm"]] == region]  # not one already moved
         if candidates:
             candidates[-1]["csm"] = csm
+
+    # Each Scale account gets a named owner from its pool, in turn (no random
+    # draws, so nothing else in the data moves). Tasks still go to the pool.
+    members = {}
+    for owner_id, _, kind, _, _, pool in CS_TEAM:
+        if kind == "member":
+            members.setdefault(pool, []).append(owner_id)
+    turn = {}
+    for acc in accounts:
+        acc["member"] = ""
+        if acc["pool"] in members:
+            i = turn[acc["pool"]] = turn.get(acc["pool"], -1) + 1
+            acc["member"] = members[acc["pool"]][i % len(members[acc["pool"]])]
 
     # A few new Enterprise accounts were never handed to a CSM (a handoff miss)
     new_enterprise = [a for a in accounts if a["tier"] == "Enterprise"
@@ -409,7 +434,7 @@ def write_team():
     path = OUT_DIR / "cs_team.csv"
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["owner_id", "owner_name", "owner_type", "region", "manager"])
+        writer.writerow(["owner_id", "owner_name", "owner_type", "region", "manager", "pool"])
         writer.writerows(CS_TEAM)
     return path
 
@@ -417,7 +442,7 @@ def write_team():
 def write_crm(accounts):
     path = OUT_DIR / "crm_accounts.csv"
     columns = ["account_id", "account_name", "tier", "region", "contract_start", "renewal_date",
-               "contracted_events", "add_ons", "csm_owner", "cs_pool", "last_qbr_date",
+               "contracted_events", "add_ons", "csm_owner", "cs_pool", "pool_owner", "last_qbr_date",
                "next_qbr_date", "arr"]
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
@@ -437,6 +462,7 @@ def write_crm(accounts):
                 "add_ons": acc["add_ons"],
                 "csm_owner": acc["csm"],
                 "cs_pool": acc["pool"],
+                "pool_owner": acc["member"],
                 "last_qbr_date": acc["last_qbr"].isoformat() if acc["last_qbr"] else "",
                 "next_qbr_date": acc["next_qbr"].isoformat() if acc["next_qbr"] else "",
                 "arr": arr_of(acc),
@@ -562,8 +588,9 @@ def visible_day(acc, below=None, above=None):
 def engagement_for_account(rng, acc):
     p = PERSONALITIES[acc["personality"]]
     region, start, tier = acc["region"], acc["contract_start"], acc["tier"]
-    owner = acc["csm"] or acc["pool"]
+    owner = acc["csm"] or acc["member"] or acc["pool"]     # meetings: the named owner
     style = OWNER_STYLE["pool" if acc["pool"] else acc["csm"]] if owner else None
+    host = acc["pool"] or owner                            # workshops: the pool runs them
     contact = f"{acc['id']}_usr_01"
     out = []
 
@@ -604,7 +631,7 @@ def engagement_for_account(rng, acc):
         if first and rng.random() < ONBOARDING_WORKSHOP_RATE[acc["personality"]]:
             for n in range(1, min(3, acc["users_end"]) + 1):
                 out.append(cs_event(rng, "workshop_attended", local_time(rng, first, region, 14),
-                                    acc, owner, "onboarding_workshop", f"{acc['id']}_usr_{n:02d}"))
+                                    acc, host, "onboarding_workshop", f"{acc['id']}_usr_{n:02d}"))
     if tier == "Scale" and acc["personality"] in ADVANCED_WORKSHOP_RATE:
         for day in workshop_days(region, START_DATE):
             rate = ADVANCED_WORKSHOP_RATE[acc["personality"]]
@@ -613,7 +640,7 @@ def engagement_for_account(rng, acc):
             if rng.random() < rate:
                 for n in range(1, rng.randint(1, 2) + 1):
                     out.append(cs_event(rng, "workshop_attended", local_time(rng, day, region, 14),
-                                        acc, owner, "advanced_workshop", f"{acc['id']}_usr_{n:02d}"))
+                                        acc, host, "advanced_workshop", f"{acc['id']}_usr_{n:02d}"))
 
     if not owner:            # Self-service: no human coverage, so no meetings
         return in_window(out)

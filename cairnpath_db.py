@@ -136,9 +136,13 @@ def connect():
                          ELSE tier END              AS tier,
                tier                                 AS crm_tier,
                {u['contract_column']}::BIGINT       AS contracted_events
+               {'' if 'pool_owner' in crm_cols else ', NULL::VARCHAR AS pool_owner'}  -- optional: a Scale account's named owner
         FROM raw
     """)
-    con.sql(f"CREATE VIEW cs_team AS SELECT *{_renames('team')} FROM read_csv_auto('{team_file}')")
+    # the pool column is optional (a pool member's pool); without it, no members
+    team_raw = f"SELECT *{_renames('team')} FROM read_csv_auto('{team_file}')"
+    team_cols = {r[0] for r in con.sql(f"DESCRIBE {team_raw}").fetchall()}
+    con.sql(f"CREATE VIEW cs_team AS SELECT *{'' if 'pool' in team_cols else ', NULL::VARCHAR AS pool'} FROM ({team_raw})")
 
     # Utilisation per account, kept as a view so later queries (and the flags)
     # can reuse it instead of copying the logic.

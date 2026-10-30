@@ -66,12 +66,14 @@ annual committed event volume; seats are free and unlimited; paid add-ons
 
 Book of business: ~500 accounts, Europe only, in four sub-regions
 (UK&I, DACH, France & Benelux, Nordics). 48 Enterprise (6 CSMs, 8 each),
-150 Scale (one pooled team per region), 300 Self-service. Show counts next
+150 Scale (one pooled team per region: a queue plus named members, about 1
+per 15-20 accounts: UK&I 3, DACH 2, F&B 2, Nordics 1), 300 Self-service. Show counts next
 to percentages in reports: small segments mislead.
 
 CRM table (`data/crm_accounts.csv`): account_id, account_name, tier, region,
 contract_start, renewal_date, contracted_events, add_ons, csm_owner
-(Enterprise), cs_pool (Scale), last_qbr_date and next_qbr_date
+(Enterprise), cs_pool (Scale: the queue tasks go to), pool_owner (Scale:
+the named pool member who owns it, optional), last_qbr_date and next_qbr_date
 (Enterprise, roughly quarterly; some overdue and not rebooked), arr (optional;
 missing = estimated from contracted_events x the list price in [money]).
 Contract sizes vary per account (half to double the tier's middle size).
@@ -79,7 +81,11 @@ Pipeline-written facts
 (e.g. "welcome sent") go in an action log, not the CRM.
 
 CS team table (`data/cs_team.csv`): owner_id, owner_name, owner_type
-(csm | pool), region, manager.
+(csm | pool | member), region, manager, pool (a member's pool). Scale
+accounts get a named member in turn (round robin per pool, no random draws);
+meetings on them are that member's, workshops stay the pool's. Tasks still go
+to the pool queue; the cockpit counts a member's work as tasks routed to them
+plus pool-queue tasks on their own accounts.
 
 ## Event schema
 

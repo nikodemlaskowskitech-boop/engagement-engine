@@ -289,7 +289,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <h2>Team: in front of customers, against the median</h2>
         <p class="finding small" id="ld-team-finding"></p>
         <div class="tablewrap"><table id="ld-team"></table></div>
-        <p class="note">Meetings held in the last 30 days and the share of each owner's accounts met in that time, against the median of owners of the same kind (CSMs with CSMs, pools with pools). Counts, not hours: the data has no meeting length. A pool is a whole regional team, so its counts aren't comparable with one CSM's.</p>
+        <p class="note">Meetings held in the last 30 days and the share of each owner's accounts met in that time, against the median of owners of the same kind (CSMs with CSMs, pool members with pool members). Counts, not hours: the data has no meeting length. Pools are queues, not people, so they aren't listed.</p>
       </div>
     </section>
 
@@ -573,6 +573,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const saveSeg = () => { try { localStorage.setItem("cockpit-seg", JSON.stringify(seg)); } catch (e) { /* no storage here */ } };
   const segOn = () => Object.values(seg).some(Boolean);
   // whose book is open: a named owner, or a pool (its team + the Scale tier)
+  // An owner's work: tasks routed to them, plus, for a pool member, the tasks
+  // on their own accounts still waiting in the pool queue (anyone may take those)
+  const workOf = (o) => { const t = teamById[o] || {};
+    return (D.tasks || []).filter((x) => x.routed_to === o || (t.owner_type === "member" && x.routed_to === t.pool && (byId[x.account_id] || {}).owner_id === o)); };
+  const KIND_ORDER = { csm: 0, member: 1, pool: 2 };
+  const kindName = (k) => ({ csm: "CSMs", member: "pool members", pool: "pools" }[k] || "owners");
   const segOwner = () => seg.owner || (seg.team && seg.tier === "Scale" ? (D.team.find((t) => t.owner_type === "pool" && t.region === seg.team) || {}).owner_id || "" : "");
   const inSeg = (a) => !!a && (!seg.manager || a.manager === seg.manager) && (!seg.team || homeOf[a.owner_id] === seg.team) && (!seg.region || a.region === seg.region)
     && (!seg.tier || a.tier === seg.tier) && (!seg.owner || a.owner_id === seg.owner);
@@ -593,7 +599,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const FACET = {
     manager: (a) => a.manager,
     team: (a) => homeOf[a.owner_id],
-    owner: (a) => (teamById[a.owner_id] || {}).owner_type === "csm" ? a.owner_id : null,   // named people only: a pool is Team + Scale
+    owner: (a) => ["csm", "member"].includes((teamById[a.owner_id] || {}).owner_type) ? a.owner_id : null,   // named people only: a pool is Team + Scale
     region: (a) => a.region,
     tier: (a) => a.tier,
   };
@@ -971,7 +977,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const whenText = (s) => { const d = String(s || "").slice(0, 10); return d.length === 10 ? fmt(d) : ""; };
   const forecastRole = (a) => {
     const o = segOwner();
-    if (o && o === a.owner_id) return { by: o, role: "owner" };
+    if (o && (o === a.owner_id || (a.pool && o === a.pool))) return { by: o, role: "owner" };   // the owner, or their pool
     if (seg.manager && seg.manager === a.manager) return { by: seg.manager, role: "manager" };
     return null;
   };
@@ -1156,7 +1162,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const wh = $("tm-weeks"); wh.innerHTML = "";
     const weeks = D.week_ends;
     const team = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team) && (!seg.owner || t.owner_id === seg.owner)
-      && (!seg.tier || (seg.tier === "Enterprise" ? t.owner_type === "csm" : seg.tier === "Scale" ? t.owner_type === "pool" : false)));
+      && t.owner_type !== "pool"                       // people hold meetings; a pool is a queue
+      && (!seg.tier || (seg.tier === "Enterprise" ? t.owner_type === "csm" : seg.tier === "Scale" ? t.owner_type === "member" : false)));
     const counts = team.map((t) => weeks.map((we) => D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > day(we) - 7 && day(x.date) <= day(we)).length));
     const max = Math.max(1, ...counts.flat());
     if (!team.length) { wh.innerHTML = '<p class="note">Nobody on the CS team covers this segment.</p>'; return; }
@@ -1185,19 +1192,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // owners of the same kind. People filters apply; account filters don't.
   function drawCapacity() {
     const people = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team) && (!seg.owner || t.owner_id === seg.owner));
-    const all = D.team.map((t) => ({ t, accs: D.accounts.filter((a) => a.owner_id === t.owner_id).length,
-      open: (D.tasks || []).filter((x) => x.routed_to === t.owner_id && x.action_status === "Open").length,
+    const all = D.team.map((t) => ({ t, accs: accountsOf(t.owner_id).length,
+      open: workOf(t.owner_id).filter((x) => x.action_status === "Open").length,
       away: D.accounts.filter((a) => a.owner_id === t.owner_id && crossRegion(a)).length }));
     const med = {};
-    for (const k of ["csm", "pool"]) { const g = all.filter((r) => r.t.owner_type === k); med[k] = { accs: median(g.map((r) => r.accs)), open: median(g.map((r) => r.open)) }; }
-    const rows = all.filter((r) => people.includes(r.t)).sort((x, y) => (x.t.owner_type === y.t.owner_type ? x.open - y.open : x.t.owner_type === "csm" ? -1 : 1));
-    const room = (r) => r.open < med[r.t.owner_type].open;
+    for (const k of Object.keys(KIND_ORDER)) { const g = all.filter((r) => r.t.owner_type === k); med[k] = { accs: median(g.map((r) => r.accs)), open: median(g.map((r) => r.open)) }; }
+    const rows = all.filter((r) => people.includes(r.t)).sort((x, y) => KIND_ORDER[x.t.owner_type] - KIND_ORDER[y.t.owner_type] || x.open - y.open);
+    const room = (r) => r.t.owner_type !== "pool" && r.open < med[r.t.owner_type].open;   // a queue has no room; people do
     const cell = (v, m) => `${v} <small>(median ${m})</small>`;
     $("tm-cap").innerHTML = `<tr><th>Owner</th><th>Team</th><th class="r">Accounts</th><th class="r">Open tasks</th><th class="r">Other region</th><th></th></tr>` + rows.map((r) =>
       `<tr><td>${esc(r.t.owner_name)}</td><td>${esc(r.t.region)}</td><td class="r num">${cell(r.accs, med[r.t.owner_type].accs)}</td><td class="r num">${cell(r.open, med[r.t.owner_type].open)}</td><td class="r num">${r.away || "–"}</td><td>${room(r) ? "room" : ""}</td></tr>`).join("");
     const withRoom = rows.filter(room);
     $("tm-cap-finding").textContent = !rows.length ? "Nobody on the CS team in this segment."
-      : withRoom.length ? `${withRoom.length} of ${rows.length} owners have fewer open tasks than the median: ${withRoom.slice(0, 3).map((r) => r.t.owner_name + " (" + r.open + ")").join(", ")}${withRoom.length > 3 ? ", ..." : ""}.`
+      : withRoom.length ? `${withRoom.length} of ${rows.length} owners have fewer open tasks than the median: ${withRoom.slice(0, 3).map((r) => r.t.owner_name + " (" + r.open + ")").join(", ")}${withRoom.length > 3 ? " and more" : ""}.`
+      : rows.length === 1 ? `${rows[0].t.owner_name} has ${rows[0].open} open task${rows[0].open === 1 ? "" : "s"}, not below the median for ${kindName(rows[0].t.owner_type)} (${med[rows[0].t.owner_type].open}).`
       : `None of the ${rows.length} owners is below the median of open tasks.`;
   }
 
@@ -1662,12 +1670,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     ], "No expansion flag in this segment.");
     // team: meetings in 30 days and share of the book met, against the median of the same kind
     const people = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team) && (!seg.owner || t.owner_id === seg.owner));
-    const stat = (t) => { const book = D.accounts.filter((a) => a.owner_id === t.owner_id);
+    const stat = (t) => { const book = accountsOf(t.owner_id);
       const m = D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > RUN - 31).length;
       return { t, book: book.length, arr: sum(book, (a) => a.arr), risk: sum(book, (a) => valueOf(flagOf(a, "churn"))), meetings: m, met: book.filter((a) => met30(a.account_id)).length }; };
     const all = D.team.map(stat), med = {};
-    for (const k of ["csm", "pool"]) { const g = all.filter((r) => r.t.owner_type === k); med[k] = { m: median(g.map((r) => r.meetings)), s: median(g.map((r) => r.book ? r.met / r.book : 0)) }; }
-    const rows = all.filter((r) => people.includes(r.t));
+    for (const k of Object.keys(KIND_ORDER)) { const g = all.filter((r) => r.t.owner_type === k); med[k] = { m: median(g.map((r) => r.meetings)), s: median(g.map((r) => r.book ? r.met / r.book : 0)) }; }
+    // people only: a pool is a queue, its meetings are its members'
+    const rows = all.filter((r) => people.includes(r.t) && r.t.owner_type !== "pool").sort((x, y) => KIND_ORDER[x.t.owner_type] - KIND_ORDER[y.t.owner_type]);
     const pc = (x) => Math.round(100 * x);               // compare what the reader sees
     const low = rows.filter((r) => r.book && pc(r.met / r.book) < pc(med[r.t.owner_type].s));
     $("ld-team-finding").textContent = rows.length ? `${low.length} of ${rows.length} owners met a smaller share of their book in 30 days than the median for their kind.` : "Nobody on the CS team in this segment.";
@@ -1686,7 +1695,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const FOLLOW_DAYS = D.settings.follow_up_days || 30;
   const PROGRAMME = new Set(["Stalled", "Silent", "Shelfware"]);
   const LIVE = (t) => t.action_status === "Open" || t.action_status === "Claimed";
-  const accountsOf = (o) => D.accounts.filter((a) => a.owner_id === o);
+  // a pool's book is every Scale account in its queue; a person's is what they own
+  const accountsOf = (o) => (teamById[o] || {}).owner_type === "pool" ? D.accounts.filter((a) => a.pool === o) : D.accounts.filter((a) => a.owner_id === o);
   const peersOf = (o) => D.team.filter((t) => t.owner_type === (teamById[o] || {}).owner_type).map((t) => t.owner_id);
   const MEET_KIND = (topic) => topic === "qbr" ? "qbr" : ["churn_call", "growth_call", "activation_call", "follow_up"].includes(topic) ? "call" : "other";
   // one colour per meaning on this page: QBR blue, other meetings aqua, problem calls and
@@ -1759,11 +1769,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         saveSeg(); redraw(); }));
       return;
     }
-    const peers = peersOf(o), kind = (teamById[o] || {}).owner_type === "pool" ? "pools" : "CSMs";
+    const peers = peersOf(o), kind = kindName((teamById[o] || {}).owner_type);
     const med = (f) => { const m = median(peers.map(f)); return m == null ? "–" : Math.round(m * 10) / 10; };
 
     // 1. workload
-    const mine = (p) => TASKS.filter((t) => t.routed_to === p && LIVE(t));
+    const mine = (p) => workOf(p).filter(LIVE);
     const live = mine(o).sort((a, b) => b.age_days - a.age_days);
     const open = live.filter((t) => t.action_status === "Open");
     const old = live.filter((t) => t.age_days >= FAST), given = live.filter((t) => t.assigned_from);
