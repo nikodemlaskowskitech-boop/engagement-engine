@@ -303,9 +303,13 @@ One JSON event per line, one file per day in `data/events/`.
   reports' SQL through `team_report.add_views(con)` and
   `onboarding_report.add_views(con)`, so the page and the reports agree.
   Counts only, never real user IDs. Also builds `data/views.html` from
-  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): eight
+  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): nine
   tabs. Overview (the engagement sieve: churn signals stage by stage, and
-  renewals in the next 180 days by today's flag), My book (one owner's
+  renewals in the next 180 days by today's flag), Leadership (the one-pager:
+  ARR at risk with action taken, renewal, action planned and forecast, biggest
+  first; growth by upside; Act accounts called and planned; forecasts ≠ data;
+  meetings and share of the book met in 30 days per owner against the median
+  of the same kind), My book (one owner's
   morning page: workload, engagement against the median of owners of the same
   kind, the portfolio risk first with action taken and planned, and booked
   engagements over the next 8 weeks: QBRs, renewals, Scale follow-ups), Tasks (the manager's queue:

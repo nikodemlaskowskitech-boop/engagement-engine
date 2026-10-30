@@ -218,9 +218,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <h1>Cairnpath CS Cockpit</h1>
       <span class="asof" id="asof"></span>
     </div>
-    <p class="lede">Eight views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
+    <p class="lede">Nine views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
     <nav role="tablist" aria-label="Views">
       <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
+      <button role="tab" id="tab-lead" data-view="lead" aria-selected="false">Leadership</button>
       <button role="tab" id="tab-mybook" data-view="mybook" aria-selected="false">My book</button>
       <button role="tab" id="tab-tasks" data-view="tasks" aria-selected="false">Tasks</button>
       <button role="tab" id="tab-outcomes" data-view="outcomes" aria-selected="false">Did it work?</button>
@@ -266,6 +267,28 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <div class="panel">
         <h2 id="ov-list-title">Accounts</h2>
         <div class="tablewrap" id="ov-list"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-lead" role="tabpanel" aria-labelledby="tab-lead" hidden>
+      <p class="finding" id="ld-finding"></p>
+      <p class="sub">The one page leadership asks for: what is at risk, what was done and what is planned; where the growth is; and whether the team is in front of its customers. Sorted by value, which guides the work and is never anyone's credit. The segment bar applies.</p>
+      <div class="tiles" id="ld-tiles"></div>
+        <div class="panel">
+          <h2>Churn: biggest ARR at risk first</h2>
+          <p class="finding small" id="ld-churn-finding"></p>
+          <div class="examples tablewrap" id="ld-churn"></div>
+        </div>
+        <div class="panel">
+          <h2>Growth: biggest upside first</h2>
+          <p class="finding small" id="ld-growth-finding"></p>
+          <div class="examples tablewrap" id="ld-growth"></div>
+        </div>
+      <div class="panel">
+        <h2>Team: in front of customers, against the median</h2>
+        <p class="finding small" id="ld-team-finding"></p>
+        <div class="tablewrap"><table id="ld-team"></table></div>
+        <p class="note">Meetings held in the last 30 days and the share of each owner's accounts met in that time, against the median of owners of the same kind (CSMs with CSMs, pools with pools). Counts, not hours: the data has no meeting length. A pool is a whole regional team, so its counts aren't comparable with one CSM's.</p>
       </div>
     </section>
 
@@ -591,7 +614,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("seg-reset").hidden = !segOn();
     $("segbar").classList.toggle("on", segOn());
   }
-  function redraw() { drawSegbar(); drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes(); drawTasks(); drawMyBook();
+  function redraw() { drawSegbar(); drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes(); drawTasks(); drawMyBook(); drawLeadership();
     if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } }   // who may plan or forecast depends on the segment
   for (const k of Object.keys(seg)) $("seg-" + k).addEventListener("change", (e) => { seg[k] = e.target.value; saveSeg(); redraw(); });
   $("seg-reset").addEventListener("click", () => { for (const k in seg) seg[k] = ""; saveSeg(); redraw(); });
@@ -614,7 +637,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
 
   // tabs, with a bookmarkable #token per view
-  const views = ["overview", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
+  const views = ["overview", "lead", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
   const show = (v) => {
     if (!views.includes(v)) v = "overview";
     for (const w of views) {
@@ -1502,11 +1525,76 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       }
       forecasts = groupForecasts(fs.filter((v) => v.kind === "forecast"));
       nextSteps = groupForecasts(fs.filter((v) => v.kind === "next_step"));
-      drawTasks(); drawMyBook(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); }
+      drawTasks(); drawMyBook(); drawLeadership(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); }
     }, () => { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } });
     drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); }
   })();
 
+
+  // ---------------------------------------------------------------- leadership: the one-pager
+  // Churn (what is red, action taken, action planned), growth by value, and the
+  // team's time in front of customers. Every list sorted by value at stake.
+  function drawLeadership() {
+    const accs = D.accounts.filter(inSeg), person = (a) => a.tier !== "Self-service";
+    const flagOf = (a, f) => a.flags.find((x) => x.flag === f);
+    const churn = accs.filter((a) => flagOf(a, "churn") && person(a)).sort((a, b) => (valueOf(flagOf(b, "churn")) || 0) - (valueOf(flagOf(a, "churn")) || 0));
+    const growth = accs.filter((a) => flagOf(a, "expansion") && person(a)).sort((a, b) => (valueOf(flagOf(b, "expansion")) || 0) - (valueOf(flagOf(a, "expansion")) || 0));
+    const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
+    const atRisk = sum(churn, (a) => valueOf(flagOf(a, "churn"))), upside = sum(growth, (a) => valueOf(flagOf(a, "expansion")));
+    const bookArr = sum(accs.filter(person), (a) => a.arr);
+    const act = churn.filter((a) => flagOf(a, "churn").status === "Act");
+    // action taken: a churn call or QBR since the signal (team report), or any customer meeting in 30 days
+    const called = (a) => { const t = D.time_to_action.find((r) => r.account_id === a.account_id && r.flag === "churn"); return t ? !!t.call_date : met30(a.account_id); };
+    const planned = (a) => !!planOf(a);
+    const overdue = churn.filter((a) => { const p = planOf(a); return p && (planStatus(a, p) || {}).overdue; });
+    const gaps = accs.filter((a) => { const f = (forecasts[a.account_id] || []).slice(-1)[0]; return f && forecastGap(a, f); });
+    const actCalled = act.filter(called).length, actPlanned = act.filter(planned).length;
+    $("ld-finding").textContent = churn.length
+      ? `${segOn() ? segName() + ": " : ""}${money(atRisk)} of ${money(bookArr)} ARR is at risk; ${!act.length ? "no account is at Act." : act.length === actPlanned ? `all ${act.length} Act accounts have a next step planned.` : `${act.length - actPlanned} of ${act.length} Act accounts have no next step planned.`}`
+      : `${segName()}: no CSM or pool account at churn risk.`;
+    $("ld-tiles").innerHTML =
+      tile("ARR at risk", money(atRisk), `${churn.length} accounts · ${act.length} at Act`, act.length > 0) +
+      tile("Act: called", `${actCalled} of ${act.length}`, "churn call or QBR since the signal", actCalled < act.length) +
+      tile("Act: next step planned", `${actPlanned} of ${act.length}`, overdue.length ? `${overdue.length} overdue` : "none overdue", actPlanned < act.length) +
+      tile("Upside", money(upside), `${growth.length} accounts with an expansion flag`, false) +
+      tile("Forecast ≠ data", gaps.length, "owner's forecast a quarter of the ARR from the data", gaps.length > 0);
+    const lastCust = (id) => { const t = (touchesBy[id] || []).filter((x) => ["meeting_held", "email_sent", "workshop_attended"].includes(x.event)).slice(-1)[0];
+      return t ? `${esc(topicName(t.topic))} <small>${fmt(t.date)}</small>` : '<span class="muted">none in 90 days</span>'; };
+    const planCell = (a) => { const p = planOf(a); return p ? planText(a, p) : '<span class="bad">none</span>'; };
+    const fcCell = (a) => { const f = (forecasts[a.account_id] || []).slice(-1)[0]; return f ? esc(callText(f)) + (forecastGap(a, f) ? ' <span class="bad">≠ data</span>' : "") : '<span class="muted">none</span>'; };
+    const acct = (a) => `${esc(a.account_name)}<small><br>${esc(a.owner || "")}</small>`;
+    $("ld-churn-finding").textContent = churn.length ? `${act.length} Act, ${churn.length - act.length} Watch or Shelfware; ${overdue.length} next step${overdue.length === 1 ? " is" : "s are"} overdue.` : "";
+    shortList($("ld-churn"), churn, [
+      { label: "Account", get: acct },
+      { label: "At risk", get: (a) => `<b>${money(valueOf(flagOf(a, "churn")))}</b><small><br>${esc(flagOf(a, "churn").status)}</small>` },
+      { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${a.renewal_date.slice(0, 4)}<small><br>${ahead(a.renewal_date)}</small>` },
+      { label: "Action taken", get: (a) => lastCust(a.account_id) },
+      { label: "Action planned", get: planCell },
+      { label: "Forecast", get: fcCell },
+    ], "No account at churn risk in this segment.");
+    $("ld-growth-finding").textContent = growth.length ? `${growth.filter((a) => flagOf(a, "expansion").status === "Act").length} at Act (usage and users growing); ${growth.filter((a) => !planned(a)).length} with no next step planned.` : "";
+    shortList($("ld-growth"), growth, [
+      { label: "Account", get: acct },
+      { label: "Upside", get: (a) => `<b>${money(valueOf(flagOf(a, "expansion")))}</b><small><br>${esc(flagOf(a, "expansion").status)} · ARR ${money(a.arr)}</small>` },
+      { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${a.renewal_date.slice(0, 4)}<small><br>${ahead(a.renewal_date)}</small>` },
+      { label: "Action planned", get: planCell },
+    ], "No expansion flag in this segment.");
+    // team: meetings in 30 days and share of the book met, against the median of the same kind
+    const people = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team) && (!seg.owner || t.owner_id === seg.owner));
+    const stat = (t) => { const book = D.accounts.filter((a) => a.owner_id === t.owner_id);
+      const m = D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > RUN - 31).length;
+      return { t, book: book.length, arr: sum(book, (a) => a.arr), risk: sum(book, (a) => valueOf(flagOf(a, "churn"))), meetings: m, met: book.filter((a) => met30(a.account_id)).length }; };
+    const all = D.team.map(stat), med = {};
+    for (const k of ["csm", "pool"]) { const g = all.filter((r) => r.t.owner_type === k); med[k] = { m: median(g.map((r) => r.meetings)), s: median(g.map((r) => r.book ? r.met / r.book : 0)) }; }
+    const rows = all.filter((r) => people.includes(r.t));
+    const pc = (x) => Math.round(100 * x);               // compare what the reader sees
+    const low = rows.filter((r) => r.book && pc(r.met / r.book) < pc(med[r.t.owner_type].s));
+    $("ld-team-finding").textContent = rows.length ? `${low.length} of ${rows.length} owners met a smaller share of their book in 30 days than the median for their kind.` : "Nobody on the CS team in this segment.";
+    $("ld-team").innerHTML = `<tr><th>Owner</th><th class="r">Book ARR</th><th class="r">At risk</th><th class="r">Meetings, 30 d</th><th class="r">Book met, 30 d</th></tr>` + rows.map((r) => {
+      const share = r.book ? r.met / r.book : 0, m = med[r.t.owner_type];
+      return `<tr><td>${esc(r.t.owner_name)}<small><br>${esc(r.t.region)}</small></td><td class="r num">${money(r.arr)}</td><td class="r num">${money(r.risk)}</td>` +
+        `<td class="r num">${r.meetings} <small>(median ${m.m})</small></td><td class="r num${pc(share) < pc(m.s) ? " bad" : ""}">${r.met} of ${r.book} (${Math.round(100 * share)}%) <small>(median ${Math.round(100 * m.s)}%)</small></td></tr>`; }).join("");
+  }
 
   // ---------------------------------------------------------------- my book: one owner's morning page
   // "What do I do today, and why?" for one CSM or pool: workload, engagement,
