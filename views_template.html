@@ -615,10 +615,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       }
     }
     const n = D.accounts.filter(inSeg).length;
-    const o = seg.owner && teamById[seg.owner];
+    const o = segOwner() && teamById[segOwner()];   // a named CSM, or a pool (team + Scale)
     $("seg-count").textContent = (segOn() ? `${n} of ${D.accounts.length} accounts` : `${n} accounts`)
       + (o ? ` · ${o.owner_name} sits in ${o.region}, manager ${managerName(o.manager)}` : "")
-      + ((seg.manager || seg.team) && !seg.owner ? " · Self-service has no owner, so it's left out" : "");
+      + ((seg.manager || seg.team) && !seg.owner && !seg.tier ? " · Self-service has no owner, so it's left out" : "");
     $("seg-reset").hidden = !segOn();
     $("segbar").classList.toggle("on", segOn());
   }
@@ -889,6 +889,28 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       (p ? `Next: ${esc(p.type.toLowerCase())} on ${fmt(p.due)} (${(planStatus(a, p) || {}).text}).` : noPlan ? '<span class="bad">No next step planned.</span>' : "");
   }
 
+  // Who may plan or forecast is read from the segment bar (in a real tool:
+  // the sign-in). One click sets it: the account's owner (a named CSM, or a
+  // pool = its team + Scale) or the owner's manager.
+  function actAsHtml(a, what) {
+    const o = teamById[a.owner_id];
+    if (!o) return `<p class="note">No owner assigned yet: CS ops assigns one before anyone can ${what}.</p>`;
+    return `<p class="note">To ${what}, act as:</p><div class="fc-form">` +
+      `<button class="small" data-actas="owner" data-acc="${esc(a.account_id)}">${esc(o.owner_name)}${o.owner_type === "pool" ? " (pool)" : ""}</button>` +
+      (o.manager ? `<button class="small" data-actas="manager" data-acc="${esc(a.account_id)}">${esc(managerName(o.manager))} (manager)</button>` : "") +
+      `</div>`;
+  }
+  function actAs(kind, id) {
+    const o = teamById[byId[id].owner_id];
+    for (const k in seg) seg[k] = "";
+    if (kind === "manager") seg.manager = o.manager;
+    else if (o.owner_type === "pool") { seg.team = o.region; seg.tier = "Scale"; }   // a pool's book
+    else seg.owner = o.owner_id;
+    saveSeg(); redraw();
+  }
+  for (const host of ["tl-next", "tl-forecast"])
+    $(host).addEventListener("click", (e) => { const b = e.target.closest("[data-actas]"); if (b) actAs(b.dataset.actas, b.dataset.acc); });
+
   function drawNext(id) {
     const a = byId[id], host = $("tl-next"); if (!a) return;
     drawSummary(id);                                     // the summary reads the same plan
@@ -899,7 +921,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       : `<p class="${a.flags.some((f) => f.flag === "churn" && f.status === "Act") ? "bad" : "muted"}">No next step recorded.</p>`;
     const who = forecastRole(a);
     if (dbState !== "ready") h += `<p class="note">Next steps are recorded in the published cockpit.</p>`;
-    else if (!who) h += `<p class="note">To plan a next step, pick yourself at the top: Owner (this account's owner) or Manager (theirs).</p>`;
+    else if (!who) h += actAsHtml(a, "plan a next step");
     else h += `<div class="fc-form"><select id="ns-type" aria-label="Next step">${Object.entries(STEP_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>` +
       `<input id="ns-due" type="date" min="${new Date(TODAY * 864e5).toISOString().slice(0, 10)}" aria-label="Due date">` +
       `<input id="ns-note" type="text" maxlength="200" placeholder="What and with whom (optional)" aria-label="Note">` +
@@ -948,7 +970,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     } else h += `<p class="muted">No forecast from the owner yet.</p>`;
     const who = forecastRole(a);
     if (dbState !== "ready") h += `<p class="note">Forecasts are recorded in the published cockpit.</p>`;
-    else if (!who) h += `<p class="note">To record a forecast, pick yourself at the top: Owner (this account's owner) or Manager (theirs).</p>`;
+    else if (!who) h += actAsHtml(a, "record a forecast");
     else h += `<div class="fc-form"><select id="fc-call" aria-label="Forecast">${Object.entries(CALLS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>` +
       `<label id="fc-amt" hidden>to ${esc(CUR.trim())} <input id="fc-amount" type="number" min="0" step="1000" inputmode="numeric"></label>` +
       `<input id="fc-reason" type="text" maxlength="200" placeholder="Reason (required)" aria-label="Reason">` +
