@@ -75,7 +75,8 @@ One row per account, CSV with a header.
 | contracted_events | number | Yes | Annual committed volume: the bottom of the utilisation sum |
 | add_ons | text | No | Paid add-ons, e.g. `experiments`; for the QBR pack |
 | csm_owner | text | Enterprise | The named CSM's owner_id; empty = "No CSM assigned" |
-| cs_pool | text | Scale | The pool's owner_id |
+| cs_pool | text | Scale | The pool's owner_id: the regional queue its tasks go to |
+| pool_owner | text | No | A Scale account's named owner (a pool member's owner_id): their forecasts, next steps and My book. Tasks still go to the pool queue. Empty = the pool owns it |
 | last_qbr_date | date | No | QBR overdue |
 | next_qbr_date | date | No | QBR coming up, and QBR first |
 | arr | number | No | Annual recurring revenue (some CRMs call it annual order value). Missing = estimated from contracted volume x the list price in settings.toml [money], marked as an estimate. Name the column in [money] arr_column |
@@ -90,15 +91,18 @@ acc_003,Driftwood Banking,Enterprise,UK&I,2026-02-10,2027-02-10,300000000,experi
 
 | Column | Meaning |
 | --- | --- |
-| owner_id | Matches csm_owner / cs_pool in the CRM |
+| owner_id | Matches csm_owner / cs_pool / pool_owner in the CRM |
 | owner_name | Shown on tasks |
-| owner_type | `csm` or `pool` |
+| owner_type | `csm`, `pool` (a regional queue) or `member` (a person in a pool) |
 | region | The region they sit in: their team. Not always the region of their accounts (a CSM can cover a customer elsewhere) |
 | manager | Who gets the escalations (e.g. `mgr_james`) |
+| pool | Optional. For a `member`: the pool they work in (e.g. `pool_uki`) |
 
 ```csv
-owner_id,owner_name,owner_type,region,manager
-csm_anna,Anna Whitfield,csm,UK&I,mgr_james
+owner_id,owner_name,owner_type,region,manager,pool
+csm_anna,Anna Whitfield,csm,UK&I,mgr_james,
+pool_uki,UK&I Scale team,pool,UK&I,mgr_james,
+pm_priya,Priya Shah,member,UK&I,mgr_james,pool_uki
 ```
 
 ## 4. Engagement history (optional)

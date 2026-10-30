@@ -108,11 +108,12 @@ with value_path.open(encoding="utf-8") as f:
 accounts = rows(con, """
     SELECT c.account_id, c.account_name, c.tier, c.region, c.contract_start, c.renewal_date,
            c.contracted_events, c.add_ons, c.last_qbr_date, c.next_qbr_date,
-           coalesce(c.csm_owner, c.cs_pool) AS owner_id,
+           coalesce(c.csm_owner, c.pool_owner, c.cs_pool) AS owner_id,   -- the named owner first
+           c.cs_pool AS pool,
            c.arr, c.arr_estimated,
            t.owner_name AS owner, t.manager
     FROM crm c
-    LEFT JOIN cs_team t ON t.owner_id = coalesce(c.csm_owner, c.cs_pool)
+    LEFT JOIN cs_team t ON t.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)
     ORDER BY c.account_id""")
 for a in accounts:
     a["util"] = [util.get(a["account_id"], {}).get(d) for d in util_dates]
@@ -178,7 +179,7 @@ export = {
         FROM action_status s
         LEFT JOIN cs_team o  ON o.owner_id = s.routed_to
         LEFT JOIN crm c      USING (account_id)
-        LEFT JOIN cs_team ao ON ao.owner_id = coalesce(c.csm_owner, c.cs_pool)
+        LEFT JOIN cs_team ao ON ao.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)
         ORDER BY s.age_days DESC, s.account_id, s.flag, s.status"""),
     "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],

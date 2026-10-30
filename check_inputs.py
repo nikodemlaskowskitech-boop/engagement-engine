@@ -150,8 +150,11 @@ team = read_csv(FILES["team_file"], ["owner_id", "owner_name", "owner_type", "re
 owners = {}
 if team:
     owners = {r["owner_id"]: r for r in team}
-    if odd := {r["owner_type"] for r in team} - {"csm", "pool"}:
-        say("WARN", f"CS team: owner_type must be csm or pool, found: {', '.join(sorted(odd))}")
+    if odd := {r["owner_type"] for r in team} - {"csm", "pool", "member"}:
+        say("WARN", f"CS team: owner_type must be csm, pool or member, found: {', '.join(sorted(odd))}")
+    pools = {r["owner_id"] for r in team if r["owner_type"] == "pool"}
+    if lost := [r["owner_id"] for r in team if r["owner_type"] == "member" and r.get("pool") not in pools]:
+        say("WARN", f"CS team: pool members with no known pool (pool column): {examples(lost)}")
     if no_mgr := [r["owner_id"] for r in team if not r["manager"].strip()]:
         say("WARN", f"CS team: {count(len(no_mgr), 'owner')} without a manager, so no escalations for them: {examples(no_mgr)}")
     if accounts:
