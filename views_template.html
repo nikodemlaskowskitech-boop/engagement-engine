@@ -170,6 +170,14 @@ table.matrix td { padding: 6px; }
 .badge.Claimed { background: var(--accent-soft); color: var(--accent); }
 .badge.Done { background: var(--good-bg); color: var(--good-ink); }
 .badge.Resolved { background: var(--bg); color: var(--ink-3); border: 1px solid var(--rule); }
+.sum-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 24px; }
+@media (max-width: 720px) { .sum-cols { grid-template-columns: 1fr; gap: 12px; } }
+h3.mini { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
+.sum-list { list-style: none; margin: 0; padding: 0; font-size: 0.9rem; }
+.sum-list li { display: grid; grid-template-columns: 92px 1fr; gap: 10px; padding: 5px 0; border-top: 1px solid var(--rule); }
+.sum-list li:first-child { border-top: 0; }
+.sum-list .when { font-family: var(--font-data); font-size: 0.8rem; color: var(--ink-2); }
+.sum-list small { color: var(--ink-3); }
 .forecast { margin-top: 16px; border-top: 1px solid var(--rule); padding-top: 12px; font-size: 0.88rem; }
 .forecast h3 { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
 .forecast p { margin: 4px 0; }
@@ -349,6 +357,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <div class="acc-find wide"><input type="search" id="tl-find" placeholder="Search an account by name or ID" autocomplete="off" role="combobox" aria-label="Account" aria-autocomplete="list" aria-expanded="false" aria-controls="tl-find-list"><ul class="acc-list" id="tl-find-list" role="listbox" hidden></ul></div>
         <select id="tl-account" aria-label="Account" hidden></select>
         <div class="chips" id="tl-picks" aria-label="Accounts worth a look"></div>
+      </div>
+      <div class="panel">
+        <h2>Summary: what was done, what's next</h2>
+        <p class="finding small" id="tl-sum-line"></p>
+        <div class="sum-cols">
+          <div><h3 class="mini">Done, newest first</h3><ul class="sum-list" id="tl-done"></ul></div>
+          <div><h3 class="mini">Coming up</h3><ul class="sum-list" id="tl-coming"></ul></div>
+        </div>
       </div>
       <div class="grid2">
         <div class="panel">
@@ -681,6 +697,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
   function drawTimeline(id) {
     const a = byId[id]; if (!a) return;
+    sumAll = false;                                      // a new account starts with the short list
     pressChips(id);
     const host = $("tl-chart"); host.innerHTML = ""; host.classList.remove("fade"); void host.offsetWidth; host.classList.add("fade");
     const W = 720, H = 330, L = 44, R = 16, top = 12;
@@ -797,8 +814,51 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
   const planText = (a, p) => { const st = planStatus(a, p);
     return p ? `${esc(p.type)}, ${fmt(p.due)}${st ? ` <span class="${st.overdue ? "bad" : "muted"}">${st.text}</span>` : ""}` : ""; };
+  // Summary: everything done on the account, newest first (customer touches,
+  // tasks sent, plans and forecasts), next to what's coming up.
+  const DONE_TEXT = {
+    meeting_held: (t) => [`Meeting (${topicName(t.topic)})`, ownerName[t.owner_id] || t.owner_id, true],
+    email_sent: (t) => [`Email sent (${topicName(t.topic)})`, t.owner_id === "automated" ? "automated" : ownerName[t.owner_id] || t.owner_id, true],
+    workshop_attended: (t) => [`Workshop attended (${topicName(t.topic)})`, "", true],
+    email_opened: (t) => [`Customer opened: ${topicName(t.topic)}`, "", false],
+    task_claimed: (t) => ["Task taken in Slack", ownerName[t.owner_id] || "", false],
+    task_assigned: (t) => [`Task given to ${ownerName[t.owner_id] || t.owner_id}`, "", false],
+    handback_approved: () => ["Hand-back to the pool approved", "", false],
+  };
+  // cockpit entries carry the real date, which is after the data ends
+  const ago = (d) => { const n = Math.round(TODAY - day(d)); return n < 0 ? "in the cockpit" : n === 0 ? "today" : `${n} d ago`; };
+  const ahead = (d) => { const n = Math.round(day(d) - TODAY); return n < 0 ? `${-n} d ago` : n === 0 ? "today" : `in ${n} d`; };
+  let sumAll = false;
+  function drawSummary(id) {
+    const a = byId[id]; if (!a) return;
+    const done = [];
+    for (const t of touchesBy[id] || []) { const f = DONE_TEXT[t.event]; if (!f) continue; const [what, who, customer] = f(t); done.push({ date: t.date, at: t.date, what, who, customer }); }
+    for (const t of TASKS.filter((x) => x.account_id === id && x.sent_on))
+      done.push({ date: t.sent_on, at: t.sent_on, what: `Task sent: ${t.flag} ${t.status}`, who: `${ownerName[t.routed_to] || t.routed_to} · now ${t.action_status}`, customer: false });
+    for (const s of nextSteps[id] || []) done.push({ date: String(s.decided_at).slice(0, 10), at: String(s.decided_at), what: `Next step planned: ${STEP_TYPES[s.type] || s.type} by ${fmt(s.due)}`, who: s.role === "manager" ? managerName(s.by) + " (manager)" : ownerName[s.by] || s.by, customer: false });
+    for (const f of forecasts[id] || []) done.push({ date: String(f.decided_at).slice(0, 10), at: String(f.decided_at), what: `Forecast: ${callText(f)}`, who: (f.role === "manager" ? managerName(f.by) + " (manager)" : ownerName[f.by] || f.by) + (f.reason ? ` · ${f.reason}` : ""), customer: false });
+    done.sort((x, y) => y.at.localeCompare(x.at));       // full timestamps: two saves on one day stay in order
+    const shown = sumAll ? done : done.slice(0, 6);
+    $("tl-done").innerHTML = done.length ? shown.map((d) => `<li><span class="when">${fmt(d.date)}<br>${ago(d.date)}</span><span>${d.customer ? "<b>" + esc(d.what) + "</b>" : esc(d.what)}${d.who ? `<br><small>${esc(d.who)}</small>` : ""}</span></li>`).join("") +
+      (done.length > 6 ? `<li><span></span><button class="link" id="tl-done-all">${sumAll ? "Show fewer" : `View all (${done.length})`}</button></li>` : "")
+      : '<li><span></span><span class="muted">Nothing on record in the last 90 days.</span></li>';
+    const b = $("tl-done-all"); if (b) b.addEventListener("click", () => { sumAll = !sumAll; drawSummary(id); });
+    // coming up: the plan, a booked QBR, the renewal and the forecast for it
+    const p = planOf(a), fc = (forecasts[id] || []).slice(-1)[0], up = [];
+    if (p) up.push({ date: p.due, what: `${p.kind === "step" ? "Next step" : "Next step (from the CRM)"}: ${p.type}`, who: p.note || "", overdue: (planStatus(a, p) || {}).overdue });
+    if (a.next_qbr_date && a.next_qbr_date > D.as_of && !(p && p.kind === "crm")) up.push({ date: a.next_qbr_date, what: "QBR booked", who: "in the CRM" });
+    up.push({ date: a.renewal_date, what: `Renewal: ${money(a.arr)}`, who: fc ? `Forecast: ${callText(fc)}` : dataRisk(a) ? `Data: ${money(dataRisk(a))} at risk` : "No forecast yet" });
+    up.sort((x, y) => x.date.localeCompare(y.date));
+    $("tl-coming").innerHTML = up.map((u) => `<li><span class="when">${fmt(u.date)}<br><span class="${u.overdue ? "bad" : ""}">${u.overdue ? (planStatus(a, p) || {}).text : ahead(u.date)}</span></span><span><b>${esc(u.what)}</b>${u.who ? `<br><small>${esc(u.who)}</small>` : ""}</span></li>`).join("");
+    const lastC = done.find((d) => d.customer);
+    const noPlan = !p && a.tier !== "Self-service";
+    $("tl-sum-line").innerHTML = `${lastC ? `Last customer action: ${esc(lastC.what.replace(/^./, (c) => c.toLowerCase()))}, ${ago(lastC.date)}.` : "No customer action in 90 days."} ` +
+      (p ? `Next: ${esc(p.type.toLowerCase())} on ${fmt(p.due)} (${(planStatus(a, p) || {}).text}).` : noPlan ? '<span class="bad">No next step planned.</span>' : "");
+  }
+
   function drawNext(id) {
     const a = byId[id], host = $("tl-next"); if (!a) return;
+    drawSummary(id);                                     // the summary reads the same plan
     if (a.tier === "Self-service") { host.innerHTML = ""; return; }
     const hist = nextSteps[id] || [], p = planOf(a);
     let h = `<h3>Action planned</h3>`;
