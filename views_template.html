@@ -85,7 +85,7 @@ section.view { display: grid; gap: 20px; }
 
 /* controls */
 .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-select, input[type="search"] { font: 0.92rem var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; max-width: 100%; }
+select, input[type="search"], input[type="text"], input[type="number"] { font: 0.92rem var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; max-width: 100%; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { font: 500 0.82rem var(--font-body); color: var(--ink-2); background: var(--bg); border: 1px solid var(--rule); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
 .chip:hover, .chip[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
@@ -159,6 +159,14 @@ table.matrix td { padding: 6px; }
 .badge.Claimed { background: var(--accent-soft); color: var(--accent); }
 .badge.Done { background: var(--good-bg); color: var(--good-ink); }
 .badge.Resolved { background: var(--bg); color: var(--ink-3); border: 1px solid var(--rule); }
+.forecast { margin-top: 16px; border-top: 1px solid var(--rule); padding-top: 12px; font-size: 0.88rem; }
+.forecast h3 { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
+.forecast p { margin: 4px 0; }
+.forecast .gap { color: var(--warning-ink, var(--ink)); border-left: 3px solid var(--warning); padding-left: 8px; }
+.fc-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.fc-form input[type=text] { flex: 1 1 180px; min-width: 0; }
+.fc-form input[type=number] { width: 110px; }
+.fc-hist { margin: 6px 0 0; padding: 0; list-style: none; color: var(--ink-2); font-size: 0.82rem; }
 .pending { display: block; font-size: 0.78rem; color: var(--accent); margin-top: 3px; }
 td .act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 td .act select { padding: 4px 6px; font-size: 0.82rem; max-width: 190px; }
@@ -268,7 +276,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <h2>3. Accounts in the portfolio: risk first</h2>
           <p class="finding" style="font-size:1rem" id="mb-port-finding"></p>
           <div class="tablewrap" id="mb-port"></div>
-          <p class="note">Action planned needs a next step with a date on each account; none are recorded yet. Growth is sorted by renewal date until accounts carry ARR.</p>
+          <p class="note">Sorted by value at stake. At risk: the whole ARR at Act (they may leave), the unused part at Watch and Shelfware (customers cut their commitment to what they use). Upside: forecast usage above the contract at renewal. "≠ data" marks a forecast a quarter of the ARR away from the data's number. Value guides the work; it isn't anyone's credit. Action planned needs a next step with a date; none are recorded yet.</p>
         </div>
         <div class="panel">
           <h2>4. Engagement pipeline: looking forward 8 weeks</h2>
@@ -340,6 +348,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <h2>Account</h2>
           <dl class="facts" id="tl-facts"></dl>
           <div class="flags" id="tl-flags"></div>
+          <div class="forecast" id="tl-forecast"></div>
         </div>
       </div>
     </section>
@@ -445,6 +454,30 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  // money: value guides the work, it's never a CSM's credit
+  const CUR = D.settings.currency === "EUR" ? "€" : (D.settings.currency || "") + " ";
+  const money = (v) => v == null || isNaN(v) ? "–" : Math.abs(v) >= 1e6 ? CUR + (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M"
+    : Math.abs(v) >= 1000 ? CUR + Math.round(v / 1000) + "k" : CUR + Math.round(v);
+  const valueOf = (f) => (f && typeof f.value === "number" ? f.value : null);
+  // The page's database (published cockpit only). Declared up here because the
+  // timeline and My book read it too, not just the Tasks tab.
+  let db = null, me = null, dbState = "loading", decisions = {}, saveError = "";
+  // Renewal forecasts, account -> oldest first. The export carries the ones
+  // already synced; the published page replaces them with its live database.
+  let forecasts = {};
+  const groupForecasts = (list) => { const m = {}; for (const f of list) (m[f.account_id] = m[f.account_id] || []).push(f);
+    for (const k in m) m[k].sort((x, y) => String(x.decided_at).localeCompare(String(y.decided_at))); return m; };
+  forecasts = groupForecasts(D.forecasts || []);
+  const CALLS = { renew: "Renew in full", downsize: "Downsize", churn: "Churn" };
+  const callText = (f) => f.call === "downsize" && f.amount != null ? `Downsize to ${money(f.amount)}` : CALLS[f.call] || f.call;
+  // what the person expects to lose at renewal, next to what the data says
+  const expectedLoss = (a, f) => f.call === "churn" ? a.arr : f.call === "downsize" && f.amount != null ? Math.max(0, a.arr - f.amount) : 0;
+  const dataRisk = (a) => valueOf(a.flags.find((x) => x.flag === "churn")) || 0;
+  const forecastGap = (a, f) => {
+    const mine = expectedLoss(a, f), data = dataRisk(a);
+    return Math.abs(mine - data) >= 0.25 * a.arr ? { mine, data } : null;   // a quarter of the ARR apart: worth a conversation
+  };
+
   $("asof").textContent = "Data as of " + fmt(D.as_of) + " 2026";
   const byId = Object.fromEntries(D.accounts.map((a) => [a.account_id, a]));
   const ownerName = Object.fromEntries(D.team.map((t) => [t.owner_id, t.owner_name]));
@@ -468,6 +501,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   try { const saved = JSON.parse(localStorage.getItem("cockpit-seg") || "{}"); for (const k in seg) if (typeof saved[k] === "string") seg[k] = saved[k]; } catch (e) { /* no storage here */ }
   const saveSeg = () => { try { localStorage.setItem("cockpit-seg", JSON.stringify(seg)); } catch (e) { /* no storage here */ } };
   const segOn = () => Object.values(seg).some(Boolean);
+  // whose book is open: a named owner, or a pool (its team + the Scale tier)
+  const segOwner = () => seg.owner || (seg.team && seg.tier === "Scale" ? (D.team.find((t) => t.owner_type === "pool" && t.region === seg.team) || {}).owner_id || "" : "");
   const inSeg = (a) => !!a && (!seg.manager || a.manager === seg.manager) && (!seg.team || homeOf[a.owner_id] === seg.team) && (!seg.region || a.region === seg.region)
     && (!seg.tier || a.tier === seg.tier) && (!seg.owner || a.owner_id === seg.owner);
   const inSegId = (id) => inSeg(byId[id]);
@@ -485,7 +520,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     fillSelect($("seg-manager"), MANAGERS.map((m) => [m, managerName(m)]), seg.manager);
     // people side: teams narrow to the manager's (James: UK&I and Nordics), owners to both
     fillSelect($("seg-team"), REGIONS.filter((r) => D.team.some((t) => (!seg.manager || t.manager === seg.manager) && t.region === r)).map((r) => [r, r]), seg.team);
-    const owners = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team));
+    // named people only: a pool is its team plus the Scale tier, so it needs no entry here
+    const owners = D.team.filter((t) => t.owner_type === "csm" && (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team));
     fillSelect($("seg-owner"), owners.map((t) => [t.owner_id, t.owner_name]), seg.owner);
     // account side: every region, since an owner can cover accounts anywhere
     fillSelect($("seg-region"), REGIONS.map((r) => [r, r]), seg.region);
@@ -693,15 +729,70 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const contracted = (a.contracted_events / 1e6).toLocaleString("en-GB") + "M events a year";
     const facts = [["Tier", a.tier], ["Region", a.region], ["Owner", a.owner || (a.tier === "Self-service" ? "No CSM (Self-service)" : "Not assigned")],
       ["Contract", fmt(a.contract_start) + " " + a.contract_start.slice(0, 4) + " to " + fmt(a.renewal_date) + " " + a.renewal_date.slice(0, 4)],
-      ["Commitment", contracted], ["Add-ons", a.add_ons || "None"]];
+      ["Commitment", contracted], ["ARR", money(a.arr) + (a.arr_estimated ? " (estimate from list price)" : "")], ["Add-ons", a.add_ons || "None"]];
     $("tl-facts").innerHTML = facts.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
     const t = tta[id];
     if (t) $("tl-facts").innerHTML += `<dt>Time to call</dt><dd>${t.call_date ? (t.called_early ? "Called before the signal" : t.days_to_call + " days after the signal") : '<span class="bad">No call since ' + fmt(t.signal_date) + "</span>"}</dd>`;
     $("tl-flags").innerHTML = a.flags.length
-      ? a.flags.map((f) => `<div class="flag ${severity(f)}"><span class="pill">${esc(f.flag)} · ${esc(f.status)}</span><p>${esc(f.reasons)}</p></div>`).join("")
+      ? a.flags.map((f) => `<div class="flag ${severity(f)}"><span class="pill">${esc(f.flag)} · ${esc(f.status)}</span><p>${esc(f.reasons)}</p>` +
+          (valueOf(f) != null ? `<p><b>${money(valueOf(f))} ${f.flag === "churn" ? "ARR at risk" : "upside"}</b> · ${esc(f.value_basis)}</p>` : "") + `</div>`).join("")
       : '<p class="note">No open flags.</p>';
     const tc = (touchesBy[id] || []).length;
+    drawForecast(id);
     $("tl-finding").textContent = `${a.account_name}: ${a.flags.length ? a.flags.length + " open flag" + (a.flags.length > 1 ? "s" : "") : "no open flags"}, ${tc} CS touch${tc === 1 ? "" : "es"} in 90 days.`;
+  }
+  // Renewal forecast: the data's number, then the owner's (or manager's) call
+  // with a reason, and its history. Like a CRM forecast field; the gap between
+  // the person and the data is worth a conversation.
+  const whenText = (s) => { const d = String(s || "").slice(0, 10); return d.length === 10 ? fmt(d) : ""; };
+  const forecastRole = (a) => {
+    const o = segOwner();
+    if (o && o === a.owner_id) return { by: o, role: "owner" };
+    if (seg.manager && seg.manager === a.manager) return { by: seg.manager, role: "manager" };
+    return null;
+  };
+  function drawForecast(id) {
+    const a = byId[id], host = $("tl-forecast"); if (!a) return;
+    if (a.tier === "Self-service") { host.innerHTML = ""; return; }   // no owner to forecast it
+    const ch = a.flags.find((f) => f.flag === "churn"), ex = a.flags.find((f) => f.flag === "expansion");
+    const hist = forecasts[id] || [], last = hist[hist.length - 1];
+    let h = `<h3>Renewal forecast</h3><p>Data: ${ch ? `<b>${money(valueOf(ch))} at risk</b> of ${money(a.arr)} <small>(${esc(ch.value_basis || "")})</small>` : `no churn risk, ${money(a.arr)} renewing`}` +
+      (ex && valueOf(ex) ? ` · ${money(valueOf(ex))} upside` : "") + "</p>";
+    if (last) {
+      h += `<p><b>${esc(callText(last))}</b> · ${last.role === "manager" ? esc(managerName(last.by)) + " (manager override)" : esc(ownerName[last.by] || last.by)}, ${whenText(last.decided_at)}<br><small>${esc(last.reason || "")}</small></p>`;
+      const g = forecastGap(a, last);
+      if (g) h += `<p class="gap">${g.mine > g.data ? "The person sees more risk than the data" : "The data sees more risk than the person"}: ${money(g.mine)} expected lost vs. ${money(g.data)} at risk.</p>`;
+    } else h += `<p class="muted">No forecast from the owner yet.</p>`;
+    const who = forecastRole(a);
+    if (dbState !== "ready") h += `<p class="note">Forecasts are recorded in the published cockpit.</p>`;
+    else if (!who) h += `<p class="note">To record a forecast, pick yourself at the top: Owner (this account's owner) or Manager (theirs).</p>`;
+    else h += `<div class="fc-form"><select id="fc-call" aria-label="Forecast">${Object.entries(CALLS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>` +
+      `<label id="fc-amt" hidden>to ${esc(CUR.trim())} <input id="fc-amount" type="number" min="0" step="1000" inputmode="numeric"></label>` +
+      `<input id="fc-reason" type="text" maxlength="200" placeholder="Reason (required)" aria-label="Reason">` +
+      `<button class="small primary" id="fc-save">Save${who.role === "manager" ? " as manager" : ""}</button></div><p class="note" id="fc-msg"></p>`;
+    if (hist.length > 1) h += `<ul class="fc-hist">` + hist.slice(0, -1).reverse().slice(0, 4).map((f) =>
+      `<li>${whenText(f.decided_at)} · ${esc(f.role === "manager" ? managerName(f.by) + " (manager)" : ownerName[f.by] || f.by)}: ${esc(callText(f))}${f.reason ? " · " + esc(f.reason) : ""}</li>`).join("") +
+      (hist.length > 5 ? `<li>and ${hist.length - 5} earlier</li>` : "") + "</ul>";
+    host.innerHTML = h;
+    if (!who || dbState !== "ready") return;
+    const call = $("fc-call"), amt = $("fc-amount");
+    call.addEventListener("change", () => { $("fc-amt").hidden = call.value !== "downsize"; });
+    $("fc-save").addEventListener("click", async () => {
+      const reason = $("fc-reason").value.trim(), amount = call.value === "downsize" ? Number(amt.value) : null;
+      const msg = (t) => { $("fc-msg").textContent = t; };
+      if (!reason) return msg("Add a reason: it's what a manager reads in the forecast call.");
+      if (call.value === "downsize" && !(amount > 0 && amount < a.arr)) return msg(`A downsize is between 0 and today's ARR (${money(a.arr)}).`);
+      $("fc-save").disabled = true;
+      const at = new Date().toISOString();
+      try {
+        await db.collection("decisions").doc(`forecast~${id}~${at.replace(/[^0-9]/g, "")}`).set({
+          kind: "forecast", account_id: id, call: call.value, amount, reason, by: who.by, role: who.role,
+          data_at_risk: dataRisk(a), as_of: D.as_of, decided_at: at, decided_by: me });
+      } catch (e) {
+        $("fc-save").disabled = false;
+        msg(e && e.code === "invalid_argument" ? "You can see this cockpit but not change it: ask its owner for Contributor access." : "That forecast wasn't saved. Try again in a moment.");
+      }
+    });
   }
   function pressChips(id) { document.querySelectorAll("#tl-picks .chip").forEach((c) => c.setAttribute("aria-pressed", String(c.id === "pick-" + id))); }
 
@@ -1165,8 +1256,6 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const docId = (kind, t) => [kind, t.account_id, t.flag, t.status].join("~").replace(/[^A-Za-z0-9_.~:@+-]/g, "-");
   const canAssign = (t) => !!teamById[t.routed_to] && (t.action_status === "Open" || t.action_status === "Claimed");
   const canApprove = (t) => t.status === "Follow-up not picked up" && t.action_status === "Open";
-  let db = null, me = null, dbState = "loading", decisions = {}, saveError = "";
-
   function assignSelect(t) {
     // the manager's own team first, then everyone else; never the current owner
     const mine = D.team.filter((o) => o.manager === seg.manager && o.owner_id !== t.routed_to);
@@ -1246,20 +1335,25 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // the database answers later (or never, in the offline file): the list draws first
   (async () => {
     const use = window.claude && window.claude.use;
-    if (!use) { dbState = "none"; drawTasks(); return; }
+    if (!use) { dbState = "none"; drawTasks(); if (sel.value) drawForecast(sel.value); return; }
     try {
       db = await window.claude.use("db");
       const user = await window.claude.use("user");
       me = user ? await user.id() : null;
     } catch (e) { db = null; }
-    if (!db) { dbState = "none"; drawTasks(); return; }
+    if (!db) { dbState = "none"; drawTasks(); if (sel.value) drawForecast(sel.value); return; }
     dbState = "ready";
     db.collection("decisions").onSnapshot((snap) => {
-      decisions = {};
-      for (const d of snap.docs) { const v = d.data(); if (v && v.as_of === D.as_of) decisions[d.id] = v; }   // older data: ignored
-      drawTasks();
-    }, () => { dbState = "none"; drawTasks(); });
-    drawTasks();
+      decisions = {}; const fs = [];
+      for (const d of snap.docs) {
+        const v = d.data(); if (!v) continue;
+        if (v.kind === "forecast") fs.push(v);                       // forecasts: kept whatever the data
+        else if (v.as_of === D.as_of) decisions[d.id] = v;           // task decisions on older data: ignored
+      }
+      forecasts = groupForecasts(fs);
+      drawTasks(); drawMyBook(); if (sel.value) drawForecast(sel.value);
+    }, () => { dbState = "none"; drawTasks(); if (sel.value) drawForecast(sel.value); });
+    drawTasks(); if (sel.value) drawForecast(sel.value);
   })();
 
 
@@ -1330,14 +1424,19 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   }
 
   function drawMyBook() {
-    const o = seg.owner, name = ownerName[o] || o;
+    // a pool's book = its team + the Scale tier (pools aren't in the Owner list)
+    const o = segOwner(), name = ownerName[o] || o;
     $("mb-pick").innerHTML = "";
     $("mb-body").hidden = !o;
     if (!o) {
       $("mb-finding").textContent = "Pick an owner to see their book.";
       const owners = D.team.filter((t) => !seg.manager || t.manager === seg.manager);
       $("mb-pick").innerHTML = owners.map((t) => `<button class="chip" data-o="${esc(t.owner_id)}">${esc(t.owner_name)}</button>`).join("");
-      $("mb-pick").querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => { seg.owner = b.dataset.o; seg.team = seg.region = seg.tier = ""; saveSeg(); redraw(); }));
+      $("mb-pick").querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => {
+        const t = teamById[b.dataset.o];
+        if (t.owner_type === "pool") { seg.owner = seg.region = ""; seg.team = t.region; seg.tier = "Scale"; }
+        else { seg.owner = t.owner_id; seg.team = seg.region = seg.tier = ""; }
+        saveSeg(); redraw(); }));
       return;
     }
     const peers = peersOf(o), kind = (teamById[o] || {}).owner_type === "pool" ? "pools" : "CSMs";
@@ -1406,10 +1505,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const fl = (a, f) => a.flags.find((x) => x.flag === f);
     const lastMeeting = (id, topics) => { const ms = (touchesBy[id] || []).filter((t) => t.event === "meeting_held" && (!topics || topics.includes(t.topic))); return ms.length ? ms[ms.length - 1] : null; };
     const CHURN_ORDER = { Act: 0, Shelfware: 1, Watch: 2 };
-    const churn = accs.filter((a) => fl(a, "churn")).sort((a, b) => CHURN_ORDER[fl(a, "churn").status] - CHURN_ORDER[fl(b, "churn").status] || a.renewal_date.localeCompare(b.renewal_date));
-    const growth = accs.filter((a) => !fl(a, "churn") && fl(a, "expansion")).sort((a, b) => a.renewal_date.localeCompare(b.renewal_date));
-    const rest = accs.filter((a) => !fl(a, "churn") && !fl(a, "expansion")).sort((a, b) => a.renewal_date.localeCompare(b.renewal_date));
-    $("mb-port-finding").textContent = `${churn.length} of ${plural(accs.length, "account")} in ${name}'s book ${churn.length === 1 ? "is" : "are"} at churn risk.`;
+    // sorted by value at stake: the biggest ARR at risk first, the biggest upside first
+    const byValue = (f) => (a, b) => (valueOf(fl(b, f)) || 0) - (valueOf(fl(a, f)) || 0) || a.renewal_date.localeCompare(b.renewal_date);
+    const churn = accs.filter((a) => fl(a, "churn")).sort(byValue("churn"));
+    const growth = accs.filter((a) => !fl(a, "churn") && fl(a, "expansion")).sort(byValue("expansion"));
+    const rest = accs.filter((a) => !fl(a, "churn") && !fl(a, "expansion")).sort((a, b) => (b.arr || 0) - (a.arr || 0));
+    const sumOf = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
+    const atRisk = sumOf(churn, (a) => valueOf(fl(a, "churn"))), bookArr = sumOf(accs, (a) => a.arr);
+    $("mb-port-finding").textContent = `${money(atRisk)} of ${name}'s ${money(bookArr)} ARR is at risk, across ${churn.length} of ${plural(accs.length, "account")}.`;
     // the last thing CS did on the account, whatever it was, with its date and age
     // customer-facing actions only: a task claimed or reassigned is internal, not contact
     const CS_ACTION = { meeting_held: (t) => topicName(t.topic).replace(/^follow up$/, "follow-up call"), email_sent: (t) => `email: ${topicName(t.topic)}`,
@@ -1423,7 +1526,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const row = (a, f, topics) => {
       const flag = f ? fl(a, f) : null, m = f ? lastMeeting(a.account_id, topics) : null;
       const sev = flag ? (f === "churn" ? (flag.status === "Act" ? "critical" : "warning") : "good") : "";
-      return `<tr class="click" tabindex="0" data-id="${esc(a.account_id)}"><td>${esc(a.account_name)}<small><br>${esc(a.tier)}</small></td><td>${spark(a.util)}</td>` +
+      const v = flag ? valueOf(flag) : null, fc = (forecasts[a.account_id] || []).slice(-1)[0], gap = fc && forecastGap(a, fc);
+      const valueCell = `<b>${money(v != null ? v : a.arr)}</b><small><br>${v != null ? (f === "churn" ? "at risk" : "upside") + " of " + money(a.arr) : "ARR"}` +
+        (fc ? `<br>${fc.role === "manager" ? "Manager" : "Owner"}: ${esc(callText(fc))}${gap ? ' <span class="bad">≠ data</span>' : ""}` : "") + "</small>";
+      return `<tr class="click" tabindex="0" data-id="${esc(a.account_id)}"><td>${esc(a.account_name)}<small><br>${esc(a.tier)}</small></td><td class="num">${valueCell}</td><td>${spark(a.util)}</td>` +
         `<td>${fmtFull(a.renewal_date)}<small><br>in ${Math.round(day(a.renewal_date) - RUN)} d</small></td>` +
         `<td>${flag ? `<div class="flag ${sev}"><span class="pill">${esc(flag.status)}</span><p>${esc(flag.reasons)}</p></div>` : '<span class="muted">no flags</span>'}</td>` +
         `<td>${lastActionCell(a.account_id)}${f && !m ? `<small class="muted"><br>no ${f === "churn" ? "churn" : "growth"} call or QBR yet</small>` : ""}</td>` +
@@ -1431,10 +1537,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     };
     let restOpen = false;
     const drawPort = () => {
-      $("mb-port").innerHTML = `<table><thead><tr><th>Account</th><th>Utilisation, 90 days</th><th>Renewal</th><th>Why</th><th>Last action</th><th>Action planned</th></tr></thead><tbody>` +
-        `<tr class="group"><td colspan="6">Churn risk (${churn.length})</td></tr>` + churn.map((a) => row(a, "churn", ["churn_call", "qbr"])).join("") +
-        `<tr class="group"><td colspan="6">Growth (${growth.length})</td></tr>` + growth.map((a) => row(a, "expansion", ["growth_call", "qbr"])).join("") +
-        `<tr class="group"><td colspan="6">No flags (${rest.length}) <button class="link" data-rest>${restOpen ? "hide" : "show"}</button></td></tr>` + (restOpen ? rest.map((a) => row(a, null)).join("") : "") +
+      $("mb-port").innerHTML = `<table><thead><tr><th>Account</th><th>Value</th><th>Utilisation, 90 days</th><th>Renewal</th><th>Why</th><th>Last action</th><th>Action planned</th></tr></thead><tbody>` +
+        `<tr class="group"><td colspan="7">Churn risk (${churn.length})</td></tr>` + churn.map((a) => row(a, "churn", ["churn_call", "qbr"])).join("") +
+        `<tr class="group"><td colspan="7">Growth (${growth.length})</td></tr>` + growth.map((a) => row(a, "expansion", ["growth_call", "qbr"])).join("") +
+        `<tr class="group"><td colspan="7">No flags (${rest.length}) <button class="link" data-rest>${restOpen ? "hide" : "show"}</button></td></tr>` + (restOpen ? rest.map((a) => row(a, null)).join("") : "") +
         "</tbody></table>";
       $("mb-port").querySelectorAll("tr.click").forEach((tr) => { tr.addEventListener("click", () => openAccount(tr.dataset.id)); tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); }); });
       const b = $("mb-port").querySelector("[data-rest]"); if (b) b.addEventListener("click", (e) => { e.stopPropagation(); restOpen = !restOpen; drawPort(); });

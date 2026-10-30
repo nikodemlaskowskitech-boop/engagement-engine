@@ -23,7 +23,7 @@ and ends with what the engine can and can't do with that data.
 | Engagement history | `data/engagement/*.jsonl` | No | No journeys, no time to action, no "last touch"; flags still work |
 | Onboarding holdout | `data/onboarding_holdout.csv` | No | Everyone gets onboarding emails; no welcomed vs. control report |
 | Renewal outcomes | `data/renewal_outcomes.csv` | No | No backtest (recall, precision, warning time) |
-| Cockpit decisions | `data/cockpit_decisions.json` | No | Managers can't reassign tasks or approve hand-backs from the cockpit (Slack still can) |
+| Cockpit decisions | `data/cockpit_decisions.json` | No | Managers can't reassign tasks or approve hand-backs from the cockpit (Slack still can); renewal forecasts stay in the cockpit only |
 
 ## 1. Product events
 
@@ -125,6 +125,7 @@ engine runs.
 | `task_claimed` | owner_id, topic, slack_user | Someone took a task in Slack |
 | `task_assigned` | owner_id (the new owner), topic (the flag), status, manager | A manager gave a task to someone else in the cockpit |
 | `handback_approved` | owner_id (the manager), topic `handback`, slack_user or manager | A manager approved handing a follow-up back to the pool |
+| `forecast_set` | owner_id (who), topic `renewal_forecast`, status (renew, downsize, churn), amount (value expected at renewal), note (reason), outcome (owner or manager) | An owner or their manager set the account's renewal forecast in the cockpit. Internal: never a customer touch |
 
 Topics that matter: `getting_started` (journeys), `churn_call`, `growth_call`,
 `activation_call` (time to action), `qbr` (QBR first and slips), `check_in`.
@@ -169,6 +170,16 @@ turns them into `task_assigned` and `handback_approved` events in
 
 `kind` is `assign` (with `to_owner`) or `handback`. The latest decision per task wins.
 
+Renewal forecasts sit in the same file, `kind` `forecast`. Every one is kept
+(the history shows how a forecast moved) and none is skipped for older data:
+like a CRM forecast field, it's about the renewal, not today's numbers.
+
+```json
+[{"kind": "forecast", "account_id": "acc_024", "call": "downsize", "amount": 150000,
+  "reason": "Budget cut, keeps the core team", "by": "csm_mia", "role": "owner",
+  "data_at_risk": 234400, "as_of": "2026-10-18", "decided_at": "2026-10-30T10:00:00Z"}]
+```
+
 ## What the engine writes
 
 Never into the inputs above: flags (`data/flags_*.csv`), the action log
@@ -187,6 +198,7 @@ needs:
 | `email_sent` | Activity (email) | date, owner (or "automated"), subject = topic |
 | `task_claimed` | Task owner update | who took it, when |
 | `task_assigned` | Task owner update | the new owner, the manager who decided, when |
+| `forecast_set` | Renewal opportunity forecast | category (renew, downsize, churn), amount, reason, who |
 
 Each event's `event_id` goes into an external-ID field, so a re-run never
 creates duplicates. The direction stays one-way for CS facts: the engine is
