@@ -38,12 +38,13 @@ const FAKE_DB = `
       onSnapshot: (f) => { cb = f; f(snap()); },
       doc: (id) => ({ set: async (v) => { docs[id] = v; cb && cb(snap()); },
                       delete: async () => { delete docs[id]; cb && cb(snap()); } }) }) };
-    window.__docs = docs;
+    window.__docs = docs; window.__db = db;
     window.claude = { use: async (n) => n === "db" ? db : n === "user" ? { id: async () => "tester" } : null };
   })();`;
 
 async function open(browser, opts = {}) {
   const page = await browser.newPage({ viewport: { width: opts.width || 1300, height: 900 }, colorScheme: opts.scheme || "light" });
+  page.setDefaultTimeout(5000);                        // a missing element fails fast instead of hanging
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/fonts\.g|ERR_|net::/.test(m.text())) errors.push(m.text()); });
@@ -220,6 +221,65 @@ const segment = async (page, values) => {
     await segment(page, { team: pickedPool.region, tier: "Scale" });
     await tab(page, "mybook");
     check((await page.textContent("#mb-finding")).includes(pickedPool.owner_name), "Team + Scale opens the pool's book");
+    await page.close();
+  }
+
+  // --- 6. Handover brief (AI) ------------------------------------------------------
+  console.log("\n6. Handover brief: sources, privacy, confirm");
+  {
+    const H = D.handovers || {}, accs = Object.keys(H);
+    const none = D.accounts.find((a) => !H[a.account_id] && a.tier === "Enterprise");
+    const errors = [];
+    const visit = async (id) => { const o = await open(browser, { db: true, hash: "#" + id }); o.page.on("pageerror", (e) => errors.push(e.message)); return o.page; };
+    let page = await visit(none.account_id);
+    check(await page.isHidden("#tl-handover"), "No brief: no handover panel");
+    if (!accs.length) console.log("  SKIP  no briefs in the export (run handover.py, then export_views.py)");
+    for (const id of accs) {
+      const h = H[id];
+      await page.close(); page = await visit(id);
+      check(await page.isVisible("#tl-handover"), `${id}: the panel shows`);
+      const cites = await page.$$eval("#tl-handover .ho-brief .cite", (bs) => bs.map((b) => b.dataset.src));
+      const ids = new Set(h.sources.map((x) => x.id));
+      check(cites.length > 0 && cites.every((c) => ids.has(c)), `${id}: ${cites.length} citations, all to real sources`);
+      const brief = await page.textContent("#tl-handover .ho-brief");
+      check(!/Customer [A-Z]\b|\bCS \d\b/.test(brief), `${id}: real names are back in the brief (no 'Customer A' or 'CS 1' left)`);
+      // privacy in the page: what the model saw holds no real name, email or phone
+      const keyFile = path.join(ROOT, "data", "handover", id + "_key.json");
+      const seen = await page.textContent("#ho-sent");
+      if (fs.existsSync(keyFile)) {
+        const key = JSON.parse(fs.readFileSync(keyFile, "utf8"));
+        const leaks = Object.entries(key).flatMap(([label, real]) => [real, ...(label === "the customer" ? [] : [real.split(" ")[0]])])
+          .filter((w) => new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b").test(seen));
+        leaks.push(...(seen.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []), ...(seen.match(/\+\d[\d ()-]{7,}\d/g) || []));
+        check(!leaks.length, `${id}: 'What the model saw' shows no real name, email or phone`, leaks.join(", "));
+      }
+      const c = cites.find((x) => x !== "DATA") || cites[0];
+      await page.click(`#tl-handover .cite[data-src=${c}]`); await page.waitForTimeout(300);
+      check(await page.evaluate((c) => document.getElementById("ho-sent").open && document.getElementById("ho-src-" + c).classList.contains("hit"), c),
+        `${id}: clicking [${c}] opens that source`);
+    }
+    if (accs.length) {
+      const id = accs[0], h = H[id], a = D.accounts.find((x) => x.account_id === id);
+      await page.close(); page = await visit(id);
+      const other = D.team.find((t) => t.owner_type === "csm" && t.owner_id !== h.from);
+      await segment(page, { owner: other.owner_id });
+      await tab(page, "timeline"); await page.fill("#tl-find", id); await page.keyboard.press("Enter"); await page.waitForTimeout(300);
+      check(!(await page.isVisible("#ho-confirm")), `${other.owner_name} (not the outgoing owner) can't confirm`);
+      await page.click("#tl-handover [data-actas=owner]"); await page.waitForTimeout(300);
+      check(await page.isVisible("#ho-confirm"), `Acting as ${a.owner} opens Confirm`);
+      await page.fill("#ho-note", "Test note"); await page.click("#ho-confirm"); await page.waitForTimeout(300);
+      const head = await page.textContent("#tl-handover .ho-head");
+      check(head.includes("Confirmed") && (await page.textContent("#tl-handover")).includes("Test note"), "Confirm saves and shows, with the note");
+      const doc = await page.evaluate(() => Object.values(window.__docs).find((d) => d.kind === "handover_confirm"));
+      check(doc && doc.version === h.version && doc.by === h.from, "The database holds the confirm for this version", JSON.stringify(doc));
+      // a rewrite after the confirm: the stored confirm points at an older version
+      await page.evaluate((id) => window.__db.collection("decisions").doc("handover_confirm~" + id + "~1").set(
+        { kind: "handover_confirm", account_id: id, version: "older", by: "x", role: "owner", decided_at: "2099-01-01T00:00:00Z" }), id);
+      await page.waitForTimeout(250);
+      check((await page.textContent("#tl-handover .ho-head")).includes("rewritten since it was confirmed") && await page.isVisible("#ho-confirm"),
+        "A brief rewritten after the confirm is a draft again, ready to confirm");
+    }
+    check(!errors.length, "No script errors in the handover panel", errors.join("; "));
     await page.close();
   }
 

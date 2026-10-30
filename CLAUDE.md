@@ -366,7 +366,13 @@ One JSON event per line, one file per day in `data/events/`.
   was set; shown in My book's portfolio. The timeline opens with a summary:
   everything done (customer touches, tasks sent, plans, forecasts), newest
   first, next to what's coming up (next step, booked QBR, renewal with its
-  forecast). Also exports next_steps,
+  forecast). Handover brief on the timeline (accounts with a finished brief
+  from handover.py, exported as handovers): the brief as a draft, each
+  citation a tag that opens that source as the model saw it (redacted), what to
+  check before confirming, and Confirm (optional note for the new owner) for
+  the outgoing owner or their manager, saved in the page's database
+  (handover_confirm, pointing at the brief's version = its written_at); a
+  rewrite after that makes it a draft again. Also exports next_steps,
   forecasts (forecast_set events), churn_signals, renewals
   (backtest.py's view) and tasks (action_status, with each task's manager).
   Opens in any browser offline. The page only draws; the numbers come from
@@ -425,7 +431,11 @@ One JSON event per line, one file per day in `data/events/`.
   lost); with Owner = Mia every account on every tab is hers or marked
   outside, and the filters narrow; saving a next step, a forecast and a
   reassignment against a stand-in database, including the refusals; edge cases
-  (Self-service, no owner, a tiny segment, a pool's book). Exit 1 on any FAIL.
+  (Self-service, no owner, a tiny segment, a pool's book); the handover panel
+  (only where a brief exists, every citation a real source, real names back in
+  the brief, none in 'What the model saw', a citation opens its source, only
+  the outgoing owner or manager confirms, a rewrite after a confirm is a draft
+  again). Exit 1 on any FAIL.
 - `tests/scenarios_test.js`: the 23 acceptance scenarios, automated by role
   (Mia the CSM, Priya the pool member, Sophie the manager, the leader, admin,
   anyone). Each works out its expected result from the export and checks the

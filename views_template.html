@@ -186,6 +186,18 @@ h3.mini { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase;
 .fc-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
 .fc-form input[type=text] { flex: 1 1 180px; min-width: 0; }
 .fc-form input[type=number] { width: 110px; }
+.ho-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between; }
+.ho-brief { max-width: 80ch; font-size: 0.92rem; }
+.ho-brief h4 { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); margin: 16px 0 4px; }
+.ho-brief ul, .ho-brief ol { margin: 0; padding-left: 20px; }
+.ho-brief li { margin: 3px 0; }
+.cite { font: 600 0.7rem var(--font-data); color: var(--accent); background: var(--accent-soft); border: 0; border-radius: 4px; padding: 0 4px; margin: 0 1px; cursor: pointer; vertical-align: 1px; }
+.ho-check { border-left: 3px solid var(--warning); padding: 2px 0 2px 10px; margin: 12px 0 0; font-size: 0.88rem; }
+.ho-check ul { margin: 4px 0 0; padding-left: 18px; }
+.ho-sent summary { cursor: pointer; color: var(--accent); font-size: 0.88rem; margin-top: 12px; }
+.ho-src { border-top: 1px solid var(--rule); padding: 8px 0; }
+.ho-src.hit { background: var(--accent-soft); }
+.ho-src pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 0.8rem/1.45 var(--font-data); color: var(--ink-2); margin: 4px 0 0; }
 .fc-hist { margin: 6px 0 0; padding: 0; list-style: none; color: var(--ink-2); font-size: 0.82rem; }
 .pending { display: block; font-size: 0.78rem; color: var(--accent); margin-top: 3px; }
 td .act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -397,6 +409,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <div><h3 class="mini">Coming up</h3><ul class="sum-list" id="tl-coming"></ul></div>
         </div>
       </div>
+      <div class="panel" id="tl-handover" hidden></div>
       <div class="grid2">
         <div class="panel">
           <h2>Usage and CS touches</h2>
@@ -526,6 +539,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // Renewal forecasts, account -> oldest first. The export carries the ones
   // already synced; the published page replaces them with its live database.
   let forecasts = {};
+  const HANDOVER = D.handovers || {};                  // AI handover briefs (handover.py), by account
+  let handoverConfirms = {};                           // confirms from the page's database, by account
   const groupForecasts = (list) => { const m = {}; for (const f of list) (m[f.account_id] = m[f.account_id] || []).push(f);
     for (const k in m) m[k].sort((x, y) => String(x.decided_at).localeCompare(String(y.decided_at))); return m; };
   forecasts = groupForecasts(D.forecasts || []);
@@ -634,7 +649,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       // the segment changed and the open account isn't in it: open one that is
       if (sel.value && segOn() && !inSegId(sel.value) && picks.length) { sel.value = picks[0].id; drawTimeline(picks[0].id); }
     }
-    if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } }   // who may plan or forecast depends on the segment
+    if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } }   // who may plan or forecast depends on the segment
   for (const k of Object.keys(seg)) $("seg-" + k).addEventListener("change", (e) => { seg[k] = e.target.value; saveSeg(); redraw(); });
   $("seg-reset").addEventListener("click", () => { for (const k in seg) seg[k] = ""; saveSeg(); redraw(); });
 
@@ -709,6 +724,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const pool = D.accounts.filter(inSeg);
     const pickBy = (fn, why) => { const a = pool.find((x) => fn(x) && !picks.some((p) => p.id === x.account_id)); if (a) picks.push({ id: a.account_id, why }); };
     const churnF = (a) => a.flags.find((f) => f.flag === "churn");
+    pickBy((a) => HANDOVER[a.account_id], "Handover brief");
     pickBy((a) => tta[a.account_id] && !tta[a.account_id].call_date && tta[a.account_id].flag === "churn", "Declining, never called");
     pickBy((a) => tta[a.account_id] && tta[a.account_id].days_to_call === 0 && tta[a.account_id].called_early && tta[a.account_id].flag === "churn", "Called before the signal");
     pickBy((a) => a.flags.some((f) => f.flag === "journey" && f.status === "No meeting in 30 days"), "Escalated to a manager");
@@ -856,6 +872,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const tc = (touchesBy[id] || []).length;
     drawNext(id);
     drawForecast(id);
+    drawHandover(id);
     $("tl-find").placeholder = `${a.account_name} (${a.account_id}): search another account`;
     $("tl-finding").textContent = (segOn() && !inSeg(a) ? `Outside ${segName()}: ` : "") + `${a.account_name}: ${a.flags.length ? a.flags.length + " open flag" + (a.flags.length > 1 ? "s" : "") : "no open flags"}, ${tc} CS touch${tc === 1 ? "" : "es"} in 90 days.`;
   }
@@ -1024,6 +1041,80 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       }
     });
   }
+  // Handover brief: what the AI wrote for the new owner, from emails, tickets and
+  // calls. A draft until the outgoing owner (or their manager) confirms it; a
+  // rewrite after that makes it a draft again. Every citation opens the source
+  // as the model saw it (redacted), so a claim can be checked in one click.
+  function briefHtml(md, ids) {
+    const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+      .replace(/\[((?:[A-Z]+\d*)(?:,\s*[A-Z]+\d*)*)\]/g, (m, g) => g.split(/,\s*/).map((c) =>
+        ids.has(c) ? `<button class="cite" data-src="${c}" title="Show source ${c}">${c}</button>` : `<span class="bad">[${c}?]</span>`).join(""));
+    let h = "", list = "";
+    const close = () => { if (list) { h += `</${list}>`; list = ""; } };
+    for (const line of md.split("\n")) {
+      const t = line.trim(); let m;
+      if (!t) { close(); continue; }
+      if ((m = t.match(/^#{1,4}\s+(.*)/))) { close(); h += `<h4>${inline(m[1])}</h4>`; }
+      else if ((m = t.match(/^[-*]\s+(.*)/))) { if (list !== "ul") { close(); h += "<ul>"; list = "ul"; } h += `<li>${inline(m[1])}</li>`; }
+      else if ((m = t.match(/^\d+\.\s+(.*)/))) { if (list !== "ol") { close(); h += "<ol>"; list = "ol"; } h += `<li>${inline(m[1])}</li>`; }
+      else { close(); h += `<p>${inline(t)}</p>`; }
+    }
+    close(); return h;
+  }
+  function drawHandover(id) {
+    const host = $("tl-handover"), h = HANDOVER[id], a = byId[id];
+    if (!h || !a) { host.hidden = true; host.innerHTML = ""; return; }
+    host.hidden = false;
+    const ids = new Set(h.sources.map((x) => x.id));
+    const conf = (handoverConfirms[id] || []).slice(-1)[0];
+    const current = conf && conf.version === h.version;          // confirmed this very version
+    const who = (() => { const r = forecastRole(a); return r && (r.role === "manager" || r.by === h.from) ? r : null; })();
+    const status = current ? `<span class="badge Done">Confirmed</span>`
+      : conf ? `<span class="badge Open">Draft: rewritten since it was confirmed</span>` : `<span class="badge Open">Draft</span>`;
+    let x = `<div class="ho-head"><h2>Handover brief: ${esc(ownerName[h.from] || h.from)} → ${esc(ownerName[h.to] || h.to)}</h2>${status}</div>`;
+    x += `<p class="note">Written by AI from ${h.sources.length - 1} documents (support cases, emails, call transcripts) and the engine's data` +
+      (h.written_as_of ? `, on data as of ${fmt(h.written_as_of)}` : "") + `. Click a source tag to see what the model read.` +
+      (h.why && h.why.length ? ` Last written because: ${esc(h.why.join("; "))}.` : "") + `</p>`;
+    if (conf) x += `<p class="note">${current ? "Confirmed" : "Last confirmed"} by ${esc(conf.role === "manager" ? managerName(conf.by) + " (manager)" : ownerName[conf.by] || conf.by)}, ${whenText(conf.decided_at)}${conf.note ? ` · “${esc(conf.note)}”` : ""}</p>`;
+    x += `<div class="ho-brief">${briefHtml(h.brief, ids)}</div>`;
+    x += h.unverified.length ? `<div class="ho-check"><b>Check before confirming</b><ul>${h.unverified.map((u) => `<li>${esc(u)}</li>`).join("")}</ul></div>`
+      : `<p class="note">Every sentence cites a source and every number traces back to one.</p>`;
+    // the confirm: the outgoing owner, or their manager
+    x += `<div class="forecast">`;
+    if (current) x += `<p class="muted">This version is confirmed. A rewrite (new emails, tickets or calls, a flag change) makes it a draft again.</p>`;
+    else if (dbState !== "ready") x += `<p class="note">The outgoing owner confirms the brief in the published cockpit.</p>`;
+    else if (!who) x += actAsHtml(a, "confirm the brief");
+    else x += `<div class="fc-form"><input id="ho-note" type="text" maxlength="200" placeholder="A note for ${esc(ownerName[h.to] || "the new owner")} (optional)" aria-label="Note for the new owner">` +
+      `<button class="small primary" id="ho-confirm">Confirm${who.role === "manager" ? " as manager" : ""}</button></div><p class="note" id="ho-msg"></p>`;
+    x += `</div>`;
+    // what the model saw: redacted, source by source
+    const parts = h.sent.split(/\n\s*---\s*\n/).map((p) => { const m = p.trim().match(/^\[([A-Z]+\d*)\]\s*([^\n]*)\n?([\s\S]*)$/); return m ? { id: m[1], title: m[2], text: m[3] } : null; }).filter(Boolean);
+    x += `<details class="ho-sent" id="ho-sent"><summary>What the model saw (names, emails and phone numbers already replaced)</summary>` +
+      parts.map((p) => `<div class="ho-src" id="ho-src-${p.id}"><b>[${p.id}]</b> ${esc(p.title)}<pre>${esc(p.text.replace(/\n\s*\n(\s*\n)+/g, "\n\n"))}</pre></div>`).join("") + `</details>`;
+    host.innerHTML = x;
+    if (!who || current || dbState !== "ready") return;
+    $("ho-confirm").addEventListener("click", async () => {
+      $("ho-confirm").disabled = true;
+      const at = new Date().toISOString();
+      try {
+        await db.collection("decisions").doc(`handover_confirm~${id}~${at.replace(/[^0-9]/g, "")}`).set({
+          kind: "handover_confirm", account_id: id, version: h.version, from: h.from, to: h.to,
+          note: $("ho-note").value.trim(), by: who.by, role: who.role, as_of: D.as_of, decided_at: at, decided_by: me });
+      } catch (e) {
+        $("ho-confirm").disabled = false;
+        $("ho-msg").textContent = e && e.code === "invalid_argument" ? "You can see this cockpit but not change it: ask its owner for Contributor access." : "The confirm wasn't saved. Try again in a moment.";
+      }
+    });
+  }
+  $("tl-handover").addEventListener("click", (e) => {
+    const act = e.target.closest("[data-actas]"); if (act) return actAs(act.dataset.actas, act.dataset.acc);
+    const c = e.target.closest(".cite"); if (!c) return;
+    const box = $("ho-src-" + c.dataset.src); if (!box) return;
+    $("ho-sent").open = true;
+    document.querySelectorAll(".ho-src.hit").forEach((b) => b.classList.remove("hit"));
+    box.classList.add("hit"); box.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+
   function pressChips(id) { document.querySelectorAll("#tl-picks .chip").forEach((c) => c.setAttribute("aria-pressed", String(c.id === "pick-" + id))); }
 
   // ---------------------------------------------------------------- onboarding
@@ -1597,26 +1688,27 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // the database answers later (or never, in the offline file): the list draws first
   (async () => {
     const use = window.claude && window.claude.use;
-    if (!use) { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } return; }
+    if (!use) { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } return; }
     try {
       db = await window.claude.use("db");
       const user = await window.claude.use("user");
       me = user ? await user.id() : null;
     } catch (e) { db = null; }
-    if (!db) { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } return; }
+    if (!db) { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } return; }
     dbState = "ready";
     db.collection("decisions").onSnapshot((snap) => {
       decisions = {}; const fs = [];
       for (const d of snap.docs) {
         const v = d.data(); if (!v) continue;
-        if (v.kind === "forecast" || v.kind === "next_step") fs.push(v);   // plans and forecasts: kept whatever the data
+        if (v.kind === "forecast" || v.kind === "next_step" || v.kind === "handover_confirm") fs.push(v);   // kept whatever the data
         else if (v.as_of === D.as_of) decisions[d.id] = v;           // task decisions on older data: ignored
       }
       forecasts = groupForecasts(fs.filter((v) => v.kind === "forecast"));
       nextSteps = groupForecasts(fs.filter((v) => v.kind === "next_step"));
-      drawTasks(); drawMyBook(); drawLeadership(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); }
-    }, () => { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } });
-    drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); }
+      handoverConfirms = groupForecasts(fs.filter((v) => v.kind === "handover_confirm"));
+      drawTasks(); drawMyBook(); drawLeadership(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); }
+    }, () => { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } });
+    drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); }
   })();
 
 

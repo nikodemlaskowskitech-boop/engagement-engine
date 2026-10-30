@@ -184,6 +184,11 @@ Renewal forecasts (`kind` `forecast`) and next steps (`kind` `next_step`, with
 (the history shows how a forecast moved) and none is skipped for older data:
 like a CRM forecast field, it's about the renewal, not today's numbers.
 
+Handover confirms (`kind` `handover_confirm`, with `version`, `from`, `to`,
+`note`, `by`, `role`) live only in the page's database: the cockpit compares
+`version` with the brief's `written_at` to show Confirmed or Draft. The
+pipeline doesn't read them yet.
+
 ```json
 [{"kind": "forecast", "account_id": "acc_024", "call": "downsize", "amount": 150000,
   "reason": "Budget cut, keeps the core team", "by": "csm_mia", "role": "owner",

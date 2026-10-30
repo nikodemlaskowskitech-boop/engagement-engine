@@ -24,6 +24,10 @@ What goes in:
   tasks           every task sent to a person (action_status): who has it,
                   its manager, Open/Claimed/Done/Resolved and its age, and
                   whether a manager reassigned it (empty before actions.py runs)
+  handovers       finished AI handover briefs (handover.py), per account: the
+                  brief with real names back in, its sources, what is unverified,
+                  what the model saw (redacted) and when and why it was written.
+                  The redaction key (<acc>_key.json) is never exported.
   settings        the few thresholds the page labels with
 
 Real user IDs never leave this script: weekly active users are counts.
@@ -47,6 +51,42 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 DATA = Path(__file__).resolve().parent / "data"
 FLAGS = ("activation", "churn", "expansion", "qbr", "journey")
+
+
+def handovers():
+    """Finished handover briefs from data/handover/ (empty until handover.py runs).
+    Only a finished answer is shown: a cut-short or unchecked brief stays out."""
+    folder, out = DATA / "handover", {}
+    stories = Path(__file__).resolve().parent / SETTINGS["handover"]["stories_folder"] / "directory.csv"
+    if not stories.exists():
+        return out
+    with stories.open(encoding="utf-8") as f:
+        for entry in csv.DictReader(f):
+            acc = entry["account_id"]
+            md, check, meta, sent = (folder / f"{acc}{s}" for s in (".md", "_check.json", "_meta.json", "_sent.txt"))
+            if not (md.exists() and check.exists() and sent.exists()):
+                continue
+            checks = json.loads(check.read_text(encoding="utf-8"))
+            if checks.get("stop_reason") != "end_turn":
+                continue
+            m = json.loads(meta.read_text(encoding="utf-8")) if meta.exists() else {}
+            text = md.read_text(encoding="utf-8")
+            body, _, tail = text.partition("\n---\n")
+            sources = [{"id": i, "title": t} for i, t in
+                       ((l.split("**")[1], l.split("**", 2)[2].strip()) for l in tail.splitlines() if l.startswith("- **"))]
+            unverified = []
+            if checks.get("unknown_citations"):
+                unverified.append("Citations to sources that don't exist: " + ", ".join(checks["unknown_citations"]))
+            if checks.get("unverified_numbers"):
+                unverified.append("Numbers found in no source: " + ", ".join(checks["unverified_numbers"]))
+            unverified += [f"No source: {u}" for u in checks.get("uncited_sentences", [])]
+            # a version stamp the confirm points at (older briefs: the file's time)
+            from datetime import datetime, timezone
+            version = m.get("written_at") or datetime.fromtimestamp(md.stat().st_mtime, timezone.utc).isoformat(timespec="seconds")
+            out[acc] = {"from": entry["handover_from"], "to": entry["handover_to"], "brief": body.strip(),
+                        "sources": sources, "unverified": unverified, "sent": sent.read_text(encoding="utf-8"),
+                        "version": version, "written_as_of": m.get("written_as_of"), "why": m.get("why", [])}
+    return out
 
 
 def rows(con, sql):
@@ -181,6 +221,7 @@ export = {
         LEFT JOIN crm c      USING (account_id)
         LEFT JOIN cs_team ao ON ao.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)
         ORDER BY s.age_days DESC, s.account_id, s.flag, s.status"""),
+    "handovers": handovers(),
     "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"],

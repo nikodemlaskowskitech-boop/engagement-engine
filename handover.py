@@ -371,7 +371,9 @@ def run(account_id, dry_run, force=False):
     (OUT / f"{account_id}.md").write_text(brief, encoding="utf-8")
     (OUT / f"{account_id}_check.json").write_text(json.dumps(checks, indent=1), encoding="utf-8")
     # remember what this brief was written from, so an unchanged account isn't rewritten
-    meta_path.write_text(json.dumps({"written_as_of": json.loads(VIEWS.read_text(encoding="utf-8"))["as_of"], "why": changes or ["--force"],
+    from datetime import datetime, timezone      # when this version was written: the cockpit's confirm points at it
+    meta_path.write_text(json.dumps({"written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                     "written_as_of": json.loads(VIEWS.read_text(encoding="utf-8"))["as_of"], "why": changes or ["--force"],
                                      "parts": new}, indent=1), encoding="utf-8")
     print(f"           brief -> data/handover/{account_id}.md"
           + (f"  ({'; '.join(flags)})" if flags else "  (all checks passed)"))
