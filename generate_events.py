@@ -441,8 +441,10 @@ def events_for_day(acc, day_index, day, pool):
         target = min(acc["users_end"], 1 + round((acc["users_start"] - 1) * days_live / 10))
     else:
         target = round(acc["users_start"] + (acc["users_end"] - acc["users_start"]) * day_index / (DAYS - 1))
+    invited_today = set()
     while len(pool) < target:
         new_user = f"{acc['id']}_usr_{len(pool) + 1:02d}"
+        invited_today.add(new_user)
         out.append(event("user_invited", "product", day, acc["id"], random.choice(pool),
                          {"invited_user": new_user}))
         pool.append(new_user)
@@ -455,7 +457,9 @@ def events_for_day(acc, day_index, day, pool):
         # and does several times more per day than a normal user
         chance = min(0.95, activity * 1.8) if champion else activity
         chance = min(1.0, chance * WEEKDAY_ACTIVITY[day.weekday()])   # quiet weekends
-        if random.random() < chance:
+        # someone who accepts an invite looks around the same day (otherwise a slow
+        # coin flip could leave a healthy new customer looking Stalled at day 14)
+        if random.random() < chance or user in invited_today:
             for _ in range(random.randint(5, 12) if champion else random.randint(1, 4)):
                 out.append(event(random.choice(p["features"]), "product", day, acc["id"], user))
 
