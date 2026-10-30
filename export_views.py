@@ -184,7 +184,8 @@ export = {
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"],
                  "follow_up_days": SETTINGS["follow_ups"]["after_days"],
-                 "currency": SETTINGS["money"]["currency"]},
+                 "currency": SETTINGS["money"]["currency"],
+                 "forecast_gap_share": SETTINGS["money"]["forecast_gap_share"]},
 }
 
 out = DATA / "views_data.json"

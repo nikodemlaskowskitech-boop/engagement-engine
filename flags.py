@@ -521,6 +521,25 @@ print("\nSaved every row to data/flags_expansion.csv")
 #   Opportunity   forecast utilisation at renewal above 100% x ARR, a straight
 #                 line from the last two months (capped); Watch counts at a share.
 MONEY = SETTINGS["money"]
+
+
+def at_risk_sql():
+    """[money.at_risk] in settings -> the SQL for each churn status's amount and its basis."""
+    amount, basis = [], []
+    for status, rule in MONEY["at_risk"].items():
+        if rule == "unused":
+            amount.append(f"WHEN '{status}' THEN b.arr * greatest(0, 100 - least(100, coalesce(b.util, 0))) / 100")
+            basis.append(f"WHEN '{status}' THEN format('Unused part: {{}}% of the contract in use', coalesce(b.util, 0)::INT)")
+        else:
+            share = float(rule)
+            amount.append(f"WHEN '{status}' THEN b.arr * {share}")
+            basis.append(f"WHEN '{status}' THEN '{'Whole ARR' if share == 1 else f'{share:.0%} of ARR'}: usage and users are falling'"
+                         if status == "Act" else f"WHEN '{status}' THEN '{share:.0%} of ARR'")
+    return ("CASE ch.status " + " ".join(amount) + " ELSE 0 END",
+            "CASE ch.status " + " ".join(basis) + " END")
+
+
+RISK_AMOUNT, RISK_BASIS = at_risk_sql()
 con.sql(f"""
     CREATE VIEW account_value AS
     WITH base AS (
@@ -533,10 +552,8 @@ con.sql(f"""
     ),
     risk AS (
         SELECT b.account_id, 'churn' AS flag, ch.status, b.arr, b.arr_estimated,
-               round(CASE WHEN ch.status = 'Act' THEN b.arr
-                          ELSE b.arr * greatest(0, 100 - least(100, coalesce(b.util, 0))) / 100 END, -2) AS amount,
-               CASE WHEN ch.status = 'Act' THEN 'Whole ARR: usage and users are falling'
-                    ELSE format('Unused part: {{}}% of the contract in use', coalesce(b.util, 0)::INT) END AS basis
+               round({RISK_AMOUNT}, -2) AS amount,     -- rules: [money.at_risk] in settings.toml
+               {RISK_BASIS} AS basis
         FROM churn ch JOIN base b USING (account_id)
     ),
     forecast AS (

@@ -22,6 +22,10 @@ data starts: the true signal may be older.
 
   Sieve        every churn signal, stage by stage: sent to automation or a
                  person, called, called fast, kept at renewal
+  Value        the ARR the data put at risk (flags.py, [money.at_risk]) and
+                 the owners' forecasts, next to the ARR really lost at
+                 renewal (needs renewal_arr in the outcomes): is the rule
+                 too cautious, too relaxed, or about right?
 
 Run flags.py and journeys.py first, then:  python backtest.py
 """
@@ -48,14 +52,31 @@ def add_views(con):
                    NULL::VARCHAR AS account_id, NULL::VARCHAR AS account_name, NULL::VARCHAR AS tier,
                    NULL::DATE AS renewal_date, NULL::VARCHAR AS outcome, NULL::BOOLEAN AS lost_revenue,
                    NULL::VARCHAR AS flag_status, NULL::BOOLEAN AS flagged, NULL::DATE AS signal_date,
-                   NULL::BIGINT AS warning_days, NULL::BOOLEAN AS had_churn_call, NULL::DOUBLE AS util_now
+                   NULL::BIGINT AS warning_days, NULL::BOOLEAN AS had_churn_call, NULL::DOUBLE AS util_now,
+                   NULL::DOUBLE AS arr, NULL::DOUBLE AS renewal_arr, NULL::DOUBLE AS lost_arr,
+                   NULL::DOUBLE AS data_at_risk, NULL::VARCHAR AS forecast_call, NULL::DOUBLE AS forecast_lost
                    WHERE false""")
         return
+    # renewal_arr (what the account renewed at) is optional: without it, the
+    # value comparison stays empty and the counts still work
+    cols = {r[0] for r in con.sql(f"DESCRIBE SELECT * FROM read_csv('{OUTCOMES}', all_varchar = true)").fetchall()}
+    renewal_arr = "renewal_arr::DOUBLE" if "renewal_arr" in cols else "NULL::DOUBLE"
     con.sql(f"""
     CREATE VIEW backtest AS
     WITH outcomes AS (
-        SELECT account_id, renewal_date::DATE AS renewal_date, outcome
+        SELECT account_id, renewal_date::DATE AS renewal_date, outcome, {renewal_arr} AS renewal_arr
         FROM read_csv('{OUTCOMES}', all_varchar = true)
+    ),
+    at_risk AS (
+        -- the data's number (flags.py): ARR at risk per churn row
+        SELECT account_id, amount::DOUBLE AS data_at_risk
+        FROM read_csv('data/account_value.csv', all_varchar = true) WHERE flag = 'churn'
+    ),
+    forecast AS (
+        -- the owner's (or manager's) latest renewal forecast from the cockpit
+        SELECT account_id, arg_max(properties.status, "timestamp") AS call,
+               arg_max(properties.amount, "timestamp") AS amount
+        FROM engagement WHERE event_name = 'forecast_set' GROUP BY account_id
     ),
     flagged AS (
         SELECT account_id, status
@@ -78,9 +99,19 @@ def add_views(con):
            s.signal_date,
            o.renewal_date - s.signal_date                   AS warning_days,
            o.account_id IN (SELECT account_id FROM called)  AS had_churn_call,
-           u.utilisation_pct                                AS util_now
+           u.utilisation_pct                                AS util_now,
+           c.arr,
+           o.renewal_arr,
+           greatest(0, c.arr - o.renewal_arr)               AS lost_arr,
+           coalesce(r.data_at_risk, 0)                      AS data_at_risk,
+           fc.call                                          AS forecast_call,
+           CASE fc.call WHEN 'churn' THEN c.arr
+                        WHEN 'downsize' THEN greatest(0, c.arr - fc.amount)
+                        WHEN 'renew' THEN 0 END             AS forecast_lost
     FROM outcomes o
     JOIN crm c USING (account_id)
+    LEFT JOIN at_risk r USING (account_id)
+    LEFT JOIN forecast fc USING (account_id)
     LEFT JOIN flagged f USING (account_id)
     LEFT JOIN signal s USING (account_id)
     LEFT JOIN utilisation u USING (account_id)
@@ -189,6 +220,39 @@ if __name__ == "__main__":
         ) AS funnel(step, stage, accounts)
         ORDER BY step
     """).show(max_width=200)
+
+    # --- 8. Value: the ARR the data put at risk vs. the ARR really lost ----------------
+    if con.sql("SELECT count(renewal_arr) FROM backtest").fetchone()[0]:
+        print("\n8. Value: ARR at risk (the data's rule, [money.at_risk]) vs. ARR really lost at renewal")
+        con.sql("""
+            SELECT coalesce(coalesce(flag_status, 'No churn flag'), 'All') AS status,
+                   count(*)                              AS renewals,
+                   round(sum(arr))::BIGINT               AS arr,
+                   round(sum(data_at_risk))::BIGINT      AS data_at_risk,
+                   round(sum(lost_arr))::BIGINT          AS really_lost,
+                   CASE WHEN sum(data_at_risk) > 0
+                        THEN round(100 * sum(lost_arr) / sum(data_at_risk))::INT END AS lost_pct_of_at_risk
+            FROM backtest
+            GROUP BY ROLLUP (coalesce(flag_status, 'No churn flag'))
+            ORDER BY grouping(coalesce(flag_status, 'No churn flag')), 1
+        """).show()
+        print("   Under 100%: the rule over-calls the risk (or CS saved some of it); over 100%:")
+        print("   the rule is too relaxed. 'No churn flag' losses are what no flag saw.")
+        whole, lost = con.sql("SELECT sum(arr) FILTER (WHERE flagged), sum(lost_arr) FILTER (WHERE flagged) FROM backtest").fetchone()
+        rule = con.sql("SELECT sum(data_at_risk) FROM backtest WHERE flagged").fetchone()[0]
+        print(f"   Flagged accounts lost {lost:,.0f}. This rule said {rule:,.0f} at risk; counting the whole ARR")
+        print(f"   of every flagged account would have said {whole:,.0f}.")
+        if con.sql("SELECT count(forecast_call) FROM backtest").fetchone()[0]:
+            print("\n   Owners' forecasts next to the data, for accounts with a forecast")
+            con.sql("""
+                SELECT account_id, account_name, forecast_call,
+                       round(forecast_lost)::BIGINT AS forecast_lost,
+                       round(data_at_risk)::BIGINT AS data_at_risk,
+                       round(lost_arr)::BIGINT AS really_lost
+                FROM backtest WHERE forecast_call IS NOT NULL ORDER BY account_id
+            """).show()
+        else:
+            print("   No owner forecast on an account that renewed in the period yet.")
 
     print("Small groups: read the counts, not just the percentages. The outcomes are")
     print("generated, so sections 6 and 7 show the method, not proof that calls work.")

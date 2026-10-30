@@ -230,7 +230,8 @@ One JSON event per line, one file per day in `data/events/`.
   Also writes `data/onboarding_holdout.csv`: the control group as a
   real-world fact (the programme's own list), which every sender checks.
   Also writes `data/renewal_outcomes.csv` (the renewals after the data
-  ends, for backtest.py; a real team exports closed renewals from the CRM).
+  ends, with renewal_arr = what each renewed at, for backtest.py; a real team
+  exports closed renewals from the CRM).
   Also writes `data/answer_key.csv` (each account's personality and
   welcome group): for testing only, the flags must never read it.
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
@@ -252,9 +253,10 @@ One JSON event per line, one file per day in `data/events/`.
   `data/flags_activation.csv`, `data/flags_churn.csv` and
   `data/flags_expansion.csv`; the QBR flag to `data/flags_qbr.csv`.
   Also the value at stake per churn and expansion row (view account_value,
-  `data/account_value.csv`, with its basis): ARR at risk = the whole ARR at
-  Act (they may leave), the unused part ARR x (100% - utilisation) at Watch
-  and Shelfware (they shrink to what they use at renewal); opportunity =
+  `data/account_value.csv`, with its basis): ARR at risk per status from
+  [money.at_risk] in settings (a share of ARR, or "unused" = ARR x (100% -
+  utilisation)); today the whole ARR at Act (they may leave), the unused part
+  at Watch and Shelfware (they shrink to what they use at renewal); opportunity =
   forecast utilisation at renewal above 100% x ARR (Watch at a share).
   Value guides the work; it's never a CSM's credit.
 - `check_flags.py`: tests the flags against the answer key (run `flags.py`
@@ -270,7 +272,10 @@ One JSON event per line, one file per day in `data/events/`.
   churn with vs. without a churn call (Act accounts only: mixing flag types
   confounds it), and the sieve read like a funnel (churn signals -> to
   automation or a person -> Act -> called -> called within 14 days ->
-  renewing -> kept whole). Runs after team_report.py (uses time_to_action).
+  renewing -> kept whole), and value: the data's ARR at risk and the owners'
+  latest forecasts next to the ARR really lost (ARR - renewal_arr, an optional
+  outcomes column; the generator shrinks a downsize to about the account's
+  usage, so it shows the method, not proof). Runs after team_report.py (uses time_to_action).
   Not done yet: replaying the flags as of an earlier date (needs a longer
   data window).
 - `journeys.py`: rules on the last touch (run `flags.py` first). "Email
@@ -323,7 +328,8 @@ One JSON event per line, one file per day in `data/events/`.
   every task sent to a person, its status and age; in the published cockpit a
   manager gives one to someone else or approves a hand-back, saved in the
   page's database), Did it work? (the backtest:
-  caught / missed / false alarm, warning time, calls), account timeline,
+  caught / missed / false alarm, warning time, calls, ARR at risk vs. really
+  lost by status), account timeline,
   onboarding, CS team (with capacity: each owner's whole book and open
   tasks against the median, for cross-region pickup), book of business (with
   accounts covered from another region). Every bar, cell and stage lists its

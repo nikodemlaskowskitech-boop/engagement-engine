@@ -144,6 +144,10 @@ acc_074,2026-08-09
 
 ## 6. Renewal outcomes (optional, for the backtest)
 
+Optional column `renewal_arr`: what the account renewed at (0 if it churned).
+With it, the backtest compares the ARR the data put at risk, and the owners'
+forecasts, with the ARR really lost. Without it, only the counts.
+
 What happened at each renewal: the CRM's closed renewals, exported. Without it
 the engine still runs; you just can't measure how well the flags predict.
 

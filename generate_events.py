@@ -439,7 +439,7 @@ def write_crm(accounts):
                 "cs_pool": acc["pool"],
                 "last_qbr_date": acc["last_qbr"].isoformat() if acc["last_qbr"] else "",
                 "next_qbr_date": acc["next_qbr"].isoformat() if acc["next_qbr"] else "",
-                "arr": int(round(acc["contract"] / 1000 * PRICE_PER_1K[acc["tier"]], -2)),
+                "arr": arr_of(acc),
             })
     return path
 
@@ -786,12 +786,33 @@ OUTCOME_ODDS = {                      # renewed, expanded, downsized, churned
 OUTCOMES = ("renewed", "expanded", "downsized", "churned")
 
 
+def arr_of(acc):
+    """What the account pays a year: contract x the price per 1,000 events."""
+    return int(round(acc["contract"] / 1000 * PRICE_PER_1K[acc["tier"]], -2))
+
+
+def renewal_value(acc, outcome):
+    """What the account renews at (no random draws, so the outcomes don't move).
+    Churned: nothing. Downsized: cut to about what it uses (at least a quarter).
+    Expanded: grows to its usage, at least 10%. Renewed: the same."""
+    arr = arr_of(acc)
+    p = PERSONALITIES[acc["personality"]]
+    use = min(1.2, (p["util"][1] if "util" in p else 0.6) * acc.get("util_factor", 1))
+    if outcome == "churned":
+        return 0
+    if outcome == "downsized":
+        return int(round(arr * min(0.9, max(0.25, use)), -2))
+    if outcome == "expanded":
+        return int(round(arr * max(1.1, use), -2))
+    return arr
+
+
 def write_renewal_outcomes(accounts, called):
     rng = random.Random(SEED + 7)         # own generator: nothing else changes
     path = OUT_DIR / "renewal_outcomes.csv"
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["account_id", "renewal_date", "outcome"])
+        writer.writerow(["account_id", "renewal_date", "outcome", "renewal_arr"])
         for acc in accounts:
             renewal = acc["contract_start"] + timedelta(days=365)
             if not acc["in_crm"] or not (END_DATE < renewal <= END_DATE + timedelta(days=OUTCOME_HORIZON_DAYS)):
@@ -800,7 +821,8 @@ def write_renewal_outcomes(accounts, called):
             if kind == "declining" and acc["id"] in called:
                 kind = "declining_called"
             odds = OUTCOME_ODDS.get(kind, OUTCOME_ODDS["healthy"])
-            writer.writerow([acc["id"], renewal.isoformat(), rng.choices(OUTCOMES, weights=odds)[0]])
+            outcome = rng.choices(OUTCOMES, weights=odds)[0]
+            writer.writerow([acc["id"], renewal.isoformat(), outcome, renewal_value(acc, outcome)])
     return path
 
 
