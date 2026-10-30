@@ -57,9 +57,11 @@ python export_views.py      # the views page: open data/views.html in a browser
 node tests/cockpit_test.js  # optional: tests the cockpit in a headless browser (needs Node + Playwright)
 node tests/scenarios_test.js # optional: the 23 acceptance scenarios by role, automated
 python actions.py           # tasks to Slack: digests, plus cards with buttons for the demo owners
-python listener.py          # in a second window: handles the buttons; clicks flow back as events           # post new tasks to Slack and log each action once (run it twice: the second run adds nothing)
+python listener.py          # in a second window: handles the buttons; clicks flow back as events
 python qbr.py               # facts pack for each QBR in the next 30 days
 python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_API_KEY in .env)
+python handover.py          # AI handover brief from support cases, emails and calls (--dry-run: no model)
+python tests/handover_test.py # privacy: no real name, email or phone reaches the model; then brief quality
 ```
 
 To tune the engine, edit `settings.toml` (every threshold and time window,

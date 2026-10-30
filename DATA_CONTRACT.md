@@ -190,6 +190,23 @@ like a CRM forecast field, it's about the renewal, not today's numbers.
   "data_at_risk": 234400, "as_of": "2026-10-18", "decided_at": "2026-10-30T10:00:00Z"}]
 ```
 
+## 8. Handover sources (optional, for the handover brief)
+
+Unstructured context for `handover.py`, kept apart on purpose, like the silos
+a real team has: each one names the customer its own way, and
+`stories/directory.csv` is the join table.
+
+| Source | File | Joined by | Holds |
+| --- | --- | --- | --- |
+| Directory | `stories/directory.csv` | `account_id` | `company`, `email_domain`, `helpdesk_org`, `handover_from`, `handover_to` |
+| Support cases | `stories/support_cases.csv` | `helpdesk_org` (the helpdesk's organisation name) | ticket_id, organization, requester_name, requester_email, created_at, updated_at, priority, type, status, subject, description, latest_comment |
+| Emails | `stories/emails/*.eml` | the sender's or recipients' `email_domain` | standard .eml files (From, To, Date, Subject, body) |
+| Call transcripts | `stories/calls/*.txt` | `CRM account: acc_xxx` in the header | Title, Date, Participants, then `[hh:mm:ss] Name: text` lines |
+
+Without them the handover brief has nothing to read; the rest of the engine is
+unaffected. Names, emails and phone numbers in them are redacted before
+anything reaches the model; the redaction key stays in `data/handover/`.
+
 ## What the engine writes
 
 Never into the inputs above: flags (`data/flags_*.csv`), the action log

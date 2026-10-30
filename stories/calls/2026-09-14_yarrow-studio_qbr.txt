@@ -1,0 +1,15 @@
+Title: Yarrow Studio - Q3 business review
+Date: 2026-09-14 10:00 CET
+CRM account: acc_024
+Participants: Mia Hofer (Cairnpath, CSM), Barry White (Yarrow Studio, Head of Analytics), Martin Schulz (Yarrow Studio, CFO)
+
+[00:00:40] Mia Hofer: Thanks both for making time. I'd like to start with usage, because it's moved since our last review.
+[00:01:05] Barry White: Yes, I've seen it. The web side is steady. Mobile looks lower since late August, when the iOS team moved to the new SDK.
+[00:01:30] Mia Hofer: Our numbers show about a third of the contract in use this month. Do you think the iOS change explains all of it?
+[00:01:52] Barry White: Not all of it. Two of our product squads stopped using the dashboards after the reorg. But iOS is part of it, I'm sure.
+[00:02:40] Martin Schulz: I'll be direct. We're reviewing every tool in Q4. The board wants a budget cut of around thirty percent. Cairnpath is on the list.
+[00:03:10] Mia Hofer: Understood. If volume is the issue, we can look at the right size for you rather than lose you. 
+[00:03:35] Barry White: Realistically we'd be at about 100 million events a year, not the 520 million we bought.
+[00:04:20] Mia Hofer: Then here's what I can do: if you renew by 31 January, we'll hold your current price per event, even at the lower volume. I'll confirm it in writing.
+[00:04:45] Martin Schulz: That helps. Put it in an email and I'll take it to the board.
+[00:05:30] Mia Hofer: I'll also check the iOS issue with our support team.

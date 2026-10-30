@@ -67,6 +67,15 @@ Act = 1.0
 Watch = "unused"
 Shelfware = "unused"
 
+[handover]
+# Handover briefs (handover.py): where the three silos' exports live (the demo
+# stories), and how long a brief may be. The model and its price are in [llm].
+stories_folder = "stories"
+support_file = "support_cases.csv"   # helpdesk ticket export
+email_folder = "emails"              # .eml files
+calls_folder = "calls"               # call transcripts
+max_output_tokens = 900
+
 [regions]
 # Hours ahead of UTC (summer time), for sending emails at a local hour
 utc_offset = { "UK&I" = 1, "DACH" = 2, "France & Benelux" = 2, "Nordics" = 2 }
