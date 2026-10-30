@@ -317,7 +317,8 @@ One JSON event per line, one file per day in `data/events/`.
   accounts on click, and a row opens that account's timeline, so the logic can
   be checked by hand. A segment bar filters by people (manager, team = the region the owner
   sits in, owner) and by accounts (region = where the customer is, tier); it filters
-  every tab but the timeline; its Find box (and the timeline's) searches
+  every tab but the timeline. The lists narrow each other: each offers only
+  values that still have accounts under the other filters. Its Find box (and the timeline's) searches
   accounts by name or ID, the segment's first. The Owner list has named people only: a pool is
   Team + the Scale tier. Values: ARR per account, ARR at risk and upside per
   flag (My book sorts by them). Renewal forecast on the timeline: the data's
