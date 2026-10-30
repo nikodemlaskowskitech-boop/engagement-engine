@@ -329,7 +329,10 @@ One JSON event per line, one file per day in `data/events/`.
   a quarter of the ARR apart from the data = flagged "≠ data". Action planned
   on the timeline too: the owner's (or manager's) next step with a date, else a
   QBR booked in the CRM; overdue when the date passes with no meeting since it
-  was set; shown in My book's portfolio. Also exports next_steps,
+  was set; shown in My book's portfolio. The timeline opens with a summary:
+  everything done (customer touches, tasks sent, plans, forecasts), newest
+  first, next to what's coming up (next step, booked QBR, renewal with its
+  forecast). Also exports next_steps,
   forecasts (forecast_set events), churn_signals, renewals
   (backtest.py's view) and tasks (action_status, with each task's manager).
   Opens in any browser offline. The page only draws; the numbers come from
