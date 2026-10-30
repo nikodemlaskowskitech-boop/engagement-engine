@@ -148,6 +148,10 @@ table.matrix td { padding: 6px; }
 .segbar select { padding: 5px 8px; font-size: 0.88rem; }
 .segbar .count { font-family: var(--font-data); font-size: 0.8rem; color: var(--ink-2); }
 .segbar button.reset { font: 500 0.82rem var(--font-body); color: var(--accent); background: none; border: 0; cursor: pointer; padding: 4px; }
+.finding.small { font-size: 1rem; margin: 0 0 8px; }
+.segbar .grp { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
+.segbar .grp + label { margin-left: -2px; }
+.segbar .grp:not(:first-child) { margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--rule); }
 .segbar.on { box-shadow: inset 0 -2px 0 var(--accent-soft); }
 /* tasks */
 .badge { display: inline-block; font: 600 0.72rem var(--font-body); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
@@ -201,10 +205,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   </div>
   <div class="wrap">
     <div class="segbar" id="segbar" role="group" aria-label="Segment">
+      <span class="grp">People</span>
       <label>Manager <select id="seg-manager"></select></label>
+      <label>Team <select id="seg-team"></select></label>
+      <label>Owner <select id="seg-owner"></select></label>
+      <span class="grp">Accounts</span>
       <label>Region <select id="seg-region"></select></label>
       <label>Tier <select id="seg-tier"></select></label>
-      <label>Owner <select id="seg-owner"></select></label>
       <span class="count" id="seg-count"></span>
       <button class="reset" id="seg-reset" hidden>Whole book</button>
     </div>
@@ -381,6 +388,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <p class="note">All meetings held, QBRs and check-ins included. Darker means more.</p>
         </div>
       </div>
+      <div class="panel">
+        <h2>Capacity: who can pick up more</h2>
+        <p class="finding small" id="tm-cap-finding"></p>
+        <div class="tablewrap"><table id="tm-cap"></table></div>
+        <p class="note">Each owner's whole book, whatever the Region and Tier filters, so a manager can see who has room for a task from another region. Open tasks are the ones on the Tasks tab still waiting. Below the median of the same kind of owner is marked "room".</p>
+      </div>
     </section>
 
     <section class="view" id="view-book" role="tabpanel" aria-labelledby="tab-book" hidden>
@@ -400,6 +413,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <h2>Shelfware: live 60+ days, never above 40%</h2>
         <p id="bk-shelf"></p>
         <p class="note">Flat and low, so it never shows as "falling". Enterprise and Scale get an adoption review; Self-service gets the use-case inspiration email.</p>
+      </div>
+      <div class="panel">
+        <h2 id="bk-cross-title">Covered from another region</h2>
+        <div class="tablewrap" id="bk-cross"></div>
+        <p class="note">The owner sits in one region, the customer in another. Worth a check on language, time zone and local events.</p>
       </div>
     </section>
 
@@ -434,22 +452,28 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   ownerName.cs_ops = "CS ops";
 
   // ---------------------------------------------------------------- segment
-  // The part of the book someone is looking at: a manager's team, a region, a
-  // tier, one owner. Every view except the single-account timeline draws only
-  // the accounts in it. Remembered in this browser only.
+  // The part of the book someone is looking at. Two sides: people (manager,
+  // team = the region the owner sits in, owner) and accounts (region = where the
+  // customer is, tier). They differ when a CSM covers an account in another
+  // region. Every view except the single-account timeline draws only the
+  // accounts in it. Remembered in this browser only.
   const REGIONS = ["UK&I", "DACH", "France & Benelux", "Nordics"], TIERS = ["Enterprise", "Scale", "Self-service"];
   const managerName = (m) => (m || "").replace(/^mgr_/, "").replace(/^./, (c) => c.toUpperCase());
   const MANAGERS = [...new Set(D.team.map((t) => t.manager))].sort();
   for (const m of MANAGERS) ownerName[m] = managerName(m) + " (manager)";
-  const seg = { manager: "", region: "", tier: "", owner: "" };
+  const seg = { manager: "", team: "", owner: "", region: "", tier: "" };
+  const teamById = Object.fromEntries(D.team.map((t) => [t.owner_id, t]));
+  const homeOf = Object.fromEntries(D.team.map((t) => [t.owner_id, t.region]));   // owner -> the team they sit in
+  const crossRegion = (a) => !!homeOf[a.owner_id] && homeOf[a.owner_id] !== a.region;
   try { const saved = JSON.parse(localStorage.getItem("cockpit-seg") || "{}"); for (const k in seg) if (typeof saved[k] === "string") seg[k] = saved[k]; } catch (e) { /* no storage here */ }
   const saveSeg = () => { try { localStorage.setItem("cockpit-seg", JSON.stringify(seg)); } catch (e) { /* no storage here */ } };
   const segOn = () => Object.values(seg).some(Boolean);
-  const inSeg = (a) => !!a && (!seg.manager || a.manager === seg.manager) && (!seg.region || a.region === seg.region)
+  const inSeg = (a) => !!a && (!seg.manager || a.manager === seg.manager) && (!seg.team || homeOf[a.owner_id] === seg.team) && (!seg.region || a.region === seg.region)
     && (!seg.tier || a.tier === seg.tier) && (!seg.owner || a.owner_id === seg.owner);
   const inSegId = (id) => inSeg(byId[id]);
   const segName = () => {
-    const parts = [seg.owner ? ownerName[seg.owner] : seg.manager ? managerName(seg.manager) + "'s team" : "", seg.region, seg.tier].filter(Boolean);
+    const people = seg.owner ? ownerName[seg.owner] : [seg.manager ? managerName(seg.manager) + "'s team" : "", seg.team ? seg.team + " team" : ""].filter(Boolean).join(", ");
+    const parts = [people, seg.region ? seg.region + " accounts" : "", seg.tier].filter(Boolean);
     return parts.length ? parts.join(", ") : "The whole book";
   };
   const fillSelect = (node, opts, value) => {
@@ -459,15 +483,19 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
   function drawSegbar() {
     fillSelect($("seg-manager"), MANAGERS.map((m) => [m, managerName(m)]), seg.manager);
-    // regions narrow to the manager's (James: UK&I and Nordics)
-    fillSelect($("seg-region"), REGIONS.filter((r) => !seg.manager || D.team.some((t) => t.manager === seg.manager && t.region === r)).map((r) => [r, r]), seg.region);
-    fillSelect($("seg-tier"), TIERS.map((t) => [t, t]), seg.tier);
-    // owners narrow to the manager and region picked
-    const owners = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.region || t.region === seg.region));
+    // people side: teams narrow to the manager's (James: UK&I and Nordics), owners to both
+    fillSelect($("seg-team"), REGIONS.filter((r) => D.team.some((t) => (!seg.manager || t.manager === seg.manager) && t.region === r)).map((r) => [r, r]), seg.team);
+    const owners = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team));
     fillSelect($("seg-owner"), owners.map((t) => [t.owner_id, t.owner_name]), seg.owner);
+    // account side: every region, since an owner can cover accounts anywhere
+    fillSelect($("seg-region"), REGIONS.map((r) => [r, r]), seg.region);
+    fillSelect($("seg-tier"), TIERS.map((t) => [t, t]), seg.tier);
     for (const k in seg) seg[k] = $("seg-" + k).value;     // drop a value the others ruled out
     const n = D.accounts.filter(inSeg).length;
-    $("seg-count").textContent = segOn() ? `${n} of ${D.accounts.length} accounts` + (seg.manager && !seg.owner ? " · Self-service has no manager, so it's left out" : "") : `${n} accounts`;
+    const o = seg.owner && teamById[seg.owner];
+    $("seg-count").textContent = (segOn() ? `${n} of ${D.accounts.length} accounts` : `${n} accounts`)
+      + (o ? ` · ${o.owner_name} sits in ${o.region}, manager ${managerName(o.manager)}` : "")
+      + ((seg.manager || seg.team) && !seg.owner ? " · Self-service has no owner, so it's left out" : "");
     $("seg-reset").hidden = !segOn();
     $("segbar").classList.toggle("on", segOn());
   }
@@ -798,6 +826,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     for (const [shape, color, name] of [["circle", "var(--s1)", "Churn Act, called"], ["circle", "var(--good)", "Expansion Act, called"], ["circle-open", "var(--critical)", "No call yet"]]) {
       const s = document.createElement("span"); s.append(legendSwatch(shape, color), name); $("tm-legend").appendChild(s);
     }
+    drawCapacity();
     { const s = document.createElement("span"); s.textContent = "Click a dot to open its timeline."; $("tm-legend").appendChild(s); }
 
     // owner table
@@ -811,7 +840,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // meetings per week heat grid
     const wh = $("tm-weeks"); wh.innerHTML = "";
     const weeks = D.week_ends;
-    const team = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.region || t.region === seg.region) && (!seg.owner || t.owner_id === seg.owner)
+    const team = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team) && (!seg.owner || t.owner_id === seg.owner)
       && (!seg.tier || (seg.tier === "Enterprise" ? t.owner_type === "csm" : seg.tier === "Scale" ? t.owner_type === "pool" : false)));
     const counts = team.map((t) => weeks.map((we) => D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > day(we) - 7 && day(x.date) <= day(we)).length));
     const max = Math.max(1, ...counts.flat());
@@ -837,6 +866,26 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   document.querySelectorAll("#bk-measure button").forEach((b) => b.addEventListener("click", () => {
     bkM = b.dataset.m; document.querySelectorAll("#bk-measure button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); drawBook();
   }));
+  // Capacity: each owner's whole book and open tasks against the median of
+  // owners of the same kind. People filters apply; account filters don't.
+  function drawCapacity() {
+    const people = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team) && (!seg.owner || t.owner_id === seg.owner));
+    const all = D.team.map((t) => ({ t, accs: D.accounts.filter((a) => a.owner_id === t.owner_id).length,
+      open: (D.tasks || []).filter((x) => x.routed_to === t.owner_id && x.action_status === "Open").length,
+      away: D.accounts.filter((a) => a.owner_id === t.owner_id && crossRegion(a)).length }));
+    const med = {};
+    for (const k of ["csm", "pool"]) { const g = all.filter((r) => r.t.owner_type === k); med[k] = { accs: median(g.map((r) => r.accs)), open: median(g.map((r) => r.open)) }; }
+    const rows = all.filter((r) => people.includes(r.t)).sort((x, y) => (x.t.owner_type === y.t.owner_type ? x.open - y.open : x.t.owner_type === "csm" ? -1 : 1));
+    const room = (r) => r.open < med[r.t.owner_type].open;
+    const cell = (v, m) => `${v} <small>(median ${m})</small>`;
+    $("tm-cap").innerHTML = `<tr><th>Owner</th><th>Team</th><th class="r">Accounts</th><th class="r">Open tasks</th><th class="r">Other region</th><th></th></tr>` + rows.map((r) =>
+      `<tr><td>${esc(r.t.owner_name)}</td><td>${esc(r.t.region)}</td><td class="r num">${cell(r.accs, med[r.t.owner_type].accs)}</td><td class="r num">${cell(r.open, med[r.t.owner_type].open)}</td><td class="r num">${r.away || "–"}</td><td>${room(r) ? "room" : ""}</td></tr>`).join("");
+    const withRoom = rows.filter(room);
+    $("tm-cap-finding").textContent = !rows.length ? "Nobody on the CS team in this segment."
+      : withRoom.length ? `${withRoom.length} of ${rows.length} owners have fewer open tasks than the median: ${withRoom.slice(0, 3).map((r) => r.t.owner_name + " (" + r.open + ")").join(", ")}${withRoom.length > 3 ? ", ..." : ""}.`
+      : `None of the ${rows.length} owners is below the median of open tasks.`;
+  }
+
   function drawBook() {
     const regions = REGIONS, tiers = TIERS;
     const weeks = D.week_ends.filter((we) => day(we) >= day(D.util_dates[0]));
@@ -862,6 +911,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const hit = accs.filter((a) => a.flags.some((f) => f.flag === "churn" && f.status === "Shelfware")).length;
       return `${t}: ${hit} of ${accs.length} (${pct(hit, accs.length)}%)`;
     }).join(" · ");
+    // accounts covered by an owner from another team (people side vs. account side)
+    const cross = D.accounts.filter((a) => inSeg(a) && crossRegion(a));
+    accountList($("bk-cross"), $("bk-cross-title"), "Covered from another region", cross, [
+      { label: "Account", get: (a) => esc(a.account_name) },
+      { label: "Customer in", get: (a) => esc(a.region) },
+      { label: "Owner", get: (a) => esc(a.owner) + " · " + esc(homeOf[a.owner_id]) },
+      { label: "Tier", get: (a) => esc(a.tier) },
+    ], true);
     const shareMax = Math.max(0.01, ...rows.flatMap((x) => x.cells.map((c) => (c.live ? c.hit / c.live : 0))));
     const ramp = ["var(--seq-0)", "var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
     const host = $("bk-heat"); host.innerHTML = "";
@@ -1097,12 +1154,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const TASK_STATES = ["Open", "Claimed", "Done", "Resolved"];
   const tkShow = new Set(["Open", "Claimed"]);
   const WAIT = D.settings.fast_days;                     // "waiting too long" in the finding
-  const teamById = Object.fromEntries(D.team.map((t) => [t.owner_id, t]));
   const TASKS = D.tasks || [];
   const taskInSeg = (t) => {
     const a = byId[t.account_id];
     // CS ops items with no account in the CRM (handoff gaps) belong to no team: every manager sees them
-    return (!seg.manager || t.manager === seg.manager || (t.manager == null && !seg.owner)) && (!seg.owner || t.routed_to === seg.owner)
+    return (!seg.manager || t.manager === seg.manager || (t.manager == null && !seg.owner && !seg.team)) && (!seg.owner || t.routed_to === seg.owner)
+      && (!seg.team || (teamById[t.routed_to] && teamById[t.routed_to].region === seg.team))
       && (!seg.region || (a && a.region === seg.region)) && (!seg.tier || (a && a.tier === seg.tier));
   };
   const docId = (kind, t) => [kind, t.account_id, t.flag, t.status].join("~").replace(/[^A-Za-z0-9_.~:@+-]/g, "-");
@@ -1280,7 +1337,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       $("mb-finding").textContent = "Pick an owner to see their book.";
       const owners = D.team.filter((t) => !seg.manager || t.manager === seg.manager);
       $("mb-pick").innerHTML = owners.map((t) => `<button class="chip" data-o="${esc(t.owner_id)}">${esc(t.owner_name)}</button>`).join("");
-      $("mb-pick").querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => { seg.owner = b.dataset.o; seg.region = seg.tier = ""; saveSeg(); redraw(); }));
+      $("mb-pick").querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => { seg.owner = b.dataset.o; seg.team = seg.region = seg.tier = ""; saveSeg(); redraw(); }));
       return;
     }
     const peers = peersOf(o), kind = (teamById[o] || {}).owner_type === "pool" ? "pools" : "CSMs";

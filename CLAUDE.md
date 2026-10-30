@@ -200,7 +200,8 @@ One JSON event per line, one file per day in `data/events/`.
   and ramp their volume up over the first month; shelfware is flat at about
   a quarter of the contract;
   stalled and silent ones are recent), 90 days of events, the CRM table and the
-  CS team table. About 4 in 10 accounts have a champion (one user far more
+  CS team table. Three Enterprise accounts are covered from
+  another region (CROSS_REGION_COVER), so team and region differ. About 4 in 10 accounts have a champion (one user far more
   active than the rest). Product use follows a working week (quiet
   weekends); event volume doesn't (the customer's end users never stop).
   Seeded, so output is repeatable.
@@ -298,9 +299,12 @@ One JSON event per line, one file per day in `data/events/`.
   manager gives one to someone else or approves a hand-back, saved in the
   page's database), Did it work? (the backtest:
   caught / missed / false alarm, warning time, calls), account timeline,
-  onboarding, CS team, book of business. Every bar, cell and stage lists its
+  onboarding, CS team (with capacity: each owner's whole book and open
+  tasks against the median, for cross-region pickup), book of business (with
+  accounts covered from another region). Every bar, cell and stage lists its
   accounts on click, and a row opens that account's timeline, so the logic can
-  be checked by hand. A segment bar (manager, region, tier, owner) filters
+  be checked by hand. A segment bar filters by people (manager, team = the region the owner
+  sits in, owner) and by accounts (region = where the customer is, tier); it filters
   every tab but the timeline. Also exports churn_signals, renewals
   (backtest.py's view) and tasks (action_status, with each task's manager).
   Opens in any browser offline. The page only draws; the numbers come from
