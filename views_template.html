@@ -163,6 +163,7 @@ table.matrix td { padding: 6px; }
 .acc-list li[aria-selected="true"] { background: var(--accent-soft); }
 .acc-list li.empty { cursor: default; color: var(--ink-3); }
 @media (max-width: 640px) { .acc-find input, .acc-find.wide input { width: 100%; } .acc-find, .acc-find.wide { flex: 1 1 100%; } .acc-find label { display: flex; } }
+button.link.back { display: inline-block; margin: 0 0 8px; padding: 4px 0; font-size: 0.9rem; }
 .segbar.on { box-shadow: inset 0 -2px 0 var(--accent-soft); }
 /* tasks */
 .badge { display: inline-block; font: 600 0.72rem var(--font-body); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
@@ -381,6 +382,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     </section>
 
     <section class="view" id="view-timeline" role="tabpanel" aria-labelledby="tab-timeline" hidden>
+      <button class="link back" id="tl-back" hidden></button>
       <p class="finding" id="tl-finding">One account over 90 days: what it did, what CS did, and what the engine flagged.</p>
       <div class="controls">
         <div class="acc-find wide"><input type="search" id="tl-find" placeholder="Search an account by name or ID" autocomplete="off" role="combobox" aria-label="Account" aria-autocomplete="list" aria-expanded="false" aria-controls="tl-find-list"><ul class="acc-list" id="tl-find-list" role="listbox" hidden></ul></div>
@@ -644,8 +646,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
   // tabs, with a bookmarkable #token per view
   const views = ["overview", "lead", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
+  let current = "overview";
   const show = (v) => {
     if (!views.includes(v)) v = "overview";
+    current = v;
     for (const w of views) {
       $("view-" + w).hidden = w !== v;
       $("tab-" + w).setAttribute("aria-selected", String(w === v));
@@ -653,7 +657,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     try { history.replaceState(null, "", "#" + v); } catch (e) { /* not allowed in some frames */ }
     hideTip();
   };
-  document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
+  document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => { $("tl-back").hidden = true; show(b.dataset.view); }));
 
   // ---------------------------------------------------------------- timeline
   const TOUCH = {
@@ -1089,7 +1093,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         const name = byId[a.account_id]?.account_name || a.account_id;
         hover(m, `<b>${esc(name)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>${a.call_date ? (a.via === "qbr" ? "Covered by the QBR on " + fmt(a.call_date) + ", " + a.days_to_call + " days later" : a.called_early ? "Called " + fmt(a.call_date) + ", before the signal" : "Called " + fmt(a.call_date) + ", " + a.days_to_call + " days later") : "No call yet"}${a.escalated ? "<br>Escalated to the manager" : ""}`);
         m.style.cursor = "pointer";
-        m.addEventListener("click", () => { sel.value = a.account_id; drawTimeline(a.account_id); show("timeline"); });
+        m.addEventListener("click", () => openAccount(a.account_id));
       }
     });
     $("tm-legend").innerHTML = "";
@@ -1223,7 +1227,22 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // ---------------------------------------------------------------- shared: account lists
   // A clickable list under a chart: the accounts behind a bar or a cell. A row
   // opens that account's timeline, so every number can be checked by hand.
-  function openAccount(id) { sel.value = id; drawTimeline(id); pressChips(id); show("timeline"); window.scrollTo(0, 0); }
+  // Opening an account from a list jumps to its timeline; a "Back to ..."
+  // link returns to the tab (and the spot on it) the click came from.
+  let backTo = null;
+  function openAccount(id) {
+    if (current !== "timeline") backTo = { view: current, y: window.scrollY };
+    sel.value = id; drawTimeline(id); pressChips(id); show("timeline"); window.scrollTo(0, 0);
+    const b = $("tl-back");
+    if (backTo) { b.textContent = "← Back to " + $("tab-" + backTo.view).textContent; b.hidden = false; }
+  }
+  $("tl-back").addEventListener("click", () => {
+    if (!backTo) return;
+    const { view, y } = backTo; backTo = null; $("tl-back").hidden = true;
+    show(view); window.scrollTo(0, y);
+  });
+  // say what a click on a row does before it happens
+  document.addEventListener("pointerover", (e) => { const tr = e.target.closest && e.target.closest("tr.click"); if (tr && !tr.title) tr.title = "Open this account's timeline"; });
   // short = true for the list a view opens with: two example rows and "View all (n)"
   // (a summary, not a dump); a click on a bar or cell asks for the list, so it gets all of it
   function accountList(host, titleEl, title, items, cols, short) {
