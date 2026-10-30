@@ -623,6 +623,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("segbar").classList.toggle("on", segOn());
   }
   function redraw() { drawSegbar(); drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes(); drawTasks(); drawMyBook(); drawLeadership();
+    if (typeof drawPicks === "function") {
+      drawPicks();
+      // the segment changed and the open account isn't in it: open one that is
+      if (sel.value && segOn() && !inSegId(sel.value) && picks.length) { sel.value = picks[0].id; drawTimeline(picks[0].id); }
+    }
     if (sel.value) { drawNext(sel.value); drawForecast(sel.value); } }   // who may plan or forecast depends on the segment
   for (const k of Object.keys(seg)) $("seg-" + k).addEventListener("change", (e) => { seg[k] = e.target.value; saveSeg(); redraw(); });
   $("seg-reset").addEventListener("click", () => { for (const k in seg) seg[k] = ""; saveSeg(); redraw(); });
@@ -691,14 +696,34 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
   // accounts worth a look: the stories the reports surface
   const tta = Object.fromEntries(D.time_to_action.map((r) => [r.account_id, r]));
-  const picks = [];
-  const pickBy = (fn, why) => { const a = D.accounts.find((x) => fn(x) && !picks.some((p) => p.id === x.account_id)); if (a) picks.push({ id: a.account_id, why }); };
-  pickBy((a) => tta[a.account_id] && tta[a.account_id].owner_type === "csm" && !tta[a.account_id].call_date && tta[a.account_id].flag === "churn", "Declining, never called");
-  pickBy((a) => tta[a.account_id] && tta[a.account_id].days_to_call === 0 && tta[a.account_id].called_early && tta[a.account_id].flag === "churn", "Called before the signal");
-  pickBy((a) => a.flags.some((f) => f.flag === "journey" && f.status === "No meeting in 30 days"), "Escalated to a manager");
-  pickBy((a) => a.tier === "Enterprise" && a.flags.some((f) => f.flag === "churn" && f.status === "Shelfware"), "Shelfware, never ramped");
-  pickBy((a) => a.flags.some((f) => f.flag === "expansion" && f.status === "Act") && a.flags.some((f) => f.flag === "qbr"), "Growing, QBR due");
-  pickBy((a) => a.util.some((u) => u != null) && !a.flags.length && a.tier === "Enterprise", "Healthy, no flags");
+  // Picked from the segment, so with Mia selected the chips are Mia's accounts.
+  let picks = [];
+  function computePicks() {
+    picks = [];
+    const pool = D.accounts.filter(inSeg);
+    const pickBy = (fn, why) => { const a = pool.find((x) => fn(x) && !picks.some((p) => p.id === x.account_id)); if (a) picks.push({ id: a.account_id, why }); };
+    const churnF = (a) => a.flags.find((f) => f.flag === "churn");
+    pickBy((a) => tta[a.account_id] && !tta[a.account_id].call_date && tta[a.account_id].flag === "churn", "Declining, never called");
+    pickBy((a) => tta[a.account_id] && tta[a.account_id].days_to_call === 0 && tta[a.account_id].called_early && tta[a.account_id].flag === "churn", "Called before the signal");
+    pickBy((a) => a.flags.some((f) => f.flag === "journey" && f.status === "No meeting in 30 days"), "Escalated to a manager");
+    pickBy((a) => a.tier !== "Self-service" && a.flags.some((f) => f.flag === "churn" && f.status === "Shelfware"), "Shelfware, never ramped");
+    pickBy((a) => a.flags.some((f) => f.flag === "expansion" && f.status === "Act") && a.flags.some((f) => f.flag === "qbr"), "Growing, QBR due");
+    pickBy((a) => a.flags.some((f) => f.flag === "expansion" && f.status === "Act"), "Growing");
+    pickBy((a) => churnF(a) && churnF(a).status === "Act", "At Act");
+    pickBy((a) => a.util.some((u) => u != null) && !a.flags.length && a.tier !== "Self-service", "Healthy, no flags");
+    picks = picks.slice(0, 6);
+  }
+  function drawPicks() {
+    computePicks();
+    const host = $("tl-picks"); host.innerHTML = "";
+    for (const p of picks) {
+      const b = document.createElement("button"); b.className = "chip"; b.id = "pick-" + p.id;
+      b.textContent = `${byId[p.id].account_name}: ${p.why}`;
+      b.addEventListener("click", () => { sel.value = p.id; drawTimeline(p.id); });
+      host.appendChild(b);
+    }
+    if (sel.value) pressChips(sel.value);
+  }
 
   const sel = $("tl-account");
   const sorted = [...D.accounts].sort((a, b) => a.account_name.localeCompare(b.account_name));
@@ -710,12 +735,6 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       og.appendChild(o);
     }
     sel.appendChild(og);
-  }
-  for (const p of picks) {
-    const b = document.createElement("button"); b.className = "chip"; b.id = "pick-" + p.id;
-    b.textContent = `${byId[p.id].account_name}: ${p.why}`;
-    b.addEventListener("click", () => { sel.value = p.id; drawTimeline(p.id); });
-    $("tl-picks").appendChild(b);
   }
   sel.addEventListener("change", () => drawTimeline(sel.value));
 
@@ -832,7 +851,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     drawNext(id);
     drawForecast(id);
     $("tl-find").placeholder = `${a.account_name} (${a.account_id}): search another account`;
-    $("tl-finding").textContent = `${a.account_name}: ${a.flags.length ? a.flags.length + " open flag" + (a.flags.length > 1 ? "s" : "") : "no open flags"}, ${tc} CS touch${tc === 1 ? "" : "es"} in 90 days.`;
+    $("tl-finding").textContent = (segOn() && !inSeg(a) ? `Outside ${segName()}: ` : "") + `${a.account_name}: ${a.flags.length ? a.flags.length + " open flag" + (a.flags.length > 1 ? "s" : "") : "no open flags"}, ${tc} CS touch${tc === 1 ? "" : "es"} in 90 days.`;
   }
   // Next step ("action planned"): what the owner will do next and by when.
   // Overdue when the date passes with no meeting since it was set. A QBR
@@ -1891,6 +1910,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   }
 
   // first paint: every view drawn, the one in the link shown
+  drawPicks();
   const firstPick = picks.length ? picks[0].id : D.accounts[0].account_id;
   sel.value = firstPick; drawTimeline(firstPick);
   redraw();
