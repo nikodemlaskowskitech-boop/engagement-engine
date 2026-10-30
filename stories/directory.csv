@@ -1,0 +1,4 @@
+account_id,company,email_domain,helpdesk_org,handover_from,handover_to
+acc_024,Yarrow Studio,yarrowstudio.example,Yarrow Studio GmbH,csm_mia,csm_lukas
+acc_012,Nettle Foods,nettlefoods.example,Nettle Foods Ltd,csm_tom,csm_anna
+acc_156,Driftwood Labs,driftwoodlabs.example,Driftwood Labs,pm_priya,pm_owen

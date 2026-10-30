@@ -1,0 +1,10 @@
+Title: Driftwood Labs - check-in
+Date: 2026-06-24 10:00 BST
+CRM account: acc_156
+Participants: Priya Shah (Cairnpath, Scale team), Lucas Moreau (Driftwood Labs, Product Analyst)
+
+[00:00:30] Lucas Moreau: We're live with the growth team, about eight people. The product team was meant to follow in Q3.
+[00:01:00] Priya Shah: What's holding the product team?
+[00:01:15] Lucas Moreau: They need a data engineer to instrument the app properly. We're hiring.
+[00:01:50] Priya Shah: And the experiments add-on? I don't see any experiments yet.
+[00:02:05] Lucas Moreau: No one owns it yet. Probably the product team, once they're on.

@@ -442,6 +442,29 @@ One JSON event per line, one file per day in `data/events/`.
   `ANTHROPIC_API_KEY` in the git-ignored `.env`). Writes
   `data/briefs/<account_id>.md`. `python brief.py acc_037` for one account.
   The API key lives only in `.env`: never print it, log it or commit it.
+- `handover.py`: AI handover brief for a new owner (needs `ANTHROPIC_API_KEY`;
+  `--dry-run` skips the model). Reads three silos for the accounts in
+  `stories/directory.csv`, each joined by its own key: support cases
+  (`stories/support_cases.csv`, by helpdesk organisation name), emails
+  (`stories/emails/*.eml`, by email domain), call transcripts
+  (`stories/calls/*.txt`, by CRM account ID), plus the engine's facts from
+  `data/views_data.json`. Redacts before the model: people -> Customer A /
+  CS 1, emails and phone numbers masked, company -> "the customer". The model
+  must cite a source ([S1], [E2], [C1], [DATA]) for every claim; the check lists
+  unknown citations, uncited sentences and numbers in no source; real names go
+  back in after. Writes `data/handover/<acc>_sent.txt` (exactly what the model
+  saw), `_key.json` (the redaction key: local only, never sent), `_check.json`
+  and `<acc>.md` (a draft until the outgoing owner confirms it). File names
+  in settings.toml [handover]. Not in run_all (it costs a few cents a run).
+- `stories/`: three hand-written account stories (Yarrow Studio: champion
+  leaving and a budget cut; Nettle Foods: expansion with a competitor and an
+  overage dispute; Driftwood Labs: shelfware with a renewal in two weeks).
+  `stories/answer_key.json` holds what a good brief must find and must not
+  claim; for testing only, never shown to the model.
+- `tests/handover_test.py`: privacy first (no real name, first name, email,
+  phone or company in any `_sent.txt`; runs without a key), then quality once
+  briefs exist (planted facts found, forbidden claims, citation checks). Run it
+  on every PR that touches handover.py or stories/.
 
 ## Planned next
 

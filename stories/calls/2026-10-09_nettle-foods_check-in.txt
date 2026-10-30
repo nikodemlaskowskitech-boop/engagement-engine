@@ -1,0 +1,11 @@
+Title: Nettle Foods - check-in
+Date: 2026-10-09 15:30 BST
+CRM account: acc_012
+Participants: Tom Brennan (Cairnpath, CSM), Claire Dunn (Nettle Foods, Analytics Lead)
+
+[00:00:25] Claire Dunn: Quick heads-up: we have a new VP of Marketing, Raj Patel. He owns the budget for the three brands now.
+[00:00:50] Tom Brennan: Good to know. What's his view of Cairnpath?
+[00:01:05] Claire Dunn: Honestly, mixed. He used Lumenly at his last company and has asked us to look at it before we renew.
+[00:01:40] Tom Brennan: Is it a real evaluation or a price check?
+[00:01:55] Claire Dunn: Bit of both. Finance is also annoyed about the overage invoice. And security won't let the 60 new people in without SSO.
+[00:02:40] Tom Brennan: I'll get you an answer on SSO and set up time with Raj.

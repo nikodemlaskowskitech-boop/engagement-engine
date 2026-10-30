@@ -1,0 +1,12 @@
+Title: Yarrow Studio - follow-up
+Date: 2026-10-05 14:00 CET
+CRM account: acc_024
+Participants: Mia Hofer (Cairnpath, CSM), Barry White (Yarrow Studio, Head of Analytics)
+
+[00:00:20] Barry White: Before we start, some news. I'm leaving Yarrow at the end of November. Ines Keller, our Director of Digital, takes over the analytics budget.
+[00:00:45] Mia Hofer: Congratulations, and thank you for telling me early. What is Ines like to work with?
+[00:01:10] Barry White: Sharp, numbers-first. She wasn't involved when we bought Cairnpath, so she'll question everything. She'll want usage by app before the board.
+[00:02:00] Mia Hofer: When does the board decide?
+[00:02:10] Barry White: The twelfth of November. The CFO still wants the thirty percent cut. Downsizing is likely; leaving is possible if the iOS numbers stay broken.
+[00:02:50] Mia Hofer: Our support team confirmed it's a bug in our iOS SDK. A fix is coming. I'll send Ines the timeline.
+[00:03:30] Barry White: Good. Call me again after the board, the thirteenth or so.
