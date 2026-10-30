@@ -8,10 +8,11 @@ same views the reports use (cairnpath_db.py, team_report.py and
 onboarding_report.py), so the page and the reports can never disagree.
 
 What goes in:
-  accounts        every CRM account: tier, region, owner, contract and QBR dates,
+  accounts        every CRM account: tier, region, owner, ARR, contract and QBR dates,
                   30-day utilisation for each day it can be measured, weekly
                   active users for each of the 13 weeks, and its open flags
-                  (activation, churn, expansion, QBR, journeys)
+                  (activation, churn, expansion, QBR, journeys), churn and
+                  expansion with their value (ARR at risk, opportunity)
   touches         every CS touch on the timeline (emails, opens, workshops,
                   meetings), with owner and topic
   onboarding      welcomed vs. control, one row per new account
@@ -94,11 +95,21 @@ for flag in FLAGS:
                 {"flag": flag, "status": r["status"], "reasons": r["reasons"],
                  "routed_to": r["routed_to"]})
 
+# What each churn or expansion row is worth (flags.py: ARR at risk, opportunity)
+value_path = DATA / "account_value.csv"
+if not value_path.exists():
+    sys.exit(f"{value_path} is missing: run python flags.py")
+with value_path.open(encoding="utf-8") as f:
+    for r in csv.DictReader(f):
+        for fl in flags.get(r["account_id"], []):
+            if fl["flag"] == r["flag"] and fl["status"] == r["status"]:
+                fl["value"], fl["value_basis"] = round(float(r["amount"])), r["basis"]
+
 accounts = rows(con, """
     SELECT c.account_id, c.account_name, c.tier, c.region, c.contract_start, c.renewal_date,
            c.contracted_events, c.add_ons, c.last_qbr_date, c.next_qbr_date,
            coalesce(c.csm_owner, c.cs_pool) AS owner_id,
-           c.last_qbr_date, c.next_qbr_date,
+           c.arr, c.arr_estimated,
            t.owner_name AS owner, t.manager
     FROM crm c
     LEFT JOIN cs_team t ON t.owner_id = coalesce(c.csm_owner, c.cs_pool)
@@ -156,7 +167,8 @@ export = {
     "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"],
-                 "follow_up_days": SETTINGS["follow_ups"]["after_days"]},
+                 "follow_up_days": SETTINGS["follow_ups"]["after_days"],
+                 "currency": SETTINGS["money"]["currency"]},
 }
 
 out = DATA / "views_data.json"

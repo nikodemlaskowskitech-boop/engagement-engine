@@ -78,11 +78,12 @@ One row per account, CSV with a header.
 | cs_pool | text | Scale | The pool's owner_id |
 | last_qbr_date | date | No | QBR overdue |
 | next_qbr_date | date | No | QBR coming up, and QBR first |
+| arr | number | No | Annual recurring revenue (some CRMs call it annual order value). Missing = estimated from contracted volume x the list price in settings.toml [money], marked as an estimate. Name the column in [money] arr_column |
 
 Example:
 ```csv
-account_id,account_name,tier,region,contract_start,renewal_date,contracted_events,add_ons,csm_owner,cs_pool,last_qbr_date,next_qbr_date
-acc_003,Driftwood Banking,Enterprise,UK&I,2026-02-10,2027-02-10,300000000,experiments,csm_anna,,2026-07-01,2026-10-26
+account_id,account_name,tier,region,contract_start,renewal_date,contracted_events,add_ons,csm_owner,cs_pool,last_qbr_date,next_qbr_date,arr
+acc_003,Driftwood Banking,Enterprise,UK&I,2026-02-10,2027-02-10,300000000,experiments,csm_anna,,2026-07-01,2026-10-26,135000
 ```
 
 ## 3. CS team

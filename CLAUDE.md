@@ -72,7 +72,10 @@ to percentages in reports: small segments mislead.
 CRM table (`data/crm_accounts.csv`): account_id, account_name, tier, region,
 contract_start, renewal_date, contracted_events, add_ons, csm_owner
 (Enterprise), cs_pool (Scale), last_qbr_date and next_qbr_date
-(Enterprise, roughly quarterly; some overdue and not rebooked). Pipeline-written facts
+(Enterprise, roughly quarterly; some overdue and not rebooked), arr (optional;
+missing = estimated from contracted_events x the list price in [money]).
+Contract sizes vary per account (half to double the tier's middle size).
+Pipeline-written facts
 (e.g. "welcome sent") go in an action log, not the CRM.
 
 CS team table (`data/cs_team.csv`): owner_id, owner_name, owner_type
@@ -188,7 +191,8 @@ One JSON event per line, one file per day in `data/events/`.
   CRM's tier names onto the three coverage models, [utilisation] says which
   usage event and CRM commitment column define utilisation, [regions] the
   time zones, [slack] and [slack.users] the workspace (channels, who gets
-  cards or DMs, member IDs, the cockpit link), [llm] the model and its price.
+  cards or DMs, member IDs, the cockpit link), [llm] the model and its price,
+  [money] the currency, ARR column, list price and value rules.
   The crm view (cairnpath_db.py) applies [tiers] and
   [utilisation], so the SQL downstream always speaks the engine's names
   (Self-service, Scale, Enterprise; contracted_events). Scripts read
@@ -236,6 +240,12 @@ One JSON event per line, one file per day in `data/events/`.
   flagged account, with reasons, routed_to and action; saved to
   `data/flags_activation.csv`, `data/flags_churn.csv` and
   `data/flags_expansion.csv`; the QBR flag to `data/flags_qbr.csv`.
+  Also the value at stake per churn and expansion row (view account_value,
+  `data/account_value.csv`, with its basis): ARR at risk = the whole ARR at
+  Act (they may leave), the unused part ARR x (100% - utilisation) at Watch
+  and Shelfware (they shrink to what they use at renewal); opportunity =
+  forecast utilisation at renewal above 100% x ARR (Watch at a share).
+  Value guides the work; it's never a CSM's credit.
 - `check_flags.py`: tests the flags against the answer key (run `flags.py`
   first): share of each personality found, false alarms, and every miss by
   name. Re-run it after any change to a flag rule.

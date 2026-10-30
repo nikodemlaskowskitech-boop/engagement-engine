@@ -79,11 +79,21 @@ def connect():
     # contracted_events ([utilisation]). Your own tier name stays in crm_tier.
     # Everything downstream speaks the engine's names, so a new team edits
     # settings.toml, not the SQL.
-    t, u = SETTINGS["tiers"], SETTINGS["utilisation"]
+    t, u, money = SETTINGS["tiers"], SETTINGS["utilisation"], SETTINGS["money"]
+    # ARR from the CRM; without that column, an estimate from the list price
+    # ([money] in settings.toml), so the value views still work
+    crm_cols = {r[0] for r in con.sql("DESCRIBE SELECT * FROM read_csv_auto('data/crm_accounts.csv')").fetchall()}
+    price = "CASE tier " + " ".join(f"WHEN '{t[k]}' THEN {money['price_per_1k'][n]}" for k, n in
+                                     (("tech_touch", "Self-service"), ("pooled", "Scale"), ("named_csm", "Enterprise"))) + " END"
+    arr = (f"{money['arr_column']}::DOUBLE" if money["arr_column"] in crm_cols
+           else f"round({u['contract_column']} / 1000.0 * {price}, -2)")
+    arr_exclude = f", {money['arr_column']}" if money["arr_column"] in crm_cols else ""
     con.sql(f"""
         CREATE VIEW crm AS
         WITH raw AS (SELECT * FROM read_csv_auto('data/crm_accounts.csv'))
-        SELECT * EXCLUDE (tier, {u['contract_column']}),
+        SELECT * EXCLUDE (tier, {u['contract_column']}{arr_exclude}),
+               {arr}                                 AS arr,
+               {'false' if money['arr_column'] in crm_cols else 'true'} AS arr_estimated,
                CASE tier WHEN '{t['tech_touch']}' THEN 'Self-service'
                          WHEN '{t['pooled']}'     THEN 'Scale'
                          WHEN '{t['named_csm']}'  THEN 'Enterprise'

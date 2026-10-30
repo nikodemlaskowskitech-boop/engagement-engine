@@ -512,6 +512,58 @@ con.sql("COPY (SELECT * FROM expansion ORDER BY status, account_id) TO 'data/fla
 print("\nSaved every row to data/flags_expansion.csv")
 
 
+# --- Value at stake ---------------------------------------------------------------
+# What each churn or expansion row is worth, so the work can be sorted by
+# value. It guides the work; it's never a CSM's credit.
+#   ARR at risk   Act: the whole ARR (usage and users falling: they may leave).
+#                 Watch, Shelfware: the unused part, ARR x (100% - utilisation):
+#                 customers cut their commitment to what they use at renewal.
+#   Opportunity   forecast utilisation at renewal above 100% x ARR, a straight
+#                 line from the last two months (capped); Watch counts at a share.
+MONEY = SETTINGS["money"]
+con.sql(f"""
+    CREATE VIEW account_value AS
+    WITH base AS (
+        SELECT c.account_id, c.arr, c.arr_estimated, u.utilisation_pct AS util,
+               m.util_m1, m.util_m3, (c.renewal_date - a.as_of_date) / 30.0 AS months_to_renewal
+        FROM crm c
+        CROSS JOIN as_of a
+        LEFT JOIN utilisation u USING (account_id)
+        LEFT JOIN monthly_usage m USING (account_id)
+    ),
+    risk AS (
+        SELECT b.account_id, 'churn' AS flag, ch.status, b.arr, b.arr_estimated,
+               round(CASE WHEN ch.status = 'Act' THEN b.arr
+                          ELSE b.arr * greatest(0, 100 - least(100, coalesce(b.util, 0))) / 100 END, -2) AS amount,
+               CASE WHEN ch.status = 'Act' THEN 'Whole ARR: usage and users are falling'
+                    ELSE format('Unused part: {{}}% of the contract in use', coalesce(b.util, 0)::INT) END AS basis
+        FROM churn ch JOIN base b USING (account_id)
+    ),
+    forecast AS (
+        SELECT b.*, ex.status,
+               least({MONEY['max_forecast_pct']},
+                     b.util_m3 + greatest(0, (b.util_m3 - b.util_m1) / 2.0) * greatest(0, b.months_to_renewal)) AS util_at_renewal
+        FROM expansion ex JOIN base b USING (account_id)
+    ),
+    upside AS (
+        SELECT account_id, 'expansion' AS flag, status, arr, arr_estimated,
+               round(arr * greatest(0, util_at_renewal - 100) / 100
+                     * CASE WHEN status = 'Watch' THEN {MONEY['watch_opportunity_share']} ELSE 1 END, -2) AS amount,
+               format('Forecast {{}}% of the contract at renewal{{}}', round(util_at_renewal)::INT,
+                      CASE WHEN status = 'Watch' THEN ', counted at {round(MONEY['watch_opportunity_share'] * 100)}% (Watch)' ELSE '' END) AS basis
+        FROM forecast
+    )
+    SELECT * FROM risk UNION ALL SELECT * FROM upside
+""")
+print("\n\nValue at stake (EUR), by flag and status")
+con.sql("""
+    SELECT flag, status, count(*) AS accounts, sum(amount)::BIGINT AS amount, sum(arr)::BIGINT AS arr
+    FROM account_value GROUP BY flag, status ORDER BY flag, status
+""").show()
+con.sql("COPY (SELECT * FROM account_value ORDER BY flag, amount DESC) TO 'data/account_value.csv' (HEADER)")
+print("Saved every row to data/account_value.csv")
+
+
 # --- Flag 4: QBR ---------------------------------------------------------------
 
 con.sql("""
