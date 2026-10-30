@@ -529,17 +529,33 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     for (const [v, l] of opts) node.append(new Option(l, v));
     node.value = opts.some(([v]) => v === value) ? value : "";
   };
+  // Narrowing filters: each list offers only the values that still have
+  // accounts once the other filters apply (Mia picked: only her manager, her
+  // team, the regions and tiers of her accounts).
+  const FACET = {
+    manager: (a) => a.manager,
+    team: (a) => homeOf[a.owner_id],
+    owner: (a) => (teamById[a.owner_id] || {}).owner_type === "csm" ? a.owner_id : null,   // named people only: a pool is Team + Scale
+    region: (a) => a.region,
+    tier: (a) => a.tier,
+  };
+  const facetOptions = (k) => {
+    const others = Object.keys(FACET).filter((x) => x !== k && seg[x]);
+    const vals = new Set();
+    for (const a of D.accounts) if (others.every((x) => FACET[x](a) === seg[x])) { const v = FACET[k](a); if (v) vals.add(v); }
+    return vals;
+  };
+  const LABEL = { manager: managerName, team: (v) => v, owner: (v) => ownerName[v] || v, region: (v) => v, tier: (v) => v };
+  const ORDER = { manager: MANAGERS, team: REGIONS, region: REGIONS, tier: TIERS };
   function drawSegbar() {
-    fillSelect($("seg-manager"), MANAGERS.map((m) => [m, managerName(m)]), seg.manager);
-    // people side: teams narrow to the manager's (James: UK&I and Nordics), owners to both
-    fillSelect($("seg-team"), REGIONS.filter((r) => D.team.some((t) => (!seg.manager || t.manager === seg.manager) && t.region === r)).map((r) => [r, r]), seg.team);
-    // named people only: a pool is its team plus the Scale tier, so it needs no entry here
-    const owners = D.team.filter((t) => t.owner_type === "csm" && (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team));
-    fillSelect($("seg-owner"), owners.map((t) => [t.owner_id, t.owner_name]), seg.owner);
-    // account side: every region, since an owner can cover accounts anywhere
-    fillSelect($("seg-region"), REGIONS.map((r) => [r, r]), seg.region);
-    fillSelect($("seg-tier"), TIERS.map((t) => [t, t]), seg.tier);
-    for (const k in seg) seg[k] = $("seg-" + k).value;     // drop a value the others ruled out
+    for (let pass = 0; pass < 2; pass++) {               // twice: a value dropped in pass 1 can widen the others
+      for (const k of Object.keys(FACET)) {
+        const vals = facetOptions(k);
+        const order = ORDER[k] || D.team.map((t) => t.owner_id);
+        fillSelect($("seg-" + k), order.filter((v) => vals.has(v)).map((v) => [v, LABEL[k](v)]), seg[k]);
+        seg[k] = $("seg-" + k).value;                    // drop a value the others ruled out
+      }
+    }
     const n = D.accounts.filter(inSeg).length;
     const o = seg.owner && teamById[seg.owner];
     $("seg-count").textContent = (segOn() ? `${n} of ${D.accounts.length} accounts` : `${n} accounts`)
@@ -1615,11 +1631,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const render = () => {
       const q = input.value.trim().toLowerCase();
       const rank = (a) => (inSeg(a) ? 0 : 2) + (a.flags.length ? 0 : 1);
-      items = D.accounts.filter((a) => !q || a.account_name.toLowerCase().includes(q) || a.account_id.includes(q))
+      // with a segment on, only its accounts (the timeline's box searches the whole book)
+      const pool = input.id === "seg-find" && segOn() ? D.accounts.filter(inSeg) : D.accounts;
+      items = pool.filter((a) => !q || a.account_name.toLowerCase().includes(q) || a.account_id.includes(q))
         .sort((a, b) => rank(a) - rank(b) || a.account_name.localeCompare(b.account_name)).slice(0, 8);
       list.innerHTML = items.length ? items.map((a, i) => `<li role="option" id="${input.id}-o${i}" data-id="${esc(a.account_id)}" aria-selected="${i === active}">${esc(a.account_name)}` +
         `<small>${esc(a.account_id)} · ${esc(a.tier)} · ${esc(a.region)}${a.owner ? " · " + esc(a.owner) : ""}${a.flags.length ? " · " + a.flags.map((f) => f.flag + " " + f.status).join(", ") : ""}</small></li>`).join("")
-        : '<li class="empty">No account matches</li>';
+        : `<li class="empty">No account${input.id === "seg-find" && segOn() ? " in " + esc(segName()) : ""} matches</li>`;
       list.hidden = false; input.setAttribute("aria-expanded", "true");
       if (active >= 0) input.setAttribute("aria-activedescendant", `${input.id}-o${active}`); else input.removeAttribute("aria-activedescendant");
     };
