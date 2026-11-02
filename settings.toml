@@ -67,6 +67,14 @@ Act = 1.0
 Watch = "unused"
 Shelfware = "unused"
 
+[aws]
+# Where the cloud parts run (Phase 6). Region and profile are configuration: another team
+# changes these lines, never a script. The profile is a name on your own laptop
+# (`aws login --profile cairnpath`); override it in settings.local.toml if yours differs.
+profile = "cairnpath"
+region = "eu-north-1"          # Stockholm: the region the organization's SCPs fully open
+account_id = "809071263914"    # not a secret; CDK deploys check they're in this account
+
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo
 # stories), and how long a brief may be. The model and its price are in [llm].
@@ -158,9 +166,12 @@ cockpit_url = "https://claude.ai/artifact/LGt2Q5S98GeVDK3kNzrhph"   # Open timel
 # csm_tom = "U0000000000"
 
 [llm]
-# The model that writes the QBR briefs (brief.py) and its list price, for the cost line.
-# Phase 6 swaps the provider for Bedrock here, not in the code.
-model = "claude-sonnet-5-5"
+# Who writes the QBR and handover briefs (llm.py), the model and its list price (cost line).
+#   provider = "bedrock"    Amazon Bedrock in your AWS account, signed in via [aws] profile; no API key
+#   provider = "anthropic"  the Anthropic API, with ANTHROPIC_API_KEY in .env
+provider = "bedrock"
+model = "claude-sonnet-5-5"                        # the model's name on the Anthropic API
+bedrock_model = "eu.anthropic.claude-sonnet-5-5"   # on Bedrock: the EU inference profile (data stays in EU regions)
 price_input_per_million = 2.00    # USD
 price_output_per_million = 10.00  # USD
 max_output_tokens = 1500

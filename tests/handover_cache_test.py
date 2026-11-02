@@ -35,12 +35,13 @@ class _Messages:
                                      usage=types.SimpleNamespace(input_tokens=1000, output_tokens=200))
 
 
-sys.modules["anthropic"] = types.SimpleNamespace(Anthropic=lambda: types.SimpleNamespace(messages=_Messages()))
+_fake = lambda **kw: types.SimpleNamespace(messages=_Messages())     # same stand-in for either provider
+sys.modules["anthropic"] = types.SimpleNamespace(Anthropic=_fake, AnthropicBedrock=_fake)
 
-import brief      # noqa: E402
 import handover   # noqa: E402
+import llm        # noqa: E402
 
-brief.load_api_key = lambda: None        # no key needed: the model is the stand-in
+llm.load_api_key = lambda: None          # no key needed: the model is the stand-in
 
 tmp = Path(tempfile.mkdtemp())
 shutil.copytree(REPO / "stories", tmp / "stories")

@@ -24,12 +24,10 @@ Writes data/briefs/<account_id>.md and prints what it cost.
 
 import csv
 import json
-import os
 import re
 import sys
 from pathlib import Path
 
-import anthropic
 
 from settings import SETTINGS
 
@@ -38,7 +36,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 REPO = Path(__file__).resolve().parent   # the repo root, wherever the terminal is
 
 LLM = SETTINGS["llm"]                     # model and price: settings.toml [llm]
-MODEL = LLM["model"]
+import llm                               # which provider and model: settings.toml [llm]
+from llm import load_api_key             # noqa: F401  (kept importable from here)
+MODEL = llm.MODEL
 PRICE_PER_MILLION = {"input": LLM["price_input_per_million"], "output": LLM["price_output_per_million"]}
 MAX_OUTPUT_TOKENS = LLM["max_output_tokens"]
 
@@ -86,24 +86,6 @@ facts above.
 """
 
 
-def load_api_key():
-    """Read ANTHROPIC_API_KEY (and, optionally, ANTHROPIC_WORKSPACE_ID) from
-    .env (git-ignored) without printing them.
-
-    The .env file is looked up next to this script, not in the folder the
-    terminal happens to be in, so it works wherever you run it from.
-    """
-    env = Path(__file__).resolve().parent / ".env"
-    if env.exists():
-        for line in env.read_text(encoding="utf-8-sig").splitlines():
-            name, _, value = line.partition("=")
-            if name.strip() in ("ANTHROPIC_API_KEY", "ANTHROPIC_WORKSPACE_ID") and value.strip():
-                os.environ[name.strip()] = value.strip().strip('"').strip("'")
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        sys.exit(f"No API key: looked for ANTHROPIC_API_KEY in {env} "
-                 f"({'file found' if env.exists() else 'file not found'})")
-
-
 def numbers_in(text):
     """Every number in a text, normalised (so 35.0 and 35 match, and the "-25"
     in a date like 2026-10-25 matches a plain 25)."""
@@ -135,18 +117,14 @@ def put_back_user_ids(text, account_id):
 
 
 def main():
-    load_api_key()
     packs = json.loads((REPO / "data" / "qbr_facts.json").read_text(encoding="utf-8"))
     if len(sys.argv) > 1:
         packs = [p for p in packs if p["account"]["account_id"] == sys.argv[1]]
         if not packs:
             sys.exit(f"No QBR facts pack for {sys.argv[1]}: run python qbr.py and check the ID")
 
-    # A key scoped to one workspace needs nothing more. An organisation-wide key
-    # must say which workspace each request is for, via this header.
-    workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID")
-    client = anthropic.Anthropic(
-        default_headers={"anthropic-workspace-id": workspace} if workspace else None)
+    client = llm.client()                 # Anthropic API or Bedrock, per settings.toml [llm]
+    print(f"Writing with {llm.describe()}")
     out_dir = REPO / "data" / "briefs"
     out_dir.mkdir(parents=True, exist_ok=True)
     total_in = total_out = 0
