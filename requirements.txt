@@ -3,3 +3,4 @@ anthropic==2.0.0
 slack_bolt==1.28.0
 boto3==1.43.123      # AWS SDK: Bedrock for the briefs (llm.py), later S3 and the rest of Phase 6
 botocore==1.43.123   # pinned with boto3: this version reads `aws login` sessions (LoginProvider)
+awscrt==0.38.0       # botocore[crt] for 1.43.123: needed to read `aws login` sessions
