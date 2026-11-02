@@ -500,8 +500,11 @@ One JSON event per line, one file per day in `data/events/`.
 
 ## Planned next
 
-- Move to AWS (Phase 6). Done: the briefs run on Bedrock (llm.py), signed in
-  with `aws login`. The AWS setup (2 Nov 2026): a Builder ID organization
+- Move to AWS (Phase 6). The briefs can run on Bedrock (llm.py), signed in
+  with `aws login`; code, login and libraries work (the request reaches
+  Bedrock), but the account's Anthropic model access is still pending with AWS
+  (use-case form sent 2 Nov 2026, support case to open). Until then a laptop
+  can keep the API key: settings.local.toml with [llm] provider = "anthropic". The AWS setup (2 Nov 2026): a Builder ID organization
   (management …3914, identity delegated admin …6241, Future Unicorn …9557);
   its SCPs open only eu-north-1 fully; its Identity Center has no permission
   sets, so the CLI uses the Builder ID session in the management account
