@@ -59,7 +59,8 @@ node tests/scenarios_test.js # optional: the 23 acceptance scenarios by role, au
 python actions.py           # tasks to Slack: digests, plus cards with buttons for the demo owners
 python listener.py          # in a second window: handles the buttons; clicks flow back as events
 python qbr.py               # facts pack for each QBR in the next 30 days
-python brief.py             # LLM-written QBR brief per pack (needs ANTHROPIC_API_KEY in .env)
+python brief.py             # LLM-written QBR brief per pack (Bedrock: run aws login --profile cairnpath first;
+                            #   or provider = "anthropic" in settings.toml with ANTHROPIC_API_KEY in .env)
 python handover.py          # AI handover brief from support cases, emails and calls (--dry-run: no model;
                             #   rewrites only when the context changed, --force to rewrite anyway)
 python tests/handover_test.py # privacy: no real name, email or phone reaches the model; then brief quality

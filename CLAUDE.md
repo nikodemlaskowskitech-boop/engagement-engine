@@ -217,7 +217,8 @@ One JSON event per line, one file per day in `data/events/`.
   CRM's tier names onto the three coverage models, [utilisation] says which
   usage event and CRM commitment column define utilisation, [regions] the
   time zones, [slack] and [slack.users] the workspace (channels, who gets
-  cards or DMs, member IDs, the cockpit link), [llm] the model and its price,
+  cards or DMs, member IDs, the cockpit link), [llm] the provider, model and
+  price, [aws] the profile, region and account,
   [money] the currency, ARR column, list price and value rules.
   The crm view (cairnpath_db.py) applies [tiers] and
   [utilisation], so the SQL downstream always speaks the engine's names
@@ -448,11 +449,17 @@ One JSON event per line, one file per day in `data/events/`.
 - `qbr.py`: QBR facts packs (run `flags.py` first). Writes
   `data/qbr_facts.json` (pseudonymised) and `data/qbr_user_key.csv` (the
   real user IDs; never sent to an LLM).
-- `brief.py`: QBR briefs from the facts packs (run `qbr.py` first; needs
-  `ANTHROPIC_API_KEY` in the git-ignored `.env`). Writes
+- `llm.py`: the one place that knows who writes the briefs (settings.toml
+  [llm] provider): `bedrock` (Amazon Bedrock in our AWS account, signed in with
+  the [aws] profile via `aws login --profile cairnpath`; no API key; model =
+  the EU inference profile in bedrock_model) or `anthropic` (the Anthropic API,
+  ANTHROPIC_API_KEY in `.env`). brief.py and handover.py ask it for a client.
+- `brief.py`: QBR briefs from the facts packs (run `qbr.py` first; the provider
+  comes from llm.py: Bedrock by default, or `ANTHROPIC_API_KEY` in the
+  git-ignored `.env` for the anthropic provider). Writes
   `data/briefs/<account_id>.md`. `python brief.py acc_037` for one account.
   The API key lives only in `.env`: never print it, log it or commit it.
-- `handover.py`: AI handover brief for a new owner (needs `ANTHROPIC_API_KEY`;
+- `handover.py`: AI handover brief for a new owner (provider from llm.py;
   `--dry-run` skips the model). Reads three silos for the accounts in
   `stories/directory.csv`, each joined by its own key: support cases
   (`stories/support_cases.csv`, by helpdesk organisation name), emails
@@ -493,8 +500,14 @@ One JSON event per line, one file per day in `data/events/`.
 
 ## Planned next
 
-- Move to AWS (Phase 6): switch `brief.py` to Bedrock (the anthropic
-  library's Bedrock client), so the key disappears in favour of an IAM role.
+- Move to AWS (Phase 6). Done: the briefs run on Bedrock (llm.py), signed in
+  with `aws login`. The AWS setup (2 Nov 2026): a Builder ID organization
+  (management …3914, identity delegated admin …6241, Future Unicorn …9557);
+  its SCPs open only eu-north-1 fully; its Identity Center has no permission
+  sets, so the CLI uses the Builder ID session in the management account
+  (profile cairnpath, settings.toml [aws]); workloads sit in the management
+  account for now, a deliberate exception (all in code, so they can move).
+  Next: a CDK app (S3 bucket), then the pipeline on a schedule.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a

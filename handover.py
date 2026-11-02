@@ -38,7 +38,8 @@ redaction key: local only), <account>_check.json (the checks) and
 <account>_meta.json (the fingerprint the last brief was written from).
 tests/handover_test.py grades a brief against stories/answer_key.json.
 
-Needs ANTHROPIC_API_KEY in .env (like brief.py), except with --dry-run.
+Uses the provider in settings.toml [llm] via llm.py (Bedrock: `aws login --profile cairnpath` first;
+anthropic: ANTHROPIC_API_KEY in .env). Nothing needed with --dry-run.
 """
 
 import csv
@@ -50,6 +51,7 @@ import sys
 from email import policy
 from pathlib import Path
 
+import llm                                    # which provider and model: settings.toml [llm]
 from settings import SETTINGS
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -286,7 +288,7 @@ def fingerprint(account_id, entry, docs):
         "owner": f"{entry['handover_from']} -> {entry['handover_to']}",
     }
     parts = {k: v for k, v in parts.items() if k in CONF["rewrite_on"]}
-    parts["prompt"] = _h(SYSTEM_PROMPT + LLM["model"] + str(CONF["max_output_tokens"]))   # always: new prompt = new brief
+    parts["prompt"] = _h(SYSTEM_PROMPT + llm.MODEL + str(CONF["max_output_tokens"]))   # always: new prompt = new brief
     return parts
 
 
@@ -332,15 +334,12 @@ def run(account_id, dry_run, force=False):
     print(f"           {'would rewrite' if dry_run else 'rewriting'}: " + "; ".join(changes or ["--force"]))
     if dry_run:
         return 0, 0
-    import anthropic                        # only needed for the real call
-    from brief import load_api_key
-    load_api_key()
-    client = anthropic.Anthropic()
+    client = llm.client()                   # Anthropic API or Bedrock, per settings.toml [llm]
     # the previous owner by label only: the model never sees a real name
     previous = {t["owner_id"]: t["owner_name"] for t in team}.get(entry["handover_from"], "")
     previous = next((label for label, name in key.items() if name == previous), "the previous owner")
     response = client.messages.create(
-        model=LLM["model"], max_tokens=CONF["max_output_tokens"], system=SYSTEM_PROMPT,
+        model=llm.MODEL, max_tokens=CONF["max_output_tokens"], system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content":
                    f"The account is moving from {previous} to a new owner. Sources:\n\n{sent}"}])
     draft = "".join(b.text for b in response.content if b.type == "text")
@@ -390,5 +389,6 @@ if __name__ == "__main__":
         i, o = run(account_id, dry, force)
         tin, tout = tin + i, tout + o
     if not dry:
+        print(f"Written with {llm.describe()}")
         cost = (tin * LLM["price_input_per_million"] + tout * LLM["price_output_per_million"]) / 1e6
         print(f"\n{len(ids)} accounts, {tin:,} tokens in, {tout:,} out, about ${cost:.3f}")
