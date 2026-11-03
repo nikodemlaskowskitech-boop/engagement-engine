@@ -78,6 +78,11 @@ keep_old_versions_days = 30    # data bucket: overwritten or deleted files kept 
 # The data bucket, as `cdk deploy` printed it (CairnpathData.BucketName). Not a secret.
 bucket = "cairnpathdata-data666c94c7-mp5lz9ky9ir4"
 inputs_prefix = "inputs/"      # upload.py puts the inputs under this folder in the bucket
+upload_marker = "_upload_complete.json"   # written last by upload.py; the check Lambda wakes on it
+reports_prefix = "reports/"    # what runs in AWS writes here (never under inputs/: no self-trigger)
+check_memory_mb = 1024         # the check Lambda: memory (more memory = more CPU too)
+check_timeout_seconds = 300    # ...how long it may run (it takes seconds today)
+check_disk_mb = 1024           # ...its /tmp disk, which holds a copy of the inputs (about 115 MB today)
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo

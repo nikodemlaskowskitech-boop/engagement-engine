@@ -38,7 +38,8 @@ with short comments, and work in small steps (one PR per change).
   roles, routing, money or the segment bar; their results go to the
   acceptance page. Every PR that touches infra/ runs `python
   tests/infra_test.py` (builds the template in memory, no AWS login, no
-  cost); one that touches upload.py runs `python tests/upload_test.py`. Docs-only PRs need none. Nothing merges with a FAIL. A bug
+  cost) and `python tests/check_lambda_test.py` (the Lambda's handler against
+  a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`. Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
 - Fix review findings now, in the same change or PR. Don't defer them to
   "later": deferred fixes get lost.
@@ -504,23 +505,42 @@ One JSON event per line, one file per day in `data/events/`.
   engine's data, private (all four public-access blocks, ACLs off), encrypted,
   HTTPS only, versioned (old versions expire after [aws]
   keep_old_versions_days), kept if the stack is deleted (Retain), name left to
-  AWS, tag project=cairnpath. Nikodem deploys from `infra/` (`cdk bootstrap`
-  once, then `cdk diff` and `cdk deploy`, all with `--profile cairnpath`);
-  steps in `infra/README.md`. Nothing is uploaded yet.
+  AWS, tag project=cairnpath. Plus the check Lambda (CheckInputs, Python 3.13
+  on arm64): wakes only when upload.py writes its marker ([aws] upload_marker,
+  under inputs/), copies inputs/ to its /tmp, runs the same check_inputs.py
+  (bundled by `infra/bundle.py` into infra/build/: the handler from
+  `infra/lambdas/check_inputs/`, check_inputs.py, settings.py, settings.toml;
+  never settings.local.toml) and writes `reports/check_inputs/latest.txt`,
+  `latest.json` (status OK / WARN / ERROR, counts) and a dated copy of each.
+  A data ERROR is a result, not a crash. May only read inputs/* and write
+  reports/check_inputs/* (so it can't trigger itself); logs kept 30 days;
+  memory, timeout and disk in [aws]. Nikodem deploys from `infra/` (`cdk
+  bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
+  cairnpath`); steps in `infra/README.md`.
 - `tests/infra_test.py`: checks the template before anything reaches AWS
   (each safety setting above, account and region from settings, the bucket
-  name output). Exit 1 on any FAIL.
+  name output; the Lambda's runtime, settings, marker-only trigger and least
+  privilege). Exit 1 on any FAIL.
+- `tests/check_lambda_test.py`: builds the Lambda's folder as the deploy does
+  and runs its handler on the demo inputs through a stand-in S3: every input
+  checked, the marker skipped, reports only under reports/check_inputs/, then a
+  CRM file missing a required column gives ERROR (no crash). Needs data/.
 - `upload.py`: copies the inputs named in [data] to the data bucket ([aws]
   bucket, under [aws] inputs_prefix, same folder layout). Only new or changed
   files go up (local MD5 vs. the object's ETag), so reruns send nothing and
   versioning records real changes only. Checks the bucket is ours
   (ExpectedBucketOwner = [aws] account_id). Never the answer key or the
-  engine's outputs. `--dry-run` says what would go. Not in run_all yet.
+  engine's outputs. Demo data only: a company's own exports
+  (settings.local.toml) are refused, they stay on the laptop. After a real
+  change it writes the upload-complete marker last, which wakes the check
+  Lambda once per batch. Prints the first 10 files, then a count. `--dry-run`
+  says what would go. Not in run_all yet.
   Sign in first (`aws login --profile cairnpath`).
 - `tests/upload_test.py`: a stand-in S3 (no AWS, no cost): first run sends
   every input, a rerun nothing, then only a changed and a new file; keys use
-  "/"; the answer key and outputs stay local; another account's bucket is
-  refused. Exit 1 on any FAIL.
+  "/"; the marker written once per real change, last, never on a rerun or
+  dry run; the answer key and outputs stay local; own data refused; another
+  account's bucket is refused. Exit 1 on any FAIL.
 
 ## Planned next
 
@@ -536,7 +556,8 @@ One JSON event per line, one file per day in `data/events/`.
   account for now, a deliberate exception (all in code, so they can move).
   The CDK app with the data bucket is in infra/, deployed 3 Nov 2026
   (CairnpathData, bucket name in settings.toml [aws]); upload.py copies the
-  inputs there. Next: Lambda ingestion, then the pipeline on a schedule.
+  inputs there, and the check Lambda checks each upload (reports/check_inputs/).
+  Next: the pipeline itself in AWS, on a schedule.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a
