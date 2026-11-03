@@ -169,10 +169,12 @@ check("DONE" in s3.objects[OUTPUTS + "last_run.txt"].decode(), "last_run.txt has
 check(summary["triggered_by"] == CHECK and summary["check"]["status"] == "WARN", "run.json says what woke it and the check's verdict")
 check(not work.exists(), "its work folder is cleaned up")
 if REAL:
+    # byte for byte, order included: a sort with ties can come out in a different
+    # order on another machine (account_value.csv did, until account_id broke the ties)
     for name in ("flags_activation.csv", "flags_churn.csv", "flags_expansion.csv", "flags_qbr.csv",
                  "account_value.csv", "flags_journey.csv"):
         same = s3.objects[OUTPUTS + name] == (REPO / "data" / name).read_bytes()
-        check(same, f"{name} matches the laptop's")
+        check(same, f"{name} matches the laptop's, byte for byte")
 
 print("\nEngine Lambda: a step that fails")
 (bundle / "broken.py").write_text("raise SystemExit('this step broke')\n", encoding="utf-8")

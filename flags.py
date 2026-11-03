@@ -577,7 +577,7 @@ con.sql("""
     SELECT flag, status, count(*) AS accounts, sum(amount)::BIGINT AS amount, sum(arr)::BIGINT AS arr
     FROM account_value GROUP BY flag, status ORDER BY flag, status
 """).show()
-con.sql("COPY (SELECT * FROM account_value ORDER BY flag, amount DESC) TO 'data/account_value.csv' (HEADER)")
+con.sql("COPY (SELECT * FROM account_value ORDER BY flag, amount DESC, account_id) TO 'data/account_value.csv' (HEADER)")
 print("Saved every row to data/account_value.csv")
 
 
