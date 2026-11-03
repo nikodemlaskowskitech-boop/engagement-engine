@@ -15,3 +15,7 @@ cdk deploy --profile cairnpath            # build it; prints the bucket name
 
 Needs Node.js (for the `cdk` command: `npm install -g aws-cdk`) and the pinned
 `aws-cdk-lib` and `constructs` from requirements.txt.
+
+After a deploy, put the printed bucket name in settings.toml [aws] bucket. Then,
+from the repo root, `python upload.py --dry-run` and `python upload.py` copy the
+engine's inputs into it.
