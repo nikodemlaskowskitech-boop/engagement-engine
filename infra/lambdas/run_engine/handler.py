@@ -11,8 +11,9 @@ How: copies the engine's code into /tmp/work (the scripts expect a repo folder
 with data/ next to them, and /var/task is read-only), downloads inputs/ into
 /tmp/work/data/ (same layout as the laptop) plus the action log from state/,
 runs each step in [aws] engine_steps in order, then uploads every file the
-engine wrote to outputs/: the flags, account values, views_data.json and the
-cockpit page views.html, plus last_run.txt (everything the steps printed) and
+engine wrote to outputs/: the flags, account values, views_data.json, the
+cockpit page views.html and the Parquet tables for Athena (outputs/tables/),
+plus last_run.txt (everything the steps printed) and
 run.json (the summary, written last).
 
 Only writes under outputs/, so it can never trigger the check or itself.
@@ -50,9 +51,10 @@ def now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def put(s3, key, text, kind="text/plain; charset=utf-8"):
-    s3.put_object(Bucket=BUCKET, Key=key, Body=text.encode("utf-8"), ContentType=kind,
-                  ExpectedBucketOwner=OWNER)
+def put(s3, key, body, kind="text/plain; charset=utf-8"):
+    """Write text or bytes (Parquet files are binary) to the bucket."""
+    s3.put_object(Bucket=BUCKET, Key=key, Body=body.encode("utf-8") if isinstance(body, str) else body,
+                  ContentType=kind, ExpectedBucketOwner=OWNER)
 
 
 def check_status(s3):
@@ -119,12 +121,14 @@ def handler(event, context, s3=None, work=None):
         state = download(s3, STATE, data)
         state = [s for s in state if s in STATE_FILES]
         ok, log, failed, times = run_steps(work)
-        written = sorted(p.name for p in data.iterdir()
-                         if p.is_file() and p.name not in set(inputs) | set(state))
+        # everything the steps wrote, at any depth (tables/<name>/ for Athena), minus what came in
+        written = sorted(p.relative_to(data).as_posix() for p in data.rglob("*")
+                         if p.is_file() and p.relative_to(data).as_posix() not in set(inputs) | set(state))
         for name in written:
             kind = {"json": "application/json", "html": "text/html; charset=utf-8",
-                    "csv": "text/csv; charset=utf-8"}.get(name.rsplit(".", 1)[-1], "text/plain; charset=utf-8")
-            put(s3, OUTPUTS + name, (data / name).read_text(encoding="utf-8"), kind)
+                    "csv": "text/csv; charset=utf-8", "parquet": "application/vnd.apache.parquet"
+                    }.get(name.rsplit(".", 1)[-1], "text/plain; charset=utf-8")
+            put(s3, OUTPUTS + name, (data / name).read_bytes(), kind)
     finally:
         shutil.rmtree(work, ignore_errors=True)
     summary.update(status="OK" if ok else "FAILED", failed_step=failed, step_seconds=times,

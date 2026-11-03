@@ -89,7 +89,16 @@ state_prefix = "state/"        # state carried between runs: upload.py puts the 
 # laptop-only ones: cockpit_sync reads the page's database copy, check_flags the answer key,
 # actions.py posts to Slack).
 engine_steps = ["flags.py", "journeys.py", "team_report.py", "backtest.py",
-                "onboarding_report.py", "export_views.py"]
+                "onboarding_report.py", "export_views.py", "to_parquet.py"]
+# Tables for Athena: to_parquet.py writes each to data/tables/<name>/ (outputs/tables/ in AWS),
+# and the Glue crawler turns each folder into a table in the Glue database below.
+athena_tables = ["flags_activation", "flags_churn", "flags_expansion", "flags_qbr", "flags_journey",
+                 "account_value", "tasks", "crm", "cs_team"]
+glue_database = "cairnpath"
+athena_workgroup = "cairnpath"
+athena_results_prefix = "athena-results/"   # where Athena writes query results (in the data bucket)
+athena_results_keep_days = 7                # ...deleted after this many days
+athena_scan_limit_mb = 1024                 # a query that would scan more is cancelled (cost guard)
 engine_memory_mb = 2048        # the engine Lambda: memory (and CPU with it)
 engine_timeout_seconds = 600   # ...how long it may run (it takes under a minute on the laptop)
 engine_disk_mb = 2048          # ...its /tmp disk: the inputs, the code and what it writes

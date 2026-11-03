@@ -32,3 +32,9 @@ the cockpit page `views.html`, `last_run.txt` (every step's output) and
 `run.json` (OK / SKIPPED / FAILED). The first `cdk diff` or `cdk deploy` after
 a DuckDB version change downloads DuckDB built for Lambda (a minute); later
 runs reuse it from infra/build/.
+
+Athena (ask your own questions of the results): after the engine has run once,
+`aws glue start-crawler --name <Crawler output> --profile cairnpath` turns each
+folder under `outputs/tables/` into a table in the Glue database `cairnpath`
+(about a minute; rerun only when a table's columns change). Then in the Athena
+console pick workgroup `cairnpath` and database `cairnpath`, and query.

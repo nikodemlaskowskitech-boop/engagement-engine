@@ -24,7 +24,7 @@ BUILD = INFRA / "build"
 CHECK_FILES = ["check_inputs.py", "settings.py", "settings.toml"]
 ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "flags.py", "journeys.py",
                 "team_report.py", "backtest.py", "onboarding_report.py", "export_views.py",
-                "views_template.html"]
+                "to_parquet.py", "views_template.html"]
 LAMBDA_PLATFORMS = ["manylinux_2_28_aarch64", "manylinux_2_27_aarch64", "manylinux2014_aarch64"]
 
 

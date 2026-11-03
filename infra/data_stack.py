@@ -17,6 +17,9 @@ reports/check_inputs/, and runs the same check_inputs.py as the laptop.
 """
 
 from aws_cdk import CfnOutput, Duration, RemovalPolicy, Size, Stack
+from aws_cdk import aws_athena as athena
+from aws_cdk import aws_glue as glue
+from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
@@ -45,6 +48,9 @@ class DataStack(Stack):
             lifecycle_rules=[s3.LifecycleRule(
                 noncurrent_version_expiration=Duration.days(keep_days),  # old versions don't pile up cost
                 abort_incomplete_multipart_upload_after=Duration.days(7),
+            ), s3.LifecycleRule(                                         # Athena's query results: scratch
+                prefix=SETTINGS["aws"]["athena_results_prefix"],
+                expiration=Duration.days(SETTINGS["aws"]["athena_results_keep_days"]),
             )],
         )
         # the name AWS generates, printed after `cdk deploy` (S3 names are global, so we let AWS pick)
@@ -113,3 +119,45 @@ class DataStack(Stack):
             s3.EventType.OBJECT_CREATED, s3n.LambdaDestination(engine),
             s3.NotificationKeyFilter(prefix=check_summary))
         CfnOutput(self, "EngineFunction", value=engine.function_name)
+
+        # --- Athena: ask your own questions of the engine's results ---
+        # Glue Data Catalog = the list of tables ("this folder is a table with these columns").
+        # The crawler reads the Parquet files under outputs/tables/ and writes that list for us:
+        # one table per folder, columns and types taken from the files. Run it once after the
+        # first engine run, and again only when a table's columns change (new data needs no crawl).
+        database = glue.CfnDatabase(self, "GlueDatabase", catalog_id=self.account,
+                                    database_input=glue.CfnDatabase.DatabaseInputProperty(
+                                        name=aws["glue_database"],
+                                        description="Cairnpath engine results (outputs/tables/), for Athena"))
+        crawler_role = iam.Role(
+            self, "CrawlerRole", assumed_by=iam.ServicePrincipal("glue.amazonaws.com"),
+            managed_policies=[iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSGlueServiceRole")])
+        self.bucket.grant_read(crawler_role, outputs + "tables/*")             # reads the tables, nothing else
+        crawler = glue.CfnCrawler(
+            self, "TablesCrawler", role=crawler_role.role_arn,
+            database_name=aws["glue_database"],
+            description="Turns each folder under outputs/tables/ into an Athena table",
+            # one target per table folder, and tables made at the folder's level (bucket = 1,
+            # outputs/ = 2, tables/ = 3, <name>/ = 4): without this, the five flag tables (same
+            # columns) would be merged into one table with a "partition" column instead
+            targets=glue.CfnCrawler.TargetsProperty(s3_targets=[glue.CfnCrawler.S3TargetProperty(
+                path=f"s3://{self.bucket.bucket_name}/{outputs}tables/{name}/")
+                for name in aws["athena_tables"]]),
+            configuration=json.dumps({"Version": 1.0, "Grouping": {"TableLevelConfiguration": 4}}),
+            schema_change_policy=glue.CfnCrawler.SchemaChangePolicyProperty(
+                update_behavior="UPDATE_IN_DATABASE", delete_behavior="DELETE_FROM_DATABASE"))
+        crawler.add_resource_dependency(database)    # the database exists before the crawler
+        # Athena workgroup: where query results go, and a cap on how much one query may scan
+        athena.CfnWorkGroup(
+            self, "Workgroup", name=aws["athena_workgroup"],
+            description="Cairnpath: queries over the engine's results",
+            recursive_delete_option=True,
+            work_group_configuration=athena.CfnWorkGroup.WorkGroupConfigurationProperty(
+                enforce_work_group_configuration=True,
+                bytes_scanned_cutoff_per_query=aws["athena_scan_limit_mb"] * 1024 * 1024,
+                publish_cloud_watch_metrics_enabled=True,
+                result_configuration=athena.CfnWorkGroup.ResultConfigurationProperty(
+                    output_location=f"s3://{self.bucket.bucket_name}/{aws['athena_results_prefix']}",
+                    encryption_configuration=athena.CfnWorkGroup.EncryptionConfigurationProperty(
+                        encryption_option="SSE_S3"))))
+        CfnOutput(self, "Crawler", value=crawler.ref)
