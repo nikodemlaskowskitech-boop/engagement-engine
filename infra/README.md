@@ -25,3 +25,10 @@ that sends something writes a marker last; the Lambda wakes on it, checks the
 inputs with check_inputs.py and writes `reports/check_inputs/latest.txt` (the
 report) and `latest.json` (status OK / WARN / ERROR) in the bucket. Its logs are
 in CloudWatch Logs (the function's log group), kept 30 days.
+
+And after each clean check, the engine Lambda (RunEngine) runs the engine and
+writes its results to `outputs/` in the bucket: the flags, `views_data.json`,
+the cockpit page `views.html`, `last_run.txt` (every step's output) and
+`run.json` (OK / SKIPPED / FAILED). The first `cdk diff` or `cdk deploy` after
+a DuckDB version change downloads DuckDB built for Lambda (a minute); later
+runs reuse it from infra/build/.

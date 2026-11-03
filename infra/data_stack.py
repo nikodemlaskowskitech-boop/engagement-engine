@@ -23,7 +23,9 @@ from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_s3_notifications as s3n
 from constructs import Construct
 
-from bundle import bundle_check_inputs
+import json
+
+from bundle import ENGINE_FILES, bundle_check_inputs, bundle_engine
 from settings import SETTINGS
 
 
@@ -77,3 +79,37 @@ class DataStack(Stack):
             s3.EventType.OBJECT_CREATED, s3n.LambdaDestination(fn),
             s3.NotificationKeyFilter(prefix=inputs + aws["upload_marker"]))
         CfnOutput(self, "CheckFunction", value=fn.function_name)
+
+        # --- the engine Lambda: flags, journeys, reports, cockpit export ---
+        outputs, state = aws["outputs_prefix"], aws["state_prefix"]
+        check_summary = reports + "latest.json"
+        engine = lambda_.Function(
+            self, "RunEngine",
+            description="Runs the engine (flags, journeys, reports, cockpit export) after a clean input check",
+            runtime=lambda_.Runtime.PYTHON_3_13,
+            architecture=lambda_.Architecture.ARM_64,
+            handler="handler.handler",
+            code=lambda_.Code.from_asset(str(bundle_engine())),
+            memory_size=aws["engine_memory_mb"],
+            timeout=Duration.seconds(aws["engine_timeout_seconds"]),
+            ephemeral_storage_size=Size.mebibytes(aws["engine_disk_mb"]),
+            environment={"BUCKET": self.bucket.bucket_name, "ACCOUNT_ID": str(aws["account_id"]),
+                         "INPUTS_PREFIX": inputs, "STATE_PREFIX": state, "OUTPUTS_PREFIX": outputs,
+                         "CHECK_SUMMARY": check_summary, "MARKER_NAME": aws["upload_marker"],
+                         "ENGINE_STEPS": json.dumps(aws["engine_steps"]),
+                         "ENGINE_CODE": json.dumps(ENGINE_FILES)},
+            retry_attempts=0,                                  # same data, same result: a retry wouldn't help
+            log_group=logs.LogGroup(self, "RunEngineLogs",
+                                    retention=logs.RetentionDays.ONE_MONTH,
+                                    removal_policy=RemovalPolicy.DESTROY),
+        )
+        # reads the inputs, the action log and the check's verdict; writes only outputs/
+        self.bucket.grant_read(engine, inputs + "*")
+        self.bucket.grant_read(engine, state + "*")
+        self.bucket.grant_read(engine, check_summary)
+        self.bucket.grant_put(engine, outputs + "*")
+        # runs right after each input check (its summary is written last)
+        self.bucket.add_event_notification(
+            s3.EventType.OBJECT_CREATED, s3n.LambdaDestination(engine),
+            s3.NotificationKeyFilter(prefix=check_summary))
+        CfnOutput(self, "EngineFunction", value=engine.function_name)

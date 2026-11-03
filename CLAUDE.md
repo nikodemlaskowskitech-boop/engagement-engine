@@ -38,8 +38,8 @@ with short comments, and work in small steps (one PR per change).
   roles, routing, money or the segment bar; their results go to the
   acceptance page. Every PR that touches infra/ runs `python
   tests/infra_test.py` (builds the template in memory, no AWS login, no
-  cost) and `python tests/check_lambda_test.py` (the Lambda's handler against
-  a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`. Docs-only PRs need none. Nothing merges with a FAIL. A bug
+  cost), `python tests/check_lambda_test.py` and `python
+  tests/engine_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`. Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
 - Fix review findings now, in the same change or PR. Don't defer them to
   "later": deferred fixes get lost.
@@ -514,23 +514,44 @@ One JSON event per line, one file per day in `data/events/`.
   `latest.json` (status OK / WARN / ERROR, counts) and a dated copy of each.
   A data ERROR is a result, not a crash. May only read inputs/* and write
   reports/check_inputs/* (so it can't trigger itself); logs kept 30 days;
-  memory, timeout and disk in [aws]. Nikodem deploys from `infra/` (`cdk
+  memory, timeout and disk in [aws]. Plus the engine Lambda (RunEngine, same
+  runtime): wakes when the check writes reports/check_inputs/latest.json, and
+  if its status is ERROR writes outputs/run.json SKIPPED and stops (the gate).
+  Otherwise it copies the engine's code (bundle.py ENGINE_FILES) and a data/
+  folder into /tmp/work (inputs/ plus state/action_log.csv), runs [aws]
+  engine_steps in order (run_all.ps1 minus the laptop-only cockpit_sync,
+  check_flags and actions), and uploads every file the steps wrote to
+  outputs/, then last_run.txt and run.json (status OK / FAILED, step times),
+  run.json last. A failing step: FAILED, then it raises (no retry). Reads
+  inputs/*, state/*, the check summary; writes only outputs/*. DuckDB for Lambda
+  (Linux arm64, Python 3.13, version from requirements.txt) is fetched by pip
+  with --platform at synth time, cached in infra/build/ (no Docker);
+  CAIRNPATH_SKIP_DEPS=1 skips it for tests. No handover briefs in AWS yet.
+  Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
 - `tests/infra_test.py`: checks the template before anything reaches AWS
   (each safety setting above, account and region from settings, the bucket
-  name output; the Lambda's runtime, settings, marker-only trigger and least
-  privilege). Exit 1 on any FAIL.
+  name output; for each Lambda: runtime, sizes from settings, its one trigger,
+  retries, least privilege and never writing where a trigger listens). Exit 1
+  on any FAIL.
 - `tests/check_lambda_test.py`: builds the Lambda's folder as the deploy does
   and runs its handler on the demo inputs through a stand-in S3: every input
   checked, the marker skipped, reports only under reports/check_inputs/, then a
   CRM file missing a required column gives ERROR (no crash). Needs data/.
+- `tests/engine_lambda_test.py`: the engine Lambda's bundle holds every repo
+  module the steps import; the gate (check ERROR = SKIPPED, nothing computed);
+  a run against a stand-in S3 (inputs and action log in, only new files out,
+  all under outputs/, run.json last, work folder cleaned); a failing step gives
+  FAILED and raises. With DuckDB installed it runs the real steps and compares
+  the flags with the laptop's data/; without, stand-in steps. Needs data/.
 - `upload.py`: copies the inputs named in [data] to the data bucket ([aws]
   bucket, under [aws] inputs_prefix, same folder layout). Only new or changed
   files go up (local MD5 vs. the object's ETag), so reruns send nothing and
   versioning records real changes only. Checks the bucket is ours
   (ExpectedBucketOwner = [aws] account_id). Never the answer key or the
-  engine's outputs. Demo data only: a company's own exports
+  engine's outputs, except the action log (data/action_log.csv, the tasks
+  already sent), which goes to [aws] state_prefix for the engine Lambda. Demo data only: a company's own exports
   (settings.local.toml) are refused, they stay on the laptop. After a real
   change it writes the upload-complete marker last, which wakes the check
   Lambda once per batch. Prints the first 10 files, then a count. `--dry-run`
@@ -556,8 +577,12 @@ One JSON event per line, one file per day in `data/events/`.
   account for now, a deliberate exception (all in code, so they can move).
   The CDK app with the data bucket is in infra/, deployed 3 Nov 2026
   (CairnpathData, bucket name in settings.toml [aws]); upload.py copies the
-  inputs there, and the check Lambda checks each upload (reports/check_inputs/).
-  Next: the pipeline itself in AWS, on a schedule.
+  inputs there, the check Lambda checks each upload (reports/check_inputs/),
+  and the engine Lambda runs flags to cockpit export after a clean check
+  (outputs/). Warehouse decided 3 Nov 2026: DuckDB in Lambda runs the engine
+  (one SQL dialect, same numbers as the laptop); Athena + Glue tables over
+  outputs/ for ad-hoc questions come next. Then a schedule, and the handover
+  briefs in AWS (their cache files kept in S3 between runs).
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a

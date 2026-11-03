@@ -76,17 +76,20 @@ for day in ("2026-10-01", "2026-10-02", "2026-10-03"):
 (tmp / "crm_accounts.csv").write_text("account_id\nacc_001\n", encoding="utf-8")
 (tmp / "cs_team.csv").write_text("owner_id\ncsm_1\n", encoding="utf-8")
 (tmp / "answer_key.csv").write_text("not an input\n", encoding="utf-8")     # must never go up
-(tmp / "action_log.csv").write_text("an output\n", encoding="utf-8")        # nor this
+(tmp / "action_log.csv").write_text("tasks sent\n", encoding="utf-8")       # state: goes to state/
+(tmp / "flags_churn.csv").write_text("an output\n", encoding="utf-8")      # an engine output: stays local
 upload.INPUTS = tmp
 owner = str(upload.AWS["account_id"])
 s3 = FakeS3(owner)
 
 print("\nUpload: only new or changed inputs, to the right place")
 sent = step(s3)
-check(len(sent) == 6, "first run uploads every input (4 day files + CRM + team)", sent)
-check(all(k.startswith(upload.PREFIX) for k in sent), f"everything under {upload.PREFIX}")
+check(len(sent) == 7, "first run uploads every input (4 day files + CRM + team) and the action log", sent)
+check(all(k.startswith(upload.PREFIX) for k in sent if k != upload.STATE + "action_log.csv"),
+      f"inputs under {upload.PREFIX}")
+check(upload.STATE + "action_log.csv" in sent, f"the action log under {upload.STATE} (the engine's memory of tasks sent)")
 check("inputs/events/2026-10-02.jsonl" in sent, "keeps the folder layout, with / not \\", sent)
-check(not any("answer_key" in k or "action_log" in k for k in sent),
+check(not any("answer_key" in k or "flags_churn" in k for k in sent),
       "the answer key and the engine's outputs are not uploaded")
 check(markers(s3) == 1 and s3.puts[-1] == upload.MARKER,
       "the upload-complete marker is written once, and last (the check sees a whole batch)")

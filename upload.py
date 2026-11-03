@@ -8,6 +8,8 @@ Which files: the inputs named in settings.toml [data] (events, CRM, CS team,
 CS history, holdout, renewal outcomes), wherever [data] says they live. Where
 they go: the bucket in [aws] bucket, under [aws] inputs_prefix, keeping their
 folder layout (events/2026-10-15.jsonl -> inputs/events/2026-10-15.jsonl).
+Plus the action log (data/action_log.csv: the tasks already sent) under
+[aws] state_prefix, so the engine in AWS knows them too.
 
 Only new or changed files go up: each file's MD5 fingerprint is compared with
 the one S3 keeps for it (its ETag). So a rerun sends nothing, and the bucket's
@@ -36,6 +38,8 @@ AWS = SETTINGS["aws"]
 DATA = SETTINGS["data"]
 PREFIX = AWS["inputs_prefix"].strip("/") + "/"
 MARKER = PREFIX + AWS["upload_marker"]
+STATE = AWS["state_prefix"].strip("/") + "/"
+STATE_FILES = ["action_log.csv"]   # state the engine carries between runs (tasks sent, from actions.py)
 SHOW = 10                    # file names printed per run; the rest is a count
 
 
@@ -50,7 +54,11 @@ def local_inputs():
         for path in sorted(INPUTS.glob(DATA[key])):
             files[path] = True
     # as_posix(): S3 keys use "/", even on Windows (where paths use "\")
-    return {PREFIX + p.relative_to(INPUTS).as_posix(): p for p in files}
+    out = {PREFIX + p.relative_to(INPUTS).as_posix(): p for p in files}
+    for name in STATE_FILES:
+        if (INPUTS / name).is_file():
+            out[STATE + name] = INPUTS / name
+    return out
 
 
 def md5(path):
@@ -63,13 +71,14 @@ def md5(path):
 
 
 def remote_etags(s3, bucket):
-    """What the bucket holds under the prefix: {key: MD5}."""
+    """What the bucket holds under the inputs and state prefixes: {key: MD5}."""
     etags = {}
-    pages = s3.get_paginator("list_objects_v2").paginate(
-        Bucket=bucket, Prefix=PREFIX, ExpectedBucketOwner=str(AWS["account_id"]))
-    for page in pages:
-        for obj in page.get("Contents", []):
-            etags[obj["Key"]] = obj["ETag"].strip('"')
+    for prefix in (PREFIX, STATE):
+        pages = s3.get_paginator("list_objects_v2").paginate(
+            Bucket=bucket, Prefix=prefix, ExpectedBucketOwner=str(AWS["account_id"]))
+        for page in pages:
+            for obj in page.get("Contents", []):
+                etags[obj["Key"]] = obj["ETag"].strip('"')
     return etags
 
 

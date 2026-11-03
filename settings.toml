@@ -83,6 +83,16 @@ reports_prefix = "reports/"    # what runs in AWS writes here (never under input
 check_memory_mb = 1024         # the check Lambda: memory (more memory = more CPU too)
 check_timeout_seconds = 300    # ...how long it may run (it takes seconds today)
 check_disk_mb = 1024           # ...its /tmp disk, which holds a copy of the inputs (about 115 MB today)
+outputs_prefix = "outputs/"    # the engine Lambda writes its results here (flags, views_data.json, views.html)
+state_prefix = "state/"        # state carried between runs: upload.py puts the action log here
+# The engine Lambda runs these steps in order after a clean input check (run_all.ps1 without the
+# laptop-only ones: cockpit_sync reads the page's database copy, check_flags the answer key,
+# actions.py posts to Slack).
+engine_steps = ["flags.py", "journeys.py", "team_report.py", "backtest.py",
+                "onboarding_report.py", "export_views.py"]
+engine_memory_mb = 2048        # the engine Lambda: memory (and CPU with it)
+engine_timeout_seconds = 600   # ...how long it may run (it takes under a minute on the laptop)
+engine_disk_mb = 2048          # ...its /tmp disk: the inputs, the code and what it writes
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo
