@@ -36,7 +36,9 @@ with short comments, and work in small steps (one PR per change).
   The scenario tests (`node tests/scenarios_test.js`, about two minutes) run
   before a demo or milestone, after a regenerate, or when a change touches
   roles, routing, money or the segment bar; their results go to the
-  acceptance page. Docs-only PRs need none. Nothing merges with a FAIL. A bug
+  acceptance page. Every PR that touches infra/ runs `python
+  tests/infra_test.py` (builds the template in memory, no AWS login, no
+  cost). Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
 - Fix review findings now, in the same change or PR. Don't defer them to
   "later": deferred fixes get lost.
@@ -497,6 +499,17 @@ One JSON event per line, one file per day in `data/events/`.
   call when nothing changed or only daily numbers moved; a call for a flag
   status change, a booked QBR, a new email (even with a repeated subject and
   date), a reopened ticket and --force; none on --dry-run. Same PRs as above.
+- `infra/`: the AWS side as code (CDK, Python). `app.py` reads settings.toml
+  [aws] (account, region) and builds `data_stack.py`: one S3 bucket for the
+  engine's data, private (all four public-access blocks, ACLs off), encrypted,
+  HTTPS only, versioned (old versions expire after [aws]
+  keep_old_versions_days), kept if the stack is deleted (Retain), name left to
+  AWS, tag project=cairnpath. Nikodem deploys from `infra/` (`cdk bootstrap`
+  once, then `cdk diff` and `cdk deploy`, all with `--profile cairnpath`);
+  steps in `infra/README.md`. Nothing is uploaded yet.
+- `tests/infra_test.py`: checks the template before anything reaches AWS
+  (each safety setting above, account and region from settings, the bucket
+  name output). Exit 1 on any FAIL.
 
 ## Planned next
 
@@ -510,7 +523,8 @@ One JSON event per line, one file per day in `data/events/`.
   sets, so the CLI uses the Builder ID session in the management account
   (profile cairnpath, settings.toml [aws]); workloads sit in the management
   account for now, a deliberate exception (all in code, so they can move).
-  Next: a CDK app (S3 bucket), then the pipeline on a schedule.
+  The CDK app with the data bucket is in infra/ (3 Nov 2026). Next: deploy it,
+  upload the data, then the pipeline on a schedule.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a
