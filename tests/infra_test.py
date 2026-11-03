@@ -16,6 +16,8 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "infra")]
+import os                                               # noqa: E402
+os.environ.setdefault("CAIRNPATH_SKIP_DEPS", "1")       # build the template without fetching DuckDB
 
 import aws_cdk as cdk                                   # noqa: E402
 from aws_cdk.assertions import Match, Template          # noqa: E402
@@ -74,47 +76,75 @@ check(stack.region == SETTINGS["aws"]["region"] and stack.account == str(SETTING
       f"account and region from settings.toml ({stack.account}, {stack.region})")
 check("BucketName" in t.find_outputs("*"), "prints the bucket name after deploy")
 
-print("\nCheck Lambda: wakes on the marker, least privilege")
 aws = SETTINGS["aws"]
-fns = {k: v for k, v in t.find_resources("AWS::Lambda::Function").items()
-       if v["Properties"].get("Handler") == "handler.handler"}
-fn_id, fn = next(iter(fns.items()), (None, {}))
-props = fn.get("Properties", {})
-check(len(fns) == 1, "one check function", f"{len(fns)} found")
-check(props.get("Runtime") == "python3.13" and props.get("Architectures") == ["arm64"],
-      "Python 3.13 on Graviton (arm64)", f"{props.get('Runtime')} {props.get('Architectures')}")
-check(props.get("MemorySize") == aws["check_memory_mb"] and props.get("Timeout") == aws["check_timeout_seconds"]
-      and props.get("EphemeralStorage", {}).get("Size") == aws["check_disk_mb"],
-      "memory, timeout and disk from settings.toml [aws]")
-env = props.get("Environment", {}).get("Variables", {})
-check(env.get("INPUTS_PREFIX") == aws["inputs_prefix"] and env.get("MARKER_NAME") == aws["upload_marker"]
-      and env.get("REPORTS_PREFIX") == aws["reports_prefix"] + "check_inputs/"
-      and env.get("ACCOUNT_ID") == str(aws["account_id"]) and "Ref" in str(env.get("BUCKET")),
-      "told the bucket, prefixes, marker and account (no hard-coded bucket name)", env)
 r = has(t, "AWS::Logs::LogGroup", {"RetentionInDays": 30})
-check(r is True, "logs kept 30 days, then deleted (no cost pile-up)", r)
+check(r is True and len(t.find_resources("AWS::Logs::LogGroup")) == 2,
+      "both Lambdas' logs kept 30 days, then deleted (no cost pile-up)", r)
 notes = t.find_resources("Custom::S3BucketNotifications")
-cfg = next(iter(notes.values()), {}).get("Properties", {}).get("NotificationConfiguration", {})
-lam = cfg.get("LambdaFunctionConfigurations", [])
-rules = [r["Filter"]["Key"]["FilterRules"] for r in lam] if lam else []
-check(len(lam) == 1 and lam[0]["Events"] == ["s3:ObjectCreated:*"]
-      and rules[0] == [{"Name": "prefix", "Value": aws["inputs_prefix"] + aws["upload_marker"]}],
-      "wakes only on the upload-complete marker (one run per upload, never on its own reports)", lam)
-policies = [v for v in t.find_resources("AWS::IAM::Policy").values()
-            if any(r.get("Ref") == props.get("Role", {}).get("Fn::GetAtt", [None])[0]
-                   for r in v["Properties"].get("Roles", []))]
-stmts = [s for p in policies for s in p["Properties"]["PolicyDocument"]["Statement"]]
-actions = [a for s in stmts for a in ([s["Action"]] if isinstance(s["Action"], str) else s["Action"])]
-text = json.dumps(stmts)
-check(bool(stmts) and "s3:*" not in actions and not any(a.startswith("s3:Delete") for a in actions),
-      "its role has no s3:* and no delete", actions)
-check("/" + aws["inputs_prefix"] + "*" in text and "/" + aws["reports_prefix"] + "check_inputs/*" in text,
-      "reads only inputs/*, writes only reports/check_inputs/*")
-puts = [s for s in stmts if any(a.startswith("s3:PutObject") for a in
-        ([s["Action"]] if isinstance(s["Action"], str) else s["Action"]))]
-check(bool(puts) and all('"/' + aws["inputs_prefix"] + '*"' not in json.dumps(s["Resource"]) for s in puts),
-      "can't write to inputs/ (so it can never trigger itself)")
-check("CheckFunction" in t.find_outputs("*"), "prints the function name after deploy")
+lam = next(iter(notes.values()), {}).get("Properties", {}).get("NotificationConfiguration", {}) \
+    .get("LambdaFunctionConfigurations", [])
+check(len(lam) == 2, "the bucket wakes exactly two functions", lam)
+ours = {k: v for k, v in t.find_resources("AWS::Lambda::Function").items()
+        if v["Properties"].get("Handler") == "handler.handler"}
+
+
+def actions_of(stmt):
+    return [stmt["Action"]] if isinstance(stmt["Action"], str) else stmt["Action"]
+
+
+def lambda_checks(title, env_key, prefix, trigger, may_read, may_write, never_write, output, retries):
+    """One of our Lambdas: runtime, sizes from settings, its single trigger, least privilege."""
+    print(f"\n{title}")
+    found = {k: v for k, v in ours.items() if env_key in v["Properties"]["Environment"]["Variables"]}
+    fn_id, fn = next(iter(found.items()), (None, {}))
+    props = fn.get("Properties", {})
+    check(len(found) == 1, "one function", f"{len(found)} found")
+    check(props.get("Runtime") == "python3.13" and props.get("Architectures") == ["arm64"],
+          "Python 3.13 on Graviton (arm64)", f"{props.get('Runtime')} {props.get('Architectures')}")
+    check(props.get("MemorySize") == aws[prefix + "_memory_mb"] and props.get("Timeout") == aws[prefix + "_timeout_seconds"]
+          and props.get("EphemeralStorage", {}).get("Size") == aws[prefix + "_disk_mb"],
+          "memory, timeout and disk from settings.toml [aws]")
+    env = props.get("Environment", {}).get("Variables", {})
+    check(env.get("ACCOUNT_ID") == str(aws["account_id"]) and "Ref" in str(env.get("BUCKET")),
+          "told the bucket (not hard-coded) and the account")
+    mine = [c for c in lam if c["LambdaFunctionArn"].get("Fn::GetAtt", [None])[0] == fn_id]
+    check(len(mine) == 1 and mine[0]["Events"] == ["s3:ObjectCreated:*"]
+          and mine[0]["Filter"]["Key"]["FilterRules"] == [{"Name": "prefix", "Value": trigger}],
+          f"wakes only on {trigger}", mine)
+    cfg = [v for v in t.find_resources("AWS::Lambda::EventInvokeConfig").values()
+           if v["Properties"]["FunctionName"] == {"Ref": fn_id}]
+    check(cfg and cfg[0]["Properties"].get("MaximumRetryAttempts") == retries, f"retries after a crash: {retries}")
+    role = props.get("Role", {}).get("Fn::GetAtt", [None])[0]
+    stmts = [st for v in t.find_resources("AWS::IAM::Policy").values()
+             if any(r.get("Ref") == role for r in v["Properties"].get("Roles", []))
+             for st in v["Properties"]["PolicyDocument"]["Statement"]]
+    acts = [a for st in stmts for a in actions_of(st)]
+    check(bool(stmts) and "s3:*" not in acts and not any(a.startswith("s3:Delete") for a in acts),
+          "its role has no s3:* and no delete", acts)
+    text = json.dumps(stmts)
+    check(all('/' + r + '"' in text for r in may_read), f"may read {', '.join(may_read)}")
+    puts = [st for st in stmts if any(a.startswith("s3:PutObject") for a in actions_of(st))]
+    put_text = json.dumps([st["Resource"] for st in puts])
+    check(bool(puts) and all('/' + w + '"' in put_text for w in may_write)
+          and not any('"/' + w in put_text for w in never_write),
+          f"writes only {', '.join(may_write)}; never {', '.join(never_write)} (no loops)", put_text)
+    check(output in t.find_outputs("*"), "prints the function name after deploy")
+
+
+reports = aws["reports_prefix"] + "check_inputs/"
+lambda_checks("Check Lambda: wakes on the upload marker, least privilege", "REPORTS_PREFIX",
+              "check", aws["inputs_prefix"] + aws["upload_marker"],
+              may_read=[aws["inputs_prefix"] + "*"], may_write=[reports + "*"],
+              never_write=[aws["inputs_prefix"]], output="CheckFunction", retries=1)
+lambda_checks("Engine Lambda: wakes on the check's verdict, least privilege", "ENGINE_STEPS",
+              "engine", reports + "latest.json",
+              may_read=[aws["inputs_prefix"] + "*", aws["state_prefix"] + "*", reports + "latest.json"],
+              may_write=[aws["outputs_prefix"] + "*"],
+              never_write=[aws["inputs_prefix"], aws["reports_prefix"], aws["state_prefix"]],
+              output="EngineFunction", retries=0)
+engine_env = next(v for v in ours.values() if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"])
+check(json.loads(engine_env["Properties"]["Environment"]["Variables"]["ENGINE_STEPS"]) == aws["engine_steps"],
+      "runs the steps in [aws] engine_steps, in order")
 
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)
