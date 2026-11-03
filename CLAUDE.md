@@ -38,7 +38,7 @@ with short comments, and work in small steps (one PR per change).
   roles, routing, money or the segment bar; their results go to the
   acceptance page. Every PR that touches infra/ runs `python
   tests/infra_test.py` (builds the template in memory, no AWS login, no
-  cost). Docs-only PRs need none. Nothing merges with a FAIL. A bug
+  cost); one that touches upload.py runs `python tests/upload_test.py`. Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
 - Fix review findings now, in the same change or PR. Don't defer them to
   "later": deferred fixes get lost.
@@ -510,6 +510,17 @@ One JSON event per line, one file per day in `data/events/`.
 - `tests/infra_test.py`: checks the template before anything reaches AWS
   (each safety setting above, account and region from settings, the bucket
   name output). Exit 1 on any FAIL.
+- `upload.py`: copies the inputs named in [data] to the data bucket ([aws]
+  bucket, under [aws] inputs_prefix, same folder layout). Only new or changed
+  files go up (local MD5 vs. the object's ETag), so reruns send nothing and
+  versioning records real changes only. Checks the bucket is ours
+  (ExpectedBucketOwner = [aws] account_id). Never the answer key or the
+  engine's outputs. `--dry-run` says what would go. Not in run_all yet.
+  Sign in first (`aws login --profile cairnpath`).
+- `tests/upload_test.py`: a stand-in S3 (no AWS, no cost): first run sends
+  every input, a rerun nothing, then only a changed and a new file; keys use
+  "/"; the answer key and outputs stay local; another account's bucket is
+  refused. Exit 1 on any FAIL.
 
 ## Planned next
 
@@ -523,8 +534,9 @@ One JSON event per line, one file per day in `data/events/`.
   sets, so the CLI uses the Builder ID session in the management account
   (profile cairnpath, settings.toml [aws]); workloads sit in the management
   account for now, a deliberate exception (all in code, so they can move).
-  The CDK app with the data bucket is in infra/ (3 Nov 2026). Next: deploy it,
-  upload the data, then the pipeline on a schedule.
+  The CDK app with the data bucket is in infra/, deployed 3 Nov 2026
+  (CairnpathData, bucket name in settings.toml [aws]); upload.py copies the
+  inputs there. Next: Lambda ingestion, then the pipeline on a schedule.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a

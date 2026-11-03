@@ -75,6 +75,9 @@ profile = "cairnpath"
 region = "eu-north-1"          # Stockholm: the region the organization's SCPs fully open
 account_id = "809071263914"    # not a secret; CDK deploys check they're in this account
 keep_old_versions_days = 30    # data bucket: overwritten or deleted files kept this long, then removed
+# The data bucket, as `cdk deploy` printed it (CairnpathData.BucketName). Not a secret.
+bucket = "cairnpathdata-data666c94c7-mp5lz9ky9ir4"
+inputs_prefix = "inputs/"      # upload.py puts the inputs under this folder in the bucket
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo
