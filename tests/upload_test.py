@@ -42,7 +42,8 @@ class FakeS3:
 
     def put_object(self, Bucket, Key, Body, **kw):
         self._check(kw)
-        self.objects[Key] = hashlib.md5(Body.read()).hexdigest()
+        data = Body if isinstance(Body, bytes) else Body.read()      # S3 takes bytes or a file
+        self.objects[Key] = hashlib.md5(data).hexdigest()
         self.puts.append(Key)
 
 
@@ -56,9 +57,14 @@ def check(ok, name, detail=""):
 
 
 def step(s3, dry_run=False):
+    """Run upload.py; return the input files it sent (the marker is checked on its own)."""
     before = len(s3.puts)
-    upload.run(s3, dry_run)
-    return s3.puts[before:]
+    upload.run(s3, dry_run, demo=True)
+    return [k for k in s3.puts[before:] if k != upload.MARKER]
+
+
+def markers(s3):
+    return s3.puts.count(upload.MARKER)
 
 
 tmp = Path(tempfile.mkdtemp())
@@ -82,17 +88,25 @@ check(all(k.startswith(upload.PREFIX) for k in sent), f"everything under {upload
 check("inputs/events/2026-10-02.jsonl" in sent, "keeps the folder layout, with / not \\", sent)
 check(not any("answer_key" in k or "action_log" in k for k in sent),
       "the answer key and the engine's outputs are not uploaded")
-check(step(s3) == [], "second run, nothing changed: nothing uploaded")
+check(markers(s3) == 1 and s3.puts[-1] == upload.MARKER,
+      "the upload-complete marker is written once, and last (the check sees a whole batch)")
+check(step(s3) == [] and markers(s3) == 1, "second run, nothing changed: nothing uploaded, no marker")
 
 (tmp / "events" / "2026-10-03.jsonl").write_text('{"day": "edited"}\n', encoding="utf-8")
 (tmp / "events" / "2026-10-04.jsonl").write_text('{"day": "new"}\n', encoding="utf-8")
-check(step(s3, dry_run=True) == [], "--dry-run uploads nothing")
+check(step(s3, dry_run=True) == [] and markers(s3) == 1, "--dry-run uploads nothing, writes no marker")
 sent = step(s3)
 check(sorted(sent) == ["inputs/events/2026-10-03.jsonl", "inputs/events/2026-10-04.jsonl"],
       "a changed file and a new file: just those two", sent)
+check(markers(s3) == 2, "...then a new marker, so the check runs again")
+check(upload.MARKER not in upload.local_inputs(), "the marker is never treated as an input")
+
+before = len(s3.puts)
+code = upload.run(s3, demo=False)
+check(code == 1 and len(s3.puts) == before, "your own data (not the demo) is refused: nothing leaves the laptop")
 
 try:
-    upload.run(FakeS3("111111111111"))
+    upload.run(FakeS3("111111111111"), demo=True)
     check(False, "refuses a bucket owned by another account")
 except PermissionError:
     check(True, "refuses a bucket owned by another account (ExpectedBucketOwner)")

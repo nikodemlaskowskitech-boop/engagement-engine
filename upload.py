@@ -13,18 +13,30 @@ Only new or changed files go up: each file's MD5 fingerprint is compared with
 the one S3 keeps for it (its ETag). So a rerun sends nothing, and the bucket's
 versioning keeps a history of real changes, not of reruns.
 
+When something went up, the last file written is a small marker
+(inputs/_upload_complete.json, name in [aws] upload_marker). It tells AWS the
+batch is complete: the check Lambda wakes on it, once per upload, never
+halfway through. A rerun with nothing new writes no marker and wakes nothing.
+
+Demo data only: your own exports (settings.local.toml [data] inputs pointing
+elsewhere) stay on your machine, as Phase 4d promises. upload.py refuses them.
+
 Sign in first: aws login --profile cairnpath (the profile in [aws]).
 """
 
 import argparse
 import hashlib
+import json
 import sys
+from datetime import datetime, timezone
 
-from settings import INPUTS, SETTINGS
+from settings import DEMO, INPUTS, SETTINGS
 
 AWS = SETTINGS["aws"]
 DATA = SETTINGS["data"]
 PREFIX = AWS["inputs_prefix"].strip("/") + "/"
+MARKER = PREFIX + AWS["upload_marker"]
+SHOW = 10                    # file names printed per run; the rest is a count
 
 
 def local_inputs():
@@ -74,7 +86,11 @@ def plan(local, remote):
     return new, changed, same
 
 
-def run(s3, dry_run=False):
+def run(s3, dry_run=False, demo=None):
+    if not (DEMO if demo is None else demo):
+        print(f"Not uploading: {INPUTS} is your own data (settings.local.toml), and it stays on "
+              "this machine. upload.py sends the demo data only.")
+        return 1
     bucket = AWS["bucket"]
     local = local_inputs()
     if not local:
@@ -83,9 +99,13 @@ def run(s3, dry_run=False):
     new, changed, same = plan(local, remote_etags(s3, bucket))
     print(f"Bucket {bucket}, folder {PREFIX}: {len(new)} new, {len(changed)} changed, "
           f"{len(same)} unchanged ({len(local)} input files)")
-    for key in new + changed:
-        print(f"  {'would upload' if dry_run else 'upload'}  {key}"
-              f"{'  (changed)' if key in changed else ''}")
+    todo = new + changed
+    for i, key in enumerate(todo):
+        if i < SHOW:
+            print(f"  {'would upload' if dry_run else 'upload'}  {key}"
+                  f"{'  (changed)' if key in changed else ''}")
+        elif i == SHOW:
+            print(f"  ... and {len(todo) - SHOW} more")
         if not dry_run:
             # put_object: one request per file, so the ETag stays the plain MD5.
             # ExpectedBucketOwner: refuse if the bucket ever belonged to another account.
@@ -93,7 +113,15 @@ def run(s3, dry_run=False):
                 s3.put_object(Bucket=bucket, Key=key, Body=body,
                               ExpectedBucketOwner=str(AWS["account_id"]))
     if dry_run:
-        print("Dry run: nothing uploaded.")
+        print("Dry run: nothing uploaded." + (" Would then write the upload-complete marker." if todo else ""))
+    elif todo:
+        # last, so the check in AWS only ever sees a complete batch
+        marker = {"uploaded_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                  "new": len(new), "changed": len(changed), "files": len(local)}
+        s3.put_object(Bucket=bucket, Key=MARKER, Body=json.dumps(marker).encode("utf-8"),
+                      ExpectedBucketOwner=str(AWS["account_id"]))
+        print(f"Done. Marker written ({MARKER}): the input check runs in AWS now; "
+              f"its report lands in {AWS['reports_prefix']}check_inputs/latest.txt in a minute.")
     return 0
 
 

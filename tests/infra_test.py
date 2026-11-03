@@ -9,6 +9,7 @@ Needs aws-cdk-lib and constructs (requirements.txt) and Node.js (CDK runs on
 it). Exit 1 on any FAIL. Run it on every PR that touches infra/.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -72,6 +73,48 @@ check("BucketName" not in bucket.get("Properties", {}), "name left to AWS (no ha
 check(stack.region == SETTINGS["aws"]["region"] and stack.account == str(SETTINGS["aws"]["account_id"]),
       f"account and region from settings.toml ({stack.account}, {stack.region})")
 check("BucketName" in t.find_outputs("*"), "prints the bucket name after deploy")
+
+print("\nCheck Lambda: wakes on the marker, least privilege")
+aws = SETTINGS["aws"]
+fns = {k: v for k, v in t.find_resources("AWS::Lambda::Function").items()
+       if v["Properties"].get("Handler") == "handler.handler"}
+fn_id, fn = next(iter(fns.items()), (None, {}))
+props = fn.get("Properties", {})
+check(len(fns) == 1, "one check function", f"{len(fns)} found")
+check(props.get("Runtime") == "python3.13" and props.get("Architectures") == ["arm64"],
+      "Python 3.13 on Graviton (arm64)", f"{props.get('Runtime')} {props.get('Architectures')}")
+check(props.get("MemorySize") == aws["check_memory_mb"] and props.get("Timeout") == aws["check_timeout_seconds"]
+      and props.get("EphemeralStorage", {}).get("Size") == aws["check_disk_mb"],
+      "memory, timeout and disk from settings.toml [aws]")
+env = props.get("Environment", {}).get("Variables", {})
+check(env.get("INPUTS_PREFIX") == aws["inputs_prefix"] and env.get("MARKER_NAME") == aws["upload_marker"]
+      and env.get("REPORTS_PREFIX") == aws["reports_prefix"] + "check_inputs/"
+      and env.get("ACCOUNT_ID") == str(aws["account_id"]) and "Ref" in str(env.get("BUCKET")),
+      "told the bucket, prefixes, marker and account (no hard-coded bucket name)", env)
+r = has(t, "AWS::Logs::LogGroup", {"RetentionInDays": 30})
+check(r is True, "logs kept 30 days, then deleted (no cost pile-up)", r)
+notes = t.find_resources("Custom::S3BucketNotifications")
+cfg = next(iter(notes.values()), {}).get("Properties", {}).get("NotificationConfiguration", {})
+lam = cfg.get("LambdaFunctionConfigurations", [])
+rules = [r["Filter"]["Key"]["FilterRules"] for r in lam] if lam else []
+check(len(lam) == 1 and lam[0]["Events"] == ["s3:ObjectCreated:*"]
+      and rules[0] == [{"Name": "prefix", "Value": aws["inputs_prefix"] + aws["upload_marker"]}],
+      "wakes only on the upload-complete marker (one run per upload, never on its own reports)", lam)
+policies = [v for v in t.find_resources("AWS::IAM::Policy").values()
+            if any(r.get("Ref") == props.get("Role", {}).get("Fn::GetAtt", [None])[0]
+                   for r in v["Properties"].get("Roles", []))]
+stmts = [s for p in policies for s in p["Properties"]["PolicyDocument"]["Statement"]]
+actions = [a for s in stmts for a in ([s["Action"]] if isinstance(s["Action"], str) else s["Action"])]
+text = json.dumps(stmts)
+check(bool(stmts) and "s3:*" not in actions and not any(a.startswith("s3:Delete") for a in actions),
+      "its role has no s3:* and no delete", actions)
+check("/" + aws["inputs_prefix"] + "*" in text and "/" + aws["reports_prefix"] + "check_inputs/*" in text,
+      "reads only inputs/*, writes only reports/check_inputs/*")
+puts = [s for s in stmts if any(a.startswith("s3:PutObject") for a in
+        ([s["Action"]] if isinstance(s["Action"], str) else s["Action"]))]
+check(bool(puts) and all(aws["inputs_prefix"] + "*" not in json.dumps(s["Resource"]) for s in puts),
+      "can't write to inputs/ (so it can never trigger itself)")
+check("CheckFunction" in t.find_outputs("*"), "prints the function name after deploy")
 
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)
