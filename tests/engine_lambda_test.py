@@ -152,6 +152,8 @@ else:
                 "assert Path('data/events').is_dir() and not Path('data/" + MARKER + "').exists()\n"
                 "Path('data/flags_churn.csv').write_text('account_id,status\\n', encoding='utf-8')\n"
                 "Path('data/views_data.json').write_text('{}', encoding='utf-8')\n"
+                "Path('data/tables/flags_churn').mkdir(parents=True)\n"
+                "Path('data/tables/flags_churn/flags_churn.parquet').write_bytes(b'PAR1\\x00\\xff')\n"
                 "print('stand-in step ran')\n")
     (bundle / "stand_in.py").write_text(stand_in, encoding="utf-8")
     h.CODE, h.STEPS = ENGINE_FILES + ["stand_in.py"], ["stand_in.py"]
@@ -163,6 +165,12 @@ check(all(k.startswith(OUTPUTS) for k in s3.writes), "writes only under outputs/
 check(s3.writes[-1] == OUTPUTS + "run.json", "run.json is written last (whoever reads it sees a finished run)")
 out_names = summary["outputs"]
 check("views_data.json" in out_names and "flags_churn.csv" in out_names, "uploads what the engine wrote", out_names)
+if not REAL:
+    check(s3.objects.get(OUTPUTS + "tables/flags_churn/flags_churn.parquet") == b"PAR1\x00\xff",
+          "uploads tables in their own folders (outputs/tables/<name>/), binary files intact")
+else:
+    check(all(OUTPUTS + f"tables/{t}/{t}.parquet" in s3.objects for t in AWS["athena_tables"]),
+          "uploads a Parquet table per [aws] athena_tables entry, each in its own folder")
 check(not ({"crm_accounts.csv", "action_log.csv", "cs_team.csv"} & set(out_names)),
       "never re-uploads an input or the action log as an output")
 check("DONE" in s3.objects[OUTPUTS + "last_run.txt"].decode(), "last_run.txt has every step's output, like run_all")

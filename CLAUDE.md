@@ -527,14 +527,28 @@ One JSON event per line, one file per day in `data/events/`.
   (Linux arm64, Python 3.13, version from requirements.txt) is fetched by pip
   with --platform at synth time, cached in infra/build/ (no Docker);
   CAIRNPATH_SKIP_DEPS=1 skips it for tests. No handover briefs in AWS yet.
+  Plus Athena: a Glue database ([aws] glue_database) filled by a Glue crawler
+  that reads outputs/tables/ (one target per [aws] athena_tables entry, tables
+  made at folder level 4 so same-shaped flag tables stay separate; run it by
+  hand once and after a column change: `aws glue start-crawler`), and an
+  Athena workgroup ([aws] athena_workgroup, settings enforced, results to
+  athena-results/ encrypted and deleted after [aws] athena_results_keep_days,
+  a query scanning over [aws] athena_scan_limit_mb is cancelled).
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
 - `tests/infra_test.py`: checks the template before anything reaches AWS
   (each safety setting above, account and region from settings, the bucket
   name output; for each Lambda: runtime, sizes from settings, its one trigger,
-  retries, least privilege and never writing where a trigger listens). Exit 1
-  on any FAIL.
+  retries, least privilege and never writing where a trigger listens; Athena:
+  database name, the crawler's targets, table level and read-only role, the
+  workgroup's enforced results location, encryption and scan cap, results
+  expiry, nothing waking on outputs/ or athena-results/). Exit 1 on any FAIL.
+- `to_parquet.py`: the last engine step. Writes each [aws] athena_tables
+  entry as data/tables/<name>/<name>.parquet (Athena: one folder = one table):
+  the flag and account value CSVs, tasks (from views_data.json) and the crm and
+  cs_team views (engine column names). Parquet keeps types, reads only the
+  columns a query needs, and has no trouble with commas inside the reasons.
 - `tests/check_lambda_test.py`: builds the Lambda's folder as the deploy does
   and runs its handler on the demo inputs through a stand-in S3: every input
   checked, the marker skipped, reports only under reports/check_inputs/, then a
@@ -581,8 +595,9 @@ One JSON event per line, one file per day in `data/events/`.
   and the engine Lambda runs flags to cockpit export after a clean check
   (outputs/). Warehouse decided 3 Nov 2026: DuckDB in Lambda runs the engine
   (one SQL dialect, same numbers as the laptop); Athena + Glue tables over
-  outputs/ for ad-hoc questions come next. Then a schedule, and the handover
-  briefs in AWS (their cache files kept in S3 between runs).
+  outputs/ for ad-hoc questions (built 3 Nov 2026: crawler, Glue database,
+  workgroup). Then a schedule, and the handover briefs in AWS (their cache
+  files kept in S3 between runs).
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a

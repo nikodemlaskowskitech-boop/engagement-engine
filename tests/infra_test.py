@@ -142,6 +142,43 @@ lambda_checks("Engine Lambda: wakes on the check's verdict, least privilege", "E
               may_write=[aws["outputs_prefix"] + "*"],
               never_write=[aws["inputs_prefix"], aws["reports_prefix"], aws["state_prefix"]],
               output="EngineFunction", retries=0)
+
+print("\nAthena: tables over outputs/tables/, results kept 7 days, a scan cap per query")
+dbs = t.find_resources("AWS::Glue::Database")
+check([v["Properties"]["DatabaseInput"]["Name"] for v in dbs.values()] == [aws["glue_database"]],
+      f"one Glue database, {aws['glue_database']} (name from settings)")
+crawlers = t.find_resources("AWS::Glue::Crawler")
+cr = next(iter(crawlers.values()), {}).get("Properties", {})
+paths = [json.dumps(tg["Path"]) for tg in cr.get("Targets", {}).get("S3Targets", [])]
+check(len(crawlers) == 1 and len(paths) == len(aws["athena_tables"])
+      and all(f'/{aws["outputs_prefix"]}tables/{n}/' in p for n, p in zip(aws["athena_tables"], paths)),
+      "the crawler reads one folder per table in [aws] athena_tables, under outputs/tables/", paths)
+check(json.loads(cr.get("Configuration", "{}")).get("Grouping", {}).get("TableLevelConfiguration") == 4,
+      "tables made at the folder level (the 5 same-shaped flag tables stay 5 tables, not merged)")
+crole = cr.get("Role", {}).get("Fn::GetAtt", [None])[0]
+cstmts = [st for v in t.find_resources("AWS::IAM::Policy").values()
+          if any(r.get("Ref") == crole for r in v["Properties"].get("Roles", []))
+          for st in v["Properties"]["PolicyDocument"]["Statement"]]
+cacts = [a for st in cstmts for a in actions_of(st)]
+check(bool(cstmts) and not any(a.startswith(("s3:Put", "s3:Delete")) or a == "s3:*" for a in cacts)
+      and '/' + aws["outputs_prefix"] + 'tables/*"' in json.dumps(cstmts),
+      "the crawler may read outputs/tables/* only, never write to the bucket", cacts)
+wgs = t.find_resources("AWS::Athena::WorkGroup")
+wg = next(iter(wgs.values()), {}).get("Properties", {})
+wcfg = wg.get("WorkGroupConfiguration", {})
+check(wg.get("Name") == aws["athena_workgroup"] and wcfg.get("EnforceWorkGroupConfiguration") is True,
+      "one Athena workgroup, its settings enforced (a query can't send results elsewhere)")
+check(wcfg.get("BytesScannedCutoffPerQuery") == aws["athena_scan_limit_mb"] * 1024 * 1024,
+      f"a query scanning over {aws['athena_scan_limit_mb']} MB is cancelled (cost guard)")
+check(f'/{aws["athena_results_prefix"]}' in json.dumps(wcfg.get("ResultConfiguration", {}).get("OutputLocation"))
+      and wcfg["ResultConfiguration"].get("EncryptionConfiguration", {}).get("EncryptionOption") == "SSE_S3",
+      "query results go to athena-results/ in our bucket, encrypted")
+r = has(t, "AWS::S3::Bucket", {"LifecycleConfiguration": {"Rules": Match.array_with([Match.object_like({
+    "Prefix": aws["athena_results_prefix"], "ExpirationInDays": aws["athena_results_keep_days"]})])}})
+check(r is True, f"query results deleted after {aws['athena_results_keep_days']} days", r)
+check(not any(c["Filter"]["Key"]["FilterRules"][0]["Value"].startswith((aws["outputs_prefix"], aws["athena_results_prefix"]))
+              for c in lam), "nothing wakes on outputs/ or athena-results/ (no loops)")
+
 engine_env = next(v for v in ours.values() if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"])
 check(json.loads(engine_env["Properties"]["Environment"]["Variables"]["ENGINE_STEPS"]) == aws["engine_steps"],
       "runs the steps in [aws] engine_steps, in order")
