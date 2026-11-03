@@ -19,3 +19,9 @@ Needs Node.js (for the `cdk` command: `npm install -g aws-cdk`) and the pinned
 After a deploy, put the printed bucket name in settings.toml [aws] bucket. Then,
 from the repo root, `python upload.py --dry-run` and `python upload.py` copy the
 engine's inputs into it.
+
+What runs in AWS today: the check Lambda (CheckInputs). Each `python upload.py`
+that sends something writes a marker last; the Lambda wakes on it, checks the
+inputs with check_inputs.py and writes `reports/check_inputs/latest.txt` (the
+report) and `latest.json` (status OK / WARN / ERROR) in the bucket. Its logs are
+in CloudWatch Logs (the function's log group), kept 30 days.

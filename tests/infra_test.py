@@ -112,7 +112,7 @@ check("/" + aws["inputs_prefix"] + "*" in text and "/" + aws["reports_prefix"] +
       "reads only inputs/*, writes only reports/check_inputs/*")
 puts = [s for s in stmts if any(a.startswith("s3:PutObject") for a in
         ([s["Action"]] if isinstance(s["Action"], str) else s["Action"]))]
-check(bool(puts) and all(aws["inputs_prefix"] + "*" not in json.dumps(s["Resource"]) for s in puts),
+check(bool(puts) and all('"/' + aws["inputs_prefix"] + '*"' not in json.dumps(s["Resource"]) for s in puts),
       "can't write to inputs/ (so it can never trigger itself)")
 check("CheckFunction" in t.find_outputs("*"), "prints the function name after deploy")
 
