@@ -24,6 +24,7 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_s3_notifications as s3n
+from aws_cdk import aws_scheduler as scheduler
 from constructs import Construct
 
 import json
@@ -119,6 +120,24 @@ class DataStack(Stack):
             s3.EventType.OBJECT_CREATED, s3n.LambdaDestination(engine),
             s3.NotificationKeyFilter(prefix=check_summary))
         CfnOutput(self, "EngineFunction", value=engine.function_name)
+
+        # --- the daily safety net: EventBridge Scheduler wakes the engine once a day ---
+        self.bucket.grant_read(engine, outputs + "run.json")        # to see whether it's up to date
+        schedule_role = iam.Role(
+            self, "ScheduleRole",
+            assumed_by=iam.ServicePrincipal("scheduler.amazonaws.com", conditions={
+                "StringEquals": {"aws:SourceAccount": self.account}}))   # only our own schedules
+        engine.grant_invoke(schedule_role)                               # may start the engine, nothing else
+        scheduler.CfnSchedule(
+            self, "EngineSchedule",
+            description="Daily safety net: runs the engine if the last run was missed or failed",
+            schedule_expression=aws["engine_schedule"],
+            schedule_expression_timezone=aws["engine_schedule_timezone"],
+            flexible_time_window=scheduler.CfnSchedule.FlexibleTimeWindowProperty(mode="OFF"),
+            target=scheduler.CfnSchedule.TargetProperty(
+                arn=engine.function_arn, role_arn=schedule_role.role_arn,
+                input=json.dumps({"trigger": "schedule"}),
+                retry_policy=scheduler.CfnSchedule.RetryPolicyProperty(maximum_retry_attempts=0)))
 
         # --- Athena: ask your own questions of the engine's results ---
         # Glue Data Catalog = the list of tables ("this folder is a table with these columns").

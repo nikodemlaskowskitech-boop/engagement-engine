@@ -138,7 +138,8 @@ lambda_checks("Check Lambda: wakes on the upload marker, least privilege", "REPO
               never_write=[aws["inputs_prefix"]], output="CheckFunction", retries=1)
 lambda_checks("Engine Lambda: wakes on the check's verdict, least privilege", "ENGINE_STEPS",
               "engine", reports + "latest.json",
-              may_read=[aws["inputs_prefix"] + "*", aws["state_prefix"] + "*", reports + "latest.json"],
+              may_read=[aws["inputs_prefix"] + "*", aws["state_prefix"] + "*", reports + "latest.json",
+                        aws["outputs_prefix"] + "run.json"],
               may_write=[aws["outputs_prefix"] + "*"],
               never_write=[aws["inputs_prefix"], aws["reports_prefix"], aws["state_prefix"]],
               output="EngineFunction", retries=0)
@@ -178,6 +179,28 @@ r = has(t, "AWS::S3::Bucket", {"LifecycleConfiguration": {"Rules": Match.array_w
 check(r is True, f"query results deleted after {aws['athena_results_keep_days']} days", r)
 check(not any(c["Filter"]["Key"]["FilterRules"][0]["Value"].startswith((aws["outputs_prefix"], aws["athena_results_prefix"]))
               for c in lam), "nothing wakes on outputs/ or athena-results/ (no loops)")
+
+print("\nSchedule: a daily safety net for the engine")
+scheds = t.find_resources("AWS::Scheduler::Schedule")
+sc = next(iter(scheds.values()), {}).get("Properties", {})
+engine_id = next(k for k, v in ours.items() if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"])
+check(len(scheds) == 1 and sc.get("ScheduleExpression") == aws["engine_schedule"]
+      and sc.get("ScheduleExpressionTimezone") == aws["engine_schedule_timezone"],
+      f"one schedule, {aws['engine_schedule']} in {aws['engine_schedule_timezone']} (from settings)")
+tg = sc.get("Target", {})
+check(tg.get("Arn") == {"Fn::GetAtt": [engine_id, "Arn"]} and json.loads(tg.get("Input", "{}")) == {"trigger": "schedule"}
+      and tg.get("RetryPolicy", {}).get("MaximumRetryAttempts") == 0,
+      "wakes the engine Lambda with {\"trigger\": \"schedule\"}, no retries")
+srole = tg.get("RoleArn", {}).get("Fn::GetAtt", [None])[0]
+trust = t.find_resources("AWS::IAM::Role").get(srole, {}).get("Properties", {}).get("AssumeRolePolicyDocument", {})
+check("scheduler.amazonaws.com" in json.dumps(trust) and "aws:SourceAccount" in json.dumps(trust),
+      "its role is for EventBridge Scheduler, only on schedules in our own account")
+sstmts = [st for v in t.find_resources("AWS::IAM::Policy").values()
+          if any(r.get("Ref") == srole for r in v["Properties"].get("Roles", []))
+          for st in v["Properties"]["PolicyDocument"]["Statement"]]
+check(bool(sstmts) and {a for st in sstmts for a in actions_of(st)} == {"lambda:InvokeFunction"}
+      and all(engine_id in json.dumps(st["Resource"]) for st in sstmts),
+      "and it may only start the engine, nothing else", sstmts)
 
 engine_env = next(v for v in ours.values() if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"])
 check(json.loads(engine_env["Properties"]["Environment"]["Variables"]["ENGINE_STEPS"]) == aws["engine_steps"],

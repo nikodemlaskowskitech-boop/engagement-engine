@@ -16,6 +16,11 @@ cockpit page views.html and the Parquet tables for Athena (outputs/tables/),
 plus last_run.txt (everything the steps printed) and
 run.json (the summary, written last).
 
+Also runs once a day on a schedule (EventBridge Scheduler, event {"trigger":
+"schedule"}), as a safety net: if the last run is OK and was made on the data
+the check last saw, there's nothing new and it stops (SKIPPED, "up to date");
+if an event-driven run was missed or failed, the schedule catches it up.
+
 Only writes under outputs/, so it can never trigger the check or itself.
 A failing step is a real failure: run.json says FAILED, then the function raises.
 """
@@ -63,6 +68,16 @@ def check_status(s3):
     return json.loads(body)
 
 
+def up_to_date(s3, check):
+    """True when the last run went fine and used the same input check as now."""
+    try:
+        last = json.loads(s3.get_object(Bucket=BUCKET, Key=OUTPUTS + "run.json",
+                                         ExpectedBucketOwner=OWNER)["Body"].read())
+    except Exception:                           # no run yet (or unreadable): not up to date
+        return False
+    return last.get("status") == "OK" and last.get("check", {}).get("checked_at") == check.get("checked_at")
+
+
 def download(s3, prefix, folder, skip=()):
     """Copy every object under prefix into folder, same layout. Returns the relative paths."""
     got = []
@@ -99,7 +114,8 @@ def run_steps(work):
 def handler(event, context, s3=None, work=None):
     s3 = s3 or _s3()
     started = time.time()
-    trigger = next((r["s3"]["object"]["key"] for r in event.get("Records", [])), "manual")
+    trigger = next((r["s3"]["object"]["key"] for r in event.get("Records", [])),
+                   event.get("trigger", "manual"))
     summary = {"started_at": now(), "triggered_by": trigger}
 
     check = check_status(s3)
@@ -107,6 +123,11 @@ def handler(event, context, s3=None, work=None):
     if check.get("status") == "ERROR":          # the gate: never compute on data that failed its check
         summary.update(status="SKIPPED", reason="the input check found errors (reports/check_inputs/latest.txt)")
         put(s3, OUTPUTS + "run.json", json.dumps(summary, indent=2), "application/json")
+        print(json.dumps(summary))
+        return summary
+    if trigger == "schedule" and up_to_date(s3, check):
+        # nothing new since the last good run: say so, but leave that run's run.json as it is
+        summary.update(status="SKIPPED", reason="up to date: the last run was OK, on the data the check last saw")
         print(json.dumps(summary))
         return summary
 

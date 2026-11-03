@@ -184,6 +184,27 @@ if REAL:
         same = s3.objects[OUTPUTS + name] == (REPO / "data" / name).read_bytes()
         check(same, f"{name} matches the laptop's, byte for byte")
 
+print("\nEngine Lambda: the daily schedule (a safety net)")
+sched = {"trigger": "schedule"}
+s3 = FakeS3(bucket_with_demo("WARN"))
+first = h.handler(sched, None, s3=s3, work=work)
+check(first["status"] == "OK" and first["triggered_by"] == "schedule", "no run yet: the schedule runs the engine", first.get("status"))
+before = list(s3.writes)
+again = h.handler(sched, None, s3=s3, work=work)
+check(again["status"] == "SKIPPED" and "up to date" in again["reason"] and s3.writes == before,
+      "next day, nothing new: SKIPPED 'up to date', writes nothing (the good run.json stays)", again)
+s3.objects[CHECK] = json.dumps({"status": "WARN", "errors": 0, "warnings": 2,
+                                "checked_at": "2026-11-04T00:00:00Z"}).encode()
+newer = h.handler(sched, None, s3=s3, work=work)
+check(newer["status"] == "OK", "a newer input check than the last run: the schedule catches up", newer.get("status"))
+last = json.loads(s3.objects[OUTPUTS + "run.json"]); last["status"] = "FAILED"
+s3.objects[OUTPUTS + "run.json"] = json.dumps(last).encode()
+retry = h.handler(sched, None, s3=s3, work=work)
+check(retry["status"] == "OK", "the last run FAILED: the schedule runs it again", retry.get("status"))
+s3 = FakeS3(bucket_with_demo("ERROR"))
+gated = h.handler(sched, None, s3=s3, work=work)
+check(gated["status"] == "SKIPPED" and "errors" in gated["reason"], "the gate still applies on a schedule (check ERROR)")
+
 print("\nEngine Lambda: a step that fails")
 (bundle / "broken.py").write_text("raise SystemExit('this step broke')\n", encoding="utf-8")
 h.CODE, h.STEPS = ENGINE_FILES + ["broken.py"], ["broken.py"]

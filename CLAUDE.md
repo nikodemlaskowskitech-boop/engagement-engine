@@ -527,6 +527,11 @@ One JSON event per line, one file per day in `data/events/`.
   (Linux arm64, Python 3.13, version from requirements.txt) is fetched by pip
   with --platform at synth time, cached in infra/build/ (no Docker);
   CAIRNPATH_SKIP_DEPS=1 skips it for tests. No handover briefs in AWS yet.
+  Plus a daily safety net: EventBridge Scheduler ([aws] engine_schedule and
+  engine_schedule_timezone) starts the engine with {"trigger": "schedule"};
+  if the last outputs/run.json is OK and used the same input check, it stops
+  (SKIPPED "up to date", run.json untouched), otherwise it runs (a missed or
+  failed event-driven run is caught up). Its role may only invoke the engine.
   Plus Athena: a Glue database ([aws] glue_database) filled by a Glue crawler
   that reads outputs/tables/ (one target per [aws] athena_tables entry, tables
   made at folder level 4 so same-shaped flag tables stay separate; run it by
@@ -556,7 +561,9 @@ One JSON event per line, one file per day in `data/events/`.
 - `tests/engine_lambda_test.py`: the engine Lambda's bundle holds every repo
   module the steps import; the gate (check ERROR = SKIPPED, nothing computed);
   a run against a stand-in S3 (inputs and action log in, only new files out,
-  all under outputs/, run.json last, work folder cleaned); a failing step gives
+  all under outputs/, run.json last, work folder cleaned); the schedule (runs
+  when there's no good run yet, a newer check or a failed last run; otherwise
+  SKIPPED "up to date" with no writes; the gate still applies); a failing step gives
   FAILED and raises. With DuckDB installed it runs the real steps and compares
   the flags with the laptop's data/; without, stand-in steps. Needs data/.
 - `upload.py`: copies the inputs named in [data] to the data bucket ([aws]
@@ -596,8 +603,9 @@ One JSON event per line, one file per day in `data/events/`.
   (outputs/). Warehouse decided 3 Nov 2026: DuckDB in Lambda runs the engine
   (one SQL dialect, same numbers as the laptop); Athena + Glue tables over
   outputs/ for ad-hoc questions (built 3 Nov 2026: crawler, Glue database,
-  workgroup). Then a schedule, and the handover briefs in AWS (their cache
-  files kept in S3 between runs).
+  workgroup), and a daily schedule as a safety net. Next: the handover briefs
+  in AWS (their cache files kept in S3 between runs; Bedrock, or the API key
+  in Secrets Manager), then the Slack listener on API Gateway.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a
