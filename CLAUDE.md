@@ -509,7 +509,10 @@ One JSON event per line, one file per day in `data/events/`.
   Contact list (PRIVACY.md upgrade A, optional): `stories/contacts.csv`
   ([handover] contacts_file: account_id, name, email, side), the CRM's
   contact export; each listed person is found anywhere in the text, even by
-  first name. A first name shared by two people becomes "[name]".
+  first name. A first name shared by two people becomes "[name]"; one that's
+  also a word ([handover] common_word_names) stays a word in "Will you..." or
+  "12 May". National phone numbers are masked too; "The customer" is
+  restored at a sentence start.
   Leak check (PRIVACY.md upgrade C): before the model call, leak_check() scans
   the exact text to be sent for anything person-shaped ("First Last" that
   isn't a label, role, greeting, date, product word or on [handover]
@@ -538,6 +541,9 @@ One JSON event per line, one file per day in `data/events/`.
   in an email body is labelled (without the list, the leak check stops it); a
   first-name-only mention is labelled; two Hannahs give [name]; no list = as
   before. Same PRs as handover_test.py.
+- `tests/redaction_fixes_test.py`: PRIVACY.md fixes D (first names that are
+  words: [handover] common_word_names), E (national phone numbers) and F
+  ("The customer" restored), on made-up text. Same PRs as handover_test.py.
 - `tests/handover_cache_test.py`: the cache, with a stand-in model that counts
   its calls (no key, no cost; temporary copies, real briefs untouched): no
   call when nothing changed or only daily numbers moved; a call for a flag
