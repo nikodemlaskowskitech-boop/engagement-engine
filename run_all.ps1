@@ -2,12 +2,13 @@
 # order, and save all the output to data\last_run.txt (Claude reads it from
 # there, so nothing needs pasting).
 #
-#   .\run_all.ps1                 pull + cockpit decisions, flags, checks, journeys, reports, views
+#   .\run_all.ps1                 pull + Slack clicks from AWS, cockpit decisions, flags, checks, journeys, reports, views
 #   .\run_all.ps1 -Regenerate     ...starting with fresh fake data (wipes the action log)
 #   .\run_all.ps1 -Actions        ...and post the new tasks to Slack at the end
 #
-# The Slack listener isn't included: it keeps running, so it gets its own
-# window (python listener.py).
+# The Slack listener runs in AWS. Its clicks come down first (pull_clicks.py:
+# skipped with a note if you're not signed in to AWS, never a failure). The
+# laptop listener (python listener.py) is the fallback, in its own window.
 
 param([switch]$Regenerate, [switch]$Actions, [switch]$Pulled)
 
@@ -38,7 +39,7 @@ if (-not $Pulled) {
 # (actions.py runs before the reports, so the cockpit shows the tasks it just sent)
 $steps = @()
 if ($Regenerate) { $steps += "generate_events.py" }
-$steps += "check_inputs.py", "cockpit_sync.py", "flags.py", "check_flags.py", "journeys.py"
+$steps += "pull_clicks.py", "check_inputs.py", "cockpit_sync.py", "flags.py", "check_flags.py", "journeys.py"
 if ($Actions) { $steps += "actions.py" }
 $steps += "team_report.py", "backtest.py", "onboarding_report.py", "export_views.py"
 
