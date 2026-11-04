@@ -50,7 +50,12 @@ class FakeIAM:
     def simulate_principal_policy(self, **kw):
         self.asked.append(kw)
         role, action, res = kw["PolicySourceArn"], kw["ActionNames"][0], kw["ResourceArns"][0]
-        http = kw["ContextEntries"][0]["ContextKeyValues"][0] == "false"
+        ctx = {c["ContextKeyName"]: c["ContextKeyValues"][0] for c in kw["ContextEntries"]}
+        http = ctx["aws:SecureTransport"] == "false"
+        # like the organization's region guardrail: StringNotEquals on a missing key matches, so it denies
+        if ctx.get("aws:RequestedRegion") not in ("eu-north-1", "us-east-1", "us-west-2"):
+            return {"EvaluationResults": [{"EvalDecision": "explicitDeny", "MatchedStatements": [
+                {"SourcePolicyType": "Organizations SCP", "SourcePolicyId": "RegionFloor"}]}]}
         allowed = (("RunEngine" in role and ((action == "s3:PutObject" and "/outputs/" in res)
                                              or (action == "ssm:GetParameter" and "anthropic-api-key" in res)
                                              or (action == "s3:GetObject" and "/inputs/" in res and not http)))
@@ -89,12 +94,30 @@ s3_calls = [k for k in iam.asked if k["ActionNames"][0].startswith("s3:")]
 check(all("ResourcePolicy" in k and k["ResourceOwner"] == f"arn:aws:iam::{ACCOUNT}:root" for k in s3_calls),
       "S3 cases include the bucket's own policy (so HTTPS-only is tested)")
 check(any(k["ContextEntries"][0]["ContextKeyValues"] == ["false"] for k in iam.asked), "one case asks over plain HTTP")
+check(all({"ContextKeyName": "aws:RequestedRegion", "ContextKeyType": "string", "ContextKeyValues": [REGION]}
+          in k["ContextEntries"] for k in iam.asked),
+      "every question says its region (else the region guardrail denies everything, as on 4 Nov 2026)")
 check(all("{" not in k["ResourceArns"][0] for k in iam.asked), "function names filled in from the stack")
 leaky = FakeIAM(leak=lambda role, action, res: "RunEngine" in role and action == "s3:PutObject" and "/inputs/" in res)
 results = sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION)
 bad = [r for r in results if not r["ok"]]
 check(len(bad) == 1 and "change its own inputs" in bad[0]["why"], "a role that can write its inputs is caught", bad)
 check(quiet(sc.report, results) == 1, "...and the report counts it as a failure (exit 1)")
+orig = sc.run
+def no_region_run():
+    """What happened on 4 Nov 2026: questions without a region. The controls must catch it."""
+    asked = FakeIAM()
+    real = asked.simulate_principal_policy
+    def strip(**kw):
+        kw["ContextEntries"] = [c for c in kw["ContextEntries"] if c["ContextKeyName"] != "aws:RequestedRegion"]
+        return real(**kw)
+    asked.simulate_principal_policy = strip
+    return sc.run(FakeCfn(), asked, FakeS3(), ACCOUNT, REGION)
+results = no_region_run()
+bad = [r for r in results if not r["ok"]]
+check(len(bad) == 5 and all(r["expected"] == sc.ALLOW for r in bad)
+      and all("Organizations SCP RegionFloor" in r["decided_by"] for r in bad),
+      "questions without a region: the 5 controls fail and the report names the SCP that denied them", bad)
 too_tight = FakeIAM(leak=None)
 too_tight.simulate_principal_policy = lambda **kw: {"EvaluationResults": [{"EvalDecision": "implicitDeny"}]}
 results = sc.run(FakeCfn(), too_tight, FakeS3(), ACCOUNT, REGION)

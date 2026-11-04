@@ -11,6 +11,12 @@ real policies and the bucket's real policy. Every "should be denied" case must
 come back denied, and a few "should be allowed" cases must come back allowed
 (a check that denies everything would prove nothing).
 
+The simulator knows nothing about the request beyond what it's told. So each
+question also says which region it's made in (aws:RequestedRegion) and whether
+it uses HTTPS (aws:SecureTransport), like a real request would. Without the
+region, the organization's region guardrail (an SCP that denies everything
+outside the allowed regions) matches every question and denies it all.
+
 Sign in first: aws login --profile cairnpath. Exit 1 on any FAIL.
 """
 
@@ -89,14 +95,22 @@ def run(cfn, iam, s3, account, region):
         resource = resource.format(**names)
         kw = {"PolicySourceArn": f"arn:aws:iam::{account}:role/{names[role]}",
               "ActionNames": [action], "ResourceArns": [resource],
+              # what a real request carries: its region and whether it uses HTTPS
               "ContextEntries": [{"ContextKeyName": "aws:SecureTransport", "ContextKeyType": "boolean",
-                                  "ContextKeyValues": ["false" if plain_http else "true"]}]}
+                                  "ContextKeyValues": ["false" if plain_http else "true"]},
+                                 {"ContextKeyName": "aws:RequestedRegion", "ContextKeyType": "string",
+                                  "ContextKeyValues": [region]}]}
         if action.startswith("s3:"):          # the bucket's own policy counts too (e.g. HTTPS only)
             kw.update(ResourcePolicy=bucket_policy, ResourceOwner=f"arn:aws:iam::{account}:root")
-        decision = iam.simulate_principal_policy(**kw)["EvaluationResults"][0]["EvalDecision"]
+        result = iam.simulate_principal_policy(**kw)["EvaluationResults"][0]
+        decision = result["EvalDecision"]
         got = ALLOW if decision == "allowed" else DENY
+        # which policy decided it (an SCP, the role's own policy, the bucket policy): for the report
+        by = sorted({f"{m.get('SourcePolicyType', '?')} {m.get('SourcePolicyId', '')}".strip()
+                     for m in result.get("MatchedStatements", [])})
         results.append({"role": role, "action": action, "resource": resource.split(":::")[-1].split(":")[-1],
-                        "expected": expected, "got": got, "aws_said": decision, "why": why, "ok": got == expected})
+                        "expected": expected, "got": got, "aws_said": decision, "decided_by": by,
+                        "why": why, "ok": got == expected})
     return results
 
 
@@ -104,7 +118,7 @@ def report(results):
     print(f"\nLive security checks on stack {STACK} (IAM policy simulator, nothing changed)\n")
     for r in results:
         print(f"  {'PASS' if r['ok'] else 'FAIL'}  {r['role']:<8} {r['action']:<22} {r['expected']:<8} "
-              f"{r['why']}" + ("" if r["ok"] else f"  ->  AWS said {r['aws_said']}: {r['resource']}"))
+              f"{r['why']}" + ("" if r["ok"] else f"  ->  AWS said {r['aws_said']} ({', '.join(r['decided_by']) or 'no statement matched'}): {r['resource']}"))
     bad = sum(not r["ok"] for r in results)
     denied = sum(r["expected"] == DENY for r in results)
     print(f"\n{len(results) - bad} of {len(results)} as expected ({denied} things that must be refused, "
