@@ -526,7 +526,19 @@ One JSON event per line, one file per day in `data/events/`.
   inputs/*, state/*, the check summary; writes only outputs/*. DuckDB for Lambda
   (Linux arm64, Python 3.13, version from requirements.txt) is fetched by pip
   with --platform at synth time, cached in infra/build/ (no Docker);
-  CAIRNPATH_SKIP_DEPS=1 skips it for tests. No handover briefs in AWS yet.
+  CAIRNPATH_SKIP_DEPS=1 skips it for tests. Handover briefs in AWS: the steps
+  run export_views.py, then handover.py, then export_views.py again (so the
+  cockpit shows the briefs). handover.py is in [aws] engine_optional_steps: if
+  it fails (model API down) or there's no key, the run is still OK, with a
+  warning in run.json. The key: Parameter Store SecureString ([aws]
+  api_key_parameter, filled by put_key.py), read at run time and passed to the
+  optional steps only (never in the Lambda's settings, never printed); the
+  engine may only ssm:GetParameter that one parameter. Provider in AWS: [aws]
+  briefs_llm_provider (llm.py honours CAIRNPATH_LLM_PROVIDER). The cache
+  outputs/handover/ is downloaded first and only changed files go back;
+  *_key.json (redaction keys) never leave the Lambda; stories/ is bundled
+  without answer_key.json and README.md. Libraries for Lambda: bundle.py
+  LAMBDA_PACKAGES (duckdb, anthropic), versions from requirements.txt.
   Plus a daily safety net: EventBridge Scheduler ([aws] engine_schedule and
   engine_schedule_timezone) starts the engine with {"trigger": "schedule"};
   if the last outputs/run.json is OK and used the same input check, it stops
@@ -563,7 +575,11 @@ One JSON event per line, one file per day in `data/events/`.
   a run against a stand-in S3 (inputs and action log in, only new files out,
   all under outputs/, run.json last, work folder cleaned); the schedule (runs
   when there's no good run yet, a newer check or a failed last run; otherwise
-  SKIPPED "up to date" with no writes; the gate still applies); a failing step gives
+  SKIPPED "up to date" with no writes; the gate still applies); the briefs
+  (the key only reaches the optional step, read decrypted from Parameter Store,
+  in no log; the cache uploaded only when changed; redaction keys never
+  uploaded; no key or a failing model = OK with a warning; stories bundled
+  without the answer key); a failing step gives
   FAILED and raises. With DuckDB installed it runs the real steps and compares
   the flags with the laptop's data/; without, stand-in steps. Needs data/.
 - `upload.py`: copies the inputs named in [data] to the data bucket ([aws]
@@ -578,6 +594,11 @@ One JSON event per line, one file per day in `data/events/`.
   Lambda once per batch. Prints the first 10 files, then a count. `--dry-run`
   says what would go. Not in run_all yet.
   Sign in first (`aws login --profile cairnpath`).
+- `put_key.py`: stores ANTHROPIC_API_KEY from .env in Parameter Store as a
+  SecureString ([aws] api_key_parameter), for the briefs in AWS. Never typed
+  into a command, never printed; rerun after rotating the key.
+  `tests/put_key_test.py`: stand-in Parameter Store, made-up key: stored as a
+  SecureString with overwrite, never printed in whole or in part.
 - `tests/upload_test.py`: a stand-in S3 (no AWS, no cost): first run sends
   every input, a rerun nothing, then only a changed and a new file; keys use
   "/"; the marker written once per real change, last, never on a rerun or
@@ -592,7 +613,8 @@ One JSON event per line, one file per day in `data/events/`.
   2026 (new account, no usage or billing history yet; ask again after the next
   billing cycle, early December 2026). Until then a laptop keeps the API key:
   settings.local.toml with [llm] provider = "anthropic"; in AWS the briefs
-  would read it from Secrets Manager. The AWS setup (2 Nov 2026): a Builder ID organization
+  read it from Parameter Store (put_key.py; free, unlike Secrets Manager, and
+  a static third-party key needs no rotation service). The AWS setup (2 Nov 2026): a Builder ID organization
   (management …3914, identity delegated admin …6241, Future Unicorn …9557);
   its SCPs open only eu-north-1 fully; its Identity Center has no permission
   sets, so the CLI uses the Builder ID session in the management account
@@ -605,9 +627,9 @@ One JSON event per line, one file per day in `data/events/`.
   (outputs/). Warehouse decided 3 Nov 2026: DuckDB in Lambda runs the engine
   (one SQL dialect, same numbers as the laptop); Athena + Glue tables over
   outputs/ for ad-hoc questions (built 3 Nov 2026: crawler, Glue database,
-  workgroup), and a daily schedule as a safety net. Next: the handover briefs
-  in AWS (their cache files kept in S3 between runs; Bedrock, or the API key
-  in Secrets Manager), then the Slack listener on API Gateway.
+  workgroup), a daily schedule as a safety net, and the handover briefs in AWS
+  (key in Parameter Store, cache in outputs/handover/). Next: the Slack
+  listener on API Gateway.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a

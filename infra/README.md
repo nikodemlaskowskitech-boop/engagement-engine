@@ -38,3 +38,7 @@ Athena (ask your own questions of the results): after the engine has run once,
 folder under `outputs/tables/` into a table in the Glue database `cairnpath`
 (about a minute; rerun only when a table's columns change). Then in the Athena
 console pick workgroup `cairnpath` and database `cairnpath`, and query.
+
+Handover briefs in AWS: once, from the repo root, `python put_key.py` copies the
+API key from your `.env` into Parameter Store (encrypted, never printed). Without
+it the engine still runs and says "briefs skipped: no API key" in run.json.

@@ -21,10 +21,20 @@ Also runs once a day on a schedule (EventBridge Scheduler, event {"trigger":
 the check last saw, there's nothing new and it stops (SKIPPED, "up to date");
 if an event-driven run was missed or failed, the schedule catches it up.
 
+Handover briefs (handover.py, an optional step: if it fails, the run still
+counts as OK, with a warning): the API key comes from Parameter Store
+(SecureString, read at run time and passed to that step only; never in the
+Lambda's settings, never printed). The briefs' cache (outputs/handover/) is
+downloaded first and only changed files go back, so an unchanged account
+costs no model call and no new S3 version. The redaction keys (*_key.json)
+never leave the Lambda. export_views.py runs again after the briefs, so the
+cockpit shows them.
+
 Only writes under outputs/, so it can never trigger the check or itself.
 A failing step is a real failure: run.json says FAILED, then the function raises.
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -43,13 +53,37 @@ OUTPUTS = os.environ.get("OUTPUTS_PREFIX", "outputs/")
 CHECK = os.environ.get("CHECK_SUMMARY", "reports/check_inputs/latest.json")
 MARKER = os.environ.get("MARKER_NAME", "_upload_complete.json")
 STEPS = json.loads(os.environ.get("ENGINE_STEPS", "[]"))
-CODE = json.loads(os.environ.get("ENGINE_CODE", "[]"))   # files copied into the work folder
+CODE = json.loads(os.environ.get("ENGINE_CODE", "[]"))   # files and folders copied into the work folder
+OPTIONAL = json.loads(os.environ.get("OPTIONAL_STEPS", "[]"))   # a failure here is a warning, not a failed run
+KEY_PARAMETER = os.environ.get("API_KEY_PARAMETER", "")    # Parameter Store name of the LLM API key
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "")          # who writes the briefs in AWS (settings [aws])
+CACHE = "handover/"                                        # the briefs and their fingerprints, kept between runs
+NEVER_UPLOAD = ("_key.json",)                              # redaction keys stay inside the Lambda
 STATE_FILES = ["action_log.csv"]                         # state kept between runs (tasks already sent)
 
 
 def _s3():
     import boto3
     return boto3.client("s3")
+
+
+def _ssm():
+    import boto3
+    return boto3.client("ssm")
+
+
+def api_key(ssm):
+    """The LLM API key from Parameter Store, decrypted, or None if it isn't there."""
+    if not KEY_PARAMETER:
+        return None
+    try:
+        return ssm.get_parameter(Name=KEY_PARAMETER, WithDecryption=True)["Parameter"]["Value"]
+    except Exception:
+        return None
+
+
+def md5(path):
+    return hashlib.md5(path.read_bytes()).hexdigest()
 
 
 def now():
@@ -94,24 +128,38 @@ def download(s3, prefix, folder, skip=()):
     return got
 
 
-def run_steps(work):
-    """Run each engine step in order, like run_all.ps1. Returns (ok, log, failed step, step times)."""
+def run_steps(work, secrets=None):
+    """Run each engine step in order, like run_all.ps1.
+    Returns (ok, log, failed step, step times, warnings). secrets go to the optional steps only."""
     env = {**os.environ, "PYTHONPATH": str(HERE), "PYTHONIOENCODING": "utf-8", "HOME": "/tmp"}
-    log, times = [f"Engine run {now()}\n"], {}
+    if LLM_PROVIDER:
+        env["CAIRNPATH_LLM_PROVIDER"] = LLM_PROVIDER
+    log, times, warnings = [f"Engine run {now()}\n"], {}, []
     for step in STEPS:
+        label = step if step not in times else f"{step} (again)"
+        if step in OPTIONAL and secrets is None:
+            times[label] = 0.0
+            warnings.append(f"{step} skipped: no API key in Parameter Store ({KEY_PARAMETER})")
+            log.append(f"\n===== python {step}: skipped, no API key in Parameter Store =====\n")
+            continue
         t0 = time.time()
-        done = subprocess.run([sys.executable, step], cwd=work, env=env,
+        step_env = {**env, **(secrets or {})} if step in OPTIONAL else env
+        done = subprocess.run([sys.executable, step], cwd=work, env=step_env,
                               capture_output=True, text=True, timeout=900)
-        times[step] = round(time.time() - t0, 1)
-        log.append(f"\n===== python {step} ({times[step]} s) =====\n{done.stdout}{done.stderr}")
+        times[label] = round(time.time() - t0, 1)
+        log.append(f"\n===== python {step} ({times[label]} s) =====\n{done.stdout}{done.stderr}")
         if done.returncode != 0:
+            if step in OPTIONAL:                 # e.g. the model API is down: the cockpit still updates
+                warnings.append(f"{step} failed (see last_run.txt); the rest of the run went on")
+                log.append(f"\nWARNING: {step} failed; optional, carrying on\n")
+                continue
             log.append(f"\nFAILED: {step}\n")
-            return False, "".join(log), step, times
-    log.append(f"\nDONE: {len(STEPS)} of {len(STEPS)} steps\n")
-    return True, "".join(log), None, times
+            return False, "".join(log), step, times, warnings
+    log.append(f"\nDONE: {len(STEPS)} steps" + (f", {len(warnings)} warning(s)" if warnings else "") + "\n")
+    return True, "".join(log), None, times, warnings
 
 
-def handler(event, context, s3=None, work=None):
+def handler(event, context, s3=None, work=None, ssm=None):
     s3 = s3 or _s3()
     started = time.time()
     trigger = next((r["s3"]["object"]["key"] for r in event.get("Records", [])),
@@ -137,14 +185,25 @@ def handler(event, context, s3=None, work=None):
     data.mkdir(parents=True)
     try:
         for name in CODE:                       # the engine expects its code and data/ side by side
-            shutil.copy(HERE / name, work / name)
+            if (HERE / name).is_dir():
+                shutil.copytree(HERE / name, work / name)
+            else:
+                shutil.copy(HERE / name, work / name)
         inputs = download(s3, INPUTS, data, skip={MARKER})
         state = download(s3, STATE, data)
         state = [s for s in state if s in STATE_FILES]
-        ok, log, failed, times = run_steps(work)
-        # everything the steps wrote, at any depth (tables/<name>/ for Athena), minus what came in
-        written = sorted(p.relative_to(data).as_posix() for p in data.rglob("*")
-                         if p.is_file() and p.relative_to(data).as_posix() not in set(inputs) | set(state))
+        cache = {rel: md5(data / CACHE / rel) for rel in download(s3, OUTPUTS + CACHE, data / CACHE)}
+        key = api_key(ssm or _ssm()) if any(s in OPTIONAL for s in STEPS) else None
+        ok, log, failed, times, warnings = run_steps(work, {"ANTHROPIC_API_KEY": key} if key else None)
+        # everything the steps wrote, at any depth (tables/<name>/ for Athena), minus what came in,
+        # minus redaction keys, minus cache files that didn't change (no new S3 version for nothing)
+        written = []
+        for p in sorted(data.rglob("*")):
+            rel = p.relative_to(data).as_posix()
+            if (not p.is_file() or rel in set(inputs) | set(state) or rel.endswith(NEVER_UPLOAD)
+                    or (rel.startswith(CACHE) and cache.get(rel[len(CACHE):]) == md5(p))):
+                continue
+            written.append(rel)
         for name in written:
             kind = {"json": "application/json", "html": "text/html; charset=utf-8",
                     "csv": "text/csv; charset=utf-8", "parquet": "application/vnd.apache.parquet"
@@ -152,7 +211,7 @@ def handler(event, context, s3=None, work=None):
             put(s3, OUTPUTS + name, (data / name).read_bytes(), kind)
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    summary.update(status="OK" if ok else "FAILED", failed_step=failed, step_seconds=times,
+    summary.update(status="OK" if ok else "FAILED", failed_step=failed, warnings=warnings, step_seconds=times,
                    inputs=len(inputs), outputs=written, seconds=round(time.time() - started, 1))
     put(s3, OUTPUTS + "last_run.txt", log)
     put(s3, OUTPUTS + "run.json", json.dumps(summary, indent=2), "application/json")   # last

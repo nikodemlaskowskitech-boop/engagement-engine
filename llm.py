@@ -19,7 +19,8 @@ from settings import SETTINGS
 
 LLM = SETTINGS["llm"]
 AWS = SETTINGS.get("aws", {})
-PROVIDER = LLM.get("provider", "anthropic")
+# CAIRNPATH_LLM_PROVIDER (set by the engine Lambda) wins: AWS can use a different provider than the laptop
+PROVIDER = os.environ.get("CAIRNPATH_LLM_PROVIDER") or LLM.get("provider", "anthropic")
 # Bedrock names the model by an inference profile ("eu." keeps the data in EU regions)
 MODEL = LLM["bedrock_model"] if PROVIDER == "bedrock" else LLM["model"]
 

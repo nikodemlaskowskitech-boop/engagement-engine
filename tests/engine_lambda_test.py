@@ -28,7 +28,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "infra")]
 
-from bundle import ENGINE_FILES, bundle_engine     # noqa: E402
+from bundle import ENGINE_FILES, NEVER_BUNDLE, bundle_engine     # noqa: E402
 from settings import SETTINGS                      # noqa: E402
 
 AWS, D = SETTINGS["aws"], SETTINGS["data"]
@@ -107,6 +107,9 @@ bundle = bundle_engine(tmp / "bundle", deps=False)
 check(sorted(p.name for p in bundle.iterdir()) == sorted(ENGINE_FILES + ["handler.py"]),
       "holds the handler and the engine's files, nothing else (never settings.local.toml)")
 check(set(AWS["engine_steps"]) <= set(ENGINE_FILES), "every step in [aws] engine_steps is bundled")
+check((bundle / "stories" / "directory.csv").exists()
+      and not any(any((bundle / "stories").rglob(n)) for n in NEVER_BUNDLE),
+      "the stories go with it, but never their answer key (testing only, never near the model)")
 
 
 def local_imports(name, seen):
@@ -204,6 +207,55 @@ check(retry["status"] == "OK", "the last run FAILED: the schedule runs it again"
 s3 = FakeS3(bucket_with_demo("ERROR"))
 gated = h.handler(sched, None, s3=s3, work=work)
 check(gated["status"] == "SKIPPED" and "errors" in gated["reason"], "the gate still applies on a schedule (check ERROR)")
+
+print("\nEngine Lambda: the handover briefs (optional step, key from Parameter Store)")
+
+
+class FakeSSM:
+    def __init__(self, value):
+        self.value, self.asked = value, []
+
+    def get_parameter(self, Name, WithDecryption=False):
+        self.asked.append((Name, WithDecryption))
+        if self.value is None:
+            raise KeyError("ParameterNotFound")
+        return {"Parameter": {"Name": Name, "Value": self.value}}
+
+
+(bundle / "plain.py").write_text(
+    "import os\nassert 'ANTHROPIC_API_KEY' not in os.environ, 'the key leaked to a plain step'\n"
+    "print('plain step ran without the key')\n", encoding="utf-8")
+(bundle / "briefs.py").write_text(
+    "import os, sys\nfrom pathlib import Path\n"
+    "if os.environ.get('BREAK_BRIEFS'): sys.exit('model API down')\n"
+    "assert os.environ['ANTHROPIC_API_KEY'] == 'test-key-123' and os.environ['CAIRNPATH_LLM_PROVIDER'] == 'anthropic'\n"
+    "out = Path('data/handover'); out.mkdir(parents=True, exist_ok=True)\n"
+    "for name, text in (('acc_1.md', 'brief'), ('acc_1_meta.json', '{}'), ('acc_1_key.json', '{\"Customer A\": \"Real Name\"}')):\n"
+    "    (out / name).write_text(text, encoding='utf-8')\n"
+    "print('briefs written')\n", encoding="utf-8")
+h.CODE, h.STEPS, h.OPTIONAL = ENGINE_FILES + ["plain.py", "briefs.py"], ["plain.py", "briefs.py"], ["briefs.py"]
+h.KEY_PARAMETER, h.LLM_PROVIDER = AWS["api_key_parameter"], AWS["briefs_llm_provider"]
+s3, ssm = FakeS3(bucket_with_demo("OK")), FakeSSM("test-key-123")
+run = h.handler({"trigger": "manual"}, None, s3=s3, work=work, ssm=ssm)
+check(run["status"] == "OK" and not run["warnings"], "the briefs step gets the key; plain steps never see it", run.get("warnings"))
+check(ssm.asked == [(AWS["api_key_parameter"], True)], "the key is read from Parameter Store, decrypted, once per run")
+check(OUTPUTS + "handover/acc_1.md" in s3.objects and OUTPUTS + "handover/acc_1_meta.json" in s3.objects,
+      "the briefs and their fingerprints go to outputs/handover/ (the cache for next time)")
+check(not any(k.endswith("_key.json") for k in s3.objects), "the redaction key never leaves the Lambda")
+check("test-key-123" not in s3.objects[OUTPUTS + "last_run.txt"].decode() + json.dumps(run),
+      "the key appears in no log and no summary")
+again = h.handler({"trigger": "manual"}, None, s3=s3, work=work, ssm=FakeSSM("test-key-123"))
+check(not any(o.startswith("handover/") for o in again["outputs"]),
+      "next run, briefs unchanged: nothing re-uploaded (no new S3 versions for nothing)", again["outputs"])
+nokey = h.handler({"trigger": "manual"}, None, s3=FakeS3(bucket_with_demo("OK")), work=work, ssm=FakeSSM(None))
+check(nokey["status"] == "OK" and any("no API key" in w for w in nokey["warnings"]),
+      "no key in Parameter Store: briefs skipped with a warning, the rest still runs", nokey.get("warnings"))
+os.environ["BREAK_BRIEFS"] = "1"
+down = h.handler({"trigger": "manual"}, None, s3=FakeS3(bucket_with_demo("OK")), work=work, ssm=FakeSSM("test-key-123"))
+del os.environ["BREAK_BRIEFS"]
+check(down["status"] == "OK" and any("briefs.py failed" in w for w in down["warnings"]),
+      "the model API fails: a warning, and the cockpit still updates", down.get("warnings"))
+h.OPTIONAL = []
 
 print("\nEngine Lambda: a step that fails")
 (bundle / "broken.py").write_text("raise SystemExit('this step broke')\n", encoding="utf-8")
