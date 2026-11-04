@@ -716,7 +716,11 @@ One JSON event per line, one file per day in `data/events/`.
   workgroup), a daily schedule as a safety net, and the handover briefs in AWS
   (key in Parameter Store, cache in outputs/handover/). The Slack listener on
   API Gateway (signature checked, clicks to state/clicks/) built 4 Nov 2026.
-  The laptop pulls the clicks first in run_all (pull_clicks.py). Next: the
+  The laptop pulls the clicks first in run_all (pull_clicks.py). Redaction
+  upgrades C (leak check) and A (contact list) done 4 Nov 2026; B (a PII
+  detector) deferred the same day: no data to make the case, Comprehend isn't
+  in eu-north-1 and reads English and Spanish only, Presidio is heavy
+  (PRIVACY.md, spec Feature requests). Next: the
   zero-trust list (data perimeter, own KMS key, Access Analyzer, GuardDuty).
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
