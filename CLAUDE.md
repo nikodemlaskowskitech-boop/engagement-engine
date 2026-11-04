@@ -197,6 +197,12 @@ One JSON event per line, one file per day in `data/events/`.
 - `DATA_CONTRACT.md`: the five inputs, their columns and meaning, which
   are required, what stops working without each, and what is still
   hard-coded. Update it whenever an input or a column changes.
+- `PRIVACY.md`: how the handover briefs keep people's details from the model,
+  step by step (gather, identify by position, label, clean, model, check,
+  restore), where each piece lives (laptop / AWS), how the tests prove it and
+  what they can't see, the known gaps and the upgrades in order of value
+  (leak check, contact list, PII detector, ...). Update it whenever redaction,
+  its inputs or where its outputs live change.
 - `ENGAGEMENT_LOGIC.md`: the logic by tier as Mermaid diagrams (GitHub
   renders them): coverage table, overview, Self-service journey, Scale
   queue and hand-back, Enterprise QBR first, action status. Update it when
