@@ -125,6 +125,12 @@ slack_memory_mb = 512          # small, but more memory = more CPU = a faster fi
 slack_timeout_seconds = 10     # Slack gives up after 3 s anyway; this only stops a stuck call
 slack_rate_per_second = 5      # API Gateway: steady requests per second allowed...
 slack_burst = 20               # ...and a short burst; anything above gets 429 before reaching the Lambda
+# The data perimeter (a bucket policy): besides our four workload roles, only these may read or
+# write the bucket's data. The role you get from `aws login` (any IAM path), and the break-glass
+# IAM user kept for emergencies. Everyone else in the account is refused, whatever their own
+# permissions say. Bucket settings stay open to admins, so a mistake here can always be fixed.
+admin_role_names = ["AccountFullAccessRole"]
+break_glass_users = ["nikodem"]
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo

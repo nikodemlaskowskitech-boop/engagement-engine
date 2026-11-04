@@ -617,6 +617,15 @@ One JSON event per line, one file per day in `data/events/`.
   but the daily schedule runs when a click came in after the last run. The
   address is printed after a deploy (SlackRequestUrl) for the Slack app's
   Interactivity settings.
+  Plus the data perimeter (zero trust, 4 Nov 2026): two Deny statements in
+  the bucket policy. DenyOutsideThisAccount: any identity outside [aws]
+  account_id, for everything. DenyDataToAnyoneElse: reading, writing,
+  deleting and listing the data for anyone but the four workload roles
+  (check, engine, Slack listener, crawler), [aws] admin_role_names (any IAM
+  path) and break_glass_users, whatever their own permissions say. AWS
+  services acting for the bucket are exempt (aws:PrincipalIsAWSService).
+  Bucket-level settings (the policy itself) are deliberately not denied, so
+  an admin can always fix a mistake: no lockout.
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
@@ -628,8 +637,9 @@ One JSON event per line, one file per day in `data/events/`.
   workgroup's enforced results location, encryption and scan cap, results
   expiry, nothing waking on outputs/ or athena-results/; the Slack listener:
   its role (write clicks only, its two secrets only), one route, throttling,
-  access log, only this API may call it, nothing waking on state/). Exit 1 on
-  any FAIL.
+  access log, only this API may call it, nothing waking on state/; the data
+  perimeter: both statements, the exempt roles and admins, bucket settings left
+  open). Exit 1 on any FAIL.
 - `tests/slack_lambda_test.py`: the Slack listener's handler from its real
   bundle, with requests signed like Slack signs them (made-up secret) against
   stand-in S3, Parameter Store and Slack: unsigned, wrongly signed, tampered
@@ -672,14 +682,17 @@ One JSON event per line, one file per day in `data/events/`.
 - `security_check.py`: live security checks, read-only (`python
   security_check.py` after `aws login`). Finds the deployed roles and functions
   in the CairnpathData stack and asks the IAM policy simulator, with the
-  bucket's real policy, 26 questions: things each role must NOT be able to do
+  bucket's real policy, 30 questions: things each role must NOT be able to do
   (the engine writing its inputs or the check's verdict, deleting, reading
   another secret, anything over plain HTTP; the check writing where it's
   triggered or reading the API key; the schedule starting the check or
   reading data; the crawler writing or reading raw inputs; the Slack listener
   reading any data, writing anything but clicks or reading the API key; the
-  engine reading Slack's bot token) and controls that
-  must work (so a check that denies everything can't pass). infra_test.py
+  engine reading Slack's bot token; the perimeter: an identity in the account
+  with s3:* on everything, simulated as the schedule role plus an extra
+  allow-all policy, still can't read or write the data) and controls that
+  must work (the admin, by its real ARN, still reads the data and can fix
+  the bucket policy; so a check that denies everything can't pass). infra_test.py
   checks the template; this checks what's deployed. Exit 1 on any FAIL.
   `tests/security_check_test.py`: stand-in CloudFormation, simulator and S3:
   roles told from same-prefix functions, the bucket policy and plain HTTP
@@ -726,8 +739,8 @@ One JSON event per line, one file per day in `data/events/`.
   upgrades C (leak check) and A (contact list) done 4 Nov 2026; B (a PII
   detector) deferred the same day: no data to make the case, Comprehend isn't
   in eu-north-1 and reads English and Spanish only, Presidio is heavy
-  (PRIVACY.md, spec Feature requests). Next: the
-  zero-trust list (data perimeter, own KMS key, Access Analyzer, GuardDuty).
+  (PRIVACY.md, spec Feature requests). Zero trust: the data perimeter (bucket
+  policy) built 4 Nov 2026. Next: our own KMS key, Access Analyzer, GuardDuty.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a

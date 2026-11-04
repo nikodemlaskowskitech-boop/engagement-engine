@@ -244,3 +244,27 @@ class DataStack(Stack):
                                "status": "$context.status", "latencyMs": "$context.responseLatency"}))
         CfnOutput(self, "SlackListenerFunction", value=listener.function_name)
         CfnOutput(self, "SlackRequestUrl", value=f"{api.api_endpoint}/slack/actions")   # for the Slack app
+
+        # --- the data perimeter: a second, independent check on the bucket itself ---
+        # Each role's own policy already limits what it can do. These two statements make the
+        # bucket refuse everyone else, whatever their own permissions say: an identity outside
+        # this account, or any identity in it that isn't one of our four workload roles or the
+        # admin (you, via aws login, plus the break-glass user). So a stolen key or a careless
+        # "s3:*" policy elsewhere in the account still can't read or change the data.
+        # Bucket-level settings (this policy itself, notifications) are left out on purpose: an
+        # admin can always fix a mistake here, so this can never lock us out for good.
+        acct = self.account
+        workload_roles = [fn.role.role_arn, engine.role.role_arn, listener.role.role_arn, crawler_role.role_arn]
+        admins = ([f"arn:aws:iam::{acct}:role/*{name}" for name in aws["admin_role_names"]]      # any IAM path
+                  + [f"arn:aws:iam::{acct}:user/{name}" for name in aws["break_glass_users"]])
+        not_a_service = {"BoolIfExists": {"aws:PrincipalIsAWSService": "false"}}
+        self.bucket.add_to_resource_policy(iam.PolicyStatement(
+            sid="DenyOutsideThisAccount", effect=iam.Effect.DENY, principals=[iam.AnyPrincipal()],
+            actions=["s3:*"], resources=[self.bucket.bucket_arn, self.bucket.arn_for_objects("*")],
+            conditions={"StringNotEquals": {"aws:PrincipalAccount": acct}, **not_a_service}))
+        self.bucket.add_to_resource_policy(iam.PolicyStatement(
+            sid="DenyDataToAnyoneElse", effect=iam.Effect.DENY, principals=[iam.AnyPrincipal()],
+            actions=["s3:GetObject*", "s3:PutObject*", "s3:DeleteObject*", "s3:RestoreObject",
+                     "s3:ListBucket*", "s3:ReplicateObject"],
+            resources=[self.bucket.bucket_arn, self.bucket.arn_for_objects("*")],
+            conditions={"ArnNotLike": {"aws:PrincipalArn": workload_roles + admins}, **not_a_service}))

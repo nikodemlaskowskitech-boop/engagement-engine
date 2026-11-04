@@ -44,10 +44,19 @@ class FakeS3:
         return {"Policy": json.dumps({"Statement": [{"Effect": "Deny", "Condition": {"Bool": {"aws:SecureTransport": "false"}}}]})}
 
 
+ADMIN_ARN = f"arn:aws:iam::{ACCOUNT}:role/aws-reserved/AccountFullAccessRole"
+EXEMPT = ("CheckInputs", "RunEngine", "SlackListener", "CrawlerRole", "AccountFullAccessRole")
+DATA = ("s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket")
+
+
 class FakeIAM:
-    """A tiny simulator that answers like a correct deployment, unless told to leak one case."""
-    def __init__(self, leak=None):
-        self.leak, self.asked = leak, []
+    """A tiny simulator that answers like a correct deployment, unless told to leak one case.
+    perimeter=False: the bucket policy has no perimeter (as before 4 Nov 2026)."""
+    def __init__(self, leak=None, perimeter=True):
+        self.leak, self.asked, self.perimeter = leak, [], perimeter
+
+    def get_role(self, RoleName):
+        return {"Role": {"Arn": ADMIN_ARN}}
 
     def simulate_principal_policy(self, **kw):
         self.asked.append(kw)
@@ -58,6 +67,14 @@ class FakeIAM:
         if ctx.get("aws:RequestedRegion") not in ("eu-north-1", "us-east-1", "us-west-2"):
             return {"EvaluationResults": [{"EvalDecision": "explicitDeny", "MatchedStatements": [
                 {"SourcePolicyType": "Organizations SCP", "SourcePolicyId": "RegionFloor"}]}]}
+        if (self.perimeter and kw.get("ResourcePolicy") and action.startswith(DATA)
+                and not any(x in ctx.get("aws:PrincipalArn", "") for x in EXEMPT)):
+            return {"EvaluationResults": [{"EvalDecision": "explicitDeny", "MatchedStatements": [
+                {"SourcePolicyType": "Resource Policy", "SourcePolicyId": "DenyDataToAnyoneElse"}]}]}
+        if "AccountFullAccessRole" in role:                  # the admin may do anything else
+            return {"EvaluationResults": [{"EvalDecision": "allowed"}]}
+        if any('"s3:*"' in p for p in kw.get("PolicyInputList", [])) and action.startswith("s3:") and not http:
+            return {"EvaluationResults": [{"EvalDecision": "allowed"}]}
         allowed = (("RunEngine" in role and ((action == "s3:PutObject" and "/outputs/" in res)
                                              or (action == "ssm:GetParameter" and "anthropic-api-key" in res)
                                              or (action == "s3:GetObject" and "/inputs/" in res and not http)))
@@ -127,6 +144,19 @@ bad = [r for r in results if not r["ok"]]
 check(len(bad) == sum(r["expected"] == sc.ALLOW for r in results) and all(r["expected"] == sc.ALLOW for r in bad)
       and all("Organizations SCP RegionFloor" in r["decided_by"] for r in bad),
       "questions without a region: every control fails and the report names the SCP that denied them", bad)
+print("\nThe data perimeter cases")
+iam = FakeIAM()
+results = sc.run(FakeCfn(), iam, FakeS3(), ACCOUNT, REGION)
+check(all(k["ContextEntries"][2] == {"ContextKeyName": "aws:PrincipalArn", "ContextKeyType": "string",
+                                     "ContextKeyValues": [k["PolicySourceArn"]]} for k in iam.asked),
+      "every question says who's asking (aws:PrincipalArn), so the perimeter can tell roles apart")
+check(any(k.get("PolicyInputList") for k in iam.asked) and any(k["PolicySourceArn"] == ADMIN_ARN for k in iam.asked),
+      "it simulates an identity with s3:* on everything, and the admin role by its real ARN (path included)")
+check(all(r["ok"] for r in results) and sum(r["role"] == "admin" for r in results) == 2,
+      "with the perimeter: the s3:* identity is refused, the admin still reads data and can fix the policy")
+bad = [r for r in sc.run(FakeCfn(), FakeIAM(perimeter=False), FakeS3(), ACCOUNT, REGION) if not r["ok"]]
+check(len(bad) == 2 and all("perimeter" in r["why"] for r in bad),
+      "without the perimeter, the two perimeter cases fail (they'd catch it being removed)", bad)
 too_tight = FakeIAM(leak=None)
 too_tight.simulate_principal_policy = lambda **kw: {"EvaluationResults": [{"EvalDecision": "implicitDeny"}]}
 results = sc.run(FakeCfn(), too_tight, FakeS3(), ACCOUNT, REGION)

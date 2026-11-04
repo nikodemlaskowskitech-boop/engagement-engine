@@ -69,3 +69,19 @@ Once, after the deploy that creates it:
 
 To go back to the laptop listener: turn Socket Mode on again (the Request URL
 is then ignored) and run `python listener.py`.
+
+## The data perimeter (bucket policy)
+
+Since 4 Nov 2026 the bucket itself refuses everyone except our four workload
+roles (check, engine, Slack listener, crawler), the role `aws login` gives you
+(settings.toml [aws] admin_role_names) and the break-glass user
+([aws] break_glass_users). Their own permissions don't matter: an identity
+with `s3:*` on everything is still refused the data. Identities outside the
+account are refused everything.
+
+If you ever lock yourself out of the data (say, the admin role is renamed),
+the bucket's own settings are left open on purpose, so you can still fix it:
+correct `admin_role_names` and `cdk deploy`, or as a last resort
+`aws s3api delete-bucket-policy` (that also drops HTTPS-only until the next
+deploy puts it back). `python security_check.py` checks both sides after
+every deploy: the outsider is refused, the admin still gets in.

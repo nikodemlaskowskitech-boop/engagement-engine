@@ -55,8 +55,13 @@ def find(cfn):
     return found
 
 
+# an extra identity policy for the perimeter cases: "this identity may do anything in S3"
+ALLOW_ALL_S3 = json.dumps({"Version": "2012-10-17", "Statement": [
+    {"Effect": "Allow", "Action": "s3:*", "Resource": "*"}]})
+
+
 def cases(account, region):
-    """(role, action, resource, expected, why, plain_http)"""
+    """(role, action, resource, expected, why, plain_http[, extra identity policy])"""
     b = f"arn:aws:s3:::{AWS['bucket']}"
     i, r, o, st = AWS["inputs_prefix"], AWS["reports_prefix"] + "check_inputs/", AWS["outputs_prefix"], AWS["state_prefix"]
     key = f"arn:aws:ssm:{region}:{account}:parameter{AWS['api_key_parameter']}"
@@ -97,22 +102,43 @@ def cases(account, region):
         ("slack", "s3:PutObject", f"{b}/{clicks}2026-10-19/test.json", ALLOW, "control: it can save a click", False),
         ("slack", "ssm:GetParameter", signing, ALLOW, "control: it can read Slack's signing secret", False),
         ("engine", "ssm:GetParameter", bot, DENY, "the engine can't read Slack's bot token", False),
+        # the data perimeter (bucket policy): even an identity in this account with s3:* on
+        # everything (simulated: the schedule role plus an extra allow-all policy) is refused
+        ("schedule", "s3:GetObject", f"{b}/{i}crm_accounts.csv", DENY,
+         "perimeter: another identity with s3:* still can't read the data", False, ALLOW_ALL_S3),
+        ("schedule", "s3:PutObject", f"{b}/{o}run.json", DENY,
+         "perimeter: ...nor write it", False, ALLOW_ALL_S3),
+        ("admin", "s3:GetObject", f"{b}/{i}crm_accounts.csv", ALLOW, "control: the admin can still read the data", False),
+        ("admin", "s3:PutBucketPolicy", b, ALLOW, "control: the admin can still fix the bucket's rules (no lockout)", False),
     ]
 
 
 def run(cfn, iam, s3, account, region):
     names = find(cfn)
+    arns = {k: f"arn:aws:iam::{account}:role/{v}" for k, v in names.items()}
+    # the admin role (what aws login gives you): its real ARN, path included
+    arns["admin"] = iam.get_role(RoleName=AWS["admin_role_names"][0])["Role"]["Arn"]
     bucket_policy = s3.get_bucket_policy(Bucket=AWS["bucket"], ExpectedBucketOwner=account)["Policy"]
     results = []
-    for role, action, resource, expected, why, plain_http in cases(account, region):
+    for case in cases(account, region):
+        role, action, resource, expected, why, plain_http = case[:6]
         resource = resource.format(**names)
-        kw = {"PolicySourceArn": f"arn:aws:iam::{account}:role/{names[role]}",
+        kw = {"PolicySourceArn": arns[role],
               "ActionNames": [action], "ResourceArns": [resource],
-              # what a real request carries: its region and whether it uses HTTPS
+              # what a real request carries: its region, whether it uses HTTPS, and who's asking
+              # (the bucket's perimeter decides on aws:PrincipalArn: without it, it denies everyone)
               "ContextEntries": [{"ContextKeyName": "aws:SecureTransport", "ContextKeyType": "boolean",
                                   "ContextKeyValues": ["false" if plain_http else "true"]},
                                  {"ContextKeyName": "aws:RequestedRegion", "ContextKeyType": "string",
-                                  "ContextKeyValues": [region]}]}
+                                  "ContextKeyValues": [region]},
+                                 {"ContextKeyName": "aws:PrincipalArn", "ContextKeyType": "string",
+                                  "ContextKeyValues": [arns[role]]},
+                                 {"ContextKeyName": "aws:PrincipalAccount", "ContextKeyType": "string",
+                                  "ContextKeyValues": [account]},
+                                 {"ContextKeyName": "aws:PrincipalIsAWSService", "ContextKeyType": "boolean",
+                                  "ContextKeyValues": ["false"]}]}
+        if len(case) > 6:                     # an extra identity policy (the perimeter cases)
+            kw["PolicyInputList"] = [case[6]]
         if action.startswith("s3:"):          # the bucket's own policy counts too (e.g. HTTPS only)
             kw.update(ResourcePolicy=bucket_policy, ResourceOwner=f"arn:aws:iam::{account}:root")
         result = iam.simulate_principal_policy(**kw)["EvaluationResults"][0]
