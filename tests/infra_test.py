@@ -284,5 +284,36 @@ check(aws["slack_clicks_prefix"].startswith(aws["state_prefix"])
       and not any(c["Filter"]["Key"]["FilterRules"][0]["Value"].startswith(aws["state_prefix"]) for c in lam),
       "clicks land in state/ (the engine reads them), and nothing wakes on state/ (no run per click)")
 
+print("\nData perimeter: the bucket refuses everyone but our roles and the admin")
+bp = next(iter(t.find_resources("AWS::S3::BucketPolicy").values()), {}).get("Properties", {})
+stmts = {st.get("Sid"): st for st in bp.get("PolicyDocument", {}).get("Statement", [])}
+outside, others = stmts.get("DenyOutsideThisAccount", {}), stmts.get("DenyDataToAnyoneElse", {})
+check(outside.get("Effect") == "Deny" and outside.get("Principal") == {"AWS": "*"} and outside.get("Action") == "s3:*"
+      and outside.get("Condition", {}).get("StringNotEquals", {}).get("aws:PrincipalAccount") == str(aws["account_id"]),
+      "refuses any identity outside this account, for everything", outside)
+check(outside.get("Condition", {}).get("BoolIfExists", {}).get("aws:PrincipalIsAWSService") == "false"
+      and others.get("Condition", {}).get("BoolIfExists", {}).get("aws:PrincipalIsAWSService") == "false",
+      "AWS services acting for the bucket (lifecycle rules) aren't caught by it")
+acts = actions_of(others) if others else []
+check(others.get("Effect") == "Deny" and {"s3:GetObject*", "s3:PutObject*", "s3:DeleteObject*", "s3:ListBucket*"} <= set(acts),
+      "refuses reading, writing, deleting and listing the data to anyone not exempt", acts)
+check(not any(a.startswith(("s3:PutBucket", "s3:DeleteBucket", "s3:GetBucket")) or a == "s3:*" for a in acts),
+      "leaves the bucket's own settings to admins, so a mistake can always be fixed (no lockout)", acts)
+exempt = others.get("Condition", {}).get("ArnNotLike", {}).get("aws:PrincipalArn", [])
+exempt_text = json.dumps(exempt)
+role_ids = {}
+for k, v in ours.items():
+    var = v["Properties"]["Environment"]["Variables"]
+    kind = "check" if "REPORTS_PREFIX" in var else "engine" if "ENGINE_STEPS" in var else "slack"
+    role_ids[kind] = v["Properties"]["Role"]["Fn::GetAtt"][0]
+role_ids["crawler"] = crole
+check(len(exempt) == 4 + len(aws["admin_role_names"]) + len(aws["break_glass_users"])
+      and all(rid in exempt_text for rid in role_ids.values()),
+      "exempt: the check, engine, Slack listener and crawler roles", sorted(role_ids))
+check(all(f"role/*{n}" in exempt_text for n in aws["admin_role_names"])
+      and all(f"user/{n}" in exempt_text for n in aws["break_glass_users"])
+      and "ScheduleRole" not in exempt_text,
+      "...plus the admin from settings and the break-glass user; nobody else (not even the schedule)", exempt)
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)
