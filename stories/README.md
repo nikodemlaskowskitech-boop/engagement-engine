@@ -10,6 +10,12 @@ through, exported from three separate systems, the way they arrive in real life:
 | Email | `emails/*.eml` | real email files (headers, signatures, quoted replies) | the sender's or recipient's email domain |
 | Call recorder | `calls/*.txt` | transcripts with speakers and timestamps | the CRM account ID in the header |
 
+`contacts.csv` is the CRM's contact export for these accounts (account,
+name, email, side): the dictionary the redaction uses to find a person
+anywhere in the text, not only in headers. Hannah Weiss (Nettle Foods
+procurement) appears only in an email body, so without the contact list the
+leak check would stop that brief.
+
 `directory.csv` holds the join keys (account ID, company name, email domain,
 helpdesk organisation). `answer_key.json` lists, per story, the facts a good
 handover brief must surface and the things it must not claim: it is how

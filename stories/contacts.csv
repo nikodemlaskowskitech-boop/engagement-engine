@@ -1,0 +1,9 @@
+account_id,name,email,side
+acc_024,Barry White,barry.white@yarrowstudio.example,customer
+acc_024,Ines Keller,ines.keller@yarrowstudio.example,customer
+acc_024,Martin Schulz,martin.schulz@yarrowstudio.example,customer
+acc_012,Claire Dunn,claire.dunn@nettlefoods.example,customer
+acc_012,Gareth Lloyd,gareth.lloyd@nettlefoods.example,customer
+acc_012,Raj Patel,raj.patel@nettlefoods.example,customer
+acc_012,Hannah Weiss,hannah.weiss@nettlefoods.example,customer
+acc_156,Lucas Moreau,lucas.moreau@driftwoodlabs.example,customer
