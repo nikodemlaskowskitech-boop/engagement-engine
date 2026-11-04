@@ -236,7 +236,56 @@ def redact(entry, team, facts, docs):
     return "\n\n---\n\n".join(parts), key
 
 
-# --- 4. Check ----------------------------------------------------------------------
+# --- 3. Leak check: the last look before anything leaves --------------------------
+# Redaction finds people by position (headers, participant lists, speaker lines). A
+# person named anywhere else ("loop in Hannah Weiss from procurement") is in neither
+# the key nor the privacy test. So, before the model call, scan exactly what would be
+# sent for anything still shaped like a person: "First Last" that isn't a label, a
+# role ("Head of Data"), a greeting or a known non-person in [handover]
+# leak_check_allow. Anything found stops the call for that account and is listed for
+# a person to look at. It can't catch a first name on its own ("ask Hannah"): the PII
+# detector (PRIVACY.md upgrade B) is for that.
+
+WORD = r"[A-ZÀ-Þ][a-zß-ÿ]+(?:[-'][A-ZÀ-Þ][a-zß-ÿ]+)?"
+PERSON_SHAPED = re.compile(rf"\b{WORD}(?: {WORD})+\b")
+NOT_A_NAME = {   # words that make a capitalised pair something other than a person
+    "Customer", "Cs", "Hi", "Hello", "Dear", "Thanks", "Thank", "Regards", "Best", "Cheers", "Kind",
+    "Re", "Fwd", "Fw", "Subject", "From", "To", "Cc", "Date", "The", "A", "An", "Our", "Your", "We",
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    "January", "February", "March", "April", "May", "June", "July", "August", "September",
+    "October", "November", "December", "Q1", "Q2", "Q3", "Q4",
+    "Head", "Lead", "Manager", "Director", "Analyst", "Engineer", "Partner", "Officer", "Editor",
+    "Admin", "Administrator", "Owner", "Specialist", "Architect", "Consultant", "Coordinator",
+    "Chief", "Vp", "Senior", "Junior", "Principal", "Staff", "Associate", "Assistant", "Intern",
+    "Success", "Product", "Data", "Finance", "Financial", "Business", "Marketing", "Sales", "Analytics",
+    "Platform", "Team", "Operations", "Ops", "Support", "Engineering", "Procurement", "Legal",
+    "Security", "Growth", "Customer", "Account", "Accounts", "Executive", "Technical", "Solutions",
+    "Cairnpath", "Self", "Scale", "Enterprise", "Experiments", "Dashboard", "Dashboards", "Workspace",
+    "Workspaces", "Cohort", "Cohorts", "Chart", "Charts", "Export", "Exports", "Service", "Role",
+}
+
+
+BLOCKED = []                                 # accounts the leak check stopped this run
+
+
+def leak_check(sent, key):
+    """What in the text about to be sent still looks like a person. [] = safe to send."""
+    allow = set(CONF.get("leak_check_allow", []))
+    found = set()
+    for match in PERSON_SHAPED.finditer(sent):
+        words = match.group(0).split()
+        if match.group(0) in allow or any(w.capitalize() in NOT_A_NAME for w in words):
+            continue
+        found.add(match.group(0))
+    # belt and braces: a name redaction knew about must never be in the text
+    for label, real in key.items():
+        if label != "the customer" and real in sent:
+            found.add(real)
+    found |= set(EMAIL_RE.findall(sent)) | set(PHONE_RE.findall(sent))
+    return sorted(found)
+
+
+# --- 5. Check ----------------------------------------------------------------------
 
 def numbers_in(text):
     found = set()
@@ -324,6 +373,13 @@ def run(account_id, dry_run, force=False):
     kinds = {k: sum(d["kind"] == k for d in docs) for k in "SEC"}
     print(f"  {account_id}  {entry['company']:<16} {kinds['S']} tickets, {kinds['E']} emails, {kinds['C']} calls; "
           f"{len(key) - 1} people redacted -> data/handover/{account_id}_sent.txt")
+    leaks = leak_check(sent, key)
+    if leaks:                                # nothing is sent: a person looks at it first
+        BLOCKED.append(account_id)
+        print(f"           BLOCKED, nothing sent to the model: {len(leaks)} thing(s) in {account_id}_sent.txt still look "
+              f"like a person or a contact detail: {', '.join(leaks)}. If one isn't a person, add it to "
+              f"settings.toml [handover] leak_check_allow; if it is, fix the redaction (PRIVACY.md).")
+        return 0, 0
     meta_path = OUT / f"{account_id}_meta.json"
     new = fingerprint(account_id, entry, docs)
     old = json.loads(meta_path.read_text(encoding="utf-8"))["parts"] if meta_path.exists() else {}
@@ -392,3 +448,5 @@ if __name__ == "__main__":
         print(f"Written with {llm.describe()}")
         cost = (tin * LLM["price_input_per_million"] + tout * LLM["price_output_per_million"]) / 1e6
         print(f"\n{len(ids)} accounts, {tin:,} tokens in, {tout:,} out, about ${cost:.3f}")
+    if BLOCKED:                              # a failed step: run_all and the AWS run.json both show it
+        sys.exit(f"\nLeak check stopped {len(BLOCKED)} brief(s): {', '.join(BLOCKED)} (see above)")

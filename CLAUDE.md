@@ -506,6 +506,12 @@ One JSON event per line, one file per day in `data/events/`.
   changed. Daily number moves and scheduled calls don't count. The fingerprint
   and the reason for the last rewrite sit in `<acc>_meta.json`; `--force`
   rewrites anyway, `--dry-run` says what would happen.
+  Leak check (PRIVACY.md upgrade C): before the model call, leak_check() scans
+  the exact text to be sent for anything person-shaped ("First Last" that
+  isn't a label, role, greeting, date, product word or on [handover]
+  leak_check_allow), a name from the key, an email or a phone number; any hit
+  stops the call for that account (no brief), lists what it found, and
+  handover.py exits 1 (in AWS: a warning in run.json).
 - `stories/`: three hand-written account stories (Yarrow Studio: champion
   leaving and a budget cut; Nettle Foods: expansion with a competitor and an
   overage dispute; Driftwood Labs: shelfware with a renewal in two weeks).
@@ -517,6 +523,11 @@ One JSON event per line, one file per day in `data/events/`.
   when a brief is missing after a run, empty, not a finished answer, finds
   under half the planted facts or claims a forbidden one. Run it
   on every PR that touches handover.py or stories/.
+- `tests/leak_check_test.py`: the leak check with a stand-in model (no key,
+  copies of the stories): the stories as they are pass; a name planted only in
+  an email body slips past the redaction and stops the call; missed emails,
+  phones and key names are caught; roles aren't people; the allow list works;
+  --dry-run blocks too. Same PRs as handover_test.py.
 - `tests/handover_cache_test.py`: the cache, with a stand-in model that counts
   its calls (no key, no cost; temporary copies, real briefs untouched): no
   call when nothing changed or only daily numbers moved; a call for a flag
