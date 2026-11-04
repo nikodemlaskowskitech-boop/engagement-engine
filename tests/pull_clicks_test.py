@@ -64,18 +64,25 @@ target = Path(tempfile.mkdtemp()) / "engagement" / "slack_clicks.jsonl"
 s3 = FakeS3({pc.CLICKS + "2026-10-19/ev-1.json": event(1, "2026-10-19T14:00:00Z"),
              pc.CLICKS + "2026-10-19/ev-2.json": event(2, "2026-10-19T09:00:00Z"),
              "state/action_log.csv": b"not a click"})
-count, written = pc.pull(s3, target)
+events_dir = target.parent.parent / "events"
+events_dir.mkdir(parents=True)
+for d in ("2026-10-17", "2026-10-18"):
+    (events_dir / f"{d}.jsonl").write_text("{}\n", encoding="utf-8")
+count, written = pc.pull(s3, target, events_dir)
 lines = target.read_text(encoding="utf-8").splitlines() if target.exists() else []
 check(count == 2 and written and [json.loads(l)["event_id"] for l in lines] == ["ev-2", "ev-1"],
       "the clicks land in data/engagement/slack_clicks.jsonl, oldest first (nothing else from state/)", lines)
 check(target.name == "slack_clicks.jsonl", "same file name the engine in AWS uses (an upload never doubles a click)")
 before = target.stat().st_mtime_ns
-count, written = pc.pull(s3, target)
+count, written = pc.pull(s3, target, events_dir)
 check(count == 2 and not written and target.stat().st_mtime_ns == before,
       "nothing new: the file is left alone (no needless upload)")
-s3.objects[pc.CLICKS + "2026-10-20/ev-3.json"] = event(3, "2026-10-20T08:00:00Z")
-count, written = pc.pull(s3, target)
+s3.objects[pc.CLICKS + "2026-11-04/ev-3.json"] = event(3, "2026-11-04T08:00:00Z")
+count, written = pc.pull(s3, target, events_dir)
+last = next(e for e in map(json.loads, target.read_text(encoding="utf-8").splitlines()) if e["event_id"] == "ev-3")
 check(count == 3 and written, "a new click: the file is rewritten with all three")
+check(last["event_id"] == "ev-3" and last["timestamp"] == "2026-10-19T08:00:00Z",
+      "a click dated by the clock (a card from before run dates) is brought back to the run date", last)
 check(s3.writes == 0, "read-only on AWS")
 
 

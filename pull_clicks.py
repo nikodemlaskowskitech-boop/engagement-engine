@@ -17,30 +17,53 @@ working because AWS can't be reached. Read-only on AWS.
 
 import json
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
-from settings import SETTINGS
+from settings import INPUTS, SETTINGS
 
 AWS = SETTINGS["aws"]
 CLICKS = AWS["slack_clicks_prefix"]
 TARGET = Path(__file__).resolve().parent / "data" / "engagement" / "slack_clicks.jsonl"
+EVENTS = INPUTS / Path(SETTINGS["data"]["events_glob"]).parent       # the product events, one file per day
+
+
+def run_date(events_folder):
+    """The pipeline's run date: the day after the last day of product events
+    (one file per day, events/<date>.jsonl). None when there are none."""
+    days = [p.stem for p in Path(events_folder).glob("*.jsonl")]
+    days = [d for d in days if len(d) == 10 and d[4] == d[7] == "-"]
+    return date.fromisoformat(max(days)) + timedelta(days=1) if days else None
+
+
+def combine(events, events_folder):
+    """The clicks as one engagement file's text, oldest first. A click is never
+    dated after the run date it answers: a card posted before buttons carried
+    the run date gets dated by the listener's clock, so it's brought back to
+    the run date here (the engine's 'today' is the data's, never the clock's)."""
+    last = run_date(events_folder)
+    for e in events:
+        if last and e["timestamp"][:10] > last.isoformat():
+            e["timestamp"] = last.isoformat() + e["timestamp"][10:]
+    events = sorted(events, key=lambda e: (e["timestamp"], e["event_id"]))
+    return "".join(json.dumps(e) + "\n" for e in events)
 
 
 def clicks(s3):
-    """Every click in the bucket, oldest first."""
+    """Every click in the bucket."""
     owner, events = str(AWS["account_id"]), []
     for page in s3.get_paginator("list_objects_v2").paginate(
             Bucket=AWS["bucket"], Prefix=CLICKS, ExpectedBucketOwner=owner):
         for obj in page.get("Contents", []):
             body = s3.get_object(Bucket=AWS["bucket"], Key=obj["Key"], ExpectedBucketOwner=owner)["Body"].read()
             events.append(json.loads(body))
-    return sorted(events, key=lambda e: (e["timestamp"], e["event_id"]))
+    return events
 
 
-def pull(s3, target=TARGET):
+def pull(s3, target=TARGET, events_folder=None):
     """Write the clicks file if anything changed. Returns (clicks, written)."""
     events = clicks(s3)
-    text = "".join(json.dumps(e) + "\n" for e in events)
+    text = combine(events, events_folder or EVENTS)
     old = target.read_text(encoding="utf-8") if target.exists() else ""
     if not events or text == old:
         return len(events), False
