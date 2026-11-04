@@ -48,6 +48,7 @@ import hashlib
 import json
 import re
 import sys
+from collections import Counter
 from email import policy
 from pathlib import Path
 
@@ -89,6 +90,17 @@ Rules:
 def directory():
     with (STORIES / "directory.csv").open(encoding="utf-8") as f:
         return {r["account_id"]: r for r in csv.DictReader(f)}
+
+
+def contacts(account_id):
+    """The CRM's contacts for this account ([handover] contacts_file: account_id, name,
+    email, side), or [] when there's no contact list. Optional: without it,
+    people are found by position only (and the leak check catches the rest)."""
+    path = STORIES / CONF.get("contacts_file", "contacts.csv")
+    if not path.exists():
+        return []
+    with path.open(encoding="utf-8") as f:
+        return [r for r in csv.DictReader(f) if r["account_id"] == account_id and r["name"].strip()]
 
 
 def engine_facts(account_id):
@@ -184,11 +196,17 @@ PHONE_RE = re.compile(r"\+\d[\d ()-]{7,}\d")    # international numbers; dates l
 NAME_RE = r"[A-Z][a-z]+(?: [A-Z][a-z]+)+"
 
 
-def people_in(entry, team, docs, extra=""):
-    """Every person named anywhere: email headers, ticket requesters and agents,
-    call participants, the CS team. Customer side vs. ours by email domain or label."""
+def people_in(entry, team, docs, extra="", known=()):
+    """Every person named anywhere: the account's CRM contacts (wherever they appear,
+    even only in an email body or by first name), email headers, ticket requesters
+    and agents, call participants, the CS team. Customer side vs. ours by email
+    domain or label."""
     found = {}
-    alltext = " ".join(d["text"] for d in docs)
+    alltext = " ".join(d["text"] + " " + d["title"] for d in docs)
+    for c in known:                          # the contact list: found by name, not by position
+        name = c["name"].strip()
+        if re.search(rf"\b({re.escape(name)}|{re.escape(name.split()[0])})\b", alltext + " " + extra):
+            found[name] = "cs" if c.get("side", "").strip() == "cs" else "customer"
     for t in team:                           # our own people, only those who appear
         if " " in t["owner_name"] and t["owner_type"] != "pool" and t["owner_name"] in alltext + " " + extra:
             found[t["owner_name"]] = "cs"
@@ -207,7 +225,7 @@ def people_in(entry, team, docs, extra=""):
 def redact(entry, team, facts, docs):
     """Replace people, contact details and the company. Returns the redacted
     text and the key (label -> real value), which never leaves the laptop."""
-    people = people_in(entry, team, docs, facts)
+    people = people_in(entry, team, docs, facts, contacts(entry["account_id"]))
     key, labels, n = {}, {}, {"customer": 0, "cs": 0}
     for name, side in sorted(people.items(), key=lambda x: (x[1], x[0])):
         n[side] += 1
@@ -216,6 +234,7 @@ def redact(entry, team, facts, docs):
         key[label] = name
     company = entry["company"]
     org = entry["helpdesk_org"]
+    firsts = Counter(name.split()[0] for name in labels)
 
     def clean(text):
         text = EMAIL_RE.sub("[email]", text)
@@ -224,7 +243,9 @@ def redact(entry, team, facts, docs):
             text = text.replace(name, labels[name])
         for name in sorted(labels, key=len, reverse=True):
             first = name.split()[0]
-            text = re.sub(rf"\b{re.escape(first)}\b", labels[name], text)
+            # a first name alone is only replaced when one person has it; two Annas = "[name]"
+            # (privacy first: the model can't tell who, but never sees the name)
+            text = re.sub(rf"\b{re.escape(first)}\b", labels[name] if firsts[first] == 1 else "[name]", text)
         for c in sorted({org, company, company.split()[0]}, key=len, reverse=True):
             text = re.sub(rf"\b{re.escape(c)}\b", "the customer", text)
         return text

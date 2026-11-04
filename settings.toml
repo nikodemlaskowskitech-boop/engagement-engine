@@ -133,6 +133,7 @@ stories_folder = "stories"
 support_file = "support_cases.csv"   # helpdesk ticket export
 email_folder = "emails"              # .eml files
 calls_folder = "calls"               # call transcripts
+contacts_file = "contacts.csv"       # the CRM's contact export (optional): each person is found by name anywhere
 # A brief is rewritten only when one of these changed since the last one (a prompt or
 # model change always counts). Leave one out to stop it triggering a rewrite.
 #   documents    a new or edited email, ticket or call transcript

@@ -207,6 +207,7 @@ a real team has: each one names the customer its own way, and
 | Support cases | `stories/support_cases.csv` | `helpdesk_org` (the helpdesk's organisation name) | ticket_id, organization, requester_name, requester_email, created_at, updated_at, priority, type, status, subject, description, latest_comment |
 | Emails | `stories/emails/*.eml` | the sender's or recipients' `email_domain` | standard .eml files (From, To, Date, Subject, body) |
 | Call transcripts | `stories/calls/*.txt` | `CRM account: acc_xxx` in the header | Title, Date, Participants, then `[hh:mm:ss] Name: text` lines |
+| Contacts (optional) | `stories/contacts.csv` ([handover] contacts_file) | `account_id` | account_id, name, email, side (customer or cs; empty = customer): the CRM's contact export. Redaction finds each listed person anywhere in the text, even by first name; without it, people are found only in headers, participant lists and speaker lines, and the leak check stops a brief that names anyone else |
 
 Without them the handover brief has nothing to read; the rest of the engine is
 unaffected. Names, emails and phone numbers in them are redacted before

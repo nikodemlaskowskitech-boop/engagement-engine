@@ -506,6 +506,10 @@ One JSON event per line, one file per day in `data/events/`.
   changed. Daily number moves and scheduled calls don't count. The fingerprint
   and the reason for the last rewrite sit in `<acc>_meta.json`; `--force`
   rewrites anyway, `--dry-run` says what would happen.
+  Contact list (PRIVACY.md upgrade A, optional): `stories/contacts.csv`
+  ([handover] contacts_file: account_id, name, email, side), the CRM's
+  contact export; each listed person is found anywhere in the text, even by
+  first name. A first name shared by two people becomes "[name]".
   Leak check (PRIVACY.md upgrade C): before the model call, leak_check() scans
   the exact text to be sent for anything person-shaped ("First Last" that
   isn't a label, role, greeting, date, product word or on [handover]
@@ -514,7 +518,9 @@ One JSON event per line, one file per day in `data/events/`.
   handover.py exits 1 (in AWS: a warning in run.json).
 - `stories/`: three hand-written account stories (Yarrow Studio: champion
   leaving and a budget cut; Nettle Foods: expansion with a competitor and an
-  overage dispute; Driftwood Labs: shelfware with a renewal in two weeks).
+  overage dispute; Driftwood Labs: shelfware with a renewal in two weeks),
+  plus `contacts.csv` (the CRM's contacts; Hannah Weiss at Nettle Foods is
+  named only in an email body).
   `stories/answer_key.json` holds what a good brief must find and must not
   claim; for testing only, never shown to the model.
 - `tests/handover_test.py`: privacy first (no real name, first name, email,
@@ -528,6 +534,10 @@ One JSON event per line, one file per day in `data/events/`.
   an email body slips past the redaction and stops the call; missed emails,
   phones and key names are caught; roles aren't people; the allow list works;
   --dry-run blocks too. Same PRs as handover_test.py.
+- `tests/contacts_test.py`: the contact list (no model): a contact named only
+  in an email body is labelled (without the list, the leak check stops it); a
+  first-name-only mention is labelled; two Hannahs give [name]; no list = as
+  before. Same PRs as handover_test.py.
 - `tests/handover_cache_test.py`: the cache, with a stand-in model that counts
   its calls (no key, no cost; temporary copies, real briefs untouched): no
   call when nothing changed or only daily numbers moved; a call for a flag
