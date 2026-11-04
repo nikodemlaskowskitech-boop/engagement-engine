@@ -64,12 +64,18 @@ becomes **the customer**. The key is that mapping, e.g.
 
 ### 1.4 Clean the text (`clean()` inside `redact()`), in this order
 
-1. Email addresses → `[email]`; international phone numbers (`+44 …`) →
-   `[phone]`. Masked for good, not labelled: a brief never needs them.
+1. Email addresses → `[email]`; phone numbers → `[phone]`: international
+   (`+44 …`) and, since 4 Nov 2026 (fix E), national ones too (`020 7946
+   0958`, `06 12 34 56 78`, `(0)89 …`: a leading 0 and 9 to 13 digits, so
+   dates, versions, amounts and short IDs stay). Masked for good, not
+   labelled: a brief never needs them.
 2. Full names → their label, longest first ("Jane Doe" before "Jane").
 3. First names on their own → the same label ("Jane said…"), but only when
    one person has that first name. Two Hannahs: a bare "Hannah" becomes
-   `[name]`, so the model never gets the wrong person's label.
+   `[name]`, so the model never gets the wrong person's label. A first name
+   that's also a word ([handover] common_word_names: Will, May, Mark...) stays
+   a word at a sentence start before "you", "we" etc. ("Will you send it?") or
+   next to a number ("12 May"); anywhere else it's still the person (fix D).
 4. The company name, its first word and the helpdesk organisation → "the
    customer".
 
@@ -112,7 +118,9 @@ They're listed under "Unverified" at the bottom of the brief.
 ### 1.8 Restore (`restore()`)
 
 Each label is replaced by its real value, longest label first, so
-"Customer AB" is never read as "Customer A" and "CS 10" never as "CS 1". The
+"Customer AB" is never read as "Customer A" and "CS 10" never as "CS 1".
+"The customer" at the start of a sentence gets the company name back too
+(fix F; before, two of Driftwood Labs' brief sentences kept "The customer"). The
 brief the new owner reads has real names; the model never had them.
 
 ### 1.9 Where each piece lives
@@ -158,6 +166,10 @@ found". That's gap 1 below.
   check is clean; without the list the leak check stops that brief; a contact
   named by first name only gets the label; two Hannahs give `[name]` for a
   bare "Hannah"; with no contact list at all the briefs work as before.
+- `tests/redaction_fixes_test.py` (fixes D, E, F, on made-up text): "Will
+  you…" and "12 May" stay words while "Will said…" is still the person; UK,
+  French and German national numbers masked, dates, versions, amounts and IDs
+  not; "The customer" restored at a sentence start.
 
 ---
 
@@ -166,10 +178,10 @@ found". That's gap 1 below.
 | # | Gap | Example | Risk |
 | --- | --- | --- | --- |
 | 1 | Names outside the known positions aren't found | an email body says "loop in Hannah Weiss from procurement", and she never appears in a header, participant list or speaker line | on the contact list (A): **found and labelled**, even by first name. Not on it: the leak check (C) **stops the call**. Left: a first name alone of someone not on the list ("ask Petra") |
-| 2 | First names are replaced as whole words everywhere | a person called "Will" or "May" turns ordinary words into labels | garbled text, possibly a wrong statement |
+| 2 | First names are replaced as whole words everywhere | a person called "Will" or "May" turns ordinary words into labels | mostly fixed with D: "Will you…" and "12 May" stay words. Left: other everyday uses ("Mark the date") still become the person's label, a garble, never a leak |
 | 3 | Two people with the same first name collide | every bare "Anna" became the first Anna's label | fixed with A: a shared first name on its own becomes `[name]` |
-| 4 | Only international phone numbers are caught | `01632 960123` stays | a phone number reaches the model |
-| 5 | Restore is exact and case-sensitive | "The customer" at the start of a sentence stays generic | low: nothing wrong shown, just less specific |
+| 4 | Only international phone numbers are caught | `01632 960123` stayed | fixed with E (national formats). Left: numbers written in words or with unusual separators |
+| 5 | Restore is exact and case-sensitive | "The customer" at the start of a sentence stayed generic | fixed with F |
 | 6 | Labels are per brief | "Customer A" means different people in two briefs | none today; matters if briefs are ever combined |
 | 7 | Other identifiers aren't touched | job titles, street addresses, contract or invoice numbers, IBANs | a rare title ("our only CFO") can identify a person |
 
@@ -185,14 +197,14 @@ Today's three stories have none of gaps 1, 4 or 7 (checked by hand on 4 Nov
 | A ✅ | **Contact list as the dictionary** (done 4 Nov 2026, §1.2) | 1 (mostly), 3 | Add an optional `contacts.csv` input (account_id, name, email, side), the CRM's contact export, to the data contract. Every known person is found wherever they appear, not only in headers. Same-first-name people get first-name replacement only where unambiguous (else full names only). | A story with a contact named only in an email body: the privacy test must find and hide her. | none (an export the CRM already has) |
 | B ⏸ | **A PII detector as a second pass** (deferred 4 Nov 2026, see below) | 1 (the rest), 4, 7 | After the rules, run each cleaned document through Amazon Comprehend `DetectPiiEntities` (or open-source Microsoft Presidio, on the laptop) and label anything it finds as a person, phone, address or account number. | A planted unknown name, a local phone number and an IBAN in a story: all masked. | Comprehend: fractions of a cent per brief |
 | C ✅ | **A leak check on what the model would see** (done 4 Nov 2026, §1.5) | makes 1 visible | Scan `_sent.txt` for anything person-shaped (the detector from B, or "First Last" not in the key and not a known word). Anything found blocks the model call and is listed for a human. | The test from A, run *without* A: the check must stop the call. | none |
-| D | **Safer first names** | 2, 3 | Replace a first name alone only when it's unique in the document set and not a common word (a short stop list). | Stories with "Will" and two Annas. | none |
-| E | **Local phone formats** | 4 | Extend the phone pattern (national formats, or rely on B). | A local number in a story. | none |
-| F | **Case-insensitive restore** | 5 | Restore "The customer" too, keeping the capital. | Unit test on restore. | none |
+| D ✅ | **Safer first names** (done 4 Nov 2026, §1.4) | 2, 3 | Replace a first name alone only when it's unique in the document set and not a common word (a short stop list). | Stories with "Will" and two Annas. | none |
+| E ✅ | **Local phone formats** (done 4 Nov 2026, §1.4) | 4 | Extend the phone pattern (national formats, or rely on B). | A local number in a story. | none |
+| F ✅ | **Case-insensitive restore** (done 4 Nov 2026, §1.8) | 5 | Restore "The customer" too, keeping the capital. | Unit test on restore. | none |
 | G | **Stable pseudonyms across briefs** | 6 | A per-account token kept in a vault (e.g. DynamoDB), so the same person keeps the same label everywhere. | Two briefs naming the same person: same label. | only if briefs are ever combined |
 
 Suggested order: **C first** (done: a silent leak is now a stopped call),
 then **A** (done: the contact list finds people anywhere), then **B** (deferred, below) (catches what nobody
-listed). D, E and F are small fixes to do alongside. G only when needed.
+listed). D, E and F, the small fixes, done 4 Nov 2026. G only when needed.
 
 ### Upgrade B: why we're waiting (decided 4 Nov 2026)
 

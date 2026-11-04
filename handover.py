@@ -192,7 +192,48 @@ def gather(account_id):
 # --- 2. Redact ---------------------------------------------------------------------
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
-PHONE_RE = re.compile(r"\+\d[\d ()-]{7,}\d")    # international numbers; dates like 2026-10-05 stay
+# Phone numbers: international (+44 20 7946 0958) and national (020 7946 0958, 01632 960123,
+# 06 12 34 56 78, (0)89 1234 5678). A national number starts with 0 and has 9 to 13 digits, so
+# dates (2026-10-05), versions (3.0.1), amounts and short IDs stay.
+PHONE_RE = re.compile(r"\+\d[\d ()-]{7,}\d"
+                      r"|(?<![\w/.:-])\(?0\)?\d{1,4}\)?(?:[ -]\d{2,6}){1,4}(?![\w/:-]|\.\d)"
+                      r"|(?<![\w/.:-])0\d{8,12}(?![\w/:-]|\.\d)")
+
+
+def phones(text):
+    """The phone numbers in a text (national ones must have 9 to 13 digits)."""
+    return [m.group(0) for m in PHONE_RE.finditer(text)
+            if m.group(0).startswith("+") or 9 <= sum(c.isdigit() for c in m.group(0)) <= 13]
+
+
+def mask_phones(text):
+    for number in sorted(set(phones(text)), key=len, reverse=True):
+        text = text.replace(number, "[phone]")
+    return text
+
+
+# First names that are also everyday words (PRIVACY.md fix D): "Will you send it?" and "on
+# 12 May" must stay words. Such a name alone is kept as a word at a sentence start before a word
+# like "you" or "we", or next to a number (a date); anywhere else it's still the person.
+FUNCTION_WORDS = {"you", "we", "i", "they", "he", "she", "it", "be", "have", "not", "need", "the",
+                  "this", "that", "there", "our", "your", "a", "an", "all", "also"}
+
+
+def first_name_alone(first, label, text):
+    """Replace a first name on its own with its label, except where it's plainly a word."""
+    if first not in set(CONF.get("common_word_names", [])):
+        return re.sub(rf"\b{re.escape(first)}\b", label, text)
+
+    def swap(m):
+        before, after = text[:m.start()], text[m.end():]
+        next_word = re.match(r"\s+([A-Za-z']+)", after)
+        sentence_start = re.search(r"(^|[.!?:]\s+|\n\s*)$", before)
+        if sentence_start and next_word and next_word.group(1).lower() in FUNCTION_WORDS:
+            return m.group(0)                  # "Will you ...", "May we ..."
+        if re.search(r"\d\s*$", before) or re.match(r"\s*\d", after):
+            return m.group(0)                  # "12 May", "May 2026"
+        return label
+    return re.sub(rf"\b{re.escape(first)}\b", swap, text)
 NAME_RE = r"[A-Z][a-z]+(?: [A-Z][a-z]+)+"
 
 
@@ -238,14 +279,14 @@ def redact(entry, team, facts, docs):
 
     def clean(text):
         text = EMAIL_RE.sub("[email]", text)
-        text = PHONE_RE.sub("[phone]", text)
+        text = mask_phones(text)
         for name in sorted(labels, key=len, reverse=True):      # full names first, then first names alone
             text = text.replace(name, labels[name])
         for name in sorted(labels, key=len, reverse=True):
             first = name.split()[0]
             # a first name alone is only replaced when one person has it; two Annas = "[name]"
             # (privacy first: the model can't tell who, but never sees the name)
-            text = re.sub(rf"\b{re.escape(first)}\b", labels[name] if firsts[first] == 1 else "[name]", text)
+            text = first_name_alone(first, labels[name] if firsts[first] == 1 else "[name]", text)
         for c in sorted({org, company, company.split()[0]}, key=len, reverse=True):
             text = re.sub(rf"\b{re.escape(c)}\b", "the customer", text)
         return text
@@ -302,7 +343,7 @@ def leak_check(sent, key):
     for label, real in key.items():
         if label != "the customer" and real in sent:
             found.add(real)
-    found |= set(EMAIL_RE.findall(sent)) | set(PHONE_RE.findall(sent))
+    found |= set(EMAIL_RE.findall(sent)) | set(phones(sent))
     return sorted(found)
 
 
@@ -330,8 +371,12 @@ def check(brief, sent, ids):
 
 
 def restore(text, key):
+    """Real values back in, longest label first. "the customer" also comes back when the
+    model starts a sentence with it ("The customer ...", PRIVACY.md fix F)."""
     for label in sorted(key, key=len, reverse=True):
         text = text.replace(label, key[label])
+        if label[0].islower():
+            text = text.replace(label[0].upper() + label[1:], key[label])
     return text
 
 

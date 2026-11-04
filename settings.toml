@@ -147,6 +147,12 @@ max_output_tokens = 4000     # room to write; a brief cut short is refused, neve
 # something shaped like a person ("First Last"). Capitalised pairs that aren't people (brands,
 # product names) go here once a person has looked at them.
 leak_check_allow = ["Pantry Lane"]   # one of Nettle Foods' brands (stories/calls)
+# First names that are also everyday words. Alone, they're kept as words at a sentence start
+# before "you", "we" etc. ("Will you send it?") or next to a number ("12 May"); elsewhere they're
+# still the person. Add the names your customers' languages need.
+common_word_names = ["Will", "May", "June", "April", "August", "Mark", "Bill", "Grant", "Art",
+                     "Rose", "Hope", "Faith", "Joy", "Pat", "Sue", "Rob", "Jack", "Drew", "Dawn",
+                     "Summer", "Sky", "Hunter", "Chase", "Ray", "Frank", "Victor", "Iris"]
 
 [regions]
 # Hours ahead of UTC (summer time), for sending emails at a local hour
