@@ -183,7 +183,7 @@ Today's three stories have none of gaps 1, 4 or 7 (checked by hand on 4 Nov
 | | Upgrade | Closes | How | Proof it works | Cost |
 | --- | --- | --- | --- | --- | --- |
 | A ✅ | **Contact list as the dictionary** (done 4 Nov 2026, §1.2) | 1 (mostly), 3 | Add an optional `contacts.csv` input (account_id, name, email, side), the CRM's contact export, to the data contract. Every known person is found wherever they appear, not only in headers. Same-first-name people get first-name replacement only where unambiguous (else full names only). | A story with a contact named only in an email body: the privacy test must find and hide her. | none (an export the CRM already has) |
-| B | **A PII detector as a second pass** | 1 (the rest), 4, 7 | After the rules, run each cleaned document through Amazon Comprehend `DetectPiiEntities` (or open-source Microsoft Presidio, on the laptop) and label anything it finds as a person, phone, address or account number. | A planted unknown name, a local phone number and an IBAN in a story: all masked. | Comprehend: fractions of a cent per brief |
+| B ⏸ | **A PII detector as a second pass** (deferred 4 Nov 2026, see below) | 1 (the rest), 4, 7 | After the rules, run each cleaned document through Amazon Comprehend `DetectPiiEntities` (or open-source Microsoft Presidio, on the laptop) and label anything it finds as a person, phone, address or account number. | A planted unknown name, a local phone number and an IBAN in a story: all masked. | Comprehend: fractions of a cent per brief |
 | C ✅ | **A leak check on what the model would see** (done 4 Nov 2026, §1.5) | makes 1 visible | Scan `_sent.txt` for anything person-shaped (the detector from B, or "First Last" not in the key and not a known word). Anything found blocks the model call and is listed for a human. | The test from A, run *without* A: the check must stop the call. | none |
 | D | **Safer first names** | 2, 3 | Replace a first name alone only when it's unique in the document set and not a common word (a short stop list). | Stories with "Will" and two Annas. | none |
 | E | **Local phone formats** | 4 | Extend the phone pattern (national formats, or rely on B). | A local number in a story. | none |
@@ -191,8 +191,31 @@ Today's three stories have none of gaps 1, 4 or 7 (checked by hand on 4 Nov
 | G | **Stable pseudonyms across briefs** | 6 | A per-account token kept in a vault (e.g. DynamoDB), so the same person keeps the same label everywhere. | Two briefs naming the same person: same label. | only if briefs are ever combined |
 
 Suggested order: **C first** (done: a silent leak is now a stopped call),
-then **A** (done: the contact list finds people anywhere), then **B** (catches what nobody
+then **A** (done: the contact list finds people anywhere), then **B** (deferred, below) (catches what nobody
 listed). D, E and F are small fixes to do alongside. G only when needed.
+
+### Upgrade B: why we're waiting (decided 4 Nov 2026)
+
+With A and C in place, a person the contact list knows is labelled, and any
+other "First Last" stops the brief before the model call. What's left for a
+detector: a first name alone of someone not on the list, local phone
+numbers, addresses, bank details, rare job titles.
+
+We're not building it yet, because there's no case for it in the data we
+have: three hand-written English stories, which A and C already handle with
+no misses and no false alarms. Without real exports there's nothing to show
+what a detector would catch, or how often it would wrongly flag a product or
+place name. And each way of running one has a real cost:
+
+| Option | For | Against |
+| --- | --- | --- |
+| Amazon Comprehend (`DetectPiiEntities`) | managed, pay per use, an IAM permission away | not offered in eu-north-1, our only fully open region (the nearest EU ones are Frankfurt, Ireland and London): it needs an SCP change and sends redacted text out of Stockholm. Its PII detection reads **English and Spanish only**, a poor fit for a European book (German, French, Nordic languages) |
+| Microsoft Presidio, open source, inside the Lambda | stays in the region, nothing leaves, can load other languages | its language models are hundreds of MB: a container image instead of a zip, slower cold starts, more to maintain |
+| A hosted PII service in the EU | no SCP change, language choice | a new third party seeing (redacted) customer text: a vendor review first |
+
+**Revisit when** real exports arrive and the leak check stops briefs for
+names the contact list didn't know, or a customer's language needs more than
+the rules can do. Logged in the spec's Feature requests.
 
 ---
 
