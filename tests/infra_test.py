@@ -139,7 +139,7 @@ lambda_checks("Check Lambda: wakes on the upload marker, least privilege", "REPO
 lambda_checks("Engine Lambda: wakes on the check's verdict, least privilege", "ENGINE_STEPS",
               "engine", reports + "latest.json",
               may_read=[aws["inputs_prefix"] + "*", aws["state_prefix"] + "*", reports + "latest.json",
-                        aws["outputs_prefix"] + "run.json"],
+                        aws["outputs_prefix"] + "run.json", aws["outputs_prefix"] + "handover/*"],
               may_write=[aws["outputs_prefix"] + "*"],
               never_write=[aws["inputs_prefix"], aws["reports_prefix"], aws["state_prefix"]],
               output="EngineFunction", retries=0)
@@ -179,6 +179,23 @@ r = has(t, "AWS::S3::Bucket", {"LifecycleConfiguration": {"Rules": Match.array_w
 check(r is True, f"query results deleted after {aws['athena_results_keep_days']} days", r)
 check(not any(c["Filter"]["Key"]["FilterRules"][0]["Value"].startswith((aws["outputs_prefix"], aws["athena_results_prefix"]))
               for c in lam), "nothing wakes on outputs/ or athena-results/ (no loops)")
+
+print("\nEngine Lambda: the API key for the briefs")
+eng = next(v for v in ours.values() if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"])
+evars = eng["Properties"]["Environment"]["Variables"]
+check(evars.get("API_KEY_PARAMETER") == aws["api_key_parameter"] and evars.get("LLM_PROVIDER") == aws["briefs_llm_provider"]
+      and json.loads(evars.get("OPTIONAL_STEPS", "[]")) == aws["engine_optional_steps"],
+      "told the key's name (not the key), the provider and the optional steps, from settings")
+check(not any("sk-ant" in str(v) or "ANTHROPIC_API_KEY" in str(k) for k, v in evars.items()),
+      "no API key in its settings (it reads it at run time)")
+erole = eng["Properties"]["Role"]["Fn::GetAtt"][0]
+ssm_stmts = [st for v in t.find_resources("AWS::IAM::Policy").values()
+             if any(r.get("Ref") == erole for r in v["Properties"].get("Roles", []))
+             for st in v["Properties"]["PolicyDocument"]["Statement"]
+             if any(a.startswith("ssm:") for a in actions_of(st))]
+check(len(ssm_stmts) == 1 and actions_of(ssm_stmts[0]) == ["ssm:GetParameter"]
+      and f"parameter{aws['api_key_parameter']}" in json.dumps(ssm_stmts[0]["Resource"]),
+      "may read that one parameter, nothing else in Parameter Store, and never write it", ssm_stmts)
 
 print("\nSchedule: a daily safety net for the engine")
 scheds = t.find_resources("AWS::Scheduler::Schedule")

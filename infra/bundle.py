@@ -3,10 +3,10 @@ Gathers each Lambda's code into one folder under infra/build/ (git-ignored):
 its handler plus the few repo files it runs. Plain Python, no CDK, so the
 tests can build exactly what gets deployed.
 
-The engine Lambda also needs DuckDB, built for Lambda's machine (Linux on
-arm64, Python 3.13), not for the laptop. pip can fetch that build from any
-laptop (--platform), so no Docker is needed. The version comes from
-requirements.txt, so the laptop and AWS always run the same DuckDB.
+The engine Lambda also needs DuckDB and the Anthropic library, built for
+Lambda's machine (Linux on arm64, Python 3.13), not for the laptop. pip can
+fetch those builds from any laptop (--platform), so no Docker is needed. The
+versions come from requirements.txt, so the laptop and AWS always match.
 """
 
 import os
@@ -24,7 +24,9 @@ BUILD = INFRA / "build"
 CHECK_FILES = ["check_inputs.py", "settings.py", "settings.toml"]
 ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "flags.py", "journeys.py",
                 "team_report.py", "backtest.py", "onboarding_report.py", "export_views.py",
-                "to_parquet.py", "views_template.html"]
+                "to_parquet.py", "views_template.html", "handover.py", "llm.py", "stories"]
+NEVER_BUNDLE = ["answer_key.json", "README.md"]     # stories/: the test's answer key never reaches AWS
+LAMBDA_PACKAGES = ["duckdb", "anthropic"]           # third-party libraries the engine needs, pinned in requirements.txt
 LAMBDA_PLATFORMS = ["manylinux_2_28_aarch64", "manylinux_2_27_aarch64", "manylinux2014_aarch64"]
 
 
@@ -43,32 +45,37 @@ def bundle_check_inputs(out=None):
     return out
 
 
-def duckdb_version():
-    """The pinned DuckDB version, from requirements.txt (one source of truth)."""
+def pinned(package):
+    """The version requirements.txt pins for a package (one source of truth for laptop and AWS)."""
     text = (REPO / "requirements.txt").read_text(encoding="utf-8")
-    return re.search(r"^duckdb==([\w.]+)", text, re.M).group(1)
+    return re.search(rf"^{re.escape(package)}==([\w.]+)", text, re.M).group(1)
 
 
 def lambda_deps():
-    """DuckDB for Lambda (Linux arm64, Python 3.13), downloaded once per version and reused."""
-    version = duckdb_version()
-    cache = BUILD / f"deps_duckdb_{version}"
-    if not (cache / "duckdb").is_dir():
+    """The engine's libraries built for Lambda (Linux arm64, Python 3.13), downloaded once per
+    set of versions and reused. pip picks the Linux builds even on a Windows laptop."""
+    pins = [f"{p}=={pinned(p)}" for p in LAMBDA_PACKAGES]
+    cache = BUILD / ("deps_" + "_".join(pin.replace("==", "-") for pin in pins))
+    if not (cache / ".complete").exists():
         shutil.rmtree(cache, ignore_errors=True)
         cmd = [sys.executable, "-m", "pip", "install", "--quiet", "--target", str(cache),
                "--implementation", "cp", "--python-version", "3.13", "--only-binary=:all:",
-               *[a for p in LAMBDA_PLATFORMS for a in ("--platform", p)], f"duckdb=={version}"]
-        print(f"Fetching DuckDB {version} for Lambda (Linux arm64, Python 3.13) ...")
+               *[a for p in LAMBDA_PLATFORMS for a in ("--platform", p)], *pins]
+        print(f"Fetching {', '.join(pins)} for Lambda (Linux arm64, Python 3.13) ...")
         subprocess.run(cmd, check=True)
+        (cache / ".complete").write_text("ok")
     return cache
 
 
 def bundle_engine(out=None, deps=None):
-    """The engine Lambda: handler + ENGINE_FILES + DuckDB. deps=False (or the
-    CAIRNPATH_SKIP_DEPS environment variable) leaves DuckDB out, for tests."""
+    """The engine Lambda: handler + ENGINE_FILES (stories/ without its answer key) + libraries.
+    deps=False (or the CAIRNPATH_SKIP_DEPS environment variable) leaves the libraries out, for tests."""
     out = _fresh(out or BUILD / "run_engine", "run_engine")
     for name in ENGINE_FILES:
-        shutil.copy(REPO / name, out)
+        if (REPO / name).is_dir():
+            shutil.copytree(REPO / name, out / name, ignore=shutil.ignore_patterns(*NEVER_BUNDLE))
+        else:
+            shutil.copy(REPO / name, out)
     if deps is None:
         deps = not os.environ.get("CAIRNPATH_SKIP_DEPS")
     if deps:

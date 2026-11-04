@@ -104,7 +104,11 @@ class DataStack(Stack):
                          "INPUTS_PREFIX": inputs, "STATE_PREFIX": state, "OUTPUTS_PREFIX": outputs,
                          "CHECK_SUMMARY": check_summary, "MARKER_NAME": aws["upload_marker"],
                          "ENGINE_STEPS": json.dumps(aws["engine_steps"]),
-                         "ENGINE_CODE": json.dumps(ENGINE_FILES)},
+                         "ENGINE_CODE": json.dumps(ENGINE_FILES),
+                         "OPTIONAL_STEPS": json.dumps(aws["engine_optional_steps"]),
+                         # the key's NAME, not the key: the value is read at run time (never shown here)
+                         "API_KEY_PARAMETER": aws["api_key_parameter"],
+                         "LLM_PROVIDER": aws["briefs_llm_provider"]},
             retry_attempts=0,                                  # same data, same result: a retry wouldn't help
             log_group=logs.LogGroup(self, "RunEngineLogs",
                                     retention=logs.RetentionDays.ONE_MONTH,
@@ -115,6 +119,12 @@ class DataStack(Stack):
         self.bucket.grant_read(engine, state + "*")
         self.bucket.grant_read(engine, check_summary)
         self.bucket.grant_put(engine, outputs + "*")
+        self.bucket.grant_read(engine, outputs + "handover/*")          # the briefs' cache from earlier runs
+        # the LLM API key: read this one parameter, decrypted (the AWS-managed aws/ssm key allows
+        # that for roles in this account that may read the parameter), nothing else in Parameter Store
+        engine.add_to_role_policy(iam.PolicyStatement(
+            actions=["ssm:GetParameter"],
+            resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter{aws['api_key_parameter']}"]))
         # runs right after each input check (its summary is written last)
         self.bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED, s3n.LambdaDestination(engine),
