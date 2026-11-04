@@ -39,7 +39,9 @@ with short comments, and work in small steps (one PR per change).
   acceptance page. Every PR that touches infra/ runs `python
   tests/infra_test.py` (builds the template in memory, no AWS login, no
   cost), `python tests/check_lambda_test.py` and `python
-  tests/engine_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`. Docs-only PRs need none. Nothing merges with a FAIL. A bug
+  tests/engine_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`; one
+  that touches roles or policies also runs `python tests/security_check_test.py`
+  and, after the deploy, Nikodem runs `python security_check.py` (live). Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
 - Fix review findings now, in the same change or PR. Don't defer them to
   "later": deferred fixes get lost.
@@ -600,6 +602,19 @@ One JSON event per line, one file per day in `data/events/`.
   Lambda once per batch. Prints the first 10 files, then a count. `--dry-run`
   says what would go. Not in run_all yet.
   Sign in first (`aws login --profile cairnpath`).
+- `security_check.py`: live security checks, read-only (`python
+  security_check.py` after `aws login`). Finds the deployed roles and functions
+  in the CairnpathData stack and asks the IAM policy simulator, with the
+  bucket's real policy, 18 questions: things each role must NOT be able to do
+  (the engine writing its inputs or the check's verdict, deleting, reading
+  another secret, anything over plain HTTP; the check writing where it's
+  triggered or reading the API key; the schedule starting the check or
+  reading data; the crawler writing or reading raw inputs) and controls that
+  must work (so a check that denies everything can't pass). infra_test.py
+  checks the template; this checks what's deployed. Exit 1 on any FAIL.
+  `tests/security_check_test.py`: stand-in CloudFormation, simulator and S3:
+  roles told from same-prefix functions, the bucket policy and plain HTTP
+  included, a leaking role caught, an all-deny answer caught.
 - `put_key.py`: stores ANTHROPIC_API_KEY from .env in Parameter Store as a
   SecureString ([aws] api_key_parameter), for the briefs in AWS. Never typed
   into a command, never printed; rerun after rotating the key.
