@@ -142,6 +142,10 @@ calls_folder = "calls"               # call transcripts
 # Daily number moves (utilisation, users, the date) never trigger one, nor does a scheduled call.
 rewrite_on = ["documents", "flag_status", "qbr_booked", "owner"]
 max_output_tokens = 4000     # room to write; a brief cut short is refused, never saved
+# The leak check (handover.py) stops the model call when the text about to be sent still holds
+# something shaped like a person ("First Last"). Capitalised pairs that aren't people (brands,
+# product names) go here once a person has looked at them.
+leak_check_allow = ["Pantry Lane"]   # one of Nettle Foods' brands (stories/calls)
 
 [regions]
 # Hours ahead of UTC (summer time), for sending emails at a local hour
