@@ -32,6 +32,8 @@ class FakeCfn:
                 ("RunEngineE691D882", "AWS::Lambda::Function", "CairnpathData-RunEngine-BBB"),
                 ("ScheduleRole756A1A25", "AWS::IAM::Role", "CairnpathData-ScheduleRole-CCC"),
                 ("CrawlerRoleA9495AEE", "AWS::IAM::Role", "CairnpathData-CrawlerRole-DDD"),
+                ("SlackListenerServiceRoleF1A2B3C4", "AWS::IAM::Role", "CairnpathData-SlackListenerServiceRole-FFF"),
+                ("SlackListener5D6E7F80", "AWS::Lambda::Function", "CairnpathData-SlackListener-FFF"),
                 ("BucketNotificationsHandler050aRole", "AWS::IAM::Role", "CairnpathData-Handler-EEE")]
         return {"StackResources": [{"LogicalResourceId": a, "ResourceType": b, "PhysicalResourceId": c} for a, b, c in rows]}
 
@@ -61,7 +63,9 @@ class FakeIAM:
                                              or (action == "s3:GetObject" and "/inputs/" in res and not http)))
                    or ("CheckInputs" in role and action == "s3:PutObject" and "/reports/check_inputs/" in res)
                    or ("ScheduleRole" in role and action == "lambda:InvokeFunction" and "RunEngine" in res)
-                   or ("CrawlerRole" in role and action == "s3:GetObject" and "/outputs/tables/" in res))
+                   or ("CrawlerRole" in role and action == "s3:GetObject" and "/outputs/tables/" in res)
+                   or ("SlackListener" in role and ((action == "s3:PutObject" and "/state/clicks/" in res)
+                                                    or (action == "ssm:GetParameter" and "/cairnpath/slack-" in res))))
         if self.leak and self.leak(role, action, res):
             allowed = True
         return {"EvaluationResults": [{"EvalDecision": "allowed" if allowed else ("explicitDeny" if http else "implicitDeny")}]}
@@ -102,6 +106,11 @@ leaky = FakeIAM(leak=lambda role, action, res: "RunEngine" in role and action ==
 results = sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION)
 bad = [r for r in results if not r["ok"]]
 check(len(bad) == 1 and "change its own inputs" in bad[0]["why"], "a role that can write its inputs is caught", bad)
+check(names.get("slack", "").endswith("SlackListenerServiceRole-FFF"), "finds the Slack listener's role too", names)
+leaky = FakeIAM(leak=lambda role, action, res: "SlackListener" in role and action == "s3:GetObject")
+bad = [r for r in sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION) if not r["ok"]]
+check(len(bad) == 1 and bad[0]["role"] == "slack" and "read any data" in bad[0]["why"],
+      "a Slack listener that can read data is caught (it faces the internet)", bad)
 check(quiet(sc.report, results) == 1, "...and the report counts it as a failure (exit 1)")
 orig = sc.run
 def no_region_run():
@@ -115,9 +124,9 @@ def no_region_run():
     return sc.run(FakeCfn(), asked, FakeS3(), ACCOUNT, REGION)
 results = no_region_run()
 bad = [r for r in results if not r["ok"]]
-check(len(bad) == 5 and all(r["expected"] == sc.ALLOW for r in bad)
+check(len(bad) == sum(r["expected"] == sc.ALLOW for r in results) and all(r["expected"] == sc.ALLOW for r in bad)
       and all("Organizations SCP RegionFloor" in r["decided_by"] for r in bad),
-      "questions without a region: the 5 controls fail and the report names the SCP that denied them", bad)
+      "questions without a region: every control fails and the report names the SCP that denied them", bad)
 too_tight = FakeIAM(leak=None)
 too_tight.simulate_principal_policy = lambda **kw: {"EvaluationResults": [{"EvalDecision": "implicitDeny"}]}
 results = sc.run(FakeCfn(), too_tight, FakeS3(), ACCOUNT, REGION)

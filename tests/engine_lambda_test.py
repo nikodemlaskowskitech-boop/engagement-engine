@@ -22,6 +22,7 @@ import os
 import shutil
 import sys
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -37,6 +38,8 @@ INPUTS, STATE, OUTPUTS = AWS["inputs_prefix"], AWS["state_prefix"], AWS["outputs
 CHECK = AWS["reports_prefix"] + "check_inputs/latest.json"
 MARKER = AWS["upload_marker"]
 REAL = importlib.util.find_spec("duckdb") is not None
+CLICKS = AWS["slack_clicks_prefix"]
+LONG_AGO = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 failed = 0
 
@@ -52,6 +55,7 @@ class FakeS3:
 
     def __init__(self, objects):
         self.objects, self.writes = dict(objects), []
+        self.modified = {}                      # key -> when written (default: long ago)
 
     def _owner(self, owner):
         if owner != OWNER:
@@ -70,7 +74,8 @@ class FakeS3:
                 s3._owner(ExpectedBucketOwner)
                 keys = sorted(k for k in s3.objects if k.startswith(Prefix))
                 for i in range(0, max(len(keys), 1), 100):
-                    yield {"Contents": [{"Key": k} for k in keys[i:i + 100]]}
+                    yield {"Contents": [{"Key": k, "LastModified": s3.modified.get(k, LONG_AGO)}
+                                        for k in keys[i:i + 100]]}
         return Pages()
 
     def download_file(self, Bucket, Key, Filename, ExtraArgs=None):
@@ -81,6 +86,7 @@ class FakeS3:
         self._owner(ExpectedBucketOwner)
         self.objects[Key] = Body
         self.writes.append(Key)
+        self.modified[Key] = datetime.now(timezone.utc)
 
 
 def bucket_with_demo(status):
@@ -256,6 +262,42 @@ del os.environ["BREAK_BRIEFS"]
 check(down["status"] == "OK" and any("briefs.py failed" in w for w in down["warnings"]),
       "the model API fails: a warning, and the cockpit still updates", down.get("warnings"))
 h.OPTIONAL = []
+
+print("\nEngine Lambda: Slack clicks from the AWS listener (state/clicks/)")
+
+
+def click_event(n, ts):
+    return json.dumps({"event_id": f"ev-{n}", "event_name": "task_claimed", "event_type": "engagement",
+                       "timestamp": ts, "account_id": "acc_037", "user_id": None,
+                       "properties": {"owner_id": "csm_anna", "topic": "churn", "outcome": None, "note": None,
+                                      "slack_user": "U_ANNA"}, "context": {"source": "slack"}}).encode()
+
+
+(bundle / "reads_clicks.py").write_text(
+    "import json\nfrom pathlib import Path\n"
+    "lines = Path('data/engagement/slack_clicks.jsonl').read_text(encoding='utf-8').splitlines()\n"
+    "ids = [json.loads(l)['event_id'] for l in lines]\n"
+    "assert ids == ['ev-2', 'ev-1'], ids\n"
+    "assert not Path('data/clicks').exists(), 'raw click files left behind'\n"
+    "print('clicks seen', ids)\n", encoding="utf-8")
+h.CODE, h.STEPS = ENGINE_FILES + ["reads_clicks.py"], ["reads_clicks.py"]
+s3 = FakeS3(bucket_with_demo("OK"))
+s3.objects[CLICKS + "2026-10-19/ev-1.json"] = click_event(1, "2026-10-19T14:00:00Z")
+s3.objects[CLICKS + "2026-10-19/ev-2.json"] = click_event(2, "2026-10-19T09:30:00Z")
+run = h.handler({"trigger": "manual"}, None, s3=s3, work=work)
+check(run["status"] == "OK" and run["slack_clicks"] == 2,
+      "the clicks become one engagement file, oldest first, before the steps run", run.get("failed_step"))
+check(not any("clicks" in o for o in run["outputs"]), "...and are never uploaded again as outputs", run["outputs"])
+s3.objects[CHECK] = json.dumps({"status": "OK", "errors": 0, "warnings": 0, "checked_at": "2026-11-05T00:00:00Z"}).encode()
+h.handler(sched, None, s3=s3, work=work)                       # a good scheduled run on this check
+quiet = h.handler(sched, None, s3=s3, work=work)
+check(quiet["status"] == "SKIPPED", "no click since the last run: the schedule says up to date", quiet)
+s3.objects[CLICKS + "2026-10-19/ev-3.json"] = click_event(3, "2026-10-19T15:00:00Z")
+s3.modified[CLICKS + "2026-10-19/ev-3.json"] = datetime.now(timezone.utc) + timedelta(minutes=5)
+(bundle / "reads_clicks.py").write_text("print('ran')\n", encoding="utf-8")
+woke = h.handler(sched, None, s3=s3, work=work)
+check(woke["status"] == "OK" and woke["slack_clicks"] == 3,
+      "a click after the last run: the daily schedule runs the engine (clicks don't wake it one by one)", woke)
 
 print("\nEngine Lambda: a step that fails")
 (bundle / "broken.py").write_text("raise SystemExit('this step broke')\n", encoding="utf-8")

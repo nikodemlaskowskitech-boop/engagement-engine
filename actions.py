@@ -411,7 +411,7 @@ with LOG.open("a", newline="", encoding="utf-8") as f:
                     channel = (dm_target(t["routed_to"], demo_user) if t.get("_dm") and demo_user
                                else card_channel(t["routed_to"], demo_user or SETTINGS["slack"]["team_channel"]))
                     client.chat_postMessage(channel=channel,
-                                            blocks=card_blocks(t, owner, last_touch.get(t["account_id"])),
+                                            blocks=card_blocks(t, owner, last_touch.get(t["account_id"]), run_date),
                                             text=f"{t['account_name']}: {t['flag']} {t['status']} for {owner}")
                 except SlackApiError as error:
                     needed = error.response.get("needed")      # Slack names the missing permission

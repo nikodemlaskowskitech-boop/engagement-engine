@@ -38,8 +38,8 @@ with short comments, and work in small steps (one PR per change).
   roles, routing, money or the segment bar; their results go to the
   acceptance page. Every PR that touches infra/ runs `python
   tests/infra_test.py` (builds the template in memory, no AWS login, no
-  cost), `python tests/check_lambda_test.py` and `python
-  tests/engine_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`; one
+  cost), `python tests/check_lambda_test.py`, `python
+  tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one
   that touches roles or policies also runs `python tests/security_check_test.py`
   and, after the deploy, Nikodem runs `python security_check.py` (live). Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
@@ -435,7 +435,12 @@ One JSON event per line, one file per day in `data/events/`.
   page at `#acc_xxx`. Clicks are dated on the run date. Which owners get
   cards (and which get DMs) is in settings.toml [slack]; everyone else keeps
   the digest. Tokens in .env: SLACK_BOT_TOKEN (xoxb), SLACK_APP_TOKEN (xapp),
-  SLACK_DEMO_USER.
+  SLACK_DEMO_USER, SLACK_SIGNING_SECRET (for AWS). The same clicks are
+  handled in AWS by the Slack listener Lambda (infra/), with the same pieces
+  from slack_loop.py (make_event, claimed_blocks, call_form, form_answers,
+  call_logged_blocks, handback_blocks); the Slack app talks to one listener at
+  a time (Socket Mode on = the laptop, a Request URL = AWS). actions.py puts
+  the run date on every button ("d"), so either listener dates a click on it.
 - `tests/cockpit_test.js`: the cockpit test (Node + Playwright, a headless
   browser). Opens data/views.html like a person would: every tab in light and
   dark, desktop and phone (no script errors, no sideways scroll); numbers agree
@@ -559,6 +564,23 @@ One JSON event per line, one file per day in `data/events/`.
   Athena workgroup ([aws] athena_workgroup, settings enforced, results to
   athena-results/ encrypted and deleted after [aws] athena_results_keep_days,
   a query scanning over [aws] athena_scan_limit_mb is cancelled).
+  Plus the Slack listener: an HTTP API (API Gateway, one route POST
+  /slack/actions, rate limit [aws] slack_rate_per_second / slack_burst, an
+  access log without bodies) in front of the SlackListener Lambda
+  (`infra/lambdas/slack/`, bundled with slack_loop.py, settings.py,
+  settings.toml; no libraries). It checks Slack's signature (HMAC-SHA256 of
+  "v0:<timestamp>:<body>" with the signing secret, constant-time compare) and
+  refuses with 401 anything unsigned, wrongly signed or older than [aws]
+  slack_max_age_seconds, before any other work. Then it does what listener.py
+  does and saves each click as its own file, [aws]
+  slack_clicks_prefix/<run date>/<event_id>.json (state/clicks/). Its role may
+  only write there and read its two Parameter Store secrets ([aws]
+  slack_signing_secret_parameter, slack_bot_token_parameter; put_key.py
+  --slack). The engine merges the clicks into
+  data/engagement/slack_clicks.jsonl before its steps; clicks don't wake it,
+  but the daily schedule runs when a click came in after the last run. The
+  address is printed after a deploy (SlackRequestUrl) for the Slack app's
+  Interactivity settings.
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
@@ -568,7 +590,16 @@ One JSON event per line, one file per day in `data/events/`.
   retries, least privilege and never writing where a trigger listens; Athena:
   database name, the crawler's targets, table level and read-only role, the
   workgroup's enforced results location, encryption and scan cap, results
-  expiry, nothing waking on outputs/ or athena-results/). Exit 1 on any FAIL.
+  expiry, nothing waking on outputs/ or athena-results/; the Slack listener:
+  its role (write clicks only, its two secrets only), one route, throttling,
+  access log, only this API may call it, nothing waking on state/). Exit 1 on
+  any FAIL.
+- `tests/slack_lambda_test.py`: the Slack listener's handler from its real
+  bundle, with requests signed like Slack signs them (made-up secret) against
+  stand-in S3, Parameter Store and Slack: unsigned, wrongly signed, tampered
+  and stale requests refused with nothing saved; each button's event and card
+  update; a bad run date can't leave state/clicks/; Slack down = click still
+  saved; secrets read once and never printed. Exit 1 on any FAIL.
 - `to_parquet.py`: the last engine step. Writes each [aws] athena_tables
   entry as data/tables/<name>/<name>.parquet (Athena: one folder = one table):
   the flag and account value CSVs, tasks (from views_data.json) and the crm and
@@ -605,11 +636,13 @@ One JSON event per line, one file per day in `data/events/`.
 - `security_check.py`: live security checks, read-only (`python
   security_check.py` after `aws login`). Finds the deployed roles and functions
   in the CairnpathData stack and asks the IAM policy simulator, with the
-  bucket's real policy, 18 questions: things each role must NOT be able to do
+  bucket's real policy, 26 questions: things each role must NOT be able to do
   (the engine writing its inputs or the check's verdict, deleting, reading
   another secret, anything over plain HTTP; the check writing where it's
   triggered or reading the API key; the schedule starting the check or
-  reading data; the crawler writing or reading raw inputs) and controls that
+  reading data; the crawler writing or reading raw inputs; the Slack listener
+  reading any data, writing anything but clicks or reading the API key; the
+  engine reading Slack's bot token) and controls that
   must work (so a check that denies everything can't pass). infra_test.py
   checks the template; this checks what's deployed. Exit 1 on any FAIL.
   `tests/security_check_test.py`: stand-in CloudFormation, simulator and S3:
@@ -617,7 +650,9 @@ One JSON event per line, one file per day in `data/events/`.
   included, a leaking role caught, an all-deny answer caught.
 - `put_key.py`: stores ANTHROPIC_API_KEY from .env in Parameter Store as a
   SecureString ([aws] api_key_parameter), for the briefs in AWS. Never typed
-  into a command, never printed; rerun after rotating the key.
+  into a command, never printed; rerun after rotating the key. `--slack`
+  does the same for SLACK_SIGNING_SECRET and SLACK_BOT_TOKEN (both or
+  neither) for the Slack listener in AWS.
   `tests/put_key_test.py`: stand-in Parameter Store, made-up key: stored as a
   SecureString with overwrite, never printed in whole or in part.
 - `tests/upload_test.py`: a stand-in S3 (no AWS, no cost): first run sends
@@ -649,8 +684,10 @@ One JSON event per line, one file per day in `data/events/`.
   (one SQL dialect, same numbers as the laptop); Athena + Glue tables over
   outputs/ for ad-hoc questions (built 3 Nov 2026: crawler, Glue database,
   workgroup), a daily schedule as a safety net, and the handover briefs in AWS
-  (key in Parameter Store, cache in outputs/handover/). Next: the Slack
-  listener on API Gateway.
+  (key in Parameter Store, cache in outputs/handover/). The Slack listener on
+  API Gateway (signature checked, clicks to state/clicks/) built 4 Nov 2026.
+  Next: the laptop pulls the clicks from AWS before actions.py, then the
+  zero-trust list (data perimeter, own KMS key, Access Analyzer, GuardDuty).
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a

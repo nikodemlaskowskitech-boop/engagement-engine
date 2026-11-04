@@ -14,9 +14,15 @@ And the first piece of code that runs in AWS: a Lambda that checks the inputs
 after each upload (lambdas/check_inputs/handler.py). It wakes up only when
 upload.py writes its "upload complete" marker, may only read inputs/ and write
 reports/check_inputs/, and runs the same check_inputs.py as the laptop.
+
+Then the engine Lambda, a daily schedule, Athena, and the Slack listener: one
+public HTTPS address (API Gateway) for Slack's button clicks, and a small
+Lambda that checks each request's Slack signature before doing anything.
 """
 
 from aws_cdk import CfnOutput, Duration, RemovalPolicy, Size, Stack
+from aws_cdk import aws_apigatewayv2 as apigwv2
+from aws_cdk import aws_apigatewayv2_integrations as integrations
 from aws_cdk import aws_athena as athena
 from aws_cdk import aws_glue as glue
 from aws_cdk import aws_iam as iam
@@ -29,7 +35,7 @@ from constructs import Construct
 
 import json
 
-from bundle import ENGINE_FILES, bundle_check_inputs, bundle_engine
+from bundle import ENGINE_FILES, bundle_check_inputs, bundle_engine, bundle_slack
 from settings import SETTINGS
 
 
@@ -103,6 +109,7 @@ class DataStack(Stack):
             environment={"BUCKET": self.bucket.bucket_name, "ACCOUNT_ID": str(aws["account_id"]),
                          "INPUTS_PREFIX": inputs, "STATE_PREFIX": state, "OUTPUTS_PREFIX": outputs,
                          "CHECK_SUMMARY": check_summary, "MARKER_NAME": aws["upload_marker"],
+                         "CLICKS_PREFIX": aws["slack_clicks_prefix"],     # Slack clicks (inside state/)
                          "ENGINE_STEPS": json.dumps(aws["engine_steps"]),
                          "ENGINE_CODE": json.dumps(ENGINE_FILES),
                          "OPTIONAL_STEPS": json.dumps(aws["engine_optional_steps"]),
@@ -190,3 +197,50 @@ class DataStack(Stack):
                     encryption_configuration=athena.CfnWorkGroup.EncryptionConfigurationProperty(
                         encryption_option="SSE_S3"))))
         CfnOutput(self, "Crawler", value=crawler.ref)
+
+        # --- the Slack listener: clicks on task cards, without the laptop ---
+        # API Gateway gives Slack one public address. Anyone on the internet can reach it, so
+        # the Lambda checks Slack's signature on every request before doing anything (see its
+        # handler). The gateway adds a rate limit, so a flood is cut off before it reaches
+        # (and costs) the Lambda, and an access log of every request.
+        clicks = aws["slack_clicks_prefix"]
+        params = [aws["slack_signing_secret_parameter"], aws["slack_bot_token_parameter"]]
+        listener = lambda_.Function(
+            self, "SlackListener",
+            description="Handles Slack button clicks: checks the signature, saves the click, updates the card",
+            runtime=lambda_.Runtime.PYTHON_3_13,
+            architecture=lambda_.Architecture.ARM_64,
+            handler="handler.handler",
+            code=lambda_.Code.from_asset(str(bundle_slack())),
+            memory_size=aws["slack_memory_mb"],
+            timeout=Duration.seconds(aws["slack_timeout_seconds"]),
+            environment={"BUCKET": self.bucket.bucket_name, "ACCOUNT_ID": str(aws["account_id"]),
+                         "CLICKS_PREFIX": clicks, "MAX_AGE_SECONDS": str(aws["slack_max_age_seconds"]),
+                         # the secrets' NAMES, not the secrets: read at run time, never shown here
+                         "SIGNING_SECRET_PARAMETER": params[0], "BOT_TOKEN_PARAMETER": params[1]},
+            log_group=logs.LogGroup(self, "SlackListenerLogs",
+                                    retention=logs.RetentionDays.ONE_MONTH,
+                                    removal_policy=RemovalPolicy.DESTROY),
+        )
+        self.bucket.grant_put(listener, clicks + "*")               # writes clicks, reads nothing
+        listener.add_to_role_policy(iam.PolicyStatement(
+            actions=["ssm:GetParameter"],
+            resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter{p}" for p in params]))
+        api = apigwv2.HttpApi(self, "SlackApi", description="Slack's button clicks (signature checked in the Lambda)",
+                              create_default_stage=False)
+        api.add_routes(path="/slack/actions", methods=[apigwv2.HttpMethod.POST],
+                       integration=integrations.HttpLambdaIntegration("SlackClicks", listener))
+        access_logs = logs.LogGroup(self, "SlackApiAccessLogs", retention=logs.RetentionDays.ONE_MONTH,
+                                    removal_policy=RemovalPolicy.DESTROY)
+        stage = api.add_stage(
+            "Stage", stage_name="$default", auto_deploy=True,      # (id "Default" would clash with the API itself)
+            throttle=apigwv2.ThrottleSettings(rate_limit=aws["slack_rate_per_second"], burst_limit=aws["slack_burst"]))
+        # the access log: who called, when, what we answered (never the body). Set on the
+        # CloudFormation stage directly: CDK's Python wrapper for it doesn't take plain settings
+        stage.node.default_child.access_log_settings = apigwv2.CfnStage.AccessLogSettingsProperty(
+            destination_arn=access_logs.log_group_arn,
+            format=json.dumps({"requestId": "$context.requestId", "ip": "$context.identity.sourceIp",
+                               "time": "$context.requestTime", "route": "$context.routeKey",
+                               "status": "$context.status", "latencyMs": "$context.responseLatency"}))
+        CfnOutput(self, "SlackListenerFunction", value=listener.function_name)
+        CfnOutput(self, "SlackRequestUrl", value=f"{api.api_endpoint}/slack/actions")   # for the Slack app

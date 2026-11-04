@@ -22,6 +22,7 @@ BUILD = INFRA / "build"
 
 # What each Lambda needs from the repo, and nothing else (never settings.local.toml)
 CHECK_FILES = ["check_inputs.py", "settings.py", "settings.toml"]
+SLACK_FILES = ["slack_loop.py", "settings.py", "settings.toml"]   # the Slack listener: plain Python, no libraries
 ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "flags.py", "journeys.py",
                 "team_report.py", "backtest.py", "onboarding_report.py", "export_views.py",
                 "to_parquet.py", "views_template.html", "handover.py", "llm.py", "stories"]
@@ -41,6 +42,13 @@ def _fresh(out, handler):
 def bundle_check_inputs(out=None):
     out = _fresh(out or BUILD / "check_inputs", "check_inputs")
     for name in CHECK_FILES:
+        shutil.copy(REPO / name, out)
+    return out
+
+
+def bundle_slack(out=None):
+    out = _fresh(out or BUILD / "slack", "slack")
+    for name in SLACK_FILES:
         shutil.copy(REPO / name, out)
     return out
 

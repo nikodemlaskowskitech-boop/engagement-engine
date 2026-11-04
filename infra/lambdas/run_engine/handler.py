@@ -30,6 +30,12 @@ costs no model call and no new S3 version. The redaction keys (*_key.json)
 never leave the Lambda. export_views.py runs again after the briefs, so the
 cockpit shows them.
 
+Slack clicks (from the Slack listener Lambda, one file each under
+state/clicks/) are merged into data/engagement/slack_clicks.jsonl before the
+steps run, so every step sees them as CS history, like the laptop's clicks.
+Clicks don't wake the engine (one run per click would be wasteful); the daily
+schedule runs it when clicks came in since the last run.
+
 Only writes under outputs/, so it can never trigger the check or itself.
 A failing step is a real failure: run.json says FAILED, then the function raises.
 """
@@ -60,6 +66,8 @@ LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "")          # who writes the brie
 CACHE = "handover/"                                        # the briefs and their fingerprints, kept between runs
 NEVER_UPLOAD = ("_key.json",)                              # redaction keys stay inside the Lambda
 STATE_FILES = ["action_log.csv"]                         # state kept between runs (tasks already sent)
+CLICKS = os.environ.get("CLICKS_PREFIX", "state/clicks/")   # the Slack listener's clicks, one file each
+CLICKS_FILE = "engagement/slack_clicks.jsonl"              # ...merged here for the engine (never uploaded)
 
 
 def _s3():
@@ -102,14 +110,44 @@ def check_status(s3):
     return json.loads(body)
 
 
+def newest_click(s3):
+    """When the newest Slack click arrived ("2026-11-04T10:00:00Z"), or None."""
+    newest = None
+    for page in s3.get_paginator("list_objects_v2").paginate(
+            Bucket=BUCKET, Prefix=CLICKS, ExpectedBucketOwner=OWNER):
+        for obj in page.get("Contents", []):
+            when = obj["LastModified"].astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            newest = max(newest or when, when)
+    return newest
+
+
 def up_to_date(s3, check):
-    """True when the last run went fine and used the same input check as now."""
+    """True when the last run went fine, used the same input check as now, and no
+    Slack click came in after it started."""
     try:
         last = json.loads(s3.get_object(Bucket=BUCKET, Key=OUTPUTS + "run.json",
                                          ExpectedBucketOwner=OWNER)["Body"].read())
     except Exception:                           # no run yet (or unreadable): not up to date
         return False
-    return last.get("status") == "OK" and last.get("check", {}).get("checked_at") == check.get("checked_at")
+    clicked = newest_click(s3)
+    return (last.get("status") == "OK" and last.get("check", {}).get("checked_at") == check.get("checked_at")
+            and not (clicked and clicked >= last.get("started_at", "")))
+
+
+def merge_clicks(data):
+    """The clicks downloaded from state/clicks/ -> one engagement file, oldest first.
+    Same name as the file the laptop may upload, so a click is never counted twice:
+    the bucket's clicks are the full set."""
+    folder = data / CLICKS[len(STATE):]
+    events = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(folder.rglob("*.json"))]
+    shutil.rmtree(folder, ignore_errors=True)
+    if not events:
+        return 0
+    events.sort(key=lambda e: (e["timestamp"], e["event_id"]))
+    target = data / CLICKS_FILE
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+    return len(events)
 
 
 def download(s3, prefix, folder, skip=()):
@@ -191,7 +229,8 @@ def handler(event, context, s3=None, work=None, ssm=None):
                 shutil.copy(HERE / name, work / name)
         inputs = download(s3, INPUTS, data, skip={MARKER})
         state = download(s3, STATE, data)
-        state = [s for s in state if s in STATE_FILES]
+        clicks = merge_clicks(data)              # Slack clicks -> engagement/slack_clicks.jsonl
+        state = [s for s in state if s in STATE_FILES] + ([CLICKS_FILE] if clicks else [])
         cache = {rel: md5(data / CACHE / rel) for rel in download(s3, OUTPUTS + CACHE, data / CACHE)}
         key = api_key(ssm or _ssm()) if any(s in OPTIONAL for s in STEPS) else None
         ok, log, failed, times, warnings = run_steps(work, {"ANTHROPIC_API_KEY": key} if key else None)
@@ -212,7 +251,7 @@ def handler(event, context, s3=None, work=None, ssm=None):
     finally:
         shutil.rmtree(work, ignore_errors=True)
     summary.update(status="OK" if ok else "FAILED", failed_step=failed, warnings=warnings, step_seconds=times,
-                   inputs=len(inputs), outputs=written, seconds=round(time.time() - started, 1))
+                   inputs=len(inputs), slack_clicks=clicks, outputs=written, seconds=round(time.time() - started, 1))
     put(s3, OUTPUTS + "last_run.txt", log)
     put(s3, OUTPUTS + "run.json", json.dumps(summary, indent=2), "application/json")   # last
     print(json.dumps(summary))

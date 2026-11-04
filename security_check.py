@@ -31,6 +31,7 @@ DENY, ALLOW = "denied", "allowed"
 # CloudFormation logical ID prefix -> short name used in the cases
 WANTED = {"CheckInputsServiceRole": "check", "RunEngineServiceRole": "engine",
           "ScheduleRole": "schedule", "CrawlerRole": "crawler",
+          "SlackListenerServiceRole": "slack",
           "CheckInputs": "check_fn", "RunEngine": "engine_fn"}
 
 
@@ -43,7 +44,7 @@ def find(cfn):
             continue
         for prefix, name in WANTED.items():
             # longest prefix wins: "CheckInputsServiceRole..." is the role, "CheckInputs..." the function
-            is_role_name = name in ("check", "engine", "schedule", "crawler")
+            is_role_name = name in ("check", "engine", "schedule", "crawler", "slack")
             if r["LogicalResourceId"].startswith(prefix) and name not in found and (
                     (kind == "AWS::IAM::Role") == is_role_name):
                 found[name] = r["PhysicalResourceId"]
@@ -60,6 +61,9 @@ def cases(account, region):
     i, r, o, st = AWS["inputs_prefix"], AWS["reports_prefix"] + "check_inputs/", AWS["outputs_prefix"], AWS["state_prefix"]
     key = f"arn:aws:ssm:{region}:{account}:parameter{AWS['api_key_parameter']}"
     other = f"arn:aws:ssm:{region}:{account}:parameter/cairnpath/some-other-secret"
+    signing = f"arn:aws:ssm:{region}:{account}:parameter{AWS['slack_signing_secret_parameter']}"
+    bot = f"arn:aws:ssm:{region}:{account}:parameter{AWS['slack_bot_token_parameter']}"
+    clicks = AWS["slack_clicks_prefix"]
     fn = lambda name: f"arn:aws:lambda:{region}:{account}:function:{{{name}}}"   # filled in later
     return [
         # the engine
@@ -84,6 +88,15 @@ def cases(account, region):
         ("crawler", "s3:PutObject", f"{b}/{o}tables/x/x.parquet", DENY, "read-only", False),
         ("crawler", "s3:GetObject", f"{b}/{i}crm_accounts.csv", DENY, "reads the result tables, not the raw inputs", False),
         ("crawler", "s3:GetObject", f"{b}/{o}tables/crm/crm.parquet", ALLOW, "control: it can read the tables", False),
+        # the Slack listener: public-facing, so the narrowest of all
+        ("slack", "s3:GetObject", f"{b}/{i}crm_accounts.csv", DENY, "can't read any data", False),
+        ("slack", "s3:PutObject", f"{b}/{i}events/forged.jsonl", DENY, "can't write the inputs", False),
+        ("slack", "s3:PutObject", f"{b}/{st}action_log.csv", DENY, "can't touch the action log, only add clicks", False),
+        ("slack", "s3:PutObject", f"{b}/{o}run.json", DENY, "can't write the engine's results", False),
+        ("slack", "ssm:GetParameter", key, DENY, "can't read the API key", False),
+        ("slack", "s3:PutObject", f"{b}/{clicks}2026-10-19/test.json", ALLOW, "control: it can save a click", False),
+        ("slack", "ssm:GetParameter", signing, ALLOW, "control: it can read Slack's signing secret", False),
+        ("engine", "ssm:GetParameter", bot, DENY, "the engine can't read Slack's bot token", False),
     ]
 
 
