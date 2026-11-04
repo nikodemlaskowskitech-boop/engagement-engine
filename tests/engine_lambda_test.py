@@ -277,16 +277,23 @@ def click_event(n, ts):
     "import json\nfrom pathlib import Path\n"
     "lines = Path('data/engagement/slack_clicks.jsonl').read_text(encoding='utf-8').splitlines()\n"
     "ids = [json.loads(l)['event_id'] for l in lines]\n"
-    "assert ids == ['ev-2', 'ev-1'], ids\n"
+    "stamps = [json.loads(l)['timestamp'] for l in lines]\n"
+    "assert stamps == sorted(stamps) and set(ids) == {'ev-1', 'ev-2', 'ev-9'}, ids\n"
+    "last = max(p.stem for p in Path('data/events').glob('*.jsonl'))\n"
+    "import datetime as dt\nrun = (dt.date.fromisoformat(last) + dt.timedelta(days=1)).isoformat()\n"
+    "old = next(json.loads(l) for l in lines if json.loads(l)['event_id'] == 'ev-9')\n"
+    "assert old['timestamp'] == run + 'T10:00:00Z', old\n"
     "assert not Path('data/clicks').exists(), 'raw click files left behind'\n"
     "print('clicks seen', ids)\n", encoding="utf-8")
 h.CODE, h.STEPS = ENGINE_FILES + ["reads_clicks.py"], ["reads_clicks.py"]
 s3 = FakeS3(bucket_with_demo("OK"))
 s3.objects[CLICKS + "2026-10-19/ev-1.json"] = click_event(1, "2026-10-19T14:00:00Z")
 s3.objects[CLICKS + "2026-10-19/ev-2.json"] = click_event(2, "2026-10-19T09:30:00Z")
+s3.objects[CLICKS + "2099-01-01/ev-9.json"] = click_event(9, "2099-01-01T10:00:00Z")   # an old card: clock-dated
 run = h.handler({"trigger": "manual"}, None, s3=s3, work=work)
-check(run["status"] == "OK" and run["slack_clicks"] == 2,
+check(run["status"] == "OK" and run["slack_clicks"] == 3,
       "the clicks become one engagement file, oldest first, before the steps run", run.get("failed_step"))
+check(run["status"] == "OK", "...none dated after the run date (an old card's click is brought back to it)")
 check(not any("clicks" in o for o in run["outputs"]), "...and are never uploaded again as outputs", run["outputs"])
 s3.objects[CHECK] = json.dumps({"status": "OK", "errors": 0, "warnings": 0, "checked_at": "2026-11-05T00:00:00Z"}).encode()
 h.handler(sched, None, s3=s3, work=work)                       # a good scheduled run on this check
@@ -296,7 +303,7 @@ s3.objects[CLICKS + "2026-10-19/ev-3.json"] = click_event(3, "2026-10-19T15:00:0
 s3.modified[CLICKS + "2026-10-19/ev-3.json"] = datetime.now(timezone.utc) + timedelta(minutes=5)
 (bundle / "reads_clicks.py").write_text("print('ran')\n", encoding="utf-8")
 woke = h.handler(sched, None, s3=s3, work=work)
-check(woke["status"] == "OK" and woke["slack_clicks"] == 3,
+check(woke["status"] == "OK" and woke["slack_clicks"] == 4,
       "a click after the last run: the daily schedule runs the engine (clicks don't wake it one by one)", woke)
 
 print("\nEngine Lambda: a step that fails")

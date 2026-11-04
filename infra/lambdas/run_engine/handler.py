@@ -135,18 +135,19 @@ def up_to_date(s3, check):
 
 
 def merge_clicks(data):
-    """The clicks downloaded from state/clicks/ -> one engagement file, oldest first.
+    """The clicks downloaded from state/clicks/ -> one engagement file, oldest first, none
+    dated after the run date (pull_clicks.combine: the laptop does exactly the same).
     Same name as the file the laptop may upload, so a click is never counted twice:
     the bucket's clicks are the full set."""
+    from pull_clicks import combine
     folder = data / CLICKS[len(STATE):]
     events = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(folder.rglob("*.json"))]
     shutil.rmtree(folder, ignore_errors=True)
     if not events:
         return 0
-    events.sort(key=lambda e: (e["timestamp"], e["event_id"]))
     target = data / CLICKS_FILE
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+    target.write_text(combine(events, data / "events"), encoding="utf-8")
     return len(events)
 
 

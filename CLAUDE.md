@@ -432,7 +432,10 @@ One JSON event per line, one file per day in `data/events/`.
   listener saved under [aws] slack_clicks_prefix into
   data/engagement/slack_clicks.jsonl (oldest first; rewritten only when a
   click is new; same name as the engine's merge in AWS, so an upload never
-  doubles a click). Read-only on AWS. Not signed in or offline: says so and
+  doubles a click). combine() is shared with the engine Lambda (bundled): no
+  click is dated after the run date (last events/<date>.jsonl + 1), so a
+  click on a card from before buttons carried the run date, dated by the
+  listener's clock, is brought back to it. Read-only on AWS. Not signed in or offline: says so and
   the run carries on. `tests/pull_clicks_test.py`: stand-in S3.
 - `slack_loop.py`: shared Slack pieces (task cards, .env tokens, appending
   click events). `listener.py`: Socket Mode listener (`python listener.py`,
