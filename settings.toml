@@ -113,6 +113,18 @@ engine_disk_mb = 2048          # ...its /tmp disk: the inputs, the code and what
 # the last event-driven run was missed or failed; otherwise it says "up to date" and stops.
 engine_schedule = "cron(17 6 * * ? *)"      # every day at 06:17 (cron: minute hour day month weekday year)
 engine_schedule_timezone = "Europe/Paris"    # so 06:17 stays 06:17 local, summer and winter
+# The Slack listener in AWS: API Gateway gives Slack one public address (printed after a deploy as
+# SlackRequestUrl, for the Slack app's Interactivity settings), and a small Lambda handles the clicks.
+# Each click is saved as one file under slack_clicks_prefix (inside state/: the engine reads it on
+# its next run). The secrets live in Parameter Store (put_key.py copies them from .env).
+slack_clicks_prefix = "state/clicks/"
+slack_signing_secret_parameter = "/cairnpath/slack-signing-secret"   # proves a request came from Slack
+slack_bot_token_parameter = "/cairnpath/slack-bot-token"             # to update cards and open the call form
+slack_max_age_seconds = 300    # a signed request older than this is refused (a replayed request)
+slack_memory_mb = 512          # small, but more memory = more CPU = a faster first answer (Slack waits 3 s)
+slack_timeout_seconds = 10     # Slack gives up after 3 s anyway; this only stops a stuck call
+slack_rate_per_second = 5      # API Gateway: steady requests per second allowed...
+slack_burst = 20               # ...and a short burst; anything above gets 429 before reaching the Lambda
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo

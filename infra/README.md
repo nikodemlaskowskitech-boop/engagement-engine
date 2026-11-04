@@ -42,3 +42,30 @@ console pick workgroup `cairnpath` and database `cairnpath`, and query.
 Handover briefs in AWS: once, from the repo root, `python put_key.py` copies the
 API key from your `.env` into Parameter Store (encrypted, never printed). Without
 it the engine still runs and says "briefs skipped: no API key" in run.json.
+
+## The Slack listener in AWS
+
+Button clicks on the task cards (I'll take it, Log call, Approve hand-back) go
+to a public address in AWS instead of `python listener.py` on the laptop. Every
+request is checked against Slack's signature before anything happens; see
+`lambdas/slack/handler.py`. Clicks are saved under `state/clicks/` and the
+engine picks them up on its next run (the daily run, at the latest).
+
+Once, after the deploy that creates it:
+
+1. In `.env`, add `SLACK_SIGNING_SECRET=` with the value from the Slack app
+   page (api.slack.com/apps > your app > Basic Information > App Credentials >
+   Signing Secret). `SLACK_BOT_TOKEN` is already there.
+2. From the repo root: `python put_key.py --slack` (stores both in Parameter
+   Store, encrypted; prints only their names).
+3. In the Slack app: **Socket Mode** > turn it off. Then **Interactivity &
+   Shortcuts** > Request URL = the `SlackRequestUrl` that `cdk deploy` printed
+   > Save Changes. Slack only accepts the address if it answers, so do this
+   after step 2.
+4. Click a button on a card. In CloudWatch Logs (the SlackListener function's
+   log group) you'll see one line per click, and a file appears under
+   `state/clicks/` in the bucket.
+5. `python security_check.py`: now 26 questions, including the listener's.
+
+To go back to the laptop listener: turn Socket Mode on again (the Request URL
+is then ignored) and run `python listener.py`.

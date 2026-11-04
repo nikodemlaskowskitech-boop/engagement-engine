@@ -77,9 +77,10 @@ check(stack.region == SETTINGS["aws"]["region"] and stack.account == str(SETTING
 check("BucketName" in t.find_outputs("*"), "prints the bucket name after deploy")
 
 aws = SETTINGS["aws"]
-r = has(t, "AWS::Logs::LogGroup", {"RetentionInDays": 30})
-check(r is True and len(t.find_resources("AWS::Logs::LogGroup")) == 2,
-      "both Lambdas' logs kept 30 days, then deleted (no cost pile-up)", r)
+groups = t.find_resources("AWS::Logs::LogGroup")
+check(len(groups) == 4 and all(g["Properties"].get("RetentionInDays") == 30 for g in groups.values()),
+      "every log (three Lambdas, the Slack API's access log) kept 30 days, then deleted (no cost pile-up)",
+      {k: g["Properties"].get("RetentionInDays") for k, g in groups.items()})
 notes = t.find_resources("Custom::S3BucketNotifications")
 lam = next(iter(notes.values()), {}).get("Properties", {}).get("NotificationConfiguration", {}) \
     .get("LambdaFunctionConfigurations", [])
@@ -222,6 +223,66 @@ check(bool(sstmts) and {a for st in sstmts for a in actions_of(st)} == {"lambda:
 engine_env = next(v for v in ours.values() if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"])
 check(json.loads(engine_env["Properties"]["Environment"]["Variables"]["ENGINE_STEPS"]) == aws["engine_steps"],
       "runs the steps in [aws] engine_steps, in order")
+
+print("\nSlack listener: one public address, signature checked, least privilege")
+slk = {k: v for k, v in ours.items() if "SIGNING_SECRET_PARAMETER" in v["Properties"]["Environment"]["Variables"]}
+slk_id, slk_fn = next(iter(slk.items()), (None, {"Properties": {"Environment": {"Variables": {}}}}))
+sp = slk_fn["Properties"]
+svars = sp["Environment"]["Variables"]
+check(len(slk) == 1 and sp.get("Runtime") == "python3.13" and sp.get("Architectures") == ["arm64"]
+      and sp.get("MemorySize") == aws["slack_memory_mb"] and sp.get("Timeout") == aws["slack_timeout_seconds"],
+      "one function, Python 3.13 on arm64, memory and timeout from settings")
+check(svars.get("SIGNING_SECRET_PARAMETER") == aws["slack_signing_secret_parameter"]
+      and svars.get("BOT_TOKEN_PARAMETER") == aws["slack_bot_token_parameter"]
+      and svars.get("CLICKS_PREFIX") == aws["slack_clicks_prefix"]
+      and svars.get("MAX_AGE_SECONDS") == str(aws["slack_max_age_seconds"]),
+      "told the secrets' names (not the secrets), where clicks go and the replay window, from settings")
+check(not any(str(v).startswith(("xoxb-", "xapp-")) or "SECRET" in k and "PARAMETER" not in k for k, v in svars.items()),
+      "no token or secret in its settings (read at run time)")
+check(not any(c["LambdaFunctionArn"].get("Fn::GetAtt", [None])[0] == slk_id for c in lam),
+      "never woken by the bucket: only by API Gateway")
+lrole = sp.get("Role", {}).get("Fn::GetAtt", [None])[0]
+lstmts = [st for v in t.find_resources("AWS::IAM::Policy").values()
+          if any(r.get("Ref") == lrole for r in v["Properties"].get("Roles", []))
+          for st in v["Properties"]["PolicyDocument"]["Statement"]]
+s3_stmts = [st for st in lstmts if any(a.startswith("s3:") for a in actions_of(st))]
+s3_acts = {a for st in s3_stmts for a in actions_of(st)}
+check(bool(s3_stmts) and all(a.startswith("s3:PutObject") or a == "s3:Abort*" for a in s3_acts)
+      and all(f'/{aws["slack_clicks_prefix"]}*"' in json.dumps(st["Resource"]) for st in s3_stmts),
+      f"may only write under {aws['slack_clicks_prefix']}: no reads, no lists, no deletes", sorted(s3_acts))
+ssm_l = [st for st in lstmts if any(a.startswith("ssm:") for a in actions_of(st))]
+res = json.dumps([st["Resource"] for st in ssm_l])
+check(len(ssm_l) == 1 and actions_of(ssm_l[0]) == ["ssm:GetParameter"]
+      and f"parameter{aws['slack_signing_secret_parameter']}" in res and f"parameter{aws['slack_bot_token_parameter']}" in res
+      and aws["api_key_parameter"] not in res and "*" not in res,
+      "may read its two secrets only (not the API key), and never write them", ssm_l)
+check(not any(a not in ("ssm:GetParameter",) and not a.startswith(("s3:", "logs:", "xray:")) for st in lstmts for a in actions_of(st)),
+      "nothing else in its role", [a for st in lstmts for a in actions_of(st)])
+apis = t.find_resources("AWS::ApiGatewayV2::Api")
+routes = [v["Properties"]["RouteKey"] for v in t.find_resources("AWS::ApiGatewayV2::Route").values()]
+check(len(apis) == 1 and routes == ["POST /slack/actions"], "one HTTP API, one route: POST /slack/actions", routes)
+stages = [v["Properties"] for v in t.find_resources("AWS::ApiGatewayV2::Stage").values()]
+st0 = stages[0] if stages else {}
+thr = st0.get("DefaultRouteSettings", {})
+check(len(stages) == 1 and st0.get("StageName") == "$default" and st0.get("AutoDeploy") is True
+      and thr.get("ThrottlingRateLimit") == aws["slack_rate_per_second"]
+      and thr.get("ThrottlingBurstLimit") == aws["slack_burst"],
+      f"rate limit {aws['slack_rate_per_second']}/s, burst {aws['slack_burst']} (a flood stops at the gateway)", thr)
+fmt = st0.get("AccessLogSettings", {}).get("Format", "")
+check("DestinationArn" in st0.get("AccessLogSettings", {}) and "$context.status" in fmt and "body" not in fmt.lower(),
+      "every request in an access log (who, when, our answer), never the body")
+perms = [v["Properties"] for v in t.find_resources("AWS::Lambda::Permission").values()
+         if v["Properties"].get("FunctionName", {}).get("Fn::GetAtt", [None])[0] == slk_id]
+api_id = next(iter(apis), None)
+check(len(perms) == 1 and perms[0]["Principal"] == "apigateway.amazonaws.com"
+      and api_id in json.dumps(perms[0].get("SourceArn")) and "/slack/actions" in json.dumps(perms[0].get("SourceArn")),
+      "only this API's route may call the function", perms)
+check({"SlackRequestUrl", "SlackListenerFunction"} <= set(t.find_outputs("*")),
+      "prints the address for the Slack app after deploy")
+check(aws["slack_clicks_prefix"].startswith(aws["state_prefix"])
+      and engine_env["Properties"]["Environment"]["Variables"].get("CLICKS_PREFIX") == aws["slack_clicks_prefix"]
+      and not any(c["Filter"]["Key"]["FilterRules"][0]["Value"].startswith(aws["state_prefix"]) for c in lam),
+      "clicks land in state/ (the engine reads them), and nothing wakes on state/ (no run per click)")
 
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)
