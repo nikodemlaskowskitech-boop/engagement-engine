@@ -39,7 +39,7 @@ with short comments, and work in small steps (one PR per change).
   acceptance page. Every PR that touches infra/ runs `python
   tests/infra_test.py` (builds the template in memory, no AWS login, no
   cost), `python tests/check_lambda_test.py`, `python
-  tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one
+  tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one
   that touches roles or policies also runs `python tests/security_check_test.py`
   and, after the deploy, Nikodem runs `python security_check.py` (live). Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
@@ -428,6 +428,12 @@ One JSON event per line, one file per day in `data/events/`.
   `data/engagement/cockpit.jsonl`, rewritten each run, so nothing doubles.
   Decisions on older data (another as-of) are skipped; renewal forecasts and
   next steps are all kept (forecast_set, next_step_set: the history). First step of run_all.
+- `pull_clicks.py`: first step of run_all. Gathers the Slack clicks the AWS
+  listener saved under [aws] slack_clicks_prefix into
+  data/engagement/slack_clicks.jsonl (oldest first; rewritten only when a
+  click is new; same name as the engine's merge in AWS, so an upload never
+  doubles a click). Read-only on AWS. Not signed in or offline: says so and
+  the run carries on. `tests/pull_clicks_test.py`: stand-in S3.
 - `slack_loop.py`: shared Slack pieces (task cards, .env tokens, appending
   click events). `listener.py`: Socket Mode listener (`python listener.py`,
   leave it running): "I'll take it" -> task_claimed, "Log call" -> a form ->
@@ -686,7 +692,7 @@ One JSON event per line, one file per day in `data/events/`.
   workgroup), a daily schedule as a safety net, and the handover briefs in AWS
   (key in Parameter Store, cache in outputs/handover/). The Slack listener on
   API Gateway (signature checked, clicks to state/clicks/) built 4 Nov 2026.
-  Next: the laptop pulls the clicks from AWS before actions.py, then the
+  The laptop pulls the clicks first in run_all (pull_clicks.py). Next: the
   zero-trust list (data perimeter, own KMS key, Access Analyzer, GuardDuty).
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
