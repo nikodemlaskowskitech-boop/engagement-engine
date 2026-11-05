@@ -51,7 +51,8 @@ class FakeKMS:
 
     def get_key_policy(self, KeyId, PolicyName):
         self.asked.append(KeyId)
-        return {"Policy": json.dumps({"Statement": [{"Sid": "DenyUseOutsideS3", "Effect": "Deny"}]})}
+        # like the real key policy: Resource "*" (which the real simulator refuses)
+        return {"Policy": json.dumps({"Statement": [{"Sid": "DenyUseOutsideS3", "Effect": "Deny", "Resource": "*"}]})}
 
 
 ADMIN_ARN = f"arn:aws:iam::{ACCOUNT}:role/aws-reserved/AccountFullAccessRole"
@@ -70,6 +71,9 @@ class FakeIAM:
 
     def simulate_principal_policy(self, **kw):
         self.asked.append(kw)
+        for st in json.loads(kw.get("ResourcePolicy") or '{"Statement": []}').get("Statement", []):
+            if st.get("Resource") in ("*", ["*"]):        # what AWS answered on 5 Nov 2026
+                raise ValueError("InvalidInput: ResourceNames are not in a valid ARN format: *")
         role, action, res = kw["PolicySourceArn"], kw["ActionNames"][0], kw["ResourceArns"][0]
         ctx = {c["ContextKeyName"]: c["ContextKeyValues"][0] for c in kw["ContextEntries"]}
         http = ctx["aws:SecureTransport"] == "false"
@@ -182,6 +186,8 @@ check(names.get("key") == "1234abcd-12ab-34cd-56ef-1234567890ab" and kms.asked =
 check(key_qs and all("DenyUseOutsideS3" in k.get("ResourcePolicy", "")
                      and k["ResourceArns"][0] == f"arn:aws:kms:{REGION}:{ACCOUNT}:key/{names['key']}" for k in key_qs),
       "key questions are asked against the key, with the key's own policy")
+check(all('"Resource": "*"' not in k["ResourcePolicy"] for k in key_qs),
+      "the key policy's Resource \"*\" is spelled out as the key's ARN (the simulator refuses \"*\")")
 via = [k for k in key_qs if any(c["ContextKeyName"] == "kms:ViaService" for c in k["ContextEntries"])]
 check(via and len(via) < len(key_qs) and all({"ContextKeyName": "kms:ViaService", "ContextKeyType": "string",
                                                "ContextKeyValues": [f"s3.{REGION}.amazonaws.com"]} in k["ContextEntries"] for k in via),

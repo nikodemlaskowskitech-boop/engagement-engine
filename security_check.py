@@ -131,13 +131,24 @@ def cases(account, region):
     ]
 
 
+def for_simulator(key_policy, key_arn):
+    """A key policy says Resource "*" (in a key policy that means "this key"), but the
+    simulator only takes ARNs there (InvalidInput, 5 Nov 2026). Same meaning, spelled out."""
+    doc = json.loads(key_policy)
+    for st in doc.get("Statement", []):
+        if st.get("Resource") in ("*", ["*"]):
+            st["Resource"] = key_arn
+    return json.dumps(doc)
+
+
 def run(cfn, iam, s3, account, region, kms):
     names = find(cfn)
     arns = {k: f"arn:aws:iam::{account}:role/{v}" for k, v in names.items()}
     # the admin role (what aws login gives you): its real ARN, path included
     arns["admin"] = iam.get_role(RoleName=AWS["admin_role_names"][0])["Role"]["Arn"]
     bucket_policy = s3.get_bucket_policy(Bucket=AWS["bucket"], ExpectedBucketOwner=account)["Policy"]
-    key_policy = kms.get_key_policy(KeyId=names["key"], PolicyName="default")["Policy"]
+    key_arn = f"arn:aws:kms:{region}:{account}:key/{names['key']}"
+    key_policy = for_simulator(kms.get_key_policy(KeyId=names["key"], PolicyName="default")["Policy"], key_arn)
     results = []
     for case in cases(account, region):
         role, action, resource, expected, why, plain_http = case[:6]
