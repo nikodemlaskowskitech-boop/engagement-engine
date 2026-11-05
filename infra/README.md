@@ -105,3 +105,16 @@ python guardduty_report.py --save      the same, written to data/guardduty_repor
 
 To switch it off: `guardduty = false` in settings.toml, then `cdk deploy`. That
 deletes the detector and its findings, so `--save` first.
+
+## IAM Access Analyzer (free)
+
+One analyzer for the account (`[aws] access_analyzer_name`) reads every resource
+policy (the bucket, role trust policies, Lambda permissions) and lists what
+another account or the public could reach. It runs continuously; to see it:
+
+```
+python access_report.py          what's reachable from outside, by whom, under which condition
+python access_report.py --save   the same, written to data/access_report.md
+```
+
+Each finding is either on purpose (archive it with the reason) or a hole to close.

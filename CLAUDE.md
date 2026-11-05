@@ -635,6 +635,14 @@ One JSON event per line, one file per day in `data/events/`.
   type, samples left out, and the cost so far by feature, no console needed.
   `tests/guardduty_report_test.py`: a stand-in GuardDuty; with botocore
   installed, the request values are checked against AWS's own API model.
+  Plus IAM Access Analyzer (5 Nov 2026, free): one ACCOUNT analyzer ([aws]
+  access_analyzer_name) that reads every resource policy in the account and
+  lists what another account or the public could reach; the paid "unused
+  access" analyzer is left out. `access_report.py` (read-only, `--save` writes
+  data/access_report.md): active findings, public first, with who can reach
+  each and under which condition. `tests/access_report_test.py`: a stand-in
+  analyzer; with botocore installed, every request is validated against AWS's
+  API model.
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
@@ -648,7 +656,8 @@ One JSON event per line, one file per day in `data/events/`.
   its role (write clicks only, its two secrets only), one route, throttling,
   access log, only this API may call it, nothing waking on state/; the data
   perimeter: both statements, the exempt roles and admins, bucket settings left
-  open; GuardDuty: one detector with only the plans we need, or none when off).
+  open; GuardDuty: one detector with only the plans we need, or none when off;
+  Access Analyzer: one free account analyzer, named from settings).
   Exit 1 on any FAIL.
 - `tests/slack_lambda_test.py`: the Slack listener's handler from its real
   bundle, with requests signed like Slack signs them (made-up secret) against
@@ -751,7 +760,8 @@ One JSON event per line, one file per day in `data/events/`.
   in eu-north-1 and reads English and Spanish only, Presidio is heavy
   (PRIVACY.md, spec Feature requests). Zero trust: the data perimeter (bucket
   policy) built 4 Nov 2026; GuardDuty on its free trial from 5 Nov 2026 (keep
-  or switch off before about 5 Dec). Next: Access Analyzer, our own KMS key.
+  or switch off before about 5 Dec); IAM Access Analyzer 5 Nov 2026. Next: our
+  own KMS key.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a

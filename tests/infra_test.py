@@ -328,5 +328,14 @@ if aws.get("guardduty"):
 else:
     check(not dets, "[aws] guardduty = false: no detector (switched off, nothing charged)")
 
+print("\nIAM Access Analyzer: anything reachable from outside the account")
+analyzers = [v["Properties"] for v in t.find_resources("AWS::AccessAnalyzer::Analyzer").values()]
+check(len(analyzers) == 1 and analyzers[0].get("Type") == "ACCOUNT"
+      and analyzers[0].get("AnalyzerName") == aws["access_analyzer_name"]
+      and "AnalyzerConfiguration" not in analyzers[0],
+      "one free external-access analyzer for this account, named from settings (not the paid unused-access kind)",
+      analyzers)
+check("AccessAnalyzerArn" in t.find_outputs("*"), "prints its ARN after deploy")
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)
