@@ -135,6 +135,9 @@ break_glass_users = ["nikodem"]
 # 2026 to about 5 Dec 2026. After that it charges. Decide before then: keep it, or set false and
 # cdk deploy (that removes it and its findings; guardduty_report.py writes them down first).
 guardduty = true
+# IAM Access Analyzer (free, external access only): lists anything another account or the public
+# can reach. access_report.py reads its findings; none expected but what's on purpose.
+access_analyzer_name = "cairnpath-external-access"
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo

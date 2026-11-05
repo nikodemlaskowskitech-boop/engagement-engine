@@ -21,6 +21,7 @@ Lambda that checks each request's Slack signature before doing anything.
 """
 
 from aws_cdk import CfnOutput, Duration, RemovalPolicy, Size, Stack
+from aws_cdk import aws_accessanalyzer as accessanalyzer
 from aws_cdk import aws_apigatewayv2 as apigwv2
 from aws_cdk import aws_apigatewayv2_integrations as integrations
 from aws_cdk import aws_athena as athena
@@ -285,3 +286,11 @@ class DataStack(Stack):
                           off("EKS_AUDIT_LOGS"), off("EBS_MALWARE_PROTECTION"),
                           off("RDS_LOGIN_EVENTS"), off("RUNTIME_MONITORING")])
             CfnOutput(self, "GuardDutyDetector", value=detector.ref)
+
+        # --- IAM Access Analyzer: anything reachable from outside this account ---
+        # Reads every resource policy in the account (buckets, roles' trust policies, Lambda
+        # permissions, secrets, keys) and lists what another account or the public could reach.
+        # The external-access analyzer is free; the separate "unused access" one is paid and left out.
+        analyzer = accessanalyzer.CfnAnalyzer(self, "AccessAnalyzer", type="ACCOUNT",
+                                             analyzer_name=aws["access_analyzer_name"])
+        CfnOutput(self, "AccessAnalyzerArn", value=analyzer.attr_arn)
