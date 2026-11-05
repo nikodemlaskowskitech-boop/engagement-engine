@@ -43,6 +43,7 @@ address, a new secret, a new place data goes).
 | 12 | A runaway bill (AWS or model calls) | AWS: Cost Anomaly Detection email from $5, Athena scan cap, GuardDuty trial with a decision date. Model calls: a budget per feature checked before every call, every call in the AI spend ledger, the Anthropic spend limit as the ceiling | `infra_test.py`, `ai_spend_test.py`, weekly GuardDuty report | Anomaly detection needs ~10 days of history; the ledger is our estimate, not Anthropic's bill (no reconciliation yet) |
 | 13 | Someone active in the account who shouldn't be | GuardDuty (trial), KMS use in CloudTrail | `guardduty_report.py` | After 5 Dec only if we keep GuardDuty |
 | 14 | The cockpit link shared too widely | The export holds counts and account names, never user IDs; the page is private until shared; decisions are checked by role | `cockpit_test.js` (the refusals) | Anyone given the link sees the whole book |
+| 15 | Someone with edit access writes to the cockpit's database directly, skipping its forms (bad values, someone else's account, a malformed entry to stop the pipeline) | Never trust the page: `cockpit_sync.py` checks every decision again against the CRM and CS team (known account and owner, allowed values, real dates, amounts in range, an owner only on their own accounts, a manager only on their team's); a bad one is skipped and listed, never a crash; free text cut and cleaned | `cockpit_sync_test.py` | Who someone is stays self-declared (next line) |
 
 ## Risks we accept, on purpose
 
@@ -51,6 +52,11 @@ address, a new secret, a new place data goes).
 - **No network isolation (VPC).** Identity checks every call; a NAT gateway
   alone would cost more than the project (decided 4 Nov 2026).
 - **One admin role plus a break-glass user**, both trusted by the perimeter.
+- **Who did what in the cockpit is self-declared.** The page acts as whichever
+  owner or manager the viewer picks in its segment bar; every saved decision
+  also records the viewer's real account (`decided_by`), so it's traceable, not
+  prevented. A real deployment signs people in (SSO), maps each login to an
+  owner, and checks it on the server. In the demo one person plays every role.
 - **No organization-wide controls (RCP)**: one account, nothing to gain yet.
 - **Fake data.** With real customer data, items 3, 8 and 9 would need more
   (a PII detector, a review of what the engine role reads, a human check on
