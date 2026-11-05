@@ -138,6 +138,13 @@ guardduty = true
 # IAM Access Analyzer (free, external access only): lists anything another account or the public
 # can reach. access_report.py reads its findings; none expected but what's on purpose.
 access_analyzer_name = "cairnpath-external-access"
+# Our own encryption key (KMS) for the data bucket: reading the data then needs two separate
+# permissions, the bucket's and the key's, and every use of the key is logged in CloudTrail.
+# About 1 USD a month; S3 Bucket Keys keep the per-request charges near zero. The key is kept
+# if the stack is deleted, and a deletion would wait kms_deletion_window_days (data without
+# its key is lost for good).
+kms_key_alias = "alias/cairnpath-data"
+kms_deletion_window_days = 30
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo
