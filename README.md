@@ -32,6 +32,69 @@ to action) -> outcome at renewal (backtest).
 Every flag shows the numbers behind it (for example *"Utilisation 52%, then
 39%, then 27%"*), who it is routed to and what to do next.
 
+On top of the flags: a **cockpit** (one HTML page, nine tabs: leadership
+one-pager, each owner's morning page, the manager's task queue, account
+timelines, "did it work?"), **Slack task cards** with buttons that flow back as
+CS history, and two **AI features**, both privacy-first: a one-page QBR brief
+and a handover brief for a new account owner, written from support cases,
+emails and call transcripts, every claim cited and checked.
+
+## Architecture
+
+It runs in two places with the same code: a laptop (Windows, `run_all.ps1`) and
+AWS (eu-north-1, all of it as code in [`infra/`](infra/), CDK in Python).
+
+```mermaid
+flowchart LR
+  subgraph laptop["Laptop"]
+    gen["generate_events.py<br/>(or your own exports)"]
+    up["upload.py"]
+    rb["request_briefs.py<br/>(admin only)"]
+  end
+  subgraph aws["AWS, eu-north-1"]
+    s3[("S3 bucket<br/>own KMS key, versioned,<br/>data perimeter")]
+    chk["Check Lambda<br/>check_inputs.py"]
+    eng["Engine Lambda<br/>DuckDB: flags, journeys,<br/>reports, cockpit export"]
+    sch["Daily schedule<br/>(safety net)"]
+    api["API Gateway<br/>/slack/actions"]
+    sl["Slack Lambda<br/>signature checked"]
+    ssm["Parameter Store<br/>API key, Slack secrets"]
+    ath["Athena + Glue<br/>ad-hoc SQL"]
+  end
+  slack(("Slack"))
+  llm(("Claude API"))
+  cockpit["Cockpit page<br/>views.html"]
+
+  gen --> up -->|"inputs/ + marker"| s3
+  s3 -->|marker| chk -->|"verdict"| s3
+  s3 -->|verdict OK or WARN| eng
+  sch --> eng
+  rb -->|"briefs: true"| eng
+  eng -->|"outputs/"| s3
+  eng -.->|"only on request,<br/>redacted text"| llm
+  ssm -.-> eng
+  ssm -.-> sl
+  slack -->|button clicks| api --> sl -->|"state/clicks/"| s3
+  s3 --> ath
+  s3 --> cockpit
+```
+
+**One run, step by step.**
+1. `upload.py` sends only new or changed input files, then a small marker file.
+2. The marker wakes the **check Lambda**: missing columns, bad dates, unknown
+   tiers. ERROR stops everything downstream (the gate).
+3. The check's verdict wakes the **engine Lambda**: it pulls the inputs, the
+   action log and the Slack clicks, runs the same scripts as the laptop
+   (flags, journeys, team report, backtest, onboarding, cockpit export), checks
+   for free whether each AI brief is out of date, and writes Parquet tables for
+   Athena. `run.json` is written last, so whoever reads it sees a finished run.
+4. A **daily schedule** reruns the engine only if a run was missed or failed,
+   or Slack clicks came in since.
+5. **Slack clicks** ("I'll take it", "Log call") go to their own small Lambda
+   behind API Gateway and become CS history on the next run.
+6. **AI briefs** are written only when the admin asks (`request_briefs.py`).
+   Nothing a user clicks, uploads or saves can make the model run.
+
 ## Run it
 
 Windows / PowerShell, from the repo root. The quick way, after the one-time
@@ -69,6 +132,18 @@ python tests/handover_test.py # privacy: no real name, email or phone reaches th
 To tune the engine, edit `settings.toml` (every threshold and time window,
 with a comment on each), then rerun `flags.py` and `check_flags.py`.
 
+In AWS (after `aws login --profile cairnpath`; deploying is in
+[infra/README.md](infra/README.md)):
+
+```
+python upload.py            # new or changed inputs to the bucket; the check and the engine run by themselves
+python request_briefs.py    # the AI handover briefs, only when you ask (changed ones only, within budget)
+python security_check.py    # live: 37 questions on what each deployed role can and can't do
+python access_report.py     # anything reachable from outside the account (baseline: 0)
+python guardduty_report.py  # threat findings and the cost so far
+python llm.py --spend       # this month's AI spend by feature, against its budget
+```
+
 ## How each tier is handled
 
 [ENGAGEMENT_LOGIC.md](ENGAGEMENT_LOGIC.md) shows the logic as diagrams: who
@@ -80,6 +155,37 @@ its hand-back, Enterprise's QBR-first rule, and what "done" means.
 [DATA_CONTRACT.md](DATA_CONTRACT.md) lists the five inputs (events, CRM, CS team,
 engagement history, onboarding holdout), their columns, and which flags stop
 working when one is missing.
+
+## Security, in one table
+
+Every control is code, and every one has a test. The full list, with what each
+leaves open, is in [THREAT_MODEL.md](THREAT_MODEL.md) (16 threats).
+
+| Control | What it stops | Proven by |
+| --- | --- | --- |
+| One role per job, least privilege | A stolen workload credential doing more than its one job | `security_check.py`: 37 questions to AWS's policy simulator, on what's deployed |
+| Data perimeter (bucket policy) | Anyone else in the account, even with `s3:*`, reading or writing the data | `security_check.py` |
+| Own KMS key, usable only through S3 | A copied file decrypted outside the bucket's rules | `security_check.py` |
+| Public access blocked, HTTPS only, versioned | Exposure, eavesdropping, a bad run you can't undo | `tests/infra_test.py` (87 checks on the template) |
+| Slack signature check, rate limit | Forged or replayed clicks, floods | `tests/slack_lambda_test.py` |
+| Never trust the page | Bad or forged cockpit decisions; one bad row stopping the pipeline | `tests/cockpit_sync_test.py` |
+| Redaction + leak check before the model | People's names, emails or phones reaching the model | `tests/handover_test.py`, `tests/leak_check_test.py` ([PRIVACY.md](PRIVACY.md)) |
+| Secrets in `.env` / Parameter Store only; push protection | A key in the code, a log or the public repo | `tests/put_key_test.py`, GitHub push protection |
+| IAM Access Analyzer, GuardDuty (trial) | Something reachable from outside; odd activity in the account | `access_report.py` (baseline: 0), `guardduty_report.py` |
+
+No console access for anyone: everything is deployed with `cdk deploy` and read
+back with scripts.
+
+## Cost
+
+| What | Cost | Control |
+| --- | --- | --- |
+| AWS (Lambdas, S3, API Gateway, Athena, KMS key) | About $2 a month | Cost Anomaly Detection emails when a day's spend jumps (from $5); Athena cancels a query scanning over 1 GB |
+| GuardDuty | Free trial to about 5 Dec 2026 | Keep-or-switch-off decision on 1 Dec, from weekly reports |
+| AI briefs (Claude API) | About 3 cents per handover brief | A budget per feature checked **before** every call ($2 QBR, $3 handover a month); every call in the AI spend ledger (`python llm.py --spend`, Athena table `ai_spend`); briefs only on the admin's request; a cache that rewrites only when the context changed; a $10 limit on the Anthropic account as the ceiling |
+
+AWS's anomaly emails can't see the Anthropic bill, which is why the AI spend has
+its own ledger and budgets.
 
 ## Design choices
 
@@ -114,9 +220,24 @@ working when one is missing.
   Catching more of those is a constant effort as CS scales, and it's the
   main reason the top tier keeps a named CSM, whose judgement covers what
   the signals miss.
+- **AI runs only when a person with the right role asks.** Background
+  automation does the free work (flags, reports, "this brief is out of date");
+  anything that costs money waits for the admin. The trade-off: briefs can go
+  stale, and the cockpit says so.
+- **Default deny, for money too.** An AI feature without a budget in
+  settings is refused, so a new feature can't be added without a limit.
+- **Identity over network.** No VPC or NAT gateway: identity and policies check
+  every call, and the NAT alone would cost more than the whole project.
+  Accepted, written down, revisitable.
+
 
 ## Honest limits of the demo
 
 The data is generated with clear account "personalities", so good and bad
 accounts separate more cleanly than in real life. The flags look more
 accurate here than they would on real customer data.
+
+What a real deployment would add: sign-in for the cockpit (SSO) with each login
+mapped to an owner, the workloads moved out of the management account, the
+model on Amazon Bedrock (the code is ready; the account's quota isn't yet), and
+a monthly reconciliation of the AI ledger against the provider's bill.
