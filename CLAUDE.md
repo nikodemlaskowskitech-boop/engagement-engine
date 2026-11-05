@@ -205,6 +205,10 @@ One JSON event per line, one file per day in `data/events/`.
   what they can't see, the known gaps and the upgrades in order of value
   (leak check, contact list, PII detector, ...). Update it whenever redaction,
   its inputs or where its outputs live change.
+- `THREAT_MODEL.md`: one page: what we protect, the ways in, each threat with
+  its control, the test that proves it and what's left, and the risks we
+  accept on purpose. Update it when a new way in is added (a public address,
+  a secret, a new place data goes).
 - `ENGAGEMENT_LOGIC.md`: the logic by tier as Mermaid diagrams (GitHub
   renders them): coverage table, overview, Self-service journey, Scale
   queue and hand-back, Enterprise QBR first, action status. Update it when
