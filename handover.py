@@ -350,9 +350,28 @@ def leak_check(sent, key):
 
 # --- 5. Check ----------------------------------------------------------------------
 
+_UNITS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+          "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+_TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+NUMBER_WORDS = {w: i for i, w in enumerate(_UNITS)} | {w: 10 * i for i, w in enumerate(_TENS) if w}
+_WORD_RE = re.compile(r"\b(" + "|".join(t for t in _TENS if t) + r")[- ](" + "|".join(_UNITS[1:10]) + r")\b"
+                      r"|\b(" + "|".join(NUMBER_WORDS) + r")\b", re.I)
+
+
+def as_digits(text):
+    """Numbers written as words become digits ("thirteen weeks" -> "13 weeks"), so a
+    source that spells a number out still backs the brief that writes it in digits
+    (found 5 Nov 2026: "13 weeks" flagged against "thirteen weeks ago")."""
+    def word(m):
+        if m.group(1):
+            return str(NUMBER_WORDS[m.group(1).lower()] + NUMBER_WORDS[m.group(2).lower()])
+        return str(NUMBER_WORDS[m.group(3).lower()])
+    return _WORD_RE.sub(word, text)
+
+
 def numbers_in(text):
     found = set()
-    for n in re.findall(r"\d+(?:\.\d+)?", text.replace(",", "")):
+    for n in re.findall(r"\d+(?:\.\d+)?", as_digits(text).replace(",", "")):
         v = float(n)
         found.add(str(int(v)) if v == int(v) else str(v))
     return found
