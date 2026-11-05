@@ -26,6 +26,7 @@ from aws_cdk import aws_accessanalyzer as accessanalyzer
 from aws_cdk import aws_apigatewayv2 as apigwv2
 from aws_cdk import aws_apigatewayv2_integrations as integrations
 from aws_cdk import aws_athena as athena
+from aws_cdk import aws_ce as ce
 from aws_cdk import aws_glue as glue
 from aws_cdk import aws_guardduty as guardduty
 from aws_cdk import aws_iam as iam
@@ -328,3 +329,23 @@ class DataStack(Stack):
             conditions={"StringNotEquals": {"kms:ViaService": f"s3.{self.region}.amazonaws.com"},
                         "ArnNotLike": {"aws:PrincipalArn": admins}, **not_a_service}))
         CfnOutput(self, "DataKeyArn", value=self.key.key_arn)
+
+        # --- Cost Anomaly Detection (free): an email when a day's spend jumps ---
+        # AWS learns this account's usual daily cost per service and flags a day that breaks
+        # the pattern; the email goes out when the unexpected part reaches the threshold.
+        # A "custom" monitor scoped to this account, not AWS's own services monitor: an
+        # account may have only one of those, and AWS creates a default one for new accounts.
+        # The address comes from settings.local.toml (the repo is public); none = not built.
+        if aws.get("cost_alert_email"):
+            monitor = ce.CfnAnomalyMonitor(
+                self, "CostMonitor", monitor_name="cairnpath-account-spend", monitor_type="CUSTOM",
+                monitor_specification=json.dumps({"Dimensions": {
+                    "Key": "LINKED_ACCOUNT", "Values": [str(aws["account_id"])]}}))
+            ce.CfnAnomalySubscription(
+                self, "CostAlert", subscription_name="cairnpath-cost-alert", frequency="DAILY",
+                monitor_arn_list=[monitor.attr_monitor_arn],
+                subscribers=[ce.CfnAnomalySubscription.SubscriberProperty(
+                    type="EMAIL", address=aws["cost_alert_email"])],
+                threshold_expression=json.dumps({"Dimensions": {
+                    "Key": "ANOMALY_TOTAL_IMPACT_ABSOLUTE", "MatchOptions": ["GREATER_THAN_OR_EQUAL"],
+                    "Values": [str(aws["cost_alert_threshold_usd"])]}}))

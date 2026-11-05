@@ -35,3 +35,7 @@ named_csm = "Strategic"
 # Your regions: hours ahead of UTC, for sending emails at a local hour
 # [regions]
 # utc_offset = { "North" = 1, "South" = 2 }
+
+# The address for AWS cost anomaly emails (personal, so it lives here, not in settings.toml)
+# [aws]
+# cost_alert_email = "you@example.com"

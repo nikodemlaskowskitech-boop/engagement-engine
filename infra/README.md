@@ -143,3 +143,20 @@ The engine rewrites its outputs on every run; for the inputs, once:
 python upload.py --all    sends every input again, so they get the key (one input check and engine run follow)
 python security_check.py  the key questions included
 ```
+
+## Cost Anomaly Detection (free)
+
+AWS learns the account's usual daily spend and emails when a day's unexpected
+cost reaches `[aws] cost_alert_threshold_usd`. The address is personal and this
+repo is public, so it goes in `settings.local.toml` (git-ignored):
+
+```
+[aws]
+cost_alert_email = "you@example.com"
+```
+
+Without it, nothing is built. The monitor is a custom one scoped to this account:
+an account may have only one of AWS's own "services" monitors, and AWS often
+creates that one itself. Anomalies show up after AWS has seen about 10 days of
+spend history.
+

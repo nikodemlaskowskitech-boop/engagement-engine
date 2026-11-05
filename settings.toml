@@ -145,6 +145,14 @@ access_analyzer_name = "cairnpath-external-access"
 # its key is lost for good).
 kms_key_alias = "alias/cairnpath-data"
 kms_deletion_window_days = 30
+# Cost Anomaly Detection (free): AWS learns the account's usual daily spend and emails when a
+# day's unexpected cost reaches cost_alert_threshold_usd. The address is personal, so it goes in
+# settings.local.toml (git-ignored; this repo is public), e.g.
+#   [aws]
+#   cost_alert_email = "you@example.com"
+# Left empty, no monitor is built.
+cost_alert_email = ""
+cost_alert_threshold_usd = 5
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo

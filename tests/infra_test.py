@@ -367,6 +367,27 @@ check([a for st in role_kms.get(role_ids["slack"], []) for a in actions_of(st)] 
 check(srole not in role_kms, "the schedule role has no key permission at all")
 check("DataKeyArn" in t.find_outputs("*"), "prints the key's ARN after deploy")
 
+print("\nCost Anomaly Detection: an email when a day's spend jumps")
+monitors = [v["Properties"] for v in t.find_resources("AWS::CE::AnomalyMonitor").values()]
+subs = [v["Properties"] for v in t.find_resources("AWS::CE::AnomalySubscription").values()]
+if aws.get("cost_alert_email"):
+    spec = json.loads(monitors[0].get("MonitorSpecification", "{}")) if monitors else {}
+    check(len(monitors) == 1 and monitors[0].get("MonitorType") == "CUSTOM"
+          and spec == {"Dimensions": {"Key": "LINKED_ACCOUNT", "Values": [str(aws["account_id"])]}},
+          "one custom monitor for this account (doesn't clash with AWS's default services monitor)", monitors)
+    th = json.loads(subs[0].get("ThresholdExpression", "{}")) if subs else {}
+    check(len(subs) == 1 and subs[0].get("Frequency") == "DAILY"
+          and subs[0].get("Subscribers") == [{"Type": "EMAIL", "Address": aws["cost_alert_email"]}]
+          and th.get("Dimensions", {}).get("Key") == "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
+          and th["Dimensions"].get("Values") == [str(aws["cost_alert_threshold_usd"])],
+          "a daily email to the address in settings, from the threshold in settings", subs)
+else:
+    check(not monitors and not subs, "no address in settings.local.toml: no monitor (nothing half-built)")
+import subprocess                                              # noqa: E402
+tracked = subprocess.run(["git", "-C", str(REPO), "show", "HEAD:settings.toml"], capture_output=True, text=True).stdout
+check(not tracked or 'cost_alert_email = ""' in tracked,
+      "the address isn't in settings.toml (a public repo): only in the git-ignored settings.local.toml")
+
 print("\nGuardDuty: on trial, only the plans this stack needs")
 dets = t.find_resources("AWS::GuardDuty::Detector")
 if aws.get("guardduty"):
