@@ -10,6 +10,7 @@ samples, and GuardDuty switched off is said plainly. Exit 1 on any FAIL.
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -28,8 +29,10 @@ def check(ok, name, detail=""):
 
 def finding(i, kind, sev, sample=False):
     service = {"AdditionalInfo": {"Value": json.dumps({"sample": True}), "Type": "default"}} if sample else {"Count": 1}
-    return {"Id": f"f{i}", "Type": kind, "Severity": sev, "UpdatedAt": f"2026-11-{5 + i % 3:02d}T10:00:00Z",
-            "Service": service}
+    # like boto3 on 5 Nov 2026: some fields come back as Python dates, not text
+    service["EventFirstSeen"] = datetime(2026, 11, 5, 10, 0, tzinfo=timezone.utc)
+    updated = datetime(2026, 11, 5 + i % 3, 10, 0, tzinfo=timezone.utc) if i % 2 else f"2026-11-{5 + i % 3:02d}T10:00:00Z"
+    return {"Id": f"f{i}", "Type": kind, "Severity": sev, "UpdatedAt": updated, "Service": service}
 
 
 class FakeGD:
