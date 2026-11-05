@@ -52,7 +52,10 @@ class FakeKMS:
     def get_key_policy(self, KeyId, PolicyName):
         self.asked.append(KeyId)
         # like the real key policy: Resource "*" (which the real simulator refuses)
-        return {"Policy": json.dumps({"Statement": [{"Sid": "DenyUseOutsideS3", "Effect": "Deny", "Resource": "*"}]})}
+        return {"Policy": json.dumps({"Statement": [
+            {"Sid": "Root", "Effect": "Allow", "Action": "kms:*", "Resource": "*",
+             "Principal": {"AWS": f"arn:aws:iam::{ACCOUNT}:root"}},
+            {"Sid": "DenyUseOutsideS3", "Effect": "Deny", "Resource": "*"}]})}
 
 
 ADMIN_ARN = f"arn:aws:iam::{ACCOUNT}:role/aws-reserved/AccountFullAccessRole"
@@ -89,6 +92,11 @@ class FakeIAM:
                 and "kms:ViaService" not in ctx and "AccountFullAccessRole" not in role):
             return {"EvaluationResults": [{"EvalDecision": "explicitDeny", "MatchedStatements": [
                 {"SourcePolicyType": "Resource Policy", "SourcePolicyId": "DenyUseOutsideS3"}]}]}
+        # like the real simulator: an Allow to the account root in a resource policy reads as
+        # "every role in this account may" (in KMS it only hands the decision to IAM)
+        if action.startswith("kms:") and f":iam::{ACCOUNT}:root" in kw.get("ResourcePolicy", ""):
+            return {"EvaluationResults": [{"EvalDecision": "allowed", "MatchedStatements": [
+                {"SourcePolicyType": "Resource Policy", "SourcePolicyId": "ResourcePolicy"}]}]}
         if "AccountFullAccessRole" in role:                  # the admin may do anything else
             return {"EvaluationResults": [{"EvalDecision": "allowed"}]}
         if any('"s3:*"' in p for p in kw.get("PolicyInputList", [])) and action.startswith("s3:") and not http:
@@ -188,6 +196,8 @@ check(key_qs and all("DenyUseOutsideS3" in k.get("ResourcePolicy", "")
       "key questions are asked against the key, with the key's own policy")
 check(all('"Resource": "*"' not in k["ResourcePolicy"] for k in key_qs),
       "the key policy's Resource \"*\" is spelled out as the key's ARN (the simulator refuses \"*\")")
+check(all(":root" not in k["ResourcePolicy"] for k in key_qs),
+      "the root statement (in KMS it only lets IAM decide) is left out, as KMS reads it")
 via = [k for k in key_qs if any(c["ContextKeyName"] == "kms:ViaService" for c in k["ContextEntries"])]
 check(via and len(via) < len(key_qs) and all({"ContextKeyName": "kms:ViaService", "ContextKeyType": "string",
                                                "ContextKeyValues": [f"s3.{REGION}.amazonaws.com"]} in k["ContextEntries"] for k in via),
