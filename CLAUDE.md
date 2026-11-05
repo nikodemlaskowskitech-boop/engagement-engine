@@ -816,8 +816,12 @@ One JSON event per line, one file per day in `data/events/`.
   or switch off before about 5 Dec); IAM Access Analyzer 5 Nov 2026; our own KMS key
   5 Nov 2026; Cost Anomaly Detection 5 Nov 2026 (AWS spend only: it never
   sees the Anthropic API bill); the AI spend ledger with budgets per feature
-  5 Nov 2026. Next: the two free guards that are settings only Nikodem can
-  switch on (Anthropic spend limit, GitHub push protection), then Phase 8.
+  5 Nov 2026; GitHub push protection and a $10 Anthropic spend limit 5 Nov
+  2026; cockpit decisions checked on our side and AI briefs only on the
+  admin's request (request_briefs.py) 5 Nov 2026; Access Analyzer baseline 0.
+  Phase 7 done. Phase 8: README rewritten 5 Nov 2026 (architecture diagram,
+  one run step by step, controls and cost tables); next, the demo
+  walkthrough, then the CV line and interview story.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs. AI to assist CS (5 Nov 2026,
   Nikodem thinking it over; spec Feature requests): assist, not replace, e.g.
