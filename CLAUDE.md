@@ -647,6 +647,11 @@ One JSON event per line, one file per day in `data/events/`.
   each and under which condition. `tests/access_report_test.py`: a stand-in
   analyzer; with botocore installed, every request is validated against AWS's
   API model.
+  Plus Cost Anomaly Detection (5 Nov 2026, free): a custom monitor on this
+  account (not AWS's one-per-account services monitor, which AWS may have made
+  already) and a daily email when a day's unexpected cost reaches [aws]
+  cost_alert_threshold_usd. The address, [aws] cost_alert_email, is personal:
+  it lives in settings.local.toml (the repo is public); empty = not built.
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
@@ -661,6 +666,8 @@ One JSON event per line, one file per day in `data/events/`.
   access log, only this API may call it, nothing waking on state/; the data
   perimeter: both statements, the exempt roles and admins, bucket settings left
   open; GuardDuty: one detector with only the plans we need, or none when off;
+  Cost Anomaly Detection: a custom monitor and a daily email from settings, or
+  nothing without an address, and no address in settings.toml;
   Access Analyzer: one free account analyzer, named from settings).
   Exit 1 on any FAIL.
 - `tests/slack_lambda_test.py`: the Slack listener's handler from its real
@@ -770,8 +777,9 @@ One JSON event per line, one file per day in `data/events/`.
   (PRIVACY.md, spec Feature requests). Zero trust: the data perimeter (bucket
   policy) built 4 Nov 2026; GuardDuty on its free trial from 5 Nov 2026 (keep
   or switch off before about 5 Dec); IAM Access Analyzer 5 Nov 2026; our own KMS key
-  5 Nov 2026. Next: the free guards (Anthropic spend limit, GitHub push
-  protection, Cost Anomaly Detection).
+  5 Nov 2026; Cost Anomaly Detection 5 Nov 2026. Next: the two free guards
+  that are settings only Nikodem can switch on (Anthropic spend limit, GitHub
+  push protection), then observability for AI spend.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs. AI to assist CS (5 Nov 2026,
   Nikodem thinking it over; spec Feature requests): assist, not replace, e.g.
