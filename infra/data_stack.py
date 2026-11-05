@@ -25,6 +25,7 @@ from aws_cdk import aws_apigatewayv2 as apigwv2
 from aws_cdk import aws_apigatewayv2_integrations as integrations
 from aws_cdk import aws_athena as athena
 from aws_cdk import aws_glue as glue
+from aws_cdk import aws_guardduty as guardduty
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
@@ -268,3 +269,19 @@ class DataStack(Stack):
                      "s3:ListBucket*", "s3:ReplicateObject"],
             resources=[self.bucket.bucket_arn, self.bucket.arn_for_objects("*")],
             conditions={"ArnNotLike": {"aws:PrincipalArn": workload_roles + admins}, **not_a_service}))
+
+        # --- GuardDuty, on trial ([aws] guardduty): watches the account's own logs for signs
+        # of a break-in (credentials used from odd places, crypto-mining, data pulled out of the
+        # bucket in bulk). Account-wide, so it's one switch: false removes it, findings included.
+        # Only what this stack has: S3 data events and Lambda network activity. Plans for
+        # services we don't run (EKS, EC2 malware scans, RDS, runtime agents) are off, so they
+        # can't add cost.
+        if aws.get("guardduty"):
+            on = lambda name: guardduty.CfnDetector.CFNFeatureConfigurationProperty(name=name, status="ENABLED")
+            off = lambda name: guardduty.CfnDetector.CFNFeatureConfigurationProperty(name=name, status="DISABLED")
+            detector = guardduty.CfnDetector(
+                self, "GuardDuty", enable=True, finding_publishing_frequency="FIFTEEN_MINUTES",
+                features=[on("S3_DATA_EVENTS"), on("LAMBDA_NETWORK_LOGS"),
+                          off("EKS_AUDIT_LOGS"), off("EBS_MALWARE_PROTECTION"),
+                          off("RDS_LOGIN_EVENTS"), off("RUNTIME_MONITORING")])
+            CfnOutput(self, "GuardDutyDetector", value=detector.ref)

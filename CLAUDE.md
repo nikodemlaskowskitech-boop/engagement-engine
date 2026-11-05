@@ -626,6 +626,14 @@ One JSON event per line, one file per day in `data/events/`.
   services acting for the bucket are exempt (aws:PrincipalIsAWSService).
   Bucket-level settings (the policy itself) are deliberately not denied, so
   an admin can always fix a mistake: no lockout.
+  Plus GuardDuty on trial ([aws] guardduty, 30-day free trial from 5 Nov 2026
+  to about 5 Dec 2026, charged after): one detector, only S3 data events and
+  Lambda network activity on; EKS, EC2 malware, RDS and runtime plans off.
+  false + cdk deploy removes it (findings too: save them first).
+  `guardduty_report.py` (read-only; `--samples` makes sample findings,
+  `--save` writes data/guardduty_report.md): real findings by severity and
+  type, samples left out, and the cost so far by feature, no console needed.
+  `tests/guardduty_report_test.py`: a stand-in GuardDuty.
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
@@ -639,7 +647,8 @@ One JSON event per line, one file per day in `data/events/`.
   its role (write clicks only, its two secrets only), one route, throttling,
   access log, only this API may call it, nothing waking on state/; the data
   perimeter: both statements, the exempt roles and admins, bucket settings left
-  open). Exit 1 on any FAIL.
+  open; GuardDuty: one detector with only the plans we need, or none when off).
+  Exit 1 on any FAIL.
 - `tests/slack_lambda_test.py`: the Slack listener's handler from its real
   bundle, with requests signed like Slack signs them (made-up secret) against
   stand-in S3, Parameter Store and Slack: unsigned, wrongly signed, tampered
@@ -740,7 +749,8 @@ One JSON event per line, one file per day in `data/events/`.
   detector) deferred the same day: no data to make the case, Comprehend isn't
   in eu-north-1 and reads English and Spanish only, Presidio is heavy
   (PRIVACY.md, spec Feature requests). Zero trust: the data perimeter (bucket
-  policy) built 4 Nov 2026. Next: our own KMS key, Access Analyzer, GuardDuty.
+  policy) built 4 Nov 2026; GuardDuty on its free trial from 5 Nov 2026 (keep
+  or switch off before about 5 Dec). Next: Access Analyzer, our own KMS key.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs.
 - Handover brief, long histories (needs years of data we don't have): keep a
