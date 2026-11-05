@@ -604,13 +604,19 @@ One JSON event per line, one file per day in `data/events/`.
   inputs/*, state/*, the check summary; writes only outputs/*. DuckDB for Lambda
   (Linux arm64, Python 3.13, version from requirements.txt) is fetched by pip
   with --platform at synth time, cached in infra/build/ (no Docker);
-  CAIRNPATH_SKIP_DEPS=1 skips it for tests. Handover briefs in AWS: the steps
-  run export_views.py, then handover.py, then export_views.py again (so the
-  cockpit shows the briefs). handover.py is in [aws] engine_optional_steps: if
-  it fails (model API down) or there's no key, the run is still OK, with a
-  warning in run.json. The key: Parameter Store SecureString ([aws]
-  api_key_parameter, filled by put_key.py), read at run time and passed to the
-  optional steps only (never in the Lambda's settings, never printed); the
+  CAIRNPATH_SKIP_DEPS=1 skips it for tests. Handover briefs in AWS, only on
+  request (5 Nov 2026): no automatic run calls the model. The steps run
+  export_views.py, then "handover.py --dry-run" (free: marks each brief out of
+  date in <acc>_stale.json when its context changed; rewritten as no changes,
+  never deleted, since the engine may not delete), then export_views.py again
+  (the cockpit shows "Out of date" with why). Only an event with {"briefs":
+  true} swaps in the real [aws] briefs_step (handover.py), and only the admin
+  can send one: `request_briefs.py` (S3 events carry Records and are refused,
+  the schedule's input is fixed). Steps may carry arguments. Both are in [aws]
+  engine_optional_steps: if one fails (model API down, leak check) or there's
+  no key, the run is still OK, with a warning in run.json. The key: Parameter Store SecureString ([aws]
+  api_key_parameter, filled by put_key.py), read at run time, only on a briefs
+  request, and passed to the briefs step only (never in the Lambda's settings, never printed); the
   engine may only ssm:GetParameter that one parameter. Provider in AWS: [aws]
   briefs_llm_provider (llm.py honours CAIRNPATH_LLM_PROVIDER). The cache
   outputs/handover/ is downloaded first and only changed files go back;
@@ -764,6 +770,12 @@ One JSON event per line, one file per day in `data/events/`.
   neither) for the Slack listener in AWS.
   `tests/put_key_test.py`: stand-in Parameter Store, made-up key: stored as a
   SecureString with overwrite, never printed in whole or in part.
+- `request_briefs.py`: the only way the model runs in AWS. Starts the engine
+  function (name from the stack's EngineFunction output) asynchronously with
+  {"trigger": "briefs", "briefs": true}, then waits for that run's run.json
+  and says which briefs were rewritten (`--no-wait` returns at once). Admin
+  only (aws login). `tests/request_briefs_test.py`: stand-in CloudFormation,
+  Lambda and S3; with botocore, the invoke checked against AWS's API model.
 - `tests/upload_test.py`: a stand-in S3 (no AWS, no cost): first run sends
   every input, a rerun nothing, then only a changed and a new file; keys use
   "/"; the marker written once per real change, last, never on a rerun or

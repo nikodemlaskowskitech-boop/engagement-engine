@@ -160,3 +160,16 @@ an account may have only one of AWS's own "services" monitors, and AWS often
 creates that one itself. Anomalies show up after AWS has seen about 10 days of
 spend history.
 
+## Handover briefs: only on request
+
+No automatic engine run calls the model. Each run only checks, for free, whether
+a brief is out of date (`handover.py --dry-run`); the cockpit shows "Out of date"
+with the reason. To have the briefs rewritten (the changed ones only, within the
+monthly budget, every call in the AI spend ledger):
+
+```
+python request_briefs.py
+```
+
+Only the admin can start the engine this way; the schedule and S3 events can't.
+
