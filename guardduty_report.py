@@ -68,7 +68,7 @@ def report(gd, samples=False):
             lines.append(f"| {sev} | {kind} | {n} | {last[(sev, kind)][:10]} |")
         lines.append("")
     # the cost estimate: what the usage so far would have cost without the trial, by feature
-    usage = gd.get_usage_statistics(DetectorId=det, UsageStatisticType="SUM_BY_FEATURE",
+    usage = gd.get_usage_statistics(DetectorId=det, UsageStatisticType="SUM_BY_FEATURES",
                                     UsageCriteria={"Features": ["CLOUD_TRAIL", "DNS_LOGS", "FLOW_LOGS",
                                                                 "S3_DATA_EVENTS", "LAMBDA_NETWORK_LOGS"]})
     rows = usage.get("UsageStatistics", {}).get("SumByFeature", [])

@@ -19,6 +19,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import guardduty_report as g   # noqa: E402
 
 failed = 0
+REQUESTS = []
+
+
+def real_enum(shape):
+    """The values AWS really accepts, from botocore's own API model (None if botocore isn't here)."""
+    try:
+        import botocore.session
+    except ImportError:
+        return None
+    model = botocore.session.get_session().get_service_model("guardduty")
+    return set(model.shape_for(shape).enum)
 
 
 def check(ok, name, detail=""):
@@ -61,7 +72,7 @@ class FakeGD:
         return {"Findings": [f for f in self.findings if f["Id"] in FindingIds]}
 
     def get_usage_statistics(self, **kw):
-        assert kw["UsageStatisticType"] == "SUM_BY_FEATURE"
+        REQUESTS.append(kw)
         return {"UsageStatistics": {"SumByFeature": [
             {"Feature": "CLOUD_TRAIL", "Total": {"Amount": "0.12", "Unit": "USD"}},
             {"Feature": "S3_DATA_EVENTS", "Total": {"Amount": "0.30", "Unit": "USD"}}]}}
@@ -83,6 +94,18 @@ check(gd.samples_made == 0, "read-only by default: no samples created")
 g.report(gd, samples=True)
 check(gd.samples_made == 1, "--samples creates sample findings once")
 check("off in this region" in g.report(FakeGD([], detectors=())), "GuardDuty switched off: said plainly")
+
+# what the stand-in can't know: the values AWS accepts. Checked against botocore's API model, so
+# a wrong spelling fails here, not on the live account (SUM_BY_FEATURE vs SUM_BY_FEATURES, 5 Nov 2026)
+types, features = real_enum("UsageStatisticType"), real_enum("UsageFeature")
+if types is None:
+    print("  SKIP  request values vs AWS's API model (botocore not installed here)")
+else:
+    req = REQUESTS[0]
+    check(req["UsageStatisticType"] in types, f"the usage statistic type is one AWS accepts ({req['UsageStatisticType']})",
+          sorted(types))
+    check(set(req["UsageCriteria"]["Features"]) <= features, "every feature named is one AWS knows",
+          set(req["UsageCriteria"]["Features"]) - features)
 
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)

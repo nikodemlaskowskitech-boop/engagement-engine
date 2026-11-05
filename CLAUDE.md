@@ -633,7 +633,8 @@ One JSON event per line, one file per day in `data/events/`.
   `guardduty_report.py` (read-only; `--samples` makes sample findings,
   `--save` writes data/guardduty_report.md): real findings by severity and
   type, samples left out, and the cost so far by feature, no console needed.
-  `tests/guardduty_report_test.py`: a stand-in GuardDuty.
+  `tests/guardduty_report_test.py`: a stand-in GuardDuty; with botocore
+  installed, the request values are checked against AWS's own API model.
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
