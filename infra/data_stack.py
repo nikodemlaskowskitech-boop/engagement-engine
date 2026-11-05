@@ -133,7 +133,8 @@ class DataStack(Stack):
                          "OPTIONAL_STEPS": json.dumps(aws["engine_optional_steps"]),
                          # the key's NAME, not the key: the value is read at run time (never shown here)
                          "API_KEY_PARAMETER": aws["api_key_parameter"],
-                         "LLM_PROVIDER": aws["briefs_llm_provider"]},
+                         "LLM_PROVIDER": aws["briefs_llm_provider"],
+                         "LEDGER_FILE": SETTINGS["llm"]["ledger_file"]},
             retry_attempts=0,                                  # same data, same result: a retry wouldn't help
             log_group=logs.LogGroup(self, "RunEngineLogs",
                                     retention=logs.RetentionDays.ONE_MONTH,
@@ -145,6 +146,7 @@ class DataStack(Stack):
         self.bucket.grant_read(engine, check_summary)
         self.bucket.grant_put(engine, outputs + "*")
         self.bucket.grant_read(engine, outputs + "handover/*")          # the briefs' cache from earlier runs
+        self.bucket.grant_read(engine, outputs + SETTINGS["llm"]["ledger_file"])   # the AI spend ledger so far
         # the LLM API key: read this one parameter, decrypted (the AWS-managed aws/ssm key allows
         # that for roles in this account that may read the parameter), nothing else in Parameter Store
         engine.add_to_role_policy(iam.PolicyStatement(

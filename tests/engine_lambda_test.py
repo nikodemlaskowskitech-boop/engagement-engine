@@ -263,6 +263,32 @@ check(down["status"] == "OK" and any("briefs.py failed" in w for w in down["warn
       "the model API fails: a warning, and the cockpit still updates", down.get("warnings"))
 h.OPTIONAL = []
 
+print("\nEngine Lambda: the AI spend ledger carried from run to run (outputs/ai_spend.csv)")
+LEDGER = h.LEDGER
+(bundle / "spends.py").write_text(
+    "import os\nfrom pathlib import Path\n"
+    f"p = Path('data/{LEDGER}')\n"
+    "before = p.read_text(encoding='utf-8') if p.exists() else ''\n"
+    "assert 'old-row' in before or not os.environ.get('EXPECT_OLD'), 'last runs ledger not brought back'\n"
+    "if os.environ.get('SPEND'):\n"
+    "    p.write_text((before or 'header\\n') + 'new-row\\n', encoding='utf-8')\n"
+    "print('spend step ran')\n", encoding="utf-8")
+h.CODE, h.STEPS = ENGINE_FILES + ["spends.py"], ["spends.py"]
+objs = bucket_with_demo("OK")
+objs[OUTPUTS + LEDGER] = b"header\nold-row\n"
+s3 = FakeS3(objs)
+os.environ["EXPECT_OLD"] = "1"
+quiet = h.handler({"trigger": "manual"}, None, s3=s3, work=work)
+check(quiet["status"] == "OK" and LEDGER not in quiet["outputs"],
+      "the ledger so far is brought back before the steps; no model call = not re-uploaded", quiet["outputs"])
+os.environ["SPEND"] = "1"
+spent = h.handler({"trigger": "manual"}, None, s3=s3, work=work)
+del os.environ["SPEND"], os.environ["EXPECT_OLD"]
+check(LEDGER in spent["outputs"] and s3.objects[OUTPUTS + LEDGER].decode().splitlines() == ["header", "old-row", "new-row"],
+      "a run that called the model adds its rows to the ledger, keeping the old ones", s3.objects.get(OUTPUTS + LEDGER))
+first = h.handler({"trigger": "manual"}, None, s3=FakeS3(bucket_with_demo("OK")), work=work)
+check(first["status"] == "OK", "no ledger yet (first run ever): not an error")
+
 print("\nEngine Lambda: Slack clicks from the AWS listener (state/clicks/)")
 
 

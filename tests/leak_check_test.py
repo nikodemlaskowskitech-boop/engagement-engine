@@ -44,6 +44,7 @@ import handover   # noqa: E402
 import llm        # noqa: E402
 
 llm.load_api_key = lambda: None
+llm.LEDGER = Path(tempfile.mkdtemp()) / "ai_spend.csv"   # the stand-in's calls never reach the real ledger
 
 failed = 0
 

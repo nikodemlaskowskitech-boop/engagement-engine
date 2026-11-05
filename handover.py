@@ -328,6 +328,7 @@ NOT_A_NAME = {   # words that make a capitalised pair something other than a per
 
 
 BLOCKED = []                                 # accounts the leak check stopped this run
+OVER_BUDGET = []                             # accounts the monthly budget stopped this run (llm.call)
 
 
 def leak_check(sent, key):
@@ -460,10 +461,17 @@ def run(account_id, dry_run, force=False):
     # the previous owner by label only: the model never sees a real name
     previous = {t["owner_id"]: t["owner_name"] for t in team}.get(entry["handover_from"], "")
     previous = next((label for label, name in key.items() if name == previous), "the previous owner")
-    response = client.messages.create(
-        model=llm.MODEL, max_tokens=CONF["max_output_tokens"], system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content":
-                   f"The account is moving from {previous} to a new owner. Sources:\n\n{sent}"}])
+    try:
+        # through llm.call: the monthly budget is checked first, and the call goes in the ledger
+        response = llm.call(
+            client, "handover", account_id,
+            model=llm.MODEL, max_tokens=CONF["max_output_tokens"], system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content":
+                       f"The account is moving from {previous} to a new owner. Sources:\n\n{sent}"}])
+    except llm.OverBudget as e:              # no call made; the kept brief (if any) stays as it was
+        OVER_BUDGET.append(account_id)
+        print(f"           NOT WRITTEN, over budget: {e}")
+        return 0, 0
     draft = "".join(b.text for b in response.content if b.type == "text")
     usage = (response.usage.input_tokens, response.usage.output_tokens)
     # Only a finished answer counts. "max_tokens" = cut short; an empty draft = nothing written.
@@ -512,7 +520,9 @@ if __name__ == "__main__":
         tin, tout = tin + i, tout + o
     if not dry:
         print(f"Written with {llm.describe()}")
-        cost = (tin * LLM["price_input_per_million"] + tout * LLM["price_output_per_million"]) / 1e6
-        print(f"\n{len(ids)} accounts, {tin:,} tokens in, {tout:,} out, about ${cost:.3f}")
+        print(f"\n{len(ids)} accounts, {tin:,} tokens in, {tout:,} out, about ${llm.cost(tin, tout):.3f} "
+              f"(ledger: data/{llm.LEDGER.name})")
+    if OVER_BUDGET:                          # a failed step, like the leak check: visible in run_all and run.json
+        sys.exit(f"\nMonthly budget stopped {len(OVER_BUDGET)} brief(s): {', '.join(OVER_BUDGET)} (python llm.py --spend)")
     if BLOCKED:                              # a failed step: run_all and the AWS run.json both show it
         sys.exit(f"\nLeak check stopped {len(BLOCKED)} brief(s): {', '.join(BLOCKED)} (see above)")

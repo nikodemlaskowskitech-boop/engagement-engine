@@ -9,13 +9,22 @@ The one place that knows which AI provider writes the briefs: settings.toml
 
 Both speak the same Messages API, so brief.py and handover.py don't care which
 one answers. Switching provider = one line in settings.toml, never a script.
+
+Every model call goes through call(): it checks the feature's monthly budget
+first ([llm.monthly_budget_usd]; over it = refused, no call), then records the
+call in the AI spend ledger, data/ai_spend.csv ([llm] ledger_file): when, which
+feature and account, model, tokens, cost at the prices in [llm], laptop or AWS.
+
+    python llm.py --spend     this month's spend by feature, against its budget
 """
 
+import csv
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
-from settings import SETTINGS
+from settings import OUTPUTS, SETTINGS
 
 LLM = SETTINGS["llm"]
 AWS = SETTINGS.get("aws", {})
@@ -64,3 +73,87 @@ def describe():
     if PROVIDER == "bedrock":
         return f"Amazon Bedrock, {MODEL}, {AWS.get('region')}, profile {AWS.get('profile') or 'default'}"
     return f"Anthropic API, {MODEL}"
+
+
+# --- the AI spend ledger and budgets ---
+LEDGER = OUTPUTS / LLM.get("ledger_file", "ai_spend.csv")
+BUDGETS = LLM.get("monthly_budget_usd", {})
+COLUMNS = ["time_utc", "month", "feature", "account_id", "provider", "model",
+           "input_tokens", "output_tokens", "cost_usd", "where", "stop_reason"]
+
+
+class OverBudget(Exception):
+    """The feature's budget for this month is spent: no model call was made."""
+
+
+def where():
+    """Laptop or AWS: the engine Lambda has AWS_LAMBDA_FUNCTION_NAME set."""
+    return "aws" if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") else "laptop"
+
+
+def this_month():
+    # The real calendar month, not the data's as-of date: money is spent today, in real time.
+    return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
+def cost(input_tokens, output_tokens):
+    """USD at the list prices in [llm]: our estimate, not Anthropic's bill."""
+    return (input_tokens * LLM["price_input_per_million"] + output_tokens * LLM["price_output_per_million"]) / 1e6
+
+
+def spent(feature=None, month=None):
+    """USD recorded in the ledger this month, for one feature or all."""
+    if not LEDGER.exists():
+        return 0.0
+    month = month or this_month()
+    with LEDGER.open(encoding="utf-8", newline="") as f:
+        return sum(float(r["cost_usd"]) for r in csv.DictReader(f)
+                   if r["month"] == month and (feature is None or r["feature"] == feature))
+
+
+def record(feature, account_id, response):
+    """One row per call. Header once; the file only grows (like the action log)."""
+    usage = response.usage
+    row = {"time_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "month": this_month(),
+           "feature": feature, "account_id": account_id, "provider": PROVIDER, "model": MODEL,
+           "input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
+           "cost_usd": f"{cost(usage.input_tokens, usage.output_tokens):.6f}", "where": where(),
+           "stop_reason": getattr(response, "stop_reason", "") or ""}
+    new = not LEDGER.exists()
+    LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    with LEDGER.open("a", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=COLUMNS)
+        if new:
+            w.writeheader()
+        w.writerow(row)
+    return row
+
+
+def call(client, feature, account_id, **request):
+    """The only way the scripts call the model: budget first, then the call, then the ledger.
+    A feature with no budget in settings is refused too: every feature must have a limit."""
+    if feature not in BUDGETS:
+        raise OverBudget(f"no budget for '{feature}' in settings.toml [llm.monthly_budget_usd]")
+    so_far = spent(feature)
+    if so_far >= BUDGETS[feature]:
+        raise OverBudget(f"{feature}: ${so_far:.2f} spent in {this_month()}, budget ${BUDGETS[feature]:.2f} "
+                         f"(settings.toml [llm.monthly_budget_usd])")
+    response = client.messages.create(**request)
+    record(feature, account_id, response)
+    return response
+
+
+def spend_report(month=None):
+    month = month or this_month()
+    lines = [f"AI spend in {month} ({where()} ledger {LEDGER.name}; estimate at the [llm] prices)"]
+    for feature, budget in sorted(BUDGETS.items()):
+        s = spent(feature, month)
+        lines.append(f"  {feature:<12} ${s:7.3f} of ${budget:.2f}  ({s / budget:.0%})" if budget else f"  {feature}: no budget")
+    lines.append(f"  {'total':<12} ${spent(None, month):7.3f}")
+    return "\n".join(lines)
+
+
+if __name__ == "__main__" and "--spend" in sys.argv:
+    sys.stdout.reconfigure(encoding="utf-8")
+    print(spend_report())
+

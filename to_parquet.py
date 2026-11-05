@@ -36,8 +36,14 @@ def sql_path(p):
 
 
 con = connect()
+written = 0
 for name in TABLES:
     target = OUT / name / f"{name}.parquet"
+    csv_file = OUTPUTS / (name + ".csv")
+    if name not in ("crm", "cs_team", "tasks") and not csv_file.exists():
+        # e.g. ai_spend.csv before the first model call: nothing to query yet, not an error
+        print(f"  {name:<18}  skipped: no {csv_file.name} yet")
+        continue
     target.parent.mkdir(parents=True, exist_ok=True)
     if name in ("crm", "cs_team"):
         source = f"SELECT * FROM {name}"
@@ -54,4 +60,5 @@ for name in TABLES:
         os.unlink(tmp.name)
     rows = con.sql(f"SELECT count(*) FROM read_parquet('{sql_path(target)}')").fetchone()[0]
     print(f"  {name:<18} {rows:>5} rows  -> {target.relative_to(OUTPUTS.parent).as_posix()}")
-print(f"\n{len(TABLES)} tables written for Athena.")
+    written += 1
+print(f"\n{written} tables written for Athena.")
