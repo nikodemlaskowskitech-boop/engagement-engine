@@ -470,11 +470,19 @@ def run(account_id, dry_run, force=False):
     new = fingerprint(account_id, entry, docs)
     old = json.loads(meta_path.read_text(encoding="utf-8"))["parts"] if meta_path.exists() else {}
     changes = what_changed(old, new) if kept_brief_ok(account_id) else ["no finished brief yet"]
+    # "Out of date" marker for the cockpit. Never deleted, only rewritten: the engine in AWS may
+    # not delete anything, so a removed file would live on in the bucket. Current = no changes.
+    stale = OUT / f"{account_id}_stale.json"
+    current = lambda: stale.write_text(json.dumps({"changes": []}), encoding="utf-8") if stale.exists() else None
     if not changes and not force:
+        current()
         print(f"           unchanged since the last brief: kept, no model call")
         return 0, 0
     print(f"           {'would rewrite' if dry_run else 'rewriting'}: " + "; ".join(changes or ["--force"]))
     if dry_run:
+        if changes and kept_brief_ok(account_id):  # a brief exists, but its context has moved on
+            stale.write_text(json.dumps({"changes": changes, "checked_as_of": json.loads(
+                VIEWS.read_text(encoding="utf-8"))["as_of"]}, indent=1), encoding="utf-8")
         return 0, 0
     client = llm.client()                   # Anthropic API or Bedrock, per settings.toml [llm]
     # the previous owner by label only: the model never sees a real name
@@ -523,6 +531,7 @@ def run(account_id, dry_run, force=False):
     meta_path.write_text(json.dumps({"written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                      "written_as_of": json.loads(VIEWS.read_text(encoding="utf-8"))["as_of"], "why": changes or ["--force"],
                                      "parts": new}, indent=1), encoding="utf-8")
+    current()                                    # just rewritten: current again
     print(f"           brief -> data/handover/{account_id}.md"
           + (f"  ({'; '.join(flags)})" if flags else "  (all checks passed)"))
     return usage

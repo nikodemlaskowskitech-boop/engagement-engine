@@ -192,6 +192,9 @@ evars = eng["Properties"]["Environment"]["Variables"]
 check(evars.get("API_KEY_PARAMETER") == aws["api_key_parameter"] and evars.get("LLM_PROVIDER") == aws["briefs_llm_provider"]
       and json.loads(evars.get("OPTIONAL_STEPS", "[]")) == aws["engine_optional_steps"],
       "told the key's name (not the key), the provider and the optional steps, from settings")
+check(evars.get("BRIEFS_STEP") == aws["briefs_step"] and aws["briefs_step"] not in aws["engine_steps"]
+      and aws["briefs_step"] + " --dry-run" in aws["engine_steps"],
+      "no automatic run calls the model: the steps only check the briefs (--dry-run); the real one is on request")
 check(not any("sk-ant" in str(v) or "ANTHROPIC_API_KEY" in str(k) for k, v in evars.items()),
       "no API key in its settings (it reads it at run time)")
 erole = eng["Properties"]["Role"]["Fn::GetAtt"][0]

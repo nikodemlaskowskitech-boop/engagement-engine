@@ -131,6 +131,7 @@ class DataStack(Stack):
                          "ENGINE_STEPS": json.dumps(aws["engine_steps"]),
                          "ENGINE_CODE": json.dumps(ENGINE_FILES),
                          "OPTIONAL_STEPS": json.dumps(aws["engine_optional_steps"]),
+                         "BRIEFS_STEP": aws["briefs_step"],     # the model, only on an admin's request
                          # the key's NAME, not the key: the value is read at run time (never shown here)
                          "API_KEY_PARAMETER": aws["api_key_parameter"],
                          "LLM_PROVIDER": aws["briefs_llm_provider"],
