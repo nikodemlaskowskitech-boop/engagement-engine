@@ -32,7 +32,8 @@ def severity(score):
 
 def is_sample(finding):
     """Sample findings say so in their service details (the field's spelling varies by API version)."""
-    service = json.dumps(finding.get("Service", {})).lower().replace("\\", "").replace(" ", "")
+    # default=str: boto3 hands back some fields as Python dates, which plain json.dumps refuses
+    service = json.dumps(finding.get("Service", {}), default=str).lower().replace("\\", "").replace(" ", "")
     return '"sample":true' in service
 
 
@@ -61,7 +62,7 @@ def report(gd, samples=False):
         last = {}
         for f in real:
             key = (severity(f["Severity"]), f["Type"])
-            last[key] = max(last.get(key, ""), f.get("UpdatedAt", ""))
+            last[key] = max(last.get(key, ""), str(f.get("UpdatedAt", "")))
         order = {"High": 0, "Medium": 1, "Low": 2}
         for (sev, kind), n in sorted(by.items(), key=lambda x: (order[x[0][0]], -x[1])):
             lines.append(f"| {sev} | {kind} | {n} | {last[(sev, kind)][:10]} |")
