@@ -510,7 +510,8 @@ One JSON event per line, one file per day in `data/events/`.
   `data/views_data.json`. Redacts before the model: people -> Customer A /
   CS 1, emails and phone numbers masked, company -> "the customer". The model
   must cite a source ([S1], [E2], [C1], [DATA]) for every claim; the check lists
-  unknown citations, uncited sentences and numbers in no source; real names go
+  unknown citations, uncited sentences and numbers in no source (a number
+  written as a word in a source, "thirteen weeks", backs "13 weeks"); real names go
   back in after. Writes `data/handover/<acc>_sent.txt` (exactly what the model
   saw), `_key.json` (the redaction key: local only, never sent), `_check.json`
   and `<acc>.md` (a draft until the outgoing owner confirms it). File names

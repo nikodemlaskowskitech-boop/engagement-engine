@@ -71,5 +71,15 @@ out = handover.restore("The customer wants pricing. Customer A agreed; the custo
 check(out == "Acme Foods wants pricing. Will Turner agreed; Acme Foods pays.",
       "'The customer' and 'the customer' both get the company name back", out)
 
+print("\nThe number check reads numbers written as words (found 5 Nov 2026)")
+check(not handover.check("Users rose over 13 weeks [DATA].", "Weekly active users: 26 thirteen weeks ago, 38 last week.",
+                         {"DATA"})["unverified_numbers"],
+      "'13 weeks' in the brief is backed by 'thirteen weeks' in a source")
+check(handover.numbers_in("twenty-five users, Forty days, one hundred") >= {"25", "40"},
+      "compound and capitalised number words count too")
+check(handover.check("Usage fell 37% [DATA].", "Usage fell sharply.", {"DATA"})["unverified_numbers"] == ["37"],
+      "a number in no source is still flagged")
+check("someone" in handover.as_digits("someone often"), "words that only contain a number word stay as they are")
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)
