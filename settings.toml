@@ -100,7 +100,7 @@ api_key_parameter = "/cairnpath/anthropic-api-key"   # Parameter Store (SecureSt
 # Tables for Athena: to_parquet.py writes each to data/tables/<name>/ (outputs/tables/ in AWS),
 # and the Glue crawler turns each folder into a table in the Glue database below.
 athena_tables = ["flags_activation", "flags_churn", "flags_expansion", "flags_qbr", "flags_journey",
-                 "account_value", "tasks", "crm", "cs_team"]
+                 "account_value", "tasks", "crm", "cs_team", "ai_spend"]
 glue_database = "cairnpath"
 athena_workgroup = "cairnpath"
 athena_results_prefix = "athena-results/"   # where Athena writes query results (in the data bucket)
@@ -265,3 +265,14 @@ bedrock_model = "eu.anthropic.claude-sonnet-5-5"   # on Bedrock: the EU inferenc
 price_input_per_million = 2.00    # USD
 price_output_per_million = 10.00  # USD
 max_output_tokens = 1500
+# The AI spend ledger (llm.py): every model call is one row in data/<ledger_file> (feature, account,
+# tokens, cost from the prices above, laptop or AWS). Our own estimate, not Anthropic's bill.
+ledger_file = "ai_spend.csv"
+
+[llm.monthly_budget_usd]
+# Each feature's budget per calendar month (UTC), checked BEFORE every call: once the month's
+# ledger reaches it, the call is refused and the run says why. Far above what the demo spends
+# (cents a run) and well below the Anthropic account's spend limit, so a loop hits ours first.
+# One call can still go over by its own cost (at most max_output_tokens' worth).
+qbr_brief = 2.00
+handover = 3.00

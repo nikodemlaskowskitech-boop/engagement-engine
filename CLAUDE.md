@@ -39,7 +39,7 @@ with short comments, and work in small steps (one PR per change).
   acceptance page. Every PR that touches infra/ runs `python
   tests/infra_test.py` (builds the template in memory, no AWS login, no
   cost), `python tests/check_lambda_test.py`, `python
-  tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one
+  tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one that touches llm.py, brief.py or handover.py runs `python tests/ai_spend_test.py`; one
   that touches roles or policies also runs `python tests/security_check_test.py`
   and, after the deploy, Nikodem runs `python security_check.py` (live). Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
@@ -483,6 +483,19 @@ One JSON event per line, one file per day in `data/events/`.
   the [aws] profile via `aws login --profile cairnpath`; no API key; model =
   the EU inference profile in bedrock_model) or `anthropic` (the Anthropic API,
   ANTHROPIC_API_KEY in `.env`). brief.py and handover.py ask it for a client.
+  The AI spend ledger (5 Nov 2026): every model call goes through
+  `llm.call(client, feature, account_id, ...)`, which checks the feature's
+  monthly budget first ([llm.monthly_budget_usd]: qbr_brief, handover; real
+  calendar month, UTC; at or over it = OverBudget, no call; a feature with no
+  budget is refused too), then appends one row to data/ai_spend.csv ([llm]
+  ledger_file: time, month, feature, account, provider, model, tokens, cost at
+  the [llm] prices, laptop or aws, stop reason). Our estimate, not Anthropic's
+  bill. `python llm.py --spend`: this month by feature against its budget.
+  Over budget, brief.py and handover.py exit 1 naming the accounts (in AWS: a
+  warning in run.json). The engine Lambda brings outputs/ai_spend.csv back
+  before its steps and uploads it only when a call added rows; to_parquet.py
+  makes it an Athena table (ai_spend; skipped while no call has been made).
+  `tests/ai_spend_test.py`: a stand-in model, a temporary ledger.
 - `brief.py`: QBR briefs from the facts packs (run `qbr.py` first; the provider
   comes from llm.py: Bedrock by default, or `ANTHROPIC_API_KEY` in the
   git-ignored `.env` for the anthropic provider). Writes
@@ -781,9 +794,10 @@ One JSON event per line, one file per day in `data/events/`.
   (PRIVACY.md, spec Feature requests). Zero trust: the data perimeter (bucket
   policy) built 4 Nov 2026; GuardDuty on its free trial from 5 Nov 2026 (keep
   or switch off before about 5 Dec); IAM Access Analyzer 5 Nov 2026; our own KMS key
-  5 Nov 2026; Cost Anomaly Detection 5 Nov 2026. Next: the two free guards
-  that are settings only Nikodem can switch on (Anthropic spend limit, GitHub
-  push protection), then observability for AI spend.
+  5 Nov 2026; Cost Anomaly Detection 5 Nov 2026 (AWS spend only: it never
+  sees the Anthropic API bill); the AI spend ledger with budgets per feature
+  5 Nov 2026. Next: the two free guards that are settings only Nikodem can
+  switch on (Anthropic spend limit, GitHub push protection), then Phase 8.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs. AI to assist CS (5 Nov 2026,
   Nikodem thinking it over; spec Feature requests): assist, not replace, e.g.

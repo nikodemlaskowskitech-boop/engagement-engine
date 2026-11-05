@@ -144,7 +144,8 @@ lambda_checks("Check Lambda: wakes on the upload marker, least privilege", "REPO
 lambda_checks("Engine Lambda: wakes on the check's verdict, least privilege", "ENGINE_STEPS",
               "engine", reports + "latest.json",
               may_read=[aws["inputs_prefix"] + "*", aws["state_prefix"] + "*", reports + "latest.json",
-                        aws["outputs_prefix"] + "run.json", aws["outputs_prefix"] + "handover/*"],
+                        aws["outputs_prefix"] + "run.json", aws["outputs_prefix"] + "handover/*",
+                        aws["outputs_prefix"] + SETTINGS["llm"]["ledger_file"]],
               may_write=[aws["outputs_prefix"] + "*"],
               never_write=[aws["inputs_prefix"], aws["reports_prefix"], aws["state_prefix"]],
               output="EngineFunction", retries=0)

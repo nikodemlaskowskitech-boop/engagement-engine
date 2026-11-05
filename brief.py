@@ -39,7 +39,6 @@ LLM = SETTINGS["llm"]                     # model and price: settings.toml [llm]
 import llm                               # which provider and model: settings.toml [llm]
 from llm import load_api_key             # noqa: F401  (kept importable from here)
 MODEL = llm.MODEL
-PRICE_PER_MILLION = {"input": LLM["price_input_per_million"], "output": LLM["price_output_per_million"]}
 MAX_OUTPUT_TOKENS = LLM["max_output_tokens"]
 
 SYSTEM_PROMPT = """You write one-page QBR preparation briefs for a Customer Success Manager.
@@ -128,16 +127,24 @@ def main():
     out_dir = REPO / "data" / "briefs"
     out_dir.mkdir(parents=True, exist_ok=True)
     total_in = total_out = 0
+    refused = None
 
     for pack in packs:
         account_id = pack["account"]["account_id"]
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_OUTPUT_TOKENS,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user",
-                       "content": "Facts pack:\n```json\n" + json.dumps(pack, indent=2, default=str) + "\n```"}],
-        )
+        try:
+            # through llm.call: the monthly budget is checked first, and the call goes in the ledger
+            response = llm.call(
+                client, "qbr_brief", account_id,
+                model=MODEL,
+                max_tokens=MAX_OUTPUT_TOKENS,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user",
+                           "content": "Facts pack:\n```json\n" + json.dumps(pack, indent=2, default=str) + "\n```"}],
+            )
+        except llm.OverBudget as e:           # no call made: stop here, say why
+            refused = str(e)
+            print(f"  {account_id}  NOT WRITTEN, over budget: {e}")
+            break
         draft = "".join(block.text for block in response.content if block.type == "text")
         total_in += response.usage.input_tokens
         total_out += response.usage.output_tokens
@@ -158,8 +165,10 @@ def main():
         flag = f"  ({len(unchecked)} unverified numbers)" if unchecked else ""
         print(f"  {account_id}  {pack['account']['name']:<24} -> data/briefs/{account_id}.md{flag}")
 
-    cost = (total_in * PRICE_PER_MILLION["input"] + total_out * PRICE_PER_MILLION["output"]) / 1_000_000
-    print(f"\n{len(packs)} briefs, {total_in:,} tokens in, {total_out:,} tokens out, about ${cost:.3f}")
+    print(f"\n{len(packs)} briefs, {total_in:,} tokens in, {total_out:,} tokens out, "
+          f"about ${llm.cost(total_in, total_out):.3f} (ledger: data/{llm.LEDGER.name})")
+    if refused:
+        sys.exit(f"Stopped by the monthly budget: {refused}")
 
 
 if __name__ == "__main__":

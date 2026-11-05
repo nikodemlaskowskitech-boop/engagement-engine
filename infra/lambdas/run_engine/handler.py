@@ -63,6 +63,7 @@ CODE = json.loads(os.environ.get("ENGINE_CODE", "[]"))   # files and folders cop
 OPTIONAL = json.loads(os.environ.get("OPTIONAL_STEPS", "[]"))   # a failure here is a warning, not a failed run
 KEY_PARAMETER = os.environ.get("API_KEY_PARAMETER", "")    # Parameter Store name of the LLM API key
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "")          # who writes the briefs in AWS (settings [aws])
+LEDGER = os.environ.get("LEDGER_FILE", "ai_spend.csv")      # the AI spend ledger, kept between runs (outputs/)
 CACHE = "handover/"                                        # the briefs and their fingerprints, kept between runs
 NEVER_UPLOAD = ("_key.json",)                              # redaction keys stay inside the Lambda
 STATE_FILES = ["action_log.csv"]                         # state kept between runs (tasks already sent)
@@ -167,6 +168,17 @@ def download(s3, prefix, folder, skip=()):
     return got
 
 
+def carry(s3, name, data):
+    """Bring one file from outputs/ back into data/ (it grows run after run, like the AI spend
+    ledger). Returns its MD5, or None when there's none yet."""
+    for page in s3.get_paginator("list_objects_v2").paginate(
+            Bucket=BUCKET, Prefix=OUTPUTS + name, ExpectedBucketOwner=OWNER):
+        if any(obj["Key"] == OUTPUTS + name for obj in page.get("Contents", [])):
+            s3.download_file(BUCKET, OUTPUTS + name, str(data / name), ExtraArgs={"ExpectedBucketOwner": OWNER})
+            return md5(data / name)
+    return None
+
+
 def run_steps(work, secrets=None):
     """Run each engine step in order, like run_all.ps1.
     Returns (ok, log, failed step, step times, warnings). secrets go to the optional steps only."""
@@ -233,6 +245,7 @@ def handler(event, context, s3=None, work=None, ssm=None):
         clicks = merge_clicks(data)              # Slack clicks -> engagement/slack_clicks.jsonl
         state = [s for s in state if s in STATE_FILES] + ([CLICKS_FILE] if clicks else [])
         cache = {rel: md5(data / CACHE / rel) for rel in download(s3, OUTPUTS + CACHE, data / CACHE)}
+        ledger = carry(s3, LEDGER, data)         # this month's AI spend so far: the budget counts it
         key = api_key(ssm or _ssm()) if any(s in OPTIONAL for s in STEPS) else None
         ok, log, failed, times, warnings = run_steps(work, {"ANTHROPIC_API_KEY": key} if key else None)
         # everything the steps wrote, at any depth (tables/<name>/ for Athena), minus what came in,
@@ -241,7 +254,8 @@ def handler(event, context, s3=None, work=None, ssm=None):
         for p in sorted(data.rglob("*")):
             rel = p.relative_to(data).as_posix()
             if (not p.is_file() or rel in set(inputs) | set(state) or rel.endswith(NEVER_UPLOAD)
-                    or (rel.startswith(CACHE) and cache.get(rel[len(CACHE):]) == md5(p))):
+                    or (rel.startswith(CACHE) and cache.get(rel[len(CACHE):]) == md5(p))
+                    or (rel == LEDGER and ledger == md5(p))):         # no new model call: no new version
                 continue
             written.append(rel)
         for name in written:
