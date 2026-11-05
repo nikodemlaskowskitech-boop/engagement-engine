@@ -110,6 +110,19 @@ support.write_text("\n".join(l.replace(",solved,", ",reopened,") if l.startswith
                              for l in support.read_text(encoding="utf-8").splitlines()) + "\n", encoding="utf-8")
 step("a ticket changed status", True)
 
+# "out of date" for the cockpit: the free check marks it, a rewrite clears it (rewritten, never deleted)
+stale = handover.OUT / f"{ACC}_stale.json"
+support.write_text(support.read_text(encoding="utf-8").replace(",reopened,", ",solved,"), encoding="utf-8")
+step("the free check (--dry-run) on a changed account", False, dry_run=True)
+marked = json.loads(stale.read_text(encoding="utf-8"))["changes"] if stale.exists() else []
+ok = any("DL-118" in c or "changed" in c for c in marked)
+failed += not ok
+print(f"  {'PASS' if ok else 'FAIL'}  ...marks the brief out of date, saying why: {'; '.join(marked) or 'no mark'}")
+step("the rewrite, when asked", True)
+ok = json.loads(stale.read_text(encoding="utf-8")) == {"changes": []}
+failed += not ok
+print(f"  {'PASS' if ok else 'FAIL'}  ...and the brief is current again (the mark rewritten as no changes, not deleted)")
+
 shutil.rmtree(tmp)
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)

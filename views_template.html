@@ -1075,6 +1075,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     x += `<p class="note">Written by AI from ${h.sources.length - 1} documents (support cases, emails, call transcripts) and the engine's data` +
       (h.written_as_of ? `, on data as of ${fmt(h.written_as_of)}` : "") + `. Click a source tag to see what the model read.` +
       (h.why && h.why.length ? ` Last written because: ${esc(h.why.join("; "))}.` : "") + `</p>`;
+    // out of date: the engine's free daily check (handover.py --dry-run) saw the context move on.
+    // Briefs are rewritten only when the admin asks (request_briefs.py), never by a click here.
+    if (h.stale && h.stale.length) x += `<div class="ho-check ho-stale"><b>Out of date</b>: since it was written, ` +
+      `${esc(h.stale.join("; "))}. Briefs are rewritten only when the admin asks for it.</div>`;
     if (conf) x += `<p class="note">${current ? "Confirmed" : "Last confirmed"} by ${esc(conf.role === "manager" ? managerName(conf.by) + " (manager)" : ownerName[conf.by] || conf.by)}, ${whenText(conf.decided_at)}${conf.note ? ` · “${esc(conf.note)}”` : ""}</p>`;
     x += `<div class="ho-brief">${briefHtml(h.brief, ids)}</div>`;
     x += h.unverified.length ? `<div class="ho-check"><b>Check before confirming</b><ul>${h.unverified.map((u) => `<li>${esc(u)}</li>`).join("")}</ul></div>`

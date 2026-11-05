@@ -21,10 +21,16 @@ Also runs once a day on a schedule (EventBridge Scheduler, event {"trigger":
 the check last saw, there's nothing new and it stops (SKIPPED, "up to date");
 if an event-driven run was missed or failed, the schedule catches it up.
 
-Handover briefs (handover.py, an optional step: if it fails, the run still
-counts as OK, with a warning): the API key comes from Parameter Store
-(SecureString, read at run time and passed to that step only; never in the
-Lambda's settings, never printed). The briefs' cache (outputs/handover/) is
+Handover briefs only on request (5 Nov 2026): no automatic run calls the model.
+Every run does "handover.py --dry-run" instead, which compares each brief with
+today's context for free and marks it out of date when it changed. Only an
+event with {"briefs": true} swaps in the real handover.py, and only the admin
+can send one (the schedule's input is fixed, S3 events carry Records, nobody
+else may invoke this function): request_briefs.py does it. Either way the step
+is optional (if it fails, the run still counts as OK, with a warning). The API
+key comes from Parameter Store (SecureString, read at run time, only on a
+briefs request, passed to that step only; never in the Lambda's settings,
+never printed). The briefs' cache (outputs/handover/) is
 downloaded first and only changed files go back, so an unchanged account
 costs no model call and no new S3 version. The redaction keys (*_key.json)
 never leave the Lambda. export_views.py runs again after the briefs, so the
@@ -61,6 +67,8 @@ MARKER = os.environ.get("MARKER_NAME", "_upload_complete.json")
 STEPS = json.loads(os.environ.get("ENGINE_STEPS", "[]"))
 CODE = json.loads(os.environ.get("ENGINE_CODE", "[]"))   # files and folders copied into the work folder
 OPTIONAL = json.loads(os.environ.get("OPTIONAL_STEPS", "[]"))   # a failure here is a warning, not a failed run
+BRIEFS_STEP = os.environ.get("BRIEFS_STEP", "handover.py")   # the only step that calls the model: on request only
+DRY_RUN = BRIEFS_STEP + " --dry-run"                         # what every other run does instead (free)
 KEY_PARAMETER = os.environ.get("API_KEY_PARAMETER", "")    # Parameter Store name of the LLM API key
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "")          # who writes the briefs in AWS (settings [aws])
 LEDGER = os.environ.get("LEDGER_FILE", "ai_spend.csv")      # the AI spend ledger, kept between runs (outputs/)
@@ -179,23 +187,24 @@ def carry(s3, name, data):
     return None
 
 
-def run_steps(work, secrets=None):
-    """Run each engine step in order, like run_all.ps1.
-    Returns (ok, log, failed step, step times, warnings). secrets go to the optional steps only."""
+def run_steps(work, secrets=None, steps=None):
+    """Run each engine step in order, like run_all.ps1 (a step may carry arguments, e.g. --dry-run).
+    Returns (ok, log, failed step, step times, warnings). secrets go to the briefs step only."""
+    steps = STEPS if steps is None else steps
     env = {**os.environ, "PYTHONPATH": str(HERE), "PYTHONIOENCODING": "utf-8", "HOME": "/tmp"}
     if LLM_PROVIDER:
         env["CAIRNPATH_LLM_PROVIDER"] = LLM_PROVIDER
     log, times, warnings = [f"Engine run {now()}\n"], {}, []
-    for step in STEPS:
+    for step in steps:
         label = step if step not in times else f"{step} (again)"
-        if step in OPTIONAL and secrets is None:
+        if step == BRIEFS_STEP and secrets is None:
             times[label] = 0.0
             warnings.append(f"{step} skipped: no API key in Parameter Store ({KEY_PARAMETER})")
             log.append(f"\n===== python {step}: skipped, no API key in Parameter Store =====\n")
             continue
         t0 = time.time()
-        step_env = {**env, **(secrets or {})} if step in OPTIONAL else env
-        done = subprocess.run([sys.executable, step], cwd=work, env=step_env,
+        step_env = {**env, **(secrets or {})} if step == BRIEFS_STEP else env
+        done = subprocess.run([sys.executable, *step.split()], cwd=work, env=step_env,
                               capture_output=True, text=True, timeout=900)
         times[label] = round(time.time() - t0, 1)
         log.append(f"\n===== python {step} ({times[label]} s) =====\n{done.stdout}{done.stderr}")
@@ -206,7 +215,7 @@ def run_steps(work, secrets=None):
                 continue
             log.append(f"\nFAILED: {step}\n")
             return False, "".join(log), step, times, warnings
-    log.append(f"\nDONE: {len(STEPS)} steps" + (f", {len(warnings)} warning(s)" if warnings else "") + "\n")
+    log.append(f"\nDONE: {len(steps)} steps" + (f", {len(warnings)} warning(s)" if warnings else "") + "\n")
     return True, "".join(log), None, times, warnings
 
 
@@ -215,7 +224,10 @@ def handler(event, context, s3=None, work=None, ssm=None):
     started = time.time()
     trigger = next((r["s3"]["object"]["key"] for r in event.get("Records", [])),
                    event.get("trigger", "manual"))
-    summary = {"started_at": now(), "triggered_by": trigger}
+    # briefs only when explicitly asked for, never on an S3 event (those carry Records)
+    briefs = bool(event.get("briefs")) and not event.get("Records")
+    steps = [BRIEFS_STEP if briefs and s == DRY_RUN else s for s in STEPS]
+    summary = {"started_at": now(), "triggered_by": trigger, "briefs": briefs}
 
     check = check_status(s3)
     summary["check"] = {k: check.get(k) for k in ("status", "errors", "warnings", "checked_at")}
@@ -224,7 +236,7 @@ def handler(event, context, s3=None, work=None, ssm=None):
         put(s3, OUTPUTS + "run.json", json.dumps(summary, indent=2), "application/json")
         print(json.dumps(summary))
         return summary
-    if trigger == "schedule" and up_to_date(s3, check):
+    if trigger == "schedule" and not briefs and up_to_date(s3, check):
         # nothing new since the last good run: say so, but leave that run's run.json as it is
         summary.update(status="SKIPPED", reason="up to date: the last run was OK, on the data the check last saw")
         print(json.dumps(summary))
@@ -246,8 +258,8 @@ def handler(event, context, s3=None, work=None, ssm=None):
         state = [s for s in state if s in STATE_FILES] + ([CLICKS_FILE] if clicks else [])
         cache = {rel: md5(data / CACHE / rel) for rel in download(s3, OUTPUTS + CACHE, data / CACHE)}
         ledger = carry(s3, LEDGER, data)         # this month's AI spend so far: the budget counts it
-        key = api_key(ssm or _ssm()) if any(s in OPTIONAL for s in STEPS) else None
-        ok, log, failed, times, warnings = run_steps(work, {"ANTHROPIC_API_KEY": key} if key else None)
+        key = api_key(ssm or _ssm()) if BRIEFS_STEP in steps else None    # read only on a briefs request
+        ok, log, failed, times, warnings = run_steps(work, {"ANTHROPIC_API_KEY": key} if key else None, steps)
         # everything the steps wrote, at any depth (tables/<name>/ for Athena), minus what came in,
         # minus redaction keys, minus cache files that didn't change (no new S3 version for nothing)
         written = []

@@ -241,6 +241,9 @@ const segment = async (page, values) => {
       const cites = await page.$$eval("#tl-handover .ho-brief .cite", (bs) => bs.map((b) => b.dataset.src));
       const ids = new Set(h.sources.map((x) => x.id));
       check(cites.length > 0 && cites.every((c) => ids.has(c)), `${id}: ${cites.length} citations, all to real sources`);
+      const staleShown = await page.isVisible("#tl-handover .ho-stale");
+      check(staleShown === Boolean(h.stale && h.stale.length),
+        `${id}: "Out of date" shows ${h.stale && h.stale.length ? "with why" : "nowhere"} (the engine's free check)`);
       const brief = await page.textContent("#tl-handover .ho-brief");
       check(!/Customer [A-Z]\b|\bCS \d\b/.test(brief), `${id}: real names are back in the brief (no 'Customer A' or 'CS 1' left)`);
       // privacy in the page: what the model saw holds no real name, email or phone

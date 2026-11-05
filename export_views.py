@@ -70,6 +70,8 @@ def handovers():
             if checks.get("stop_reason") != "end_turn":
                 continue
             m = json.loads(meta.read_text(encoding="utf-8")) if meta.exists() else {}
+            stale_file = folder / f"{acc}_stale.json"   # handover.py --dry-run: the context moved on since
+            stale = json.loads(stale_file.read_text(encoding="utf-8")) if stale_file.exists() else None
             text = md.read_text(encoding="utf-8")
             body, _, tail = text.partition("\n---\n")
             sources = [{"id": i, "title": t} for i, t in
@@ -85,7 +87,8 @@ def handovers():
             version = m.get("written_at") or datetime.fromtimestamp(md.stat().st_mtime, timezone.utc).isoformat(timespec="seconds")
             out[acc] = {"from": entry["handover_from"], "to": entry["handover_to"], "brief": body.strip(),
                         "sources": sources, "unverified": unverified, "sent": sent.read_text(encoding="utf-8"),
-                        "version": version, "written_as_of": m.get("written_as_of"), "why": m.get("why", [])}
+                        "version": version, "written_as_of": m.get("written_as_of"), "why": m.get("why", []),
+                        "stale": stale["changes"] if stale else []}
     return out
 
 

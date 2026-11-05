@@ -112,7 +112,8 @@ print("\nEngine Lambda: the bundle")
 bundle = bundle_engine(tmp / "bundle", deps=False)
 check(sorted(p.name for p in bundle.iterdir()) == sorted(ENGINE_FILES + ["handler.py"]),
       "holds the handler and the engine's files, nothing else (never settings.local.toml)")
-check(set(AWS["engine_steps"]) <= set(ENGINE_FILES), "every step in [aws] engine_steps is bundled")
+STEP_FILES = {st.split()[0] for st in AWS["engine_steps"] + [AWS["briefs_step"]]}
+check(STEP_FILES <= set(ENGINE_FILES), "every step in [aws] engine_steps (and the briefs step) is bundled")
 check((bundle / "stories" / "directory.csv").exists()
       and not any(any((bundle / "stories").rglob(n)) for n in NEVER_BUNDLE),
       "the stories go with it, but never their answer key (testing only, never near the model)")
@@ -133,7 +134,7 @@ def local_imports(name, seen):
 
 
 needed = set()
-for step in AWS["engine_steps"]:
+for step in STEP_FILES:
     local_imports(step, needed)
 check(needed <= set(ENGINE_FILES), "every repo module the steps import is bundled", sorted(needed - set(ENGINE_FILES)))
 
@@ -233,31 +234,54 @@ class FakeSSM:
     "print('plain step ran without the key')\n", encoding="utf-8")
 (bundle / "briefs.py").write_text(
     "import os, sys\nfrom pathlib import Path\n"
+    "out = Path('data/handover'); out.mkdir(parents=True, exist_ok=True)\n"
+    "if '--dry-run' in sys.argv:\n"
+    "    assert 'ANTHROPIC_API_KEY' not in os.environ, 'the key reached the free check'\n"
+    "    (out / 'acc_1_stale.json').write_text('{\"changes\": [\"new E9\"]}', encoding='utf-8')\n"
+    "    print('checked, no model call'); sys.exit(0)\n"
     "if os.environ.get('BREAK_BRIEFS'): sys.exit('model API down')\n"
     "assert os.environ['ANTHROPIC_API_KEY'] == 'test-key-123' and os.environ['CAIRNPATH_LLM_PROVIDER'] == 'anthropic'\n"
-    "out = Path('data/handover'); out.mkdir(parents=True, exist_ok=True)\n"
     "for name, text in (('acc_1.md', 'brief'), ('acc_1_meta.json', '{}'), ('acc_1_key.json', '{\"Customer A\": \"Real Name\"}')):\n"
     "    (out / name).write_text(text, encoding='utf-8')\n"
+    "(out / 'acc_1_stale.json').write_text('{\"changes\": []}', encoding='utf-8')\n"
     "print('briefs written')\n", encoding="utf-8")
-h.CODE, h.STEPS, h.OPTIONAL = ENGINE_FILES + ["plain.py", "briefs.py"], ["plain.py", "briefs.py"], ["briefs.py"]
+h.CODE, h.STEPS = ENGINE_FILES + ["plain.py", "briefs.py"], ["plain.py", "briefs.py --dry-run"]
+h.BRIEFS_STEP, h.DRY_RUN, h.OPTIONAL = "briefs.py", "briefs.py --dry-run", ["briefs.py --dry-run", "briefs.py"]
 h.KEY_PARAMETER, h.LLM_PROVIDER = AWS["api_key_parameter"], AWS["briefs_llm_provider"]
+ASK = {"trigger": "briefs", "briefs": True}
+
 s3, ssm = FakeS3(bucket_with_demo("OK")), FakeSSM("test-key-123")
-run = h.handler({"trigger": "manual"}, None, s3=s3, work=work, ssm=ssm)
-check(run["status"] == "OK" and not run["warnings"], "the briefs step gets the key; plain steps never see it", run.get("warnings"))
+auto = h.handler({"trigger": "manual"}, None, s3=s3, work=work, ssm=ssm)
+check(auto["status"] == "OK" and not auto["briefs"] and ssm.asked == [],
+      "an ordinary run never reads the API key (no model call possible)", (auto.get("warnings"), ssm.asked))
+check(OUTPUTS + "handover/acc_1_stale.json" in s3.objects and OUTPUTS + "handover/acc_1.md" not in s3.objects,
+      "...it only checks the briefs for free (--dry-run) and marks them out of date")
+event_ask = h.handler({"Records": [{"s3": {"object": {"key": CHECK}}}], "briefs": True}, None,
+                      s3=FakeS3(bucket_with_demo("OK")), work=work, ssm=(spy := FakeSSM("test-key-123")))
+check(not event_ask["briefs"] and spy.asked == [], "an S3 event can't ask for briefs, even with 'briefs' in it")
+
+s3, ssm = FakeS3(bucket_with_demo("OK")), FakeSSM("test-key-123")
+run = h.handler(ASK, None, s3=s3, work=work, ssm=ssm)
+check(run["status"] == "OK" and run["briefs"] and not run["warnings"],
+      "asked for briefs: the briefs step gets the key; plain steps never see it", run.get("warnings"))
 check(ssm.asked == [(AWS["api_key_parameter"], True)], "the key is read from Parameter Store, decrypted, once per run")
 check(OUTPUTS + "handover/acc_1.md" in s3.objects and OUTPUTS + "handover/acc_1_meta.json" in s3.objects,
       "the briefs and their fingerprints go to outputs/handover/ (the cache for next time)")
+s3b = FakeS3({**bucket_with_demo("OK"), OUTPUTS + "handover/acc_1_stale.json": b'{"changes": ["new E9"]}'})
+h.handler(ASK, None, s3=s3b, work=work, ssm=FakeSSM("test-key-123"))
+check(json.loads(s3b.objects[OUTPUTS + "handover/acc_1_stale.json"]) == {"changes": []},
+      "a rewritten brief clears its 'out of date' mark in the bucket (rewritten, since the engine may not delete)")
 check(not any(k.endswith("_key.json") for k in s3.objects), "the redaction key never leaves the Lambda")
 check("test-key-123" not in s3.objects[OUTPUTS + "last_run.txt"].decode() + json.dumps(run),
       "the key appears in no log and no summary")
-again = h.handler({"trigger": "manual"}, None, s3=s3, work=work, ssm=FakeSSM("test-key-123"))
+again = h.handler(ASK, None, s3=s3, work=work, ssm=FakeSSM("test-key-123"))
 check(not any(o.startswith("handover/") for o in again["outputs"]),
       "next run, briefs unchanged: nothing re-uploaded (no new S3 versions for nothing)", again["outputs"])
-nokey = h.handler({"trigger": "manual"}, None, s3=FakeS3(bucket_with_demo("OK")), work=work, ssm=FakeSSM(None))
+nokey = h.handler(ASK, None, s3=FakeS3(bucket_with_demo("OK")), work=work, ssm=FakeSSM(None))
 check(nokey["status"] == "OK" and any("no API key" in w for w in nokey["warnings"]),
       "no key in Parameter Store: briefs skipped with a warning, the rest still runs", nokey.get("warnings"))
 os.environ["BREAK_BRIEFS"] = "1"
-down = h.handler({"trigger": "manual"}, None, s3=FakeS3(bucket_with_demo("OK")), work=work, ssm=FakeSSM("test-key-123"))
+down = h.handler(ASK, None, s3=FakeS3(bucket_with_demo("OK")), work=work, ssm=FakeSSM("test-key-123"))
 del os.environ["BREAK_BRIEFS"]
 check(down["status"] == "OK" and any("briefs.py failed" in w for w in down["warnings"]),
       "the model API fails: a warning, and the cockpit still updates", down.get("warnings"))

@@ -88,13 +88,17 @@ state_prefix = "state/"        # state carried between runs: upload.py puts the 
 # The engine Lambda runs these steps in order after a clean input check (run_all.ps1 without the
 # laptop-only ones: cockpit_sync reads the page's database copy, check_flags the answer key,
 # actions.py posts to Slack).
+# No step calls the model on its own: "handover.py --dry-run" only checks, for free, whether each
+# brief is out of date (the cockpit says so). The real briefs_step replaces it only when the admin
+# asks (request_briefs.py sends {"briefs": true}; nothing else can). export_views.py runs again
+# after it, so the cockpit shows the briefs and whether they're current.
 engine_steps = ["flags.py", "journeys.py", "team_report.py", "backtest.py",
-                "onboarding_report.py", "export_views.py", "handover.py", "export_views.py",
+                "onboarding_report.py", "export_views.py", "handover.py --dry-run", "export_views.py",
                 "to_parquet.py"]
+briefs_step = "handover.py"
 # Steps whose failure is a warning, not a failed run: the briefs call an outside API, and if
-# that's down the cockpit should still update. (export_views.py runs again after them, so the
-# cockpit shows the briefs.)
-engine_optional_steps = ["handover.py"]
+# that's down (or the leak check stops one) the cockpit should still update.
+engine_optional_steps = ["handover.py --dry-run", "handover.py"]
 briefs_llm_provider = "anthropic"            # who writes the briefs in AWS ("bedrock" once its quota is granted)
 api_key_parameter = "/cairnpath/anthropic-api-key"   # Parameter Store (SecureString): put_key.py fills it
 # Tables for Athena: to_parquet.py writes each to data/tables/<name>/ (outputs/tables/ in AWS),
