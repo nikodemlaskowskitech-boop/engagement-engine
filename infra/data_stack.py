@@ -3,7 +3,8 @@ DataStack: one private S3 bucket for the pipeline's data (inputs, outputs,
 briefs) once it runs in AWS.
 
 Safe by default, each line on purpose:
-  - encrypted at rest (S3-managed keys)
+  - encrypted at rest with our own KMS key: reading the data needs the bucket's
+    permission and the key's, and every use of the key is logged
   - no public access, ever (all four "block public access" switches on)
   - HTTPS only (a bucket policy refuses plain HTTP)
   - versioned: an overwrite or delete keeps the old copy, so a bad run can be
@@ -28,6 +29,7 @@ from aws_cdk import aws_athena as athena
 from aws_cdk import aws_glue as glue
 from aws_cdk import aws_guardduty as guardduty
 from aws_cdk import aws_iam as iam
+from aws_cdk import aws_kms as kms
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
@@ -46,9 +48,22 @@ class DataStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
         keep_days = SETTINGS["aws"]["keep_old_versions_days"]
 
+        # Our own key for the bucket (instead of S3's built-in one). Its default policy lets IAM
+        # in this account decide who may use it, so the admin can always manage it (no lockout);
+        # each role gets the key permissions it needs from the bucket grants below, nothing more.
+        # Rotated yearly by AWS (old data stays readable), kept if the stack is deleted, and a
+        # deletion would wait [aws] kms_deletion_window_days: data without its key is gone.
+        self.key = kms.Key(
+            self, "DataKey", alias=SETTINGS["aws"]["kms_key_alias"],
+            description="Cairnpath data bucket: encrypts everything in it",
+            enable_key_rotation=True,
+            pending_window=Duration.days(SETTINGS["aws"]["kms_deletion_window_days"]),
+            removal_policy=RemovalPolicy.RETAIN)
+
         self.bucket = s3.Bucket(
             self, "Data",
-            encryption=s3.BucketEncryption.S3_MANAGED,
+            encryption=s3.BucketEncryption.KMS, encryption_key=self.key,
+            bucket_key_enabled=True,       # one data key per bucket, not a KMS call per file: cost near zero
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             enforce_ssl=True,
             versioned=True,
@@ -224,7 +239,13 @@ class DataStack(Stack):
                                     retention=logs.RetentionDays.ONE_MONTH,
                                     removal_policy=RemovalPolicy.DESTROY),
         )
-        self.bucket.grant_put(listener, clicks + "*")               # writes clicks, reads nothing
+        # writes clicks, reads nothing. Written out by hand rather than grant_put: that would also
+        # give kms:Decrypt (needed for big multipart uploads), and a click is one small file. So
+        # the public-facing role can encrypt a click with the key, never decrypt anything.
+        listener.add_to_role_policy(iam.PolicyStatement(
+            actions=["s3:PutObject"], resources=[self.bucket.arn_for_objects(clicks + "*")]))
+        listener.add_to_role_policy(iam.PolicyStatement(
+            actions=["kms:GenerateDataKey"], resources=[self.key.key_arn]))
         listener.add_to_role_policy(iam.PolicyStatement(
             actions=["ssm:GetParameter"],
             resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter{p}" for p in params]))
@@ -294,3 +315,16 @@ class DataStack(Stack):
         analyzer = accessanalyzer.CfnAnalyzer(self, "AccessAnalyzer", type="ACCOUNT",
                                              analyzer_name=aws["access_analyzer_name"])
         CfnOutput(self, "AccessAnalyzerArn", value=analyzer.attr_arn)
+
+        # --- the key's own perimeter: only through S3 ---
+        # The roles' key permissions are meant for S3 to use on their behalf when they read or
+        # write a file. This makes the key refuse anyone who calls KMS directly (e.g. with a
+        # stolen role credential, to decrypt a copied file outside the bucket's rules), except
+        # the admins. Key management (its policy, rotation) isn't denied: no lockout.
+        self.key.add_to_resource_policy(iam.PolicyStatement(
+            sid="DenyUseOutsideS3", effect=iam.Effect.DENY, principals=[iam.AnyPrincipal()],
+            actions=["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey*", "kms:ReEncrypt*"],
+            resources=["*"],
+            conditions={"StringNotEquals": {"kms:ViaService": f"s3.{self.region}.amazonaws.com"},
+                        "ArnNotLike": {"aws:PrincipalArn": admins}, **not_a_service}))
+        CfnOutput(self, "DataKeyArn", value=self.key.key_arn)

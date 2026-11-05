@@ -551,7 +551,11 @@ One JSON event per line, one file per day in `data/events/`.
   date), a reopened ticket and --force; none on --dry-run. Same PRs as above.
 - `infra/`: the AWS side as code (CDK, Python). `app.py` reads settings.toml
   [aws] (account, region) and builds `data_stack.py`: one S3 bucket for the
-  engine's data, private (all four public-access blocks, ACLs off), encrypted,
+  engine's data, private (all four public-access blocks, ACLs off), encrypted
+  with our own KMS key ([aws] kms_key_alias: rotated yearly, Retain, deletion
+  waits [aws] kms_deletion_window_days, S3 Bucket Key on; its policy refuses use
+  outside S3 except to the admins, never key management: no lockout; roles get
+  the key through the bucket grants, the Slack listener GenerateDataKey only),
   HTTPS only, versioned (old versions expire after [aws]
   keep_old_versions_days), kept if the stack is deleted (Retain), name left to
   AWS, tag project=cairnpath. Plus the check Lambda (CheckInputs, Python 3.13
@@ -688,8 +692,10 @@ One JSON event per line, one file per day in `data/events/`.
   the flags with the laptop's data/; without, stand-in steps. Needs data/.
 - `upload.py`: copies the inputs named in [data] to the data bucket ([aws]
   bucket, under [aws] inputs_prefix, same folder layout). Only new or changed
-  files go up (local MD5 vs. the object's ETag), so reruns send nothing and
-  versioning records real changes only. Checks the bucket is ours
+  files go up (local MD5 vs. the object's ETag, or, with the KMS key where the
+  ETag isn't the MD5, the "md5" label each upload carries), so reruns send
+  nothing and versioning records real changes only. `--all` sends everything
+  again (files from before the key get it). Checks the bucket is ours
   (ExpectedBucketOwner = [aws] account_id). Never the answer key or the
   engine's outputs, except the action log (data/action_log.csv, the tasks
   already sent), which goes to [aws] state_prefix for the engine Lambda. Demo data only: a company's own exports
@@ -701,7 +707,7 @@ One JSON event per line, one file per day in `data/events/`.
 - `security_check.py`: live security checks, read-only (`python
   security_check.py` after `aws login`). Finds the deployed roles and functions
   in the CairnpathData stack and asks the IAM policy simulator, with the
-  bucket's real policy, 30 questions: things each role must NOT be able to do
+  bucket's and the KMS key's real policies, 37 questions: things each role must NOT be able to do
   (the engine writing its inputs or the check's verdict, deleting, reading
   another secret, anything over plain HTTP; the check writing where it's
   triggered or reading the API key; the schedule starting the check or
@@ -709,13 +715,16 @@ One JSON event per line, one file per day in `data/events/`.
   reading any data, writing anything but clicks or reading the API key; the
   engine reading Slack's bot token; the perimeter: an identity in the account
   with s3:* on everything, simulated as the schedule role plus an extra
-  allow-all policy, still can't read or write the data) and controls that
-  must work (the admin, by its real ARN, still reads the data and can fix
-  the bucket policy; so a check that denies everything can't pass). infra_test.py
+  allow-all policy, still can't read or write the data; the key: the engine
+  calling KMS directly, the Slack listener decrypting, the schedule using it)
+  and controls that must work (the admin, by its real ARN, still reads the data
+  and can fix the bucket and key policies; the engine decrypts and the listener
+  encrypts through S3; so a check that denies everything can't pass). infra_test.py
   checks the template; this checks what's deployed. Exit 1 on any FAIL.
   `tests/security_check_test.py`: stand-in CloudFormation, simulator and S3:
   roles told from same-prefix functions, the bucket policy and plain HTTP
-  included, a leaking role caught, an all-deny answer caught.
+  included, a leaking role caught, an all-deny answer caught, key questions
+  with the key's policy and kms:ViaService, a key without its rule caught.
 - `put_key.py`: stores ANTHROPIC_API_KEY from .env in Parameter Store as a
   SecureString ([aws] api_key_parameter), for the briefs in AWS. Never typed
   into a command, never printed; rerun after rotating the key. `--slack`
@@ -760,10 +769,16 @@ One JSON event per line, one file per day in `data/events/`.
   in eu-north-1 and reads English and Spanish only, Presidio is heavy
   (PRIVACY.md, spec Feature requests). Zero trust: the data perimeter (bucket
   policy) built 4 Nov 2026; GuardDuty on its free trial from 5 Nov 2026 (keep
-  or switch off before about 5 Dec); IAM Access Analyzer 5 Nov 2026. Next: our
-  own KMS key.
+  or switch off before about 5 Dec); IAM Access Analyzer 5 Nov 2026; our own KMS key
+  5 Nov 2026. Next: the free guards (Anthropic spend limit, GitHub push
+  protection, Cost Anomaly Detection).
 - Parked ideas: maturity assessment score, customer journey stage and
-  special account flags as extra QBR inputs.
+  special account flags as extra QBR inputs. AI to assist CS (5 Nov 2026,
+  Nikodem thinking it over; spec Feature requests): assist, not replace, e.g.
+  a draft email for one account for the CSM to review and send, mixed signals
+  explained, a brainstorm with the account's context; kept apart from a bot
+  that acts (a Self-service inbox agent). Demo: run once against an answer
+  key, save transcripts and scorecard.
 - Handover brief, long histories (needs years of data we don't have): keep a
   stored account-history layer (e.g. the first contract years: trends, key
   events), confirmed by a person, and mine fresh insight only from activity

@@ -52,9 +52,13 @@ bucket = next(iter(buckets.values()), {})
 
 print("\nData bucket: safe by default")
 check(len(buckets) == 1, "exactly one bucket", f"{len(buckets)} found")
+keys = t.find_resources("AWS::KMS::Key")
+key_id = next(iter(keys), None)
 r = has(t, "AWS::S3::Bucket", {"BucketEncryption": {"ServerSideEncryptionConfiguration": [
-    {"ServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}})
-check(r is True, "encrypted at rest", r)
+    {"ServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms",
+                                       "KMSMasterKeyID": {"Fn::GetAtt": [key_id, "Arn"]}},
+     "BucketKeyEnabled": True}]}})
+check(r is True, "encrypted at rest with our own KMS key, Bucket Key on (few KMS calls, cost near zero)", r)
 r = has(t, "AWS::S3::Bucket", {"PublicAccessBlockConfiguration": {
     "BlockPublicAcls": True, "BlockPublicPolicy": True, "IgnorePublicAcls": True, "RestrictPublicBuckets": True}})
 check(r is True, "all four public-access blocks on", r)
@@ -256,7 +260,8 @@ check(len(ssm_l) == 1 and actions_of(ssm_l[0]) == ["ssm:GetParameter"]
       and f"parameter{aws['slack_signing_secret_parameter']}" in res and f"parameter{aws['slack_bot_token_parameter']}" in res
       and aws["api_key_parameter"] not in res and "*" not in res,
       "may read its two secrets only (not the API key), and never write them", ssm_l)
-check(not any(a not in ("ssm:GetParameter",) and not a.startswith(("s3:", "logs:", "xray:")) for st in lstmts for a in actions_of(st)),
+check(not any(a not in ("ssm:GetParameter", "kms:GenerateDataKey") and not a.startswith(("s3:", "logs:", "xray:"))
+              for st in lstmts for a in actions_of(st)),
       "nothing else in its role", [a for st in lstmts for a in actions_of(st)])
 apis = t.find_resources("AWS::ApiGatewayV2::Api")
 routes = [v["Properties"]["RouteKey"] for v in t.find_resources("AWS::ApiGatewayV2::Route").values()]
@@ -314,6 +319,53 @@ check(all(f"role/*{n}" in exempt_text for n in aws["admin_role_names"])
       and all(f"user/{n}" in exempt_text for n in aws["break_glass_users"])
       and "ScheduleRole" not in exempt_text,
       "...plus the admin from settings and the break-glass user; nobody else (not even the schedule)", exempt)
+
+print("\nOur own KMS key: two locks on the data, no lockout")
+key = keys.get(key_id, {})
+kp = key.get("Properties", {})
+check(len(keys) == 1, "one key", len(keys))
+check(kp.get("EnableKeyRotation") is True, "rotated yearly by AWS (old data stays readable)")
+check(kp.get("PendingWindowInDays") == aws["kms_deletion_window_days"]
+      and key.get("DeletionPolicy") == "Retain" and key.get("UpdateReplacePolicy") == "Retain",
+      "kept if the stack is deleted; a deletion waits the days in settings (data without its key is lost)",
+      (kp.get("PendingWindowInDays"), key.get("DeletionPolicy")))
+aliases = [v["Properties"] for v in t.find_resources("AWS::KMS::Alias").values()]
+check(len(aliases) == 1 and aliases[0].get("AliasName") == aws["kms_key_alias"]
+      and aliases[0].get("TargetKeyId") == {"Fn::GetAtt": [key_id, "Arn"]},
+      "a readable name from settings ([aws] kms_key_alias)", aliases)
+kstmts = kp.get("KeyPolicy", {}).get("Statement", [])
+root = [st for st in kstmts if st.get("Effect") == "Allow" and st.get("Action") == "kms:*"
+        and ":root" in json.dumps(st.get("Principal"))]
+check(len(root) == 1, "the account may manage it through IAM, so the admin can always fix it (no lockout)", kstmts)
+deny = next((st for st in kstmts if st.get("Sid") == "DenyUseOutsideS3"), {})
+dacts = actions_of(deny) if deny else []
+cond = deny.get("Condition", {})
+check(deny.get("Effect") == "Deny" and {"kms:Decrypt", "kms:GenerateDataKey*"} <= set(dacts)
+      and cond.get("StringNotEquals", {}).get("kms:ViaService") == f"s3.{aws['region']}.amazonaws.com",
+      "refuses decrypting or making data keys except through S3 (a stolen role key can't decrypt directly)", deny)
+check(not any(a.startswith(("kms:Put", "kms:Enable", "kms:Disable", "kms:Schedule", "kms:Cancel")) or a == "kms:*"
+              for a in dacts),
+      "never denies managing the key (policy, rotation, deletion): no lockout", dacts)
+kexempt = json.dumps(cond.get("ArnNotLike", {}).get("aws:PrincipalArn", []))
+check(all(f"role/*{n}" in kexempt for n in aws["admin_role_names"])
+      and all(f"user/{n}" in kexempt for n in aws["break_glass_users"])
+      and cond.get("BoolIfExists", {}).get("aws:PrincipalIsAWSService") == "false",
+      "...except the admins, and AWS services acting for the key", cond)
+role_kms = {}
+for v in t.find_resources("AWS::IAM::Policy").values():
+    for r_ in v["Properties"].get("Roles", []):
+        for st in v["Properties"]["PolicyDocument"]["Statement"]:
+            if any(a.startswith("kms:") for a in actions_of(st)):
+                role_kms.setdefault(r_.get("Ref"), []).append(st)
+check(all(rid in role_kms for rid in role_ids.values()),
+      "the check, engine, Slack listener and crawler roles may use the key (through S3)", sorted(role_kms))
+check(all(st.get("Resource") == {"Fn::GetAtt": [key_id, "Arn"]} for sts in role_kms.values() for st in sts),
+      "each role's key permission is for this key only, never kms on *", role_kms)
+check([a for st in role_kms.get(role_ids["slack"], []) for a in actions_of(st)] == ["kms:GenerateDataKey"],
+      "the Slack listener can encrypt its clicks but not decrypt anything",
+      [actions_of(st) for st in role_kms.get(role_ids["slack"], [])])
+check(srole not in role_kms, "the schedule role has no key permission at all")
+check("DataKeyArn" in t.find_outputs("*"), "prints the key's ARN after deploy")
 
 print("\nGuardDuty: on trial, only the plans this stack needs")
 dets = t.find_resources("AWS::GuardDuty::Detector")

@@ -118,3 +118,28 @@ python access_report.py --save   the same, written to data/access_report.md
 ```
 
 Each finding is either on purpose (archive it with the reason) or a hole to close.
+
+## Our own KMS key
+
+The bucket encrypts with our own key (`[aws] kms_key_alias`) instead of S3's
+built-in one. Reading the data now needs two separate permissions, the bucket's
+and the key's, and CloudTrail logs every use of the key. About 1 USD a month;
+S3 Bucket Keys keep the request charges near zero.
+
+- Each role gets the key through its bucket grant, for this key only. The Slack
+  listener may only encrypt (GenerateDataKey), never decrypt.
+- The key refuses anyone who calls KMS directly instead of through S3 (a stolen
+  role credential can't decrypt a copied file), except the admins.
+- No lockout: key management (its policy, rotation, deletion) is never denied,
+  and the account manages it through IAM, so the admin can always fix it.
+- Rotated yearly by AWS. Kept if the stack is deleted; a deletion waits
+  `[aws] kms_deletion_window_days` and can be cancelled in that time. Without
+  its key the data is gone for good.
+
+Files written before the key keep S3's own encryption until they're rewritten.
+The engine rewrites its outputs on every run; for the inputs, once:
+
+```
+python upload.py --all    sends every input again, so they get the key (one input check and engine run follow)
+python security_check.py  the key questions included
+```

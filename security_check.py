@@ -7,7 +7,8 @@ shouldn't. Read-only: nothing is created, changed or run.
 infra_test.py checks the *template* before a deploy. This checks what is
 *actually deployed*, with the IAM policy simulator: for each case it asks AWS
 "would this role be allowed to do this, on this resource?", using the role's
-real policies and the bucket's real policy. Every "should be denied" case must
+real policies and the real resource policy: the bucket's for S3 questions, our
+KMS key's for key questions. Every "should be denied" case must
 come back denied, and a few "should be allowed" cases must come back allowed
 (a check that denies everything would prove nothing).
 
@@ -36,10 +37,14 @@ WANTED = {"CheckInputsServiceRole": "check", "RunEngineServiceRole": "engine",
 
 
 def find(cfn):
-    """The deployed roles and functions, by short name: {name: physical id}."""
+    """The deployed roles and functions, by short name: {name: physical id}; plus "key",
+    the data key's ID."""
     found = {}
     for r in cfn.describe_stack_resources(StackName=STACK)["StackResources"]:
         kind = r["ResourceType"]
+        if kind == "AWS::KMS::Key" and r["LogicalResourceId"].startswith("DataKey"):
+            found["key"] = r["PhysicalResourceId"]
+            continue
         if kind not in ("AWS::IAM::Role", "AWS::Lambda::Function"):
             continue
         for prefix, name in WANTED.items():
@@ -49,7 +54,7 @@ def find(cfn):
                     (kind == "AWS::IAM::Role") == is_role_name):
                 found[name] = r["PhysicalResourceId"]
                 break
-    missing = set(WANTED.values()) - set(found)
+    missing = (set(WANTED.values()) | {"key"}) - set(found)
     if missing:
         sys.exit(f"Not found in stack {STACK}: {', '.join(sorted(missing))}. Deployed?")
     return found
@@ -58,18 +63,22 @@ def find(cfn):
 # an extra identity policy for the perimeter cases: "this identity may do anything in S3"
 ALLOW_ALL_S3 = json.dumps({"Version": "2012-10-17", "Statement": [
     {"Effect": "Allow", "Action": "s3:*", "Resource": "*"}]})
+PERIMETER = {"policy": ALLOW_ALL_S3}
+VIA_S3 = {"via": "s3"}        # a key question asked as S3 asks it, on the role's behalf (kms:ViaService)
 
 
 def cases(account, region):
-    """(role, action, resource, expected, why, plain_http[, extra identity policy])"""
+    """(role, action, resource, expected, why, plain_http[, options: {"policy": an extra identity
+    policy, "via": "s3" for a key use made through S3}])"""
     b = f"arn:aws:s3:::{AWS['bucket']}"
     i, r, o, st = AWS["inputs_prefix"], AWS["reports_prefix"] + "check_inputs/", AWS["outputs_prefix"], AWS["state_prefix"]
-    key = f"arn:aws:ssm:{region}:{account}:parameter{AWS['api_key_parameter']}"
+    api_key = f"arn:aws:ssm:{region}:{account}:parameter{AWS['api_key_parameter']}"
     other = f"arn:aws:ssm:{region}:{account}:parameter/cairnpath/some-other-secret"
     signing = f"arn:aws:ssm:{region}:{account}:parameter{AWS['slack_signing_secret_parameter']}"
     bot = f"arn:aws:ssm:{region}:{account}:parameter{AWS['slack_bot_token_parameter']}"
     clicks = AWS["slack_clicks_prefix"]
     fn = lambda name: f"arn:aws:lambda:{region}:{account}:function:{{{name}}}"   # filled in later
+    key = f"arn:aws:kms:{region}:{account}:key/{{key}}"                              # filled in later
     return [
         # the engine
         ("engine", "s3:PutObject", f"{b}/{i}events/forged.jsonl", DENY, "can't change its own inputs", False),
@@ -78,11 +87,11 @@ def cases(account, region):
         ("engine", "ssm:GetParameter", other, DENY, "can read the API key, but no other secret", False),
         ("engine", "s3:GetObject", f"{b}/{i}crm_accounts.csv", DENY, "plain HTTP refused, even for its own inputs", True),
         ("engine", "s3:PutObject", f"{b}/{o}run.json", ALLOW, "control: it can write its results", False),
-        ("engine", "ssm:GetParameter", key, ALLOW, "control: it can read the API key", False),
+        ("engine", "ssm:GetParameter", api_key, ALLOW, "control: it can read the API key", False),
         # the input check
         ("check", "s3:PutObject", f"{b}/{i}_upload_complete.json", DENY, "can't write where it's triggered (no loop)", False),
         ("check", "s3:PutObject", f"{b}/{o}run.json", DENY, "can't write the engine's results", False),
-        ("check", "ssm:GetParameter", key, DENY, "can't read the API key", False),
+        ("check", "ssm:GetParameter", api_key, DENY, "can't read the API key", False),
         ("check", "s3:PutBucketPolicy", b, DENY, "can't change the bucket's rules", False),
         ("check", "s3:PutObject", f"{b}/{r}latest.json", ALLOW, "control: it can write its report", False),
         # the schedule
@@ -98,27 +107,37 @@ def cases(account, region):
         ("slack", "s3:PutObject", f"{b}/{i}events/forged.jsonl", DENY, "can't write the inputs", False),
         ("slack", "s3:PutObject", f"{b}/{st}action_log.csv", DENY, "can't touch the action log, only add clicks", False),
         ("slack", "s3:PutObject", f"{b}/{o}run.json", DENY, "can't write the engine's results", False),
-        ("slack", "ssm:GetParameter", key, DENY, "can't read the API key", False),
+        ("slack", "ssm:GetParameter", api_key, DENY, "can't read the API key", False),
         ("slack", "s3:PutObject", f"{b}/{clicks}2026-10-19/test.json", ALLOW, "control: it can save a click", False),
         ("slack", "ssm:GetParameter", signing, ALLOW, "control: it can read Slack's signing secret", False),
         ("engine", "ssm:GetParameter", bot, DENY, "the engine can't read Slack's bot token", False),
         # the data perimeter (bucket policy): even an identity in this account with s3:* on
         # everything (simulated: the schedule role plus an extra allow-all policy) is refused
         ("schedule", "s3:GetObject", f"{b}/{i}crm_accounts.csv", DENY,
-         "perimeter: another identity with s3:* still can't read the data", False, ALLOW_ALL_S3),
+         "perimeter: another identity with s3:* still can't read the data", False, PERIMETER),
         ("schedule", "s3:PutObject", f"{b}/{o}run.json", DENY,
-         "perimeter: ...nor write it", False, ALLOW_ALL_S3),
+         "perimeter: ...nor write it", False, PERIMETER),
         ("admin", "s3:GetObject", f"{b}/{i}crm_accounts.csv", ALLOW, "control: the admin can still read the data", False),
         ("admin", "s3:PutBucketPolicy", b, ALLOW, "control: the admin can still fix the bucket's rules (no lockout)", False),
+        # our KMS key: the second lock. Roles use it only through S3, never by calling KMS
+        ("engine", "kms:Decrypt", key, DENY,
+         "key: the engine can't decrypt by calling KMS directly (a stolen credential can't either)", False),
+        ("slack", "kms:Decrypt", key, DENY, "key: the Slack listener can't decrypt anything, even via S3", False, VIA_S3),
+        ("schedule", "kms:Decrypt", key, DENY, "key: the schedule has no use of the key at all", False, VIA_S3),
+        ("engine", "kms:Decrypt", key, ALLOW, "control: the engine reads its data through S3", False, VIA_S3),
+        ("slack", "kms:GenerateDataKey", key, ALLOW, "control: the Slack listener can encrypt a click via S3", False, VIA_S3),
+        ("admin", "kms:Decrypt", key, ALLOW, "control: the admin can still use the key directly", False),
+        ("admin", "kms:PutKeyPolicy", key, ALLOW, "control: the admin can still fix the key's policy (no lockout)", False),
     ]
 
 
-def run(cfn, iam, s3, account, region):
+def run(cfn, iam, s3, account, region, kms):
     names = find(cfn)
     arns = {k: f"arn:aws:iam::{account}:role/{v}" for k, v in names.items()}
     # the admin role (what aws login gives you): its real ARN, path included
     arns["admin"] = iam.get_role(RoleName=AWS["admin_role_names"][0])["Role"]["Arn"]
     bucket_policy = s3.get_bucket_policy(Bucket=AWS["bucket"], ExpectedBucketOwner=account)["Policy"]
+    key_policy = kms.get_key_policy(KeyId=names["key"], PolicyName="default")["Policy"]
     results = []
     for case in cases(account, region):
         role, action, resource, expected, why, plain_http = case[:6]
@@ -137,10 +156,16 @@ def run(cfn, iam, s3, account, region):
                                   "ContextKeyValues": [account]},
                                  {"ContextKeyName": "aws:PrincipalIsAWSService", "ContextKeyType": "boolean",
                                   "ContextKeyValues": ["false"]}]}
-        if len(case) > 6:                     # an extra identity policy (the perimeter cases)
-            kw["PolicyInputList"] = [case[6]]
+        options = case[6] if len(case) > 6 else {}
+        if options.get("policy"):             # an extra identity policy (the perimeter cases)
+            kw["PolicyInputList"] = [options["policy"]]
+        if options.get("via"):                # S3 using the key for the role: S3 says so (kms:ViaService)
+            kw["ContextEntries"].append({"ContextKeyName": "kms:ViaService", "ContextKeyType": "string",
+                                         "ContextKeyValues": [f"{options['via']}.{region}.amazonaws.com"]})
         if action.startswith("s3:"):          # the bucket's own policy counts too (e.g. HTTPS only)
             kw.update(ResourcePolicy=bucket_policy, ResourceOwner=f"arn:aws:iam::{account}:root")
+        if action.startswith("kms:"):         # and the key's own policy for key questions
+            kw.update(ResourcePolicy=key_policy, ResourceOwner=f"arn:aws:iam::{account}:root")
         result = iam.simulate_principal_policy(**kw)["EvaluationResults"][0]
         decision = result["EvalDecision"]
         got = ALLOW if decision == "allowed" else DENY
@@ -171,5 +196,5 @@ if __name__ == "__main__":
     import boto3
     session = boto3.Session(profile_name=AWS.get("profile") or None, region_name=AWS["region"])
     results = run(session.client("cloudformation"), session.client("iam"), session.client("s3"),
-                  str(AWS["account_id"]), AWS["region"])
+                  str(AWS["account_id"]), AWS["region"], session.client("kms"))
     sys.exit(1 if report(results) else 0)

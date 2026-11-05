@@ -20,10 +20,12 @@ import upload    # noqa: E402
 
 
 class FakeS3:
-    """Enough of S3 for upload.py: list (with pages), put, and the owner check."""
+    """Enough of S3 for upload.py: list (with pages), put, head, and the owner check.
+    kms=True: the bucket encrypts with a KMS key, so (like real S3) the ETag is not the MD5."""
 
-    def __init__(self, owner):
-        self.objects, self.puts, self.owner = {}, [], owner
+    def __init__(self, owner, kms=False):
+        self.objects, self.puts, self.owner, self.kms = {}, [], owner, kms
+        self.meta, self.heads = {}, []
 
     def _check(self, kw):
         if kw.get("ExpectedBucketOwner") != self.owner:
@@ -43,8 +45,15 @@ class FakeS3:
     def put_object(self, Bucket, Key, Body, **kw):
         self._check(kw)
         data = Body if isinstance(Body, bytes) else Body.read()      # S3 takes bytes or a file
-        self.objects[Key] = hashlib.md5(data).hexdigest()
+        digest = hashlib.md5(data).hexdigest()
+        self.objects[Key] = hashlib.md5(b"encrypted" + data).hexdigest() if self.kms else digest
+        self.meta[Key] = dict(kw.get("Metadata") or {})
         self.puts.append(Key)
+
+    def head_object(self, Bucket, Key, **kw):
+        self._check(kw)
+        self.heads.append(Key)
+        return {"ETag": f'"{self.objects[Key]}"', "Metadata": self.meta[Key]}
 
 
 failed = 0
@@ -56,10 +65,10 @@ def check(ok, name, detail=""):
     print(f"  {'PASS' if ok else 'FAIL'}  {name}" + (f"  ->  {detail}" if not ok and detail else ""))
 
 
-def step(s3, dry_run=False):
+def step(s3, dry_run=False, everything=False):
     """Run upload.py; return the input files it sent (the marker is checked on its own)."""
     before = len(s3.puts)
-    upload.run(s3, dry_run, demo=True)
+    upload.run(s3, dry_run, demo=True, everything=everything)
     return [k for k in s3.puts[before:] if k != upload.MARKER]
 
 
@@ -103,6 +112,24 @@ check(sorted(sent) == ["inputs/events/2026-10-03.jsonl", "inputs/events/2026-10-
       "a changed file and a new file: just those two", sent)
 check(markers(s3) == 2, "...then a new marker, so the check runs again")
 check(upload.MARKER not in upload.local_inputs(), "the marker is never treated as an input")
+
+print("\nA bucket with our own KMS key (the ETag is no longer the MD5)")
+s3.kms = True                                  # the key arrives: files written from now on get it
+s3.heads.clear()
+check(step(s3) == [] and s3.heads == [], "files from before the key: ETag still the MD5, nothing sent, no lookups")
+sent = step(s3, everything=True)
+check(len(sent) == len(upload.local_inputs()) and markers(s3) == 3,
+      "--all sends every input again (so they get the key), then one marker", sent)
+check(all(s3.meta[k].get("md5") for k in sent), "each upload carries its MD5 as a label")
+s3.heads.clear()
+check(step(s3) == [] and markers(s3) == 3, "rerun with the key: nothing sent (the label matches), no marker")
+check(len(s3.heads) == len(sent), "the label is read only for files whose ETag isn't the MD5", len(s3.heads))
+(tmp / "crm_accounts.csv").write_text("account_id\nacc_001\nacc_002\n", encoding="utf-8")
+check(step(s3) == ["inputs/crm_accounts.csv"], "with the key, a changed file is still found, and only that one")
+k2 = FakeS3(owner, kms=True)
+step(k2)
+check(step(k2) == [], "a bucket that always had the key: second run sends nothing")
+check(step(k2, dry_run=True, everything=True) == [], "--all with --dry-run still sends nothing")
 
 before = len(s3.puts)
 code = upload.run(s3, demo=False)

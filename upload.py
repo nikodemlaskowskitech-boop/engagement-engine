@@ -3,6 +3,8 @@ Copies the engine's inputs to the data bucket on AWS (Phase 6).
 
     python upload.py              upload what's new or changed
     python upload.py --dry-run    say what would be uploaded, upload nothing
+    python upload.py --all        send every input again, changed or not (e.g. so files
+                                  uploaded before the bucket had its own key get it too)
 
 Which files: the inputs named in settings.toml [data] (events, CRM, CS team,
 CS history, holdout, renewal outcomes), wherever [data] says they live. Where
@@ -12,8 +14,12 @@ Plus the action log (data/action_log.csv: the tasks already sent) under
 [aws] state_prefix, so the engine in AWS knows them too.
 
 Only new or changed files go up: each file's MD5 fingerprint is compared with
-the one S3 keeps for it (its ETag). So a rerun sends nothing, and the bucket's
-versioning keeps a history of real changes, not of reruns.
+the bucket's copy. So a rerun sends nothing, and the bucket's versioning keeps a
+history of real changes, not of reruns. Where the fingerprint comes from: with
+S3's own encryption, the ETag S3 lists is the file's MD5. With our KMS key it
+isn't (S3 then makes the ETag from the encrypted bytes), so each upload also
+stores its MD5 as a label on the file (metadata "md5"), and a file whose ETag
+doesn't match is looked up once to read that label.
 
 When something went up, the last file written is a small marker
 (inputs/_upload_complete.json, name in [aws] upload_marker). It tells AWS the
@@ -71,7 +77,7 @@ def md5(path):
 
 
 def remote_etags(s3, bucket):
-    """What the bucket holds under the inputs and state prefixes: {key: MD5}."""
+    """What the bucket holds under the inputs and state prefixes: {key: ETag}."""
     etags = {}
     for prefix in (PREFIX, STATE):
         pages = s3.get_paginator("list_objects_v2").paginate(
@@ -82,20 +88,25 @@ def remote_etags(s3, bucket):
     return etags
 
 
-def plan(local, remote):
-    """Split the local files into new, changed and unchanged."""
+def plan(local, remote, stored_md5=lambda key: None, everything=False):
+    """Split the local files into new, changed and unchanged. stored_md5(key): the MD5
+    label the bucket's copy carries (asked only when its ETag isn't the MD5)."""
     new, changed, same = [], [], []
     for key, path in local.items():
         if key not in remote:
             new.append(key)
-        elif remote[key] != md5(path):
+        elif everything:
             changed.append(key)
         else:
-            same.append(key)
+            mine = md5(path)
+            if remote[key] == mine or stored_md5(key) == mine:
+                same.append(key)
+            else:
+                changed.append(key)
     return new, changed, same
 
 
-def run(s3, dry_run=False, demo=None):
+def run(s3, dry_run=False, demo=None, everything=False):
     if not (DEMO if demo is None else demo):
         print(f"Not uploading: {INPUTS} is your own data (settings.local.toml), and it stays on "
               "this machine. upload.py sends the demo data only.")
@@ -105,7 +116,12 @@ def run(s3, dry_run=False, demo=None):
     if not local:
         print(f"No inputs found in {INPUTS}. Run generate_events.py first?")
         return 1
-    new, changed, same = plan(local, remote_etags(s3, bucket))
+    owner = str(AWS["account_id"])
+
+    def stored_md5(key):
+        return s3.head_object(Bucket=bucket, Key=key, ExpectedBucketOwner=owner).get("Metadata", {}).get("md5")
+
+    new, changed, same = plan(local, remote_etags(s3, bucket), stored_md5, everything)
     print(f"Bucket {bucket}, folder {PREFIX}: {len(new)} new, {len(changed)} changed, "
           f"{len(same)} unchanged ({len(local)} input files)")
     todo = new + changed
@@ -116,11 +132,12 @@ def run(s3, dry_run=False, demo=None):
         elif i == SHOW:
             print(f"  ... and {len(todo) - SHOW} more")
         if not dry_run:
-            # put_object: one request per file, so the ETag stays the plain MD5.
+            # the MD5 goes along as a label, so the next run can tell the file hasn't changed.
             # ExpectedBucketOwner: refuse if the bucket ever belonged to another account.
+            # Encryption: the bucket's default (our KMS key), nothing to set here.
             with local[key].open("rb") as body:
-                s3.put_object(Bucket=bucket, Key=key, Body=body,
-                              ExpectedBucketOwner=str(AWS["account_id"]))
+                s3.put_object(Bucket=bucket, Key=key, Body=body, Metadata={"md5": md5(local[key])},
+                              ExpectedBucketOwner=owner)
     if dry_run:
         print("Dry run: nothing uploaded." + (" Would then write the upload-complete marker." if todo else ""))
     elif todo:
@@ -145,5 +162,6 @@ if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="Copy the engine's inputs to the S3 data bucket.")
     ap.add_argument("--dry-run", action="store_true", help="say what would be uploaded, upload nothing")
+    ap.add_argument("--all", action="store_true", help="send every input again, changed or not")
     args = ap.parse_args()
-    sys.exit(run(client(), args.dry_run))
+    sys.exit(run(client(), args.dry_run, everything=args.all))
