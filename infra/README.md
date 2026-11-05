@@ -85,3 +85,23 @@ correct `admin_role_names` and `cdk deploy`, or as a last resort
 `aws s3api delete-bucket-policy` (that also drops HTTPS-only until the next
 deploy puts it back). `python security_check.py` checks both sides after
 every deploy: the outsider is refused, the admin still gets in.
+
+## GuardDuty (on trial)
+
+`[aws] guardduty = true` turns on GuardDuty for this account and region: it
+reads the account's own logs (API calls, the bucket's data events, the
+Lambdas' network activity) and raises findings such as credentials used from
+an unusual place, crypto-mining, or data pulled from the bucket in bulk.
+Plans for services we don't run are off.
+
+It's on the 30-day free trial from 5 Nov 2026. After that it charges, so
+decide before about 5 Dec 2026:
+
+```
+python guardduty_report.py             what it found, and what the usage so far would have cost
+python guardduty_report.py --samples   once: sample findings, to see what they look like
+python guardduty_report.py --save      the same, written to data/guardduty_report.md
+```
+
+To switch it off: `guardduty = false` in settings.toml, then `cdk deploy`. That
+deletes the detector and its findings, so `--save` first.

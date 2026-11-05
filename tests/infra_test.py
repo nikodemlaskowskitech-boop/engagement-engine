@@ -315,5 +315,18 @@ check(all(f"role/*{n}" in exempt_text for n in aws["admin_role_names"])
       and "ScheduleRole" not in exempt_text,
       "...plus the admin from settings and the break-glass user; nobody else (not even the schedule)", exempt)
 
+print("\nGuardDuty: on trial, only the plans this stack needs")
+dets = t.find_resources("AWS::GuardDuty::Detector")
+if aws.get("guardduty"):
+    feats = {f["Name"]: f["Status"] for f in next(iter(dets.values()), {}).get("Properties", {}).get("Features", [])}
+    check(len(dets) == 1, "one detector ([aws] guardduty = true)", len(dets))
+    check(feats.get("S3_DATA_EVENTS") == "ENABLED" and feats.get("LAMBDA_NETWORK_LOGS") == "ENABLED",
+          "watches the bucket's data events and the Lambdas' network activity", feats)
+    check(all(feats.get(n) == "DISABLED" for n in ("EKS_AUDIT_LOGS", "EBS_MALWARE_PROTECTION",
+                                                   "RDS_LOGIN_EVENTS", "RUNTIME_MONITORING")),
+          "plans for services we don't run are off, so they can't add cost", feats)
+else:
+    check(not dets, "[aws] guardduty = false: no detector (switched off, nothing charged)")
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)

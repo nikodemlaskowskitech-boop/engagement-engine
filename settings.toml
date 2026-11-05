@@ -131,6 +131,10 @@ slack_burst = 20               # ...and a short burst; anything above gets 429 b
 # permissions say. Bucket settings stay open to admins, so a mistake here can always be fixed.
 admin_role_names = ["AccountFullAccessRole"]
 break_glass_users = ["nikodem"]
+# GuardDuty (threat detection on the account's own logs), on its 30-day free trial from 5 Nov
+# 2026 to about 5 Dec 2026. After that it charges. Decide before then: keep it, or set false and
+# cdk deploy (that removes it and its findings; guardduty_report.py writes them down first).
+guardduty = true
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo
