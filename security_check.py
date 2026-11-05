@@ -131,11 +131,24 @@ def cases(account, region):
     ]
 
 
-def for_simulator(key_policy, key_arn):
-    """A key policy says Resource "*" (in a key policy that means "this key"), but the
-    simulator only takes ARNs there (InvalidInput, 5 Nov 2026). Same meaning, spelled out."""
+def is_root_delegation(st, account):
+    """The key policy's "let IAM decide" statement: Allow, to this account's root."""
+    principal = json.dumps(st.get("Principal", {}))
+    return st.get("Effect") == "Allow" and f":iam::{account}:root" in principal
+
+
+def for_simulator(key_policy, key_arn, account):
+    """The key policy, as KMS really reads it, in a form the simulator takes. Two changes,
+    both found on the first live run (5 Nov 2026):
+    - Resource "*" (in a key policy that means "this key") spelled out as the key's ARN:
+      the simulator only takes ARNs there (InvalidInput).
+    - The statement that allows the account root dropped. In KMS it grants nobody anything:
+      it only lets IAM policies decide (a role still needs its own kms permission). The
+      simulator reads it like a bucket policy instead, as "every role in the account may",
+      and so answered "allowed" for roles with no key permission at all."""
     doc = json.loads(key_policy)
-    for st in doc.get("Statement", []):
+    doc["Statement"] = [st for st in doc.get("Statement", []) if not is_root_delegation(st, account)]
+    for st in doc["Statement"]:
         if st.get("Resource") in ("*", ["*"]):
             st["Resource"] = key_arn
     return json.dumps(doc)
@@ -148,7 +161,8 @@ def run(cfn, iam, s3, account, region, kms):
     arns["admin"] = iam.get_role(RoleName=AWS["admin_role_names"][0])["Role"]["Arn"]
     bucket_policy = s3.get_bucket_policy(Bucket=AWS["bucket"], ExpectedBucketOwner=account)["Policy"]
     key_arn = f"arn:aws:kms:{region}:{account}:key/{names['key']}"
-    key_policy = for_simulator(kms.get_key_policy(KeyId=names["key"], PolicyName="default")["Policy"], key_arn)
+    key_policy = for_simulator(kms.get_key_policy(KeyId=names["key"], PolicyName="default")["Policy"],
+                               key_arn, account)
     results = []
     for case in cases(account, region):
         role, action, resource, expected, why, plain_http = case[:6]
