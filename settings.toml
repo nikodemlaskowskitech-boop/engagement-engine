@@ -154,6 +154,10 @@ kms_deletion_window_days = 30
 cost_alert_email = ""
 cost_alert_threshold_usd = 5
 
+[cockpit]
+# Decisions saved in the published cockpit (cockpit_sync.py checks every one again: never trust the page).
+max_text = 200        # notes and reasons are cut to this many characters (the page's own limit)
+
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo
 # stories), and how long a brief may be. The model and its price are in [llm].

@@ -39,7 +39,7 @@ with short comments, and work in small steps (one PR per change).
   acceptance page. Every PR that touches infra/ runs `python
   tests/infra_test.py` (builds the template in memory, no AWS login, no
   cost), `python tests/check_lambda_test.py`, `python
-  tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one that touches llm.py, brief.py or handover.py runs `python tests/ai_spend_test.py`; one
+  tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one that touches llm.py, brief.py or handover.py runs `python tests/ai_spend_test.py`; one that touches cockpit_sync.py runs `python tests/cockpit_sync_test.py`; one
   that touches roles or policies also runs `python tests/security_check_test.py`
   and, after the deploy, Nikodem runs `python security_check.py` (live). Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
@@ -432,6 +432,13 @@ One JSON event per line, one file per day in `data/events/`.
   `data/engagement/cockpit.jsonl`, rewritten each run, so nothing doubles.
   Decisions on older data (another as-of) are skipped; renewal forecasts and
   next steps are all kept (forecast_set, next_step_set: the history). First step of run_all.
+  Never trust the page (5 Nov 2026): every decision is checked again against the
+  crm and cs_team views (known account and owner, allowed values, real dates,
+  a downsize between 0 and ARR, an owner only on their own accounts, a manager
+  only on their team's, a reason on every forecast); a bad one is skipped and
+  listed with why, never a crash; free text cut to [cockpit] max_text, control
+  characters removed. Who decided stays self-declared (THREAT_MODEL.md).
+  `tests/cockpit_sync_test.py`: no DuckDB, a small made-up CRM.
 - `pull_clicks.py`: first step of run_all. Gathers the Slack clicks the AWS
   listener saved under [aws] slack_clicks_prefix into
   data/engagement/slack_clicks.jsonl (oldest first; rewritten only when a
