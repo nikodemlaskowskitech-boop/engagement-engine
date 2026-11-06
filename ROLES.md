@@ -27,7 +27,7 @@ from another region belongs to its owner's team, not to its customer's region.
 | | Leader | Manager | CSM | Pool member |
 | --- | --- | --- | --- | --- |
 | Accounts on the page | Whole book | Their team's | Their team's | Their team's |
-| Self-service accounts | Yes | Those in their team's regions | No | No |
+| Accounts with no owner (Self-service, or Enterprise with no CSM yet) | Yes | Those in their team's regions | No | No |
 | ARR, ARR at risk, upside | Yes | Yes | Yes | Yes |
 | Colleagues' renewal forecasts | Yes | Yes | Yes, read-only | Yes, read-only |
 | Set a forecast or next step | No | Team's accounts | Own accounts | Own accounts |
@@ -60,6 +60,18 @@ page).
   against the median: a management view.
 - **Self-service only for managers and the leader** (confirmed 6 Nov 2026). Those
   accounts have no owner; they go to the Self-service report, not to a person.
+  The same for an Enterprise account with no CSM yet (6 Nov 2026, from the code
+  review): its "No CSM assigned" alert is the manager's to act on, so it sits on
+  the managers' pages for its region; nobody can forecast it until it has an owner.
+- **Small groups show no sums** (6 Nov 2026, from the code review). Below manager
+  level "Did it work?" is team totals, but a total over one or two accounts is
+  someone's own result. Groups smaller than `[roles] min_group` (5) show their
+  count only, and then the "All renewals" sums go too (total minus the other rows
+  would give the hidden one back); in the two-row calls table, both go. The
+  matrix and warning counts stay: counts, no money, no names.
+- **Call speed by owner is for managers** (6 Nov 2026, from the code review).
+  Below manager level the CS team tab shows the team's accounts, not an
+  owner-by-owner table; My book shows your own number next to a median.
 - **Landing on the leader's page, a dropdown to the others** (5 Nov 2026). For
   the demo only, so a visitor can switch views. In real use each person gets
   their own page's link, or signs in (SSO) and is sent to it; the dropdown and
@@ -73,7 +85,12 @@ element still counts.
 - An account ID or name outside the person's scope.
 - A forecast, next step, task or handover brief on such an account.
 - Below manager level: any per-owner outcome (caught / missed, warning time,
-  calls by owner).
+  calls by owner), or a renewal outcome row per account (totals only, and no
+  sums for groups under `[roles] min_group`).
+- Once published: a decision (forecast, next step, handover confirm) on an
+  account outside the page's scope, read from the shared database. The page
+  reads only its own accounts' decisions; a real deployment keeps one database
+  per team (see THREAT_MODEL.md).
 - A real customer user ID (true of every page already).
 
 ## Where to change it
@@ -108,6 +125,12 @@ The pages are tested as a black box, from this page and the inputs only.
   on), `outcomes` (by_owner | team_total).
 - Every page has a page switcher (`<select id="page-switch">`) whose options
   link to the other pages' file names. In the demo it lists every page.
+- Every page carries its data in `<script type="application/json" id="views-data">`.
+  On a team-total page its `renewals` list is empty and `outcomes_total` holds
+  the team's totals; any group there (in `value` or `calls`) with `n` under
+  `[roles] min_group` has `small: true` and no sums (`arr`, `at_risk`, `lost`,
+  `churned`, `kept` are null); so does the "All renewals" total in `value` when
+  any group is small, and every `calls` row when either is.
 - Account ids look like `acc_123`. Any `acc_` id in a page's raw HTML,
   anywhere, counts as being on the page.
 - `cockpit_sync.py` refuses a decision the role may not make, by the person in

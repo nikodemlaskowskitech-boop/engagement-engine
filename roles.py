@@ -62,7 +62,7 @@ def scope(person_id, person, accounts, team):
             ids.add(a["account_id"])
             if a.get("owner_id") == person_id:
                 own.add(a["account_id"])
-        elif cfg.get("self_service") and not owners(a) and a["tier"] == "Self-service" and a["region"] in regions:
+        elif cfg.get("self_service") and not owners(a) and a["region"] in regions:   # no owner: Self-service, or no CSM yet
             ids.add(a["account_id"])
     return ids, own
 
@@ -101,7 +101,17 @@ def outcomes_total(renewals, too_late):
                               "at_risk": total(xs, "data_at_risk"), "lost": total(xs, "lost_arr")})
         value.append({"group": "All renewals", "n": len(valued), "arr": total(valued, "arr"),
                       "at_risk": total(valued, "data_at_risk"), "lost": total(valued, "lost_arr")})
-    return {"renewals": len(renewals), "lost": len(lost), "flagged": len(flagged), "tp": len(tp),
+    # small groups give away someone's own result (two accounts, both one person's): no sums
+    k = ROLES.get("min_group", 5)
+    # and once one group is hidden, the total goes too: total minus the others would give it back
+    if any(g["n"] < k for g in value):
+        for g in value:
+            if g["n"] < k or g["group"] == "All renewals":
+                g.update(arr=None, at_risk=None, lost=None, small=True)
+    if any(c["n"] < k for c in calls):           # two rows: one hidden would follow from the other
+        for c in calls:
+            c.update(churned=None, kept=None, small=True)
+    return {"min_group": k, "renewals": len(renewals), "lost": len(lost), "flagged": len(flagged), "tp": len(tp),
             "fp": len(flagged) - len(tp), "fn": len(lost) - len(tp),
             "tn": len(renewals) - len(flagged) - (len(lost) - len(tp)),
             "median_warning": round(statistics.median(warn)) if warn else None,

@@ -105,8 +105,6 @@ def problem(d, accounts, team, kinds=None):
     kind = d.get("kind")
     if kind not in KINDS:
         return f"unknown kind {str(kind)[:30]!r}"
-    if kind == "handover_confirm":
-        return None                                       # shown by the page itself; nothing to apply here
     acc = accounts.get(d.get("account_id"))
     if acc is None:
         return f"unknown account {str(d.get('account_id'))[:30]!r}"
@@ -139,6 +137,10 @@ def problem(d, accounts, team, kinds=None):
         return f"{str(by)[:30]!r} doesn't own this account"
     if d["role"] == "owner" and where == "team" and (by not in team or team[by] not in {team.get(o) for o in acc["owners"]}):
         return f"{str(by)[:30]!r} isn't in this account's team"
+    if kind == "handover_confirm":
+        # shown by the page itself, nothing to apply; checked anyway so a confirm written straight
+        # to the database by someone else is listed as refused (review 6 Nov 2026)
+        return None
     if kind == "forecast":
         if d.get("call") not in CALLS:
             return f"unknown forecast {str(d.get('call'))[:30]!r}"

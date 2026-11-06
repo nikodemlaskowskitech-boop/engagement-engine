@@ -112,8 +112,11 @@ check(html == "<img src=x onerror=alert(1)>",
 print("\nThe rest behaves as before")
 events, _, stale = run([{**REAL[2], "as_of": "2026-09-01"}])
 check(not events and stale == 1, "a reassignment on older data is skipped as stale, not as invalid")
-check(run([{"kind": "handover_confirm", "account_id": "acc_012"}]) == ([], [], 0),
-      "a handover confirmation (the page's own) is neither applied nor flagged")
+confirm = {"kind": "handover_confirm", "account_id": "acc_024", "by": "csm_mia", "role": "owner", "decided_at": AT}
+check(run([confirm]) == ([], [], 0), "a handover confirmation by the owner (the page's own) is neither applied nor flagged")
+check(not run([{**confirm, "by": "csm_tom"}])[0] and len(run([{**confirm, "by": "csm_tom"}])[1]) == 1,
+      "a confirmation by someone else (written straight to the database) is listed as refused (review 6 Nov 2026)")
+check(len(run([{**confirm, "by": "mgr_james", "role": "manager"}])[1]) == 1, "...and so is one by another team's manager")
 twice = json.dumps(run(REAL)[0]) == json.dumps(run(REAL)[0])
 check(twice, "the same decisions always give the same events (a re-run doubles nothing)")
 

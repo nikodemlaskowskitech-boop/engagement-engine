@@ -1,7 +1,8 @@
 // Role pages in a browser (Node + Playwright): each person's page from data/pages/
 // opens without a script error, on its role's first tab, with only its role's tabs
 // and a page switcher; and the forecast and next-step forms appear exactly where the
-// page's edit rights say (own account yes, a teammate's no, the leader never),
+// page's edit rights say (own account yes, a teammate's no, the leader never), and
+// so do reassign, hand-back and the handover Confirm (code review, 6 Nov 2026),
 // against a stand-in database. tests/roles_test.py checks the files themselves
 // (written from ROLES.md by a separate agent); this checks they work.
 //   node tests/role_pages_test.js        (run python roles.py or export_views.py first)
@@ -46,6 +47,32 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       check(fc === want && ns === want, `${f}: ${acc} ${want ? "can" : "can't"} be forecast or planned here`, `forecast ${fc}, next step ${ns}`);
       await p.close();
     }
+  }
+  console.log("\nTask decisions only for that manager's own team (stand-in database)");
+  for (const f of ["mgr_sophie.html", "mgr_james.html", "csm_mia.html", "leader.html"]) {
+    const m = meta(f), { p } = await open(f, "tasks", true);
+    if (!m.tabs.includes("tasks")) { await p.close(); continue; }
+    await p.click("#tab-tasks");
+    for (let i = 0; i < 4; i++) {                       // every status (the chips redraw after each click)
+      const chip = await p.$("#tk-status .chip[aria-pressed=false]"); if (!chip) break; await chip.click(); }
+    const rows = await p.$$eval("#tk-list tbody tr", (trs) => trs.map((tr) => ({
+      acc: (tr.querySelector("[data-open]") || {}).dataset ? tr.querySelector("[data-open]").dataset.open : null,
+      act: !!tr.querySelector("select[data-assign], [data-approve]") })));
+    const wrong = rows.filter((r) => r.act && !(m.edit.assign || []).includes(r.acc) && !(m.edit.handback || []).includes(r.acc));
+    const some = rows.some((r) => r.act);
+    check(!wrong.length && (m.role === "manager" ? some : !some),
+      `${f}: ${m.role === "manager" ? "reassign or hand-back offered only on its team's tasks" : "no reassign or hand-back at all"}`,
+      JSON.stringify({ rows: rows.length, offered: rows.filter((r) => r.act).length, wrong: wrong.slice(0, 3) }));
+    await p.close();
+  }
+  console.log("\nHandover Confirm only for the outgoing owner or their manager (stand-in database)");
+  for (const [f, acc, want] of [["csm_mia.html", "acc_024", true], ["csm_lukas.html", "acc_024", false],
+                                ["mgr_sophie.html", "acc_024", true], ["leader.html", "acc_024", false],
+                                ["pm_priya.html", "acc_156", true], ["pm_owen.html", "acc_156", false]]) {
+    const { p } = await open(f, acc, true);
+    const btn = !!(await p.$("#ho-confirm"));
+    check(btn === want, `${f}: ${acc} handover ${want ? "can" : "can't"} be confirmed here`, `button ${btn}`);
+    await p.close();
   }
   await b.close();
   console.log(`\n${passed} passed, ${failed} failed`);

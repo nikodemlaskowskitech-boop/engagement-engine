@@ -18,6 +18,16 @@ What is tested:
   5. Cross-region cover accounts sit on their owner's team's pages.
   6. cockpit_sync.build refuses decisions the role may not make, and still
      lets the allowed ones through.
+  Plus views-data: on a team-total page no renewal rows and small groups
+  (n under [roles] min_group) with no sums; on by-owner pages renewal rows only
+  for the page's own accounts. Accounts with no owner (Self-service, or no CSM
+  yet) only on the managers' pages of their region, and never editable.
+
+Not tested here: "Once published: a decision on an account outside the page's
+scope, read from the shared database" (ROLES.md, must never contain). That
+data arrives at run time from the published page's database, not in the
+static file, so a raw-HTML test can't see it; it needs a browser test against
+a stand-in database.
 
 Run: python tests/roles_test.py   (after python export_views.py)
 Exit 1 on any FAIL.
@@ -109,6 +119,12 @@ OWNERS = {
     for a in CRM
 }
 SELF_SERVICE = {i for i, t in TIER.items() if t == "Self-service"}
+# Accounts with no owner at all, of any tier: Self-service, or an Enterprise
+# account with no CSM yet (acc_005, acc_008 in the demo). ROLES.md treats them
+# alike: managers of the customer's region see them, CSMs and members don't,
+# nobody edits them.
+UNOWNED = {i for i, own in OWNERS.items() if not own}
+MIN_GROUP = ROLES.get("min_group", 5)
 
 # A team = everyone under one manager (pools included: they carry the manager).
 TEAM_OF_MANAGER = {m: {o for o, r in PEOPLE.items() if r["manager"] == m} for m in MANAGERS}
@@ -131,13 +147,13 @@ def expected_scope(pid):
     if cfg.get("scope") == "book":
         ids = set(ALL_IDS)
         if not cfg.get("self_service", False):
-            ids -= SELF_SERVICE
+            ids -= UNOWNED
         return ids
     m = manager_of(pid)
     ids = set(TEAM_ACCOUNTS.get(m, set()))
     if cfg.get("self_service", False):
         regions = TEAM_REGIONS.get(m, set())
-        ids |= {i for i in SELF_SERVICE if REGION[i] in regions}
+        ids |= {i for i in UNOWNED if REGION[i] in regions}
     return ids
 
 
@@ -145,8 +161,9 @@ def allowed_edit(pid, how):
     if how == "own":
         return own_accounts(pid)
     if how == "team":
-        # "Team's accounts": owned by someone in the team. Self-service accounts
-        # have no owner, so they are not a team's accounts to edit.
+        # "Team's accounts": owned by someone in the team. Accounts with no
+        # owner (Self-service, Enterprise with no CSM yet) are on a manager's
+        # page but nobody may edit them ("until it has an owner").
         return set(TEAM_ACCOUNTS.get(manager_of(pid), set()))
     if how == "book":
         return set(ALL_IDS)
@@ -204,6 +221,8 @@ class PageParser(HTMLParser):
         self.switch_count = 0
         self._in_switch = False
         self.switch_options = []
+        self.views_blocks = []
+        self._in_views = False
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -211,6 +230,10 @@ class PageParser(HTMLParser):
             self._in_meta = True
             self._buf = []
             self.meta_type = a.get("type")
+        if tag == "script" and a.get("id") == "views-data":
+            self._in_views = True
+            self._buf = []
+            self.views_type = a.get("type")
         if tag == "select" and a.get("id") == "page-switch":
             self.switch_count += 1
             self._in_switch = True
@@ -221,11 +244,14 @@ class PageParser(HTMLParser):
         if tag == "script" and self._in_meta:
             self._in_meta = False
             self.meta_blocks.append(("".join(self._buf), self.meta_type))
+        elif tag == "script" and self._in_views:
+            self._in_views = False
+            self.views_blocks.append(("".join(self._buf), self.views_type))
         if tag == "select" and self._in_switch:
             self._in_switch = False
 
     def handle_data(self, data):
-        if self._in_meta:
+        if self._in_meta or self._in_views:
             self._buf.append(data)
 
 
@@ -370,6 +396,12 @@ def test_page(fname, pid):
                   f"{meta.get('outcomes')!r}")
         ss = set(ACC_RE.findall(html)) & SELF_SERVICE
         check(f"{label}: no Self-service account", not ss, f"{len(ss)}: {short(ss)}")
+        nocsm = set(ACC_RE.findall(html)) & (UNOWNED - SELF_SERVICE)
+        check(f"{label}: no account without an owner (e.g. no CSM yet)", not nocsm,
+              f"{len(nocsm)}: {short(nocsm)}")
+
+    # ---- views-data: renewals and team totals
+    test_views_data(label, parser, meta, cfg, scope)
 
     # ---- page switcher
     if check(f"{label}: one page switcher", parser.switch_count == 1,
@@ -381,6 +413,78 @@ def test_page(fname, pid):
               f"missing {short(missing)}")
         bogus = linked - set(EXPECTED_PAGES) - {"index.html"}
         check(f"{label}: switcher links only real pages", not bogus, short(bogus))
+
+
+SMALL_SEEN = [0]  # how many small groups were checked (so a pass isn't empty)
+SUM_KEYS = {"value": ("arr", "at_risk", "lost"), "calls": ("churned", "kept")}
+
+
+def groups_of(block):
+    # outcomes_total.value / .calls: a list of groups, or an object of named
+    # groups (ROLES.md doesn't say which); a single group object is one group.
+    if isinstance(block, list):
+        return [g for g in block if isinstance(g, dict)]
+    if isinstance(block, dict):
+        if "n" in block:
+            return [block]
+        return [g for g in block.values() if isinstance(g, dict)]
+    return None
+
+
+def test_views_data(label, parser, meta, cfg, scope):
+    if not check(f"{label}: exactly one views-data", len(parser.views_blocks) == 1,
+                 f"found {len(parser.views_blocks)}"):
+        return
+    raw, typ = parser.views_blocks[0]
+    check(f"{label}: views-data type application/json", typ == "application/json", f"type={typ!r}")
+    try:
+        data = json.loads(raw)
+    except Exception as e:  # noqa: BLE001
+        check(f"{label}: views-data is valid JSON", False, str(e)[:120])
+        return
+    if not check(f"{label}: views-data is an object", isinstance(data, dict), type(data).__name__):
+        return
+    renewals = data.get("renewals")
+    if cfg["outcomes"] == "team_total":
+        check(f"{label}: renewals list is empty (no row per account)",
+              renewals == [], f"{type(renewals).__name__} with "
+              f"{len(renewals) if isinstance(renewals, (list, dict)) else '?'} entries")
+        tot = data.get("outcomes_total")
+        if not check(f"{label}: outcomes_total present", isinstance(tot, dict),
+                     f"{type(tot).__name__}"):
+            return
+        for part, keys in SUM_KEYS.items():
+            groups = groups_of(tot.get(part))
+            if not check(f"{label}: outcomes_total.{part} present", groups is not None,
+                         f"{type(tot.get(part)).__name__}"):
+                continue
+            bad = []
+            for g in groups:
+                n = g.get("n")
+                if not isinstance(n, (int, float)):
+                    bad.append(f"group without a number n: {json.dumps(g)[:60]}")
+                    continue
+                if n < MIN_GROUP:
+                    if g.get("small") is not True:
+                        bad.append(f"n={n} without small: true")
+                    sums = [k for k in keys if g.get(k) is not None]
+                    if sums:
+                        bad.append(f"n={n} still has {', '.join(sums)}")
+            SMALL_SEEN[0] += sum(1 for g in groups
+                                 if isinstance(g.get("n"), (int, float)) and g["n"] < MIN_GROUP)
+            check(f"{label}: outcomes_total.{part}: groups under {MIN_GROUP} show no sums",
+                  not bad, "; ".join(bad[:4]))
+    else:
+        # by_owner pages keep renewal rows, but only for their own scope.
+        if check(f"{label}: renewals is a list", isinstance(renewals, list),
+                 f"{type(renewals).__name__}"):
+            outside = set()
+            for row in renewals:
+                outside |= set(ACC_RE.findall(json.dumps(row))) - scope
+            if cfg.get("scope") == "book":
+                outside -= outside - ALL_IDS  # the leader may hold non-CRM ids
+            check(f"{label}: renewal rows only for accounts in scope", not outside,
+                  f"{len(outside)}: {short(outside)}")
 
 
 def test_cover():
@@ -523,6 +627,7 @@ def main():
         section("2-5. Page contents")
         check("page contents", False, "data/pages/ missing: nothing to check")
     test_cockpit_sync()
+    print(f"\n  note: {SMALL_SEEN[0]} groups under min_group checked on team-total pages")
     print()
     if FAILS:
         print(f"FAILED ({len(FAILS)} checks)")

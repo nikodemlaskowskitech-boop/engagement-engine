@@ -521,6 +521,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // The data above already holds only what the role may see; this decides what the page offers.
   const PAGE = (() => { try { return JSON.parse(document.getElementById("page-meta").textContent); } catch (e) { return null; } })();
   const mayEdit = (action, id) => !PAGE || ((PAGE.edit || {})[action] || []).includes(id);
+  const PAGE_ACCOUNTS = new Set(PAGE ? PAGE.accounts : []);
   const $ = (id) => document.getElementById(id);
   const NS = "http://www.w3.org/2000/svg";
   const el = (tag, attrs = {}, parent) => {
@@ -1088,7 +1089,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     if (!h || !a) { host.hidden = true; host.innerHTML = ""; return; }
     host.hidden = false;
     const ids = new Set(h.sources.map((x) => x.id));
-    const conf = (handoverConfirms[id] || []).slice(-1)[0];
+    const conf = (handoverConfirms[id] || []).filter((c) => c.by === h.from || (c.role === "manager" && c.by === a.manager)).slice(-1)[0];
     const current = conf && conf.version === h.version;          // confirmed this very version
     const who = (() => { const r = forecastRole(a, "handover_confirm"); return r && (r.role === "manager" || r.by === h.from) ? r : null; })();
     const status = current ? `<span class="badge Done">Confirmed</span>`
@@ -1275,7 +1276,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // each group ends with its median, so every owner's number has a reference
     const medRow = (rs) => { if (rs.length < 2) return ""; const m = (f) => { const v = median(rs.map(f).filter((x) => x != null)); return v == null ? "–" : Math.round(v * 10) / 10; };
       return `<tr><td><small>Median</small></td><td class="r num"><small>${m((r) => r.n)}</small></td><td class="r num"><small>${m((r) => pct(r.called, r.n))}%</small></td><td class="r num"><small>${m((r) => r.med)}</small></td><td class="r num"><small>${m((r) => r.esc)}</small></td></tr>`; };
-    $("tm-table").innerHTML = head + `<tr class="group"><td colspan="5">Named CSMs</td></tr>` + csm.map(line).join("") + medRow(csm) + `<tr class="group"><td colspan="5">Scale pools</td></tr>` + pool.map(line).join("") + medRow(pool);
+    if (PAGE && PAGE.outcomes === "team_total") {          // below manager level: no owner-by-owner comparison
+      $("tm-table").innerHTML = `<tr><td class="muted">Call speed by owner is for managers (ROLES.md). The dots above show your team's accounts.</td></tr>`;
+    } else $("tm-table").innerHTML = head + `<tr class="group"><td colspan="5">Named CSMs</td></tr>` + csm.map(line).join("") + medRow(csm) + `<tr class="group"><td colspan="5">Scale pools</td></tr>` + pool.map(line).join("") + medRow(pool);
 
     // meetings per week heat grid
     const wh = $("tm-weeks"); wh.innerHTML = "";
@@ -1572,11 +1575,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("oc-warning").innerHTML = `<table><thead><tr><th>Days of warning</th><th class="r">Caught</th></tr></thead><tbody>` +
       T.warning_bins.map((b) => `<tr><td>${b.to == null ? b.from + "+" : b.from + "–" + b.to}</td><td class="r num">${b.n}</td></tr>`).join("") + "</tbody></table>";
     $("oc-calls").innerHTML = `<table><thead><tr><th>Act accounts</th><th class="r">Accounts</th><th class="r">Churned</th><th class="r">Kept whole</th></tr></thead><tbody>` +
-      T.calls.map((r) => `<tr><td>${esc(r.group)}</td><td class="r num">${r.n}</td><td class="r num">${r.churned} (${pct(r.churned, r.n)}%)</td><td class="r num">${r.kept} (${pct(r.kept, r.n)}%)</td></tr>`).join("") + "</tbody></table>";
+      T.calls.map((r) => r.small ? `<tr><td>${esc(r.group)}</td><td class="r num">${r.n}</td><td class="r muted" colspan="2">${r.n < T.min_group ? `fewer than ${T.min_group}: not shown` : "not shown: it would give away the other row"}</td></tr>`
+        : `<tr><td>${esc(r.group)}</td><td class="r num">${r.n}</td><td class="r num">${r.churned} (${pct(r.churned, r.n)}%)</td><td class="r num">${r.kept} (${pct(r.kept, r.n)}%)</td></tr>`).join("") + "</tbody></table>";
     if (!T.value.length) { $("oc-value").innerHTML = ""; $("oc-value-finding").textContent = "The renewal outcomes have no renewal_arr column, so the value comparison is off."; return; }
     $("oc-value-finding").textContent = "";
     $("oc-value").innerHTML = `<table><thead><tr><th>Status today</th><th class="r">Renewals</th><th class="r">ARR</th><th class="r">At risk (rule)</th><th class="r">Really lost</th><th class="r">Lost / at risk</th></tr></thead><tbody>` +
-      T.value.map((g) => `<tr><td>${g.group === "All renewals" ? "<b>All renewals</b>" : esc(g.group)}</td><td class="r num">${g.n}</td><td class="r num">${money(g.arr)}</td><td class="r num">${g.at_risk ? money(g.at_risk) : "–"}</td><td class="r num">${money(g.lost)}</td><td class="r num">${g.at_risk ? pct(g.lost, g.at_risk) + "%" : "–"}</td></tr>`).join("") + "</tbody></table>";
+      T.value.map((g) => g.small ? `<tr><td>${g.group === "All renewals" ? "<b>All renewals</b>" : esc(g.group)}</td><td class="r num">${g.n}</td><td class="r muted" colspan="4">${g.n < T.min_group ? `fewer than ${T.min_group}: not shown` : "not shown: it would give away a small group"}</td></tr>` : `<tr><td>${g.group === "All renewals" ? "<b>All renewals</b>" : esc(g.group)}</td><td class="r num">${g.n}</td><td class="r num">${money(g.arr)}</td><td class="r num">${g.at_risk ? money(g.at_risk) : "–"}</td><td class="r num">${money(g.lost)}</td><td class="r num">${g.at_risk ? pct(g.lost, g.at_risk) + "%" : "–"}</td></tr>`).join("") + "</tbody></table>";
   }
   function drawOutcomes() {
     if (!$("view-outcomes")) return;                     // not on this person's page
@@ -1679,9 +1683,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       group("Your team", mine) + group("Other teams", rest) + "</select>";
   }
   function decisionCell(t) {
-    const live = dbState === "ready" && seg.manager && t.manager === seg.manager && (!PAGE || PAGE.person === seg.manager);
+    const live = dbState === "ready" && (PAGE ? PAGE.role === "manager" && t.manager === PAGE.person : seg.manager && t.manager === seg.manager);
     const a = decisions[docId("assign", t)], h = decisions[docId("handback", t)];
-    if (canApprove(t) && t.routed_to === seg.manager && mayEdit("handback", t.account_id)) {
+    if (canApprove(t) && t.routed_to === (PAGE ? PAGE.person : seg.manager) && mayEdit("handback", t.account_id)) {
       if (h) return `<span class="pending">Hand-back approved: back to the pool on the next run</span> ${live ? `<button class="link" data-undo="${esc(docId("handback", t))}">Undo</button>` : ""}`;
       return live ? `<button class="small primary" data-approve="${esc(docId("handback", t))}">Approve hand-back</button>` : "—";
     }
@@ -1762,6 +1766,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       decisions = {}; const fs = [];
       for (const d of snap.docs) {
         const v = d.data(); if (!v) continue;
+        if (PAGE && !PAGE_ACCOUNTS.has(v.account_id)) continue;     // review 6 Nov: never another team's decisions
         if (v.kind === "forecast" || v.kind === "next_step" || v.kind === "handover_confirm") fs.push(v);   // kept whatever the data
         else if (v.as_of === D.as_of) decisions[d.id] = v;           // task decisions on older data: ignored
       }

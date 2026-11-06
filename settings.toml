@@ -171,10 +171,11 @@ max_text = 200        # notes and reasons are cut to this many characters (the p
 leader_id = "leader"                 # the leader isn't in cs_team.csv: their page id and name
 leader_name = "Head of CS"
 landing = "leader"                   # the page people land on (the whole book, read-only)
+min_group = 5                        # team totals of fewer accounts than this show no sums (one or two accounts = someone's own result)
 # tabs: views_template.html tab names; first = where the page opens
 # scope: "book" = every account, "team" = accounts owned by anyone in the person's team
-# self_service: whether Self-service accounts (no owner) are on the page; for a manager, those
-#   whose customer region is one their team covers
+# self_service: whether accounts with no owner (Self-service, or Enterprise with no CSM yet) are
+#   on the page; for a manager, those whose customer region is one their team covers
 # edit: what the person may change, and on which accounts ("own" or "team"); missing = can't
 # outcomes: "Did it work?" by owner (names) or as a team total (no names)
 [roles.leader]
