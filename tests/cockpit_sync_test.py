@@ -112,10 +112,29 @@ check(html == "<img src=x onerror=alert(1)>",
 print("\nThe rest behaves as before")
 events, _, stale = run([{**REAL[2], "as_of": "2026-09-01"}])
 check(not events and stale == 1, "a reassignment on older data is skipped as stale, not as invalid")
-check(run([{"kind": "handover_confirm", "account_id": "acc_012"}]) == ([], [], 0),
-      "a handover confirmation (the page's own) is neither applied nor flagged")
+confirm = {"kind": "handover_confirm", "account_id": "acc_024", "by": "csm_mia", "role": "owner", "decided_at": AT}
+check(run([confirm]) == ([], [], 0), "a handover confirmation by the owner (the page's own) is neither applied nor flagged")
+check(not run([{**confirm, "by": "csm_tom"}])[0] and len(run([{**confirm, "by": "csm_tom"}])[1]) == 1,
+      "a confirmation by someone else (written straight to the database) is listed as refused (review 6 Nov 2026)")
+check(len(run([{**confirm, "by": "mgr_james", "role": "manager"}])[1]) == 1, "...and so is one by another team's manager")
 twice = json.dumps(run(REAL)[0]) == json.dumps(run(REAL)[0])
 check(twice, "the same decisions always give the same events (a re-run doubles nothing)")
+
+print("\nThe rights come from settings.toml [roles] (ROLES.md), not from the script")
+real = cs.SETTINGS["roles"]
+cs.SETTINGS["roles"] = {**real, "csm": {**real["csm"], "edit": {k: v for k, v in real["csm"]["edit"].items() if k != "forecast"}}}
+check(not run([REAL[0]])[0], "take forecasts away from CSMs in [roles]: Mia's forecast is refused")
+check(len(run([REAL[1]])[0]) == 1, "...and her next step still goes through")
+cs.SETTINGS["roles"] = {**real, "manager": {**real["manager"], "edit": {}}}
+check(not run([REAL[2]])[0], "managers with no edit rights: a reassignment is refused")
+cs.SETTINGS["roles"] = {**real, "csm": {**real["csm"], "edit": {**real["csm"]["edit"], "forecast": "team"}}}
+lukas = {**REAL[0], "by": "csm_lukas"}
+team2 = {**TEAM, "csm_lukas": "mgr_sophie"}
+check(len(cs.build([lukas], AS_OF, RUN, ACCOUNTS, team2)[0]) == 1, "forecast = \"team\": a teammate may forecast Mia's account")
+check(not cs.build([{**REAL[0], "by": "csm_tom"}], AS_OF, RUN, ACCOUNTS, TEAM)[0], "...but not someone from another team")
+cs.SETTINGS["roles"] = real
+check(not cs.build([{**REAL[0], "by": "mem_priya"}], AS_OF, RUN, ACCOUNTS, TEAM, {"mem_priya": "member"})[0],
+      "a pool member's rights come from [roles.member]: not their account, refused")
 
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)

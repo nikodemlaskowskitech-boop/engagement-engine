@@ -276,8 +276,9 @@ const segment = async (page, values) => {
       const doc = await page.evaluate(() => Object.values(window.__docs).find((d) => d.kind === "handover_confirm"));
       check(doc && doc.version === h.version && doc.by === h.from, "The database holds the confirm for this version", JSON.stringify(doc));
       // a rewrite after the confirm: the stored confirm points at an older version
-      await page.evaluate((id) => window.__db.collection("decisions").doc("handover_confirm~" + id + "~1").set(
-        { kind: "handover_confirm", account_id: id, version: "older", by: "x", role: "owner", decided_at: "2099-01-01T00:00:00Z" }), id);
+      // (signed by the outgoing owner: a confirm by anyone else is ignored, review 6 Nov 2026)
+      await page.evaluate(([id, from]) => window.__db.collection("decisions").doc("handover_confirm~" + id + "~1").set(
+        { kind: "handover_confirm", account_id: id, version: "older", by: from, role: "owner", decided_at: "2099-01-01T00:00:00Z" }), [id, h.from]);
       await page.waitForTimeout(250);
       check((await page.textContent("#tl-handover .ho-head")).includes("rewritten since it was confirmed") && await page.isVisible("#ho-confirm"),
         "A brief rewritten after the confirm is a draft again, ready to confirm");

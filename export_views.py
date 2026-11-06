@@ -43,6 +43,7 @@ from pathlib import Path
 
 import backtest
 import onboarding_report
+import roles
 import team_report
 from settings import SETTINGS
 from cairnpath_db import connect
@@ -243,10 +244,14 @@ template = (Path(__file__).resolve().parent / "views_template.html").read_text(e
 page = DATA / "views.html"
 page.write_text("<!doctype html>\n<meta charset=\"utf-8\">\n"
                 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-                + template.replace("__VIEWS_DATA__", data_json.replace("</", "<\\/")),
+                + template.replace("__VIEWS_DATA__", data_json.replace("</", "<\\/"))
+                          .replace("__PAGE_META__", "null").replace("__PAGE_OPTIONS__", ""),
                 encoding="utf-8")
+# One page per person (ROLES.md): each holds only what their role may see
+pages = roles.build(export, template)
 print(f"\nViews data as of {as_of}: {len(accounts)} accounts, {len(touches)} touches, "
       f"{len(export['onboarding'])} onboarding rows, {len(export['time_to_action'])} Act accounts, "
       f"{len(export['tasks'])} tasks")
 print(f"Saved {out.relative_to(DATA.parent)} ({out.stat().st_size // 1024} KB)")
 print(f"Saved {page.relative_to(DATA.parent)}: open it in a browser")
+print(f"Saved data/pages/: {len(pages)} pages, one per person; index.html = the leader's (ROLES.md)")
