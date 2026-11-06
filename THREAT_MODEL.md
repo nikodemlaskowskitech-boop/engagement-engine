@@ -53,6 +53,11 @@ address, a new secret, a new place data goes).
 - **No network isolation (VPC).** Identity checks every call; a NAT gateway
   alone would cost more than the project (decided 4 Nov 2026).
 - **One admin role plus a break-glass user**, both trusted by the perimeter.
+- **Two engine runs can overlap, for now.** One at a time needs a reserved
+  slot, and a new account has only 10, all kept free by AWS. Overlaps are rare
+  (an upload, the 06:17 schedule, an admin's briefs request) and only the last
+  run's outputs stay; the quota increase was asked on 6 Nov 2026, then
+  [aws] engine_max_runs = 1 (audit F7).
 - **Who did what in the cockpit is self-declared.** The page acts as whichever
   owner or manager the viewer picks in its segment bar; every saved decision
   also records the viewer's real account (`decided_by`), so it's traceable, not

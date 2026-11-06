@@ -597,7 +597,9 @@ One JSON event per line, one file per day in `data/events/`.
   A data ERROR is a result, not a crash. May only read inputs/* and write
   reports/check_inputs/* (so it can't trigger itself); logs kept 30 days;
   memory, timeout and disk in [aws]. Plus the engine Lambda (RunEngine, same
-  runtime, one run at a time: [aws] engine_max_runs, a second waits its turn):
+  runtime; [aws] engine_max_runs = 1 would make a second run wait its turn, but
+  a new account has 10 slots and AWS keeps 10 free, so it's 0 = off until the
+  quota increase to 1000 asked on 6 Nov 2026 is approved):
   wakes when the check writes reports/check_inputs/latest.json, and
   if its status is ERROR writes outputs/run.json SKIPPED and stops (the gate).
   Otherwise it copies the engine's code (bundle.py ENGINE_FILES) and a data/

@@ -199,8 +199,8 @@ check(not any(c["Filter"]["Key"]["FilterRules"][0]["Value"].startswith((aws["out
 
 print("\nEngine Lambda: the API key for the briefs")
 eng = next(v for v in ours.values() if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"])
-check(eng["Properties"].get("ReservedConcurrentExecutions") == aws["engine_max_runs"] == 1,
-      "one engine run at a time ([aws] engine_max_runs): two at once could overwrite each other's outputs")
+check(eng["Properties"].get("ReservedConcurrentExecutions") == (aws["engine_max_runs"] or None),
+      f"engine runs at once from settings ([aws] engine_max_runs = {aws['engine_max_runs']}; 0 = no limit, until the quota allows 1)")
 evars = eng["Properties"]["Environment"]["Variables"]
 check(evars.get("API_KEY_PARAMETER") == aws["api_key_parameter"] and evars.get("LLM_PROVIDER") == aws["briefs_llm_provider"]
       and json.loads(evars.get("OPTIONAL_STEPS", "[]")) == aws["engine_optional_steps"],
