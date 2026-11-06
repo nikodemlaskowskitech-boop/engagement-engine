@@ -42,7 +42,7 @@ Dated on the run date, like Slack clicks. No decisions file: nothing to do.
 import json
 import re
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from settings import SETTINGS
@@ -55,6 +55,9 @@ MAX_TEXT = SETTINGS.get("cockpit", {}).get("max_text", 200)
 CALLS = {"renew", "downsize", "churn"}                  # a renewal forecast
 STEP_TYPES = {"call", "qbr", "email", "internal"}       # a next step (the page's STEP_TYPES)
 ROLES = {"owner", "manager"}
+FLAGS = {"activation", "churn", "expansion", "qbr", "journey"}   # the task flags (cairnpath_db.py flag_names)
+TEXT_FIELDS = ("kind", "account_id", "role", "by", "manager", "to_owner", "from_owner", "call", "type",
+               "due", "decided_at", "flag", "status", "reason", "note", "as_of", "decided_by")
 KINDS = {"assign", "handback", "forecast", "next_step", "handover_confirm"}   # handover_confirm: the page's own
 ISO_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
@@ -63,6 +66,17 @@ CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 def clean(text):
     """Free text as the page should have sent it: a string, no control characters, cut short."""
     return CONTROL.sub("", str(text or "")).strip()[:MAX_TEXT]
+
+
+def is_time(value):
+    """A real moment, not just the right shape: "2026-13-45T99:99:99Z" is refused (audit F3)."""
+    if not (isinstance(value, str) and ISO_TIME.match(value)):
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return True
+    except ValueError:
+        return False
 
 
 def is_day(value):
@@ -77,6 +91,11 @@ def problem(d, accounts, team):
     (owners = the CSM, pool and pool member on the account); team: {owner_id: manager}."""
     if not isinstance(d, dict):
         return "not a decision"
+    # every field the page sends as text must be text: a list or a dict here used to crash the
+    # membership checks below and stop the whole run (audit F2)
+    odd = [f for f in TEXT_FIELDS if d.get(f) is not None and not isinstance(d[f], str)]
+    if odd:
+        return f"{', '.join(odd)} isn't text"
     kind = d.get("kind")
     if kind not in KINDS:
         return f"unknown kind {str(kind)[:30]!r}"
@@ -85,14 +104,16 @@ def problem(d, accounts, team):
     acc = accounts.get(d.get("account_id"))
     if acc is None:
         return f"unknown account {str(d.get('account_id'))[:30]!r}"
-    if not ISO_TIME.match(str(d.get("decided_at", ""))):
+    if not is_time(d.get("decided_at")):
         return "decided_at isn't a time"
     managers = set(team.values())
     if kind in ("assign", "handback"):
-        if not (isinstance(d.get("flag"), str) and isinstance(d.get("status"), str) and d["flag"] and d["status"]):
-            return "no flag or status"
+        if d.get("flag") not in FLAGS or not d.get("status"):
+            return "not a known flag, or no status"
         if d.get("manager") not in managers:
             return f"{str(d.get('manager'))[:30]!r} isn't a manager"
+        if d["manager"] not in {team.get(o) for o in acc["owners"]}:      # audit F4: own team only
+            return f"{d['manager']!r} doesn't manage this account's owner"
         if kind == "assign" and d.get("to_owner") not in team:
             return f"{str(d.get('to_owner'))[:30]!r} isn't in the CS team"
         return None
@@ -129,7 +150,10 @@ def build(decisions, as_of, run_date, accounts, team):
         return [], [("the file", "isn't a list of decisions")], 0
     good, skipped = [], []
     for d in decisions:
-        why = problem(d, accounts, team)
+        try:
+            why = problem(d, accounts, team)
+        except Exception as e:                  # never let one entry stop the run (audit F2)
+            why = f"unreadable ({type(e).__name__})"
         if why:
             label = f"{d.get('kind', '?')} {d.get('account_id', '?')}" if isinstance(d, dict) else "?"
             skipped.append((str(label)[:60], why))
