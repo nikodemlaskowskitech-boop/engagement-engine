@@ -42,6 +42,8 @@ renewal (backtest).
 Below: what it does, how it's built, and how it's secured and tested. The
 technical depth is the proof.
 
+A 3-minute walkthrough of the cockpit, with what to click and say: [DEMO.md](DEMO.md).
+
 ## What it does today
 
 | Flag | Looks for | Who acts |
