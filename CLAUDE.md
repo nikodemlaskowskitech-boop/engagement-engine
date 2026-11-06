@@ -209,6 +209,13 @@ One JSON event per line, one file per day in `data/events/`.
   its control, the test that proves it and what's left, and the risks we
   accept on purpose. Update it when a new way in is added (a public address,
   a secret, a new place data goes).
+- `ROLES.md`: the role matrix (leader, manager, CSM, pool member): the team is
+  the boundary (everyone under one manager), full visibility inside it, limits on
+  actions; what each role sees, changes and opens on, why (dated decisions), what
+  a page must never contain, and where to change it (settings.toml [roles]).
+  Spec for the per-person pages (6 Nov 2026), built the independent way: tests by
+  a separate agent from the spec only, then the build, then a separate review.
+  Update it whenever a role, a tab or an edit right changes.
 - `ENGAGEMENT_LOGIC.md`: the logic by tier as Mermaid diagrams (GitHub
   renders them): coverage table, overview, Self-service journey, Scale
   queue and hand-back, Enterprise QBR first, action status. Update it when
