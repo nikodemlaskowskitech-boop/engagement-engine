@@ -413,6 +413,10 @@ One JSON event per line, one file per day in `data/events/`.
   only the main page gets the database, so the switcher fetches the chosen file and
   writes it into the main page (stopping the old page's database listener first);
   offline, where fetch can't read files, it opens the file instead.
+  Medians ("against the median") come from peer_medians(), on the whole export,
+  numbers only: [roles] peer_median = "book" (default) or "team"; the leader always
+  the book's. My book lists "No flags" accounts open for books of [cockpit]
+  open_no_flags_up_to or fewer. `tests/peer_median_test.py`: both modes.
   `tests/roles_test.py`: written from ROLES.md alone by a separate agent (raw
   HTML: no out-of-scope id or name, meta against the spec, cockpit_sync refusals);
   `tests/role_pages_test.js`: the pages in a browser (no script error, tabs, forms

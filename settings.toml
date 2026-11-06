@@ -162,6 +162,7 @@ cost_alert_threshold_usd = 5
 [cockpit]
 # Decisions saved in the published cockpit (cockpit_sync.py checks every one again: never trust the page).
 max_text = 200        # notes and reasons are cut to this many characters (the page's own limit)
+open_no_flags_up_to = 15   # My book: "No flags" accounts listed open when the book is this small or smaller (else folded, risk first)
 
 [roles]
 # Who sees what, and who may change what (ROLES.md explains each choice and how to change it).
@@ -172,6 +173,7 @@ leader_id = "leader"                 # the leader isn't in cs_team.csv: their pa
 leader_name = "Head of CS"
 landing = "leader"                   # the page people land on (the whole book, read-only)
 min_group = 5                        # team totals of fewer accounts than this show no sums (one or two accounts = someone's own result)
+peer_median = "book"                 # "against the median" compares with: "book" = everyone of the same kind (CSMs with all CSMs), "team" = only the person's team
 # tabs: views_template.html tab names; first = where the page opens
 # scope: "book" = every account, "team" = accounts owned by anyone in the person's team
 # self_service: whether accounts with no owner (Self-service, or Enterprise with no CSM yet) are
