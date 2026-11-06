@@ -19,6 +19,9 @@ reports/check_inputs/, and runs the same check_inputs.py as the laptop.
 Then the engine Lambda, a daily schedule, Athena, and the Slack listener: one
 public HTTPS address (API Gateway) for Slack's button clicks, and a small
 Lambda that checks each request's Slack signature before doing anything.
+
+And the public demo site: CloudFront in front of a second, private bucket that
+holds only the sandbox role pages the engine builds from fake data.
 """
 
 from aws_cdk import CfnOutput, Duration, RemovalPolicy, Size, Stack
@@ -27,6 +30,8 @@ from aws_cdk import aws_apigatewayv2 as apigwv2
 from aws_cdk import aws_apigatewayv2_integrations as integrations
 from aws_cdk import aws_athena as athena
 from aws_cdk import aws_ce as ce
+from aws_cdk import aws_cloudfront as cloudfront
+from aws_cdk import aws_cloudfront_origins as origins
 from aws_cdk import aws_glue as glue
 from aws_cdk import aws_guardduty as guardduty
 from aws_cdk import aws_iam as iam
@@ -42,6 +47,14 @@ import json
 
 from bundle import ENGINE_FILES, bundle_check_inputs, bundle_engine, bundle_slack
 from settings import SETTINGS
+
+
+# The site's content security policy: the page and its Google fonts, nothing else; no forms
+# posting anywhere, never inside another site's frame.
+SITE_CSP = ("default-src 'none'; script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; "
+            "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
 class DataStack(Stack):
@@ -162,6 +175,7 @@ class DataStack(Stack):
             s3.EventType.OBJECT_CREATED, s3n.LambdaDestination(engine),
             s3.NotificationKeyFilter(prefix=check_summary))
         CfnOutput(self, "EngineFunction", value=engine.function_name)
+
 
         # --- the daily safety net: EventBridge Scheduler wakes the engine once a day ---
         self.bucket.grant_read(engine, outputs + "run.json")        # to see whether it's up to date
@@ -315,6 +329,67 @@ class DataStack(Stack):
                      "s3:ListBucket*", "s3:ReplicateObject"],
             resources=[self.bucket.bucket_arn, self.bucket.arn_for_objects("*")],
             conditions={"ArnNotLike": {"aws:PrincipalArn": workload_roles + admins}, **not_a_service}))
+
+        # --- the public demo site: CloudFront in front of a private bucket of its own ---
+        # Anyone with the address can open the role pages, no login. The bucket is NOT public:
+        # all four public-access blocks on, and CloudFront is its only reader, through an origin
+        # access control (the bucket policy names this one distribution). Never the data bucket:
+        # the site bucket holds only the sandbox pages the engine builds from the demo data.
+        # S3-managed encryption, not our KMS key: the pages are public on purpose, and CloudFront
+        # would otherwise need a grant on the key that guards the real data.
+        # The engine may only write pages there (no read of anything else, no delete).
+        if aws.get("site"):
+            site_bucket = s3.Bucket(
+                self, "Site",
+                block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+                object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,   # ACLs off
+                encryption=s3.BucketEncryption.S3_MANAGED,
+                enforce_ssl=True,
+                removal_policy=RemovalPolicy.RETAIN)
+            # the browser's own safety rules for every page: HTTPS only from now on (HSTS), no
+            # framing by other sites, no MIME guessing, and a content policy that lets the page
+            # load only itself and its fonts (inline script and style are how the page is built)
+            headers = cloudfront.ResponseHeadersPolicy(
+                self, "SiteHeaders",
+                security_headers_behavior=cloudfront.ResponseSecurityHeadersBehavior(
+                    strict_transport_security=cloudfront.ResponseHeadersStrictTransportSecurity(
+                        access_control_max_age=Duration.days(365), include_subdomains=True, override=True),
+                    content_type_options=cloudfront.ResponseHeadersContentTypeOptions(override=True),
+                    frame_options=cloudfront.ResponseHeadersFrameOptions(
+                        frame_option=cloudfront.HeadersFrameOption.DENY, override=True),
+                    referrer_policy=cloudfront.ResponseHeadersReferrerPolicy(
+                        referrer_policy=cloudfront.HeadersReferrerPolicy.NO_REFERRER, override=True),
+                    content_security_policy=cloudfront.ResponseHeadersContentSecurityPolicy(
+                        content_security_policy=SITE_CSP, override=True)))
+            site = cloudfront.Distribution(
+                self, "SiteCdn",
+                comment="Cairnpath demo cockpit (sandbox pages, fake data)",
+                default_root_object="index.html",
+                default_behavior=cloudfront.BehaviorOptions(
+                    origin=origins.S3BucketOrigin.with_origin_access_control(site_bucket),
+                    viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                    allowed_methods=cloudfront.AllowedMethods.ALLOW_GET_HEAD,     # read only
+                    cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,      # honours the pages' max-age
+                    response_headers_policy=headers),
+                price_class={"PriceClass_100": cloudfront.PriceClass.PRICE_CLASS_100,
+                             "PriceClass_200": cloudfront.PriceClass.PRICE_CLASS_200,
+                             "PriceClass_All": cloudfront.PriceClass.PRICE_CLASS_ALL}[aws["site_price_class"]],
+                http_version=cloudfront.HttpVersion.HTTP2_AND_3)
+            site_bucket.grant_put(engine)                     # writes pages; reads and deletes nothing
+            engine.add_to_role_policy(iam.PolicyStatement(    # the engine's "changed?" check lists names only
+                actions=["s3:ListBucket"], resources=[site_bucket.bucket_arn]))
+            engine.add_environment("SITE_BUCKET", site_bucket.bucket_name)
+            engine.add_environment("SITE_FOLDER", aws["site_folder"])
+            engine.add_environment("SITE_CACHE_SECONDS", str(aws["site_cache_seconds"]))
+            # its own perimeter: only the engine and the admins may write or delete a page there,
+            # whatever any other identity's permissions say (a defaced public site is the risk)
+            site_bucket.add_to_resource_policy(iam.PolicyStatement(
+                sid="DenyWritesToAnyoneElse", effect=iam.Effect.DENY, principals=[iam.AnyPrincipal()],
+                actions=["s3:PutObject*", "s3:DeleteObject*", "s3:RestoreObject", "s3:ReplicateObject"],
+                resources=[site_bucket.arn_for_objects("*")],
+                conditions={"ArnNotLike": {"aws:PrincipalArn": [engine.role.role_arn] + admins}, **not_a_service}))
+            CfnOutput(self, "SiteBucket", value=site_bucket.bucket_name)
+            CfnOutput(self, "SiteUrl", value="https://" + site.distribution_domain_name)
 
         # --- GuardDuty, on trial ([aws] guardduty): watches the account's own logs for signs
         # of a break-in (credentials used from odd places, crypto-mining, data pulled out of the

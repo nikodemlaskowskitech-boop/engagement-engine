@@ -50,12 +50,17 @@ def check(ok, name, detail=""):
     print(f"  {'PASS' if ok else 'FAIL'}  {name}" + (f"  ->  {detail}" if not ok and detail else ""))
 
 
+SITE_NAME = "cairnpath-site-test"           # the public site's bucket, as the engine's settings name it
+
+
 class FakeS3:
-    """A bucket in memory: {key: bytes}. Records the order of writes."""
+    """A bucket in memory: {key: bytes}. Records the order of writes. Writes to the site
+    bucket go to .site instead ({key: (bytes, content type, cache control)})."""
 
     def __init__(self, objects):
         self.objects, self.writes = dict(objects), []
         self.modified = {}                      # key -> when written (default: long ago)
+        self.site, self.site_writes = {}, []
 
     def _owner(self, owner):
         if owner != OWNER:
@@ -70,8 +75,13 @@ class FakeS3:
         s3 = self
 
         class Pages:
-            def paginate(self, Bucket, Prefix, ExpectedBucketOwner=None):
+            def paginate(self, Bucket, Prefix="", ExpectedBucketOwner=None):
                 s3._owner(ExpectedBucketOwner)
+                if Bucket == SITE_NAME:
+                    import hashlib
+                    yield {"Contents": [{"Key": k, "ETag": '"%s"' % hashlib.md5(v[0]).hexdigest()}
+                                        for k, v in sorted(s3.site.items())]}
+                    return
                 keys = sorted(k for k in s3.objects if k.startswith(Prefix))
                 for i in range(0, max(len(keys), 1), 100):
                     yield {"Contents": [{"Key": k, "LastModified": s3.modified.get(k, LONG_AGO)}
@@ -82,8 +92,12 @@ class FakeS3:
         self._owner((ExtraArgs or {}).get("ExpectedBucketOwner"))
         Path(Filename).write_bytes(self.objects[Key])
 
-    def put_object(self, Bucket, Key, Body, ContentType=None, ExpectedBucketOwner=None):
+    def put_object(self, Bucket, Key, Body, ContentType=None, ExpectedBucketOwner=None, CacheControl=None):
         self._owner(ExpectedBucketOwner)
+        if Bucket == SITE_NAME:
+            self.site[Key] = (Body, ContentType, CacheControl)
+            self.site_writes.append(Key)
+            return
         self.objects[Key] = Body
         self.writes.append(Key)
         self.modified[Key] = datetime.now(timezone.utc)
@@ -207,6 +221,12 @@ s3.objects[CHECK] = json.dumps({"status": "WARN", "errors": 0, "warnings": 2,
                                 "checked_at": "2026-11-04T00:00:00Z"}).encode()
 newer = h.handler(sched, None, s3=s3, work=work)
 check(newer["status"] == "OK", "a newer input check than the last run: the schedule catches up", newer.get("status"))
+last = json.loads(s3.objects[OUTPUTS + "run.json"]); last["code"] = "0ld0ld0ld0ld"
+s3.objects[OUTPUTS + "run.json"] = json.dumps(last).encode()
+redeployed = h.handler(sched, None, s3=s3, work=work)
+check(redeployed["status"] == "OK" and redeployed["code"] == h.code_version(),
+      "a deploy changed the engine's code since the last run: the schedule reruns on the new code", redeployed.get("status"))
+check(h.handler(sched, None, s3=s3, work=work)["status"] == "SKIPPED", "...once: then it's up to date again")
 last = json.loads(s3.objects[OUTPUTS + "run.json"]); last["status"] = "FAILED"
 s3.objects[OUTPUTS + "run.json"] = json.dumps(last).encode()
 retry = h.handler(sched, None, s3=s3, work=work)
@@ -352,9 +372,57 @@ check(quiet["status"] == "SKIPPED", "no click since the last run: the schedule s
 s3.objects[CLICKS + "2026-10-19/ev-3.json"] = click_event(3, "2026-10-19T15:00:00Z")
 s3.modified[CLICKS + "2026-10-19/ev-3.json"] = datetime.now(timezone.utc) + timedelta(minutes=5)
 (bundle / "reads_clicks.py").write_text("print('ran')\n", encoding="utf-8")
+last = json.loads(s3.objects[OUTPUTS + "run.json"]); last["code"] = h.code_version()    # only the click is new
+s3.objects[OUTPUTS + "run.json"] = json.dumps(last).encode()
 woke = h.handler(sched, None, s3=s3, work=work)
 check(woke["status"] == "OK" and woke["slack_clicks"] == 4,
       "a click after the last run: the daily schedule runs the engine (clicks don't wake it one by one)", woke)
+
+print("\nEngine Lambda: the public demo site (sandbox pages to the site bucket)")
+check("roles.py --site" in AWS["engine_steps"] and "roles.py" in ENGINE_FILES,
+      "the engine builds the site pages (roles.py --site) and roles.py is bundled")
+(bundle / "site_pages.py").write_text(
+    "import os\nfrom pathlib import Path\n"
+    "d = Path('data/site'); (d / 'sub').mkdir(parents=True)\n"
+    "(d / 'index.html').write_text('<p>leader ' + os.environ.get('PAGE_V', '1'), encoding='utf-8')\n"
+    "(d / 'csm_mia.html').write_text('<p>mia', encoding='utf-8')\n"
+    "(d / 'notes.txt').write_text('not a page', encoding='utf-8')\n"
+    "(d / 'sub' / 'x.html').write_text('<p>nested', encoding='utf-8')\n"
+    "Path('data/views_data.json').write_text('{}', encoding='utf-8')\n", encoding="utf-8")
+h.CODE, h.STEPS = ENGINE_FILES + ["site_pages.py"], ["site_pages.py"]
+h.SITE_BUCKET, h.SITE, h.SITE_CACHE = SITE_NAME, AWS["site_folder"], AWS["site_cache_seconds"]
+s3 = FakeS3(bucket_with_demo("OK"))
+run = h.handler({"trigger": "manual"}, None, s3=s3, work=work)
+check(run["status"] == "OK" and sorted(s3.site) == ["csm_mia.html", "index.html"],
+      "after a good run, the pages go to the site bucket: HTML only, flat (no folders)", sorted(s3.site))
+check(all(v[1] == "text/html; charset=utf-8" and v[2] == f"public, max-age={AWS['site_cache_seconds']}"
+          for v in s3.site.values()), "each as HTML, with the cache time from settings")
+check(not any(k.startswith(OUTPUTS + "site") for k in s3.objects) and not any(o.startswith("site") for o in run["outputs"]),
+      "...and never also to outputs/", run["outputs"])
+check(sorted(run["site_pages"]) == ["csm_mia.html", "index.html"], "run.json lists the pages sent")
+again = h.handler({"trigger": "manual"}, None, s3=s3, work=work)
+check(again["site_pages"] == [], "next run, same pages: nothing sent", again["site_pages"])
+os.environ["PAGE_V"] = "2"
+changed = h.handler({"trigger": "manual"}, None, s3=s3, work=work)
+del os.environ["PAGE_V"]
+check(changed["site_pages"] == ["index.html"] and s3.site["index.html"][0] == b"<p>leader 2",
+      "a changed page: only that one is sent", changed["site_pages"])
+(bundle / "site_then_break.py").write_text(
+    "from pathlib import Path\nd = Path('data/site'); d.mkdir(parents=True)\n"
+    "(d / 'index.html').write_text('half a run', encoding='utf-8')\nraise SystemExit('broke after the pages')\n",
+    encoding="utf-8")
+h.CODE, h.STEPS = ENGINE_FILES + ["site_then_break.py"], ["site_then_break.py"]
+s3 = FakeS3(bucket_with_demo("OK"))
+try:
+    h.handler({"trigger": "manual"}, None, s3=s3, work=work)
+except RuntimeError:
+    pass
+check(s3.site_writes == [], "a failed run sends no page (the site keeps the last good one)", s3.site_writes)
+h.SITE_BUCKET = ""
+h.CODE, h.STEPS = ENGINE_FILES + ["site_pages.py"], ["site_pages.py"]
+s3 = FakeS3(bucket_with_demo("OK"))
+off = h.handler({"trigger": "manual"}, None, s3=s3, work=work)
+check(off["site_pages"] == [] and not s3.site_writes, "no site bucket (site off): nothing sent")
 
 print("\nEngine Lambda: a step that fails")
 (bundle / "broken.py").write_text("raise SystemExit('this step broke')\n", encoding="utf-8")

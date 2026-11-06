@@ -94,7 +94,7 @@ state_prefix = "state/"        # state carried between runs: upload.py puts the 
 # after it, so the cockpit shows the briefs and whether they're current.
 engine_steps = ["flags.py", "journeys.py", "team_report.py", "backtest.py",
                 "onboarding_report.py", "export_views.py", "handover.py --dry-run", "export_views.py",
-                "to_parquet.py"]
+                "roles.py --site", "to_parquet.py"]
 briefs_step = "handover.py"
 # Steps whose failure is a warning, not a failed run: the briefs call an outside API, and if
 # that's down (or the leak check stops one) the cockpit should still update.
@@ -158,6 +158,16 @@ kms_deletion_window_days = 30
 # Left empty, no monitor is built.
 cost_alert_email = ""
 cost_alert_threshold_usd = 5
+# The public demo site (6 Nov 2026): the role pages at a CloudFront address anyone can open, no
+# login. Its own bucket, never the data bucket: private (CloudFront is the only reader, through an
+# origin access control), HTTPS only. "roles.py --site" builds the pages in sandbox mode (forms
+# save in the visitor's browser only, nothing comes back) into data/<site_folder>, and the engine
+# copies them to the site bucket after a good run. Fake data only: a company's own data never
+# goes there (the engine runs on the demo inputs; upload.py refuses anything else).
+site = true                      # false + cdk deploy removes the distribution (the bucket is kept)
+site_folder = "site/"
+site_cache_seconds = 300         # how long CloudFront and browsers keep a page: a new run shows within 5 minutes
+site_price_class = "PriceClass_100"   # edge locations in Europe and North America only: the cheapest set
 
 [cockpit]
 # Decisions saved in the published cockpit (cockpit_sync.py checks every one again: never trust the page).

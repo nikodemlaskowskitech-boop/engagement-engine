@@ -35,14 +35,22 @@ class FakeCfn:
                 ("SlackListenerServiceRoleF1A2B3C4", "AWS::IAM::Role", "CairnpathData-SlackListenerServiceRole-FFF"),
                 ("SlackListener5D6E7F80", "AWS::Lambda::Function", "CairnpathData-SlackListener-FFF"),
                 ("BucketNotificationsHandler050aRole", "AWS::IAM::Role", "CairnpathData-Handler-EEE"),
-                ("DataKey1F2C3D4E", "AWS::KMS::Key", "1234abcd-12ab-34cd-56ef-1234567890ab")]
+                ("DataKey1F2C3D4E", "AWS::KMS::Key", "1234abcd-12ab-34cd-56ef-1234567890ab"),
+                ("Data666C94C7", "AWS::S3::Bucket", "cairnpathdata-data666c94c7-mp5lz9ky9ir4"),
+                ("Site1A2B3C4D", "AWS::S3::Bucket", "cairnpathdata-site1a2b3c4d-xyz"),
+                ("SiteCdn9F8E7D6C", "AWS::CloudFront::Distribution", "E2ABCDEF")]
         return {"StackResources": [{"LogicalResourceId": a, "ResourceType": b, "PhysicalResourceId": c} for a, b, c in rows]}
+
+
+SITE = "cairnpathdata-site1a2b3c4d-xyz"
 
 
 class FakeS3:
     def get_bucket_policy(self, Bucket, ExpectedBucketOwner=None):
         assert ExpectedBucketOwner == ACCOUNT
-        return {"Policy": json.dumps({"Statement": [{"Effect": "Deny", "Condition": {"Bool": {"aws:SecureTransport": "false"}}}]})}
+        sid = "DenyWritesToAnyoneElse" if Bucket == SITE else "DenyDataToAnyoneElse"
+        return {"Policy": json.dumps({"Statement": [{"Effect": "Deny", "Condition": {"Bool": {"aws:SecureTransport": "false"}}},
+                                                    {"Sid": sid, "Effect": "Deny"}]})}
 
 
 class FakeKMS:
@@ -66,8 +74,9 @@ DATA = ("s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket")
 class FakeIAM:
     """A tiny simulator that answers like a correct deployment, unless told to leak one case.
     perimeter=False: the bucket policy has no perimeter (as before 4 Nov 2026)."""
-    def __init__(self, leak=None, perimeter=True, key_perimeter=True):
+    def __init__(self, leak=None, perimeter=True, key_perimeter=True, site_perimeter=True):
         self.leak, self.asked, self.perimeter, self.key_perimeter = leak, [], perimeter, key_perimeter
+        self.site_perimeter = site_perimeter
 
     def get_role(self, RoleName):
         return {"Role": {"Arn": ADMIN_ARN}}
@@ -84,10 +93,15 @@ class FakeIAM:
         if ctx.get("aws:RequestedRegion") not in ("eu-north-1", "us-east-1", "us-west-2"):
             return {"EvaluationResults": [{"EvalDecision": "explicitDeny", "MatchedStatements": [
                 {"SourcePolicyType": "Organizations SCP", "SourcePolicyId": "RegionFloor"}]}]}
-        if (self.perimeter and kw.get("ResourcePolicy") and action.startswith(DATA)
+        if (self.perimeter and "DenyDataToAnyoneElse" in kw.get("ResourcePolicy", "") and action.startswith(DATA)
                 and not any(x in ctx.get("aws:PrincipalArn", "") for x in EXEMPT)):
             return {"EvaluationResults": [{"EvalDecision": "explicitDeny", "MatchedStatements": [
                 {"SourcePolicyType": "Resource Policy", "SourcePolicyId": "DenyDataToAnyoneElse"}]}]}
+        if (self.site_perimeter and "DenyWritesToAnyoneElse" in kw.get("ResourcePolicy", "")
+                and action in ("s3:PutObject", "s3:DeleteObject")
+                and not any(x in ctx.get("aws:PrincipalArn", "") for x in ("RunEngine", "AccountFullAccessRole"))):
+            return {"EvaluationResults": [{"EvalDecision": "explicitDeny", "MatchedStatements": [
+                {"SourcePolicyType": "Resource Policy", "SourcePolicyId": "DenyWritesToAnyoneElse"}]}]}
         if (self.key_perimeter and action.startswith("kms:") and "DenyUseOutsideS3" in kw.get("ResourcePolicy", "")
                 and "kms:ViaService" not in ctx and "AccountFullAccessRole" not in role):
             return {"EvaluationResults": [{"EvalDecision": "explicitDeny", "MatchedStatements": [
@@ -102,6 +116,7 @@ class FakeIAM:
         if any('"s3:*"' in p for p in kw.get("PolicyInputList", [])) and action.startswith("s3:") and not http:
             return {"EvaluationResults": [{"EvalDecision": "allowed"}]}
         allowed = (("RunEngine" in role and ((action == "s3:PutObject" and "/outputs/" in res)
+                                             or (action == "s3:PutObject" and f":::{SITE}/" in res and not http)
                                              or (action == "ssm:GetParameter" and "anthropic-api-key" in res)
                                              or (action == "s3:GetObject" and "/inputs/" in res and not http)
                                              or action == "kms:Decrypt"))
@@ -186,7 +201,8 @@ check(all(k["ContextEntries"][2] == {"ContextKeyName": "aws:PrincipalArn", "Cont
       "every question says who's asking (aws:PrincipalArn), so the perimeter can tell roles apart")
 check(any(k.get("PolicyInputList") for k in iam.asked) and any(k["PolicySourceArn"] == ADMIN_ARN for k in iam.asked),
       "it simulates an identity with s3:* on everything, and the admin role by its real ARN (path included)")
-check(all(r["ok"] for r in results) and sum(r["role"] == "admin" and r["action"].startswith("s3:") for r in results) == 2,
+check(all(r["ok"] for r in results) and sum(r["role"] == "admin" and r["action"].startswith("s3:")
+                                           and SITE not in r["resource"] for r in results) == 2,
       "with the perimeter: the s3:* identity is refused, the admin still reads data and can fix the policy")
 bad = [r for r in sc.run(FakeCfn(), FakeIAM(perimeter=False), FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
 check(len(bad) == 2 and all("perimeter" in r["why"] for r in bad),
@@ -215,6 +231,29 @@ check(len(bad) == 1 and "directly" in bad[0]["why"], "a key without its 'only th
 bad = [r for r in sc.run(FakeCfn(), FakeIAM(leak=lambda role, action, res: "SlackListener" in role and action == "kms:Decrypt"),
                          FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
 check(len(bad) == 1 and bad[0]["role"] == "slack", "a Slack listener that can decrypt is caught", bad)
+
+print("\nThe public site's bucket")
+iam = FakeIAM()
+results = sc.run(FakeCfn(), iam, FakeS3(), ACCOUNT, REGION, FakeKMS())
+site_qs = [k for k in iam.asked if k["ResourceArns"][0].startswith(f"arn:aws:s3:::{SITE}/")]
+check(sc.find(FakeCfn()).get("site") == SITE and len(site_qs) >= 6,
+      "finds the site bucket in the stack and asks about it", sc.find(FakeCfn()).get("site"))
+check(all("DenyWritesToAnyoneElse" in k["ResourcePolicy"] for k in site_qs)
+      and not any("DenyWritesToAnyoneElse" in k.get("ResourcePolicy", "") for k in iam.asked if k not in site_qs),
+      "site questions use the site bucket's own policy, data questions the data bucket's")
+check(all(r["ok"] for r in results), "a correct site passes: only the engine writes, it can't read or delete, admin keeps control")
+bad = [r for r in sc.run(FakeCfn(), FakeIAM(site_perimeter=False), FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
+check(len(bad) == 1 and "site perimeter" in bad[0]["why"], "a site bucket without its write perimeter is caught", bad)
+bad = [r for r in sc.run(FakeCfn(), FakeIAM(leak=lambda role, action, res: "RunEngine" in role and action == "s3:DeleteObject"
+                                            and SITE in res), FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
+check(len(bad) == 1 and "delete" in bad[0]["why"], "an engine that can delete a site page is caught", bad)
+sc.AWS["site"] = False
+try:
+    no_site = sc.run(FakeCfn(), FakeIAM(), FakeS3(), ACCOUNT, REGION, FakeKMS())
+    check(not any(SITE in r["resource"] for r in no_site) and all(r["ok"] for r in no_site),
+          "[aws] site = false: no site questions")
+finally:
+    sc.AWS["site"] = True
 
 too_tight = FakeIAM(leak=None)
 too_tight.simulate_principal_policy = lambda **kw: {"EvaluationResults": [{"EvalDecision": "implicitDeny"}]}

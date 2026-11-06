@@ -32,14 +32,17 @@ with short comments, and work in small steps (one PR per change).
 - Testing, in tiers (Claude runs them in its own sandbox; Nikodem never
   has to): every PR that touches the engine runs the engine checks
   (check_inputs, check_flags, backtest); every PR that touches the cockpit
-  also runs the cockpit test (`node tests/cockpit_test.js`, about a minute).
+  also runs the cockpit test (`node tests/cockpit_test.js`, about a minute)
+  and the site test (`python roles.py --site`, then `node tests/site_test.js`).
   The scenario tests (`node tests/scenarios_test.js`, about two minutes) run
   before a demo or milestone, after a regenerate, or when a change touches
   roles, routing, money or the segment bar; their results go to the
   acceptance page. Every PR that touches infra/ runs `python
   tests/infra_test.py` (builds the template in memory, no AWS login, no
   cost), `python tests/check_lambda_test.py`, `python
-  tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); one that touches upload.py runs `python tests/upload_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one that touches llm.py, brief.py or handover.py runs `python tests/ai_spend_test.py`; one that touches cockpit_sync.py runs `python tests/cockpit_sync_test.py`; one
+  tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); so does
+  any PR that changes what an engine step imports (engine_lambda_test checks the
+  bundle has it: #120 added roles.py to export_views.py and only #127 bundled it); one that touches upload.py runs `python tests/upload_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one that touches llm.py, brief.py or handover.py runs `python tests/ai_spend_test.py`; one that touches cockpit_sync.py runs `python tests/cockpit_sync_test.py`; one
   that touches roles or policies also runs `python tests/security_check_test.py`
   and, after the deploy, Nikodem runs `python security_check.py` (live). Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
@@ -411,7 +414,12 @@ One JSON event per line, one file per day in `data/events/`.
   (person, role, tabs, accounts, edit rights per action). The page reads it to
   open on the role's first tab and to offer a form only where the person may act.
   Writes data/pages/<owner_id>.html, leader.html and index.html (the landing
-  page, with a switcher to every page: demo only, see THREAT_MODEL.md). Published,
+  page, with a switcher to every page: demo only, see THREAT_MODEL.md).
+  `python roles.py --site` (an engine step in AWS) writes the same pages in
+  sandbox mode to data/site/ for the public demo site: forms save in the visitor's
+  browser only (localStorage, "Clear my changes"), a banner says so, and the
+  switcher simply opens the other page's address. `tests/site_test.js` serves them
+  with the site's real content policy. Published,
   only the main page gets the database, so the switcher fetches the chosen file and
   writes it into the main page (stopping the old page's database listener first);
   offline, where fetch can't read files, it opens the file instead.
@@ -672,9 +680,11 @@ One JSON event per line, one file per day in `data/events/`.
   LAMBDA_PACKAGES (duckdb, anthropic), versions from requirements.txt.
   Plus a daily safety net: EventBridge Scheduler ([aws] engine_schedule and
   engine_schedule_timezone) starts the engine with {"trigger": "schedule"};
-  if the last outputs/run.json is OK and used the same input check, it stops
-  (SKIPPED "up to date", run.json untouched), otherwise it runs (a missed or
-  failed event-driven run is caught up). Its role may only invoke the engine.
+  if the last outputs/run.json is OK and used the same input check and engine
+  code (a fingerprint of the bundled scripts and settings, in run.json "code"),
+  it stops (SKIPPED "up to date", run.json untouched), otherwise it runs (a
+  missed or failed event-driven run is caught up, and a deploy with new engine
+  code runs at the next schedule). Its role may only invoke the engine.
   Plus Athena: a Glue database ([aws] glue_database) filled by a Glue crawler
   that reads outputs/tables/ (one target per [aws] athena_tables entry, tables
   made at folder level 4 so same-shaped flag tables stay separate; its role
@@ -734,6 +744,19 @@ One JSON event per line, one file per day in `data/events/`.
   already) and a daily email when a day's unexpected cost reaches [aws]
   cost_alert_threshold_usd. The address, [aws] cost_alert_email, is personal:
   it lives in settings.local.toml (the repo is public); empty = not built.
+  Plus the public demo site (6 Nov 2026, [aws] site): CloudFront in front of a
+  second bucket of its own (never the data bucket): private (all four public-access
+  blocks, ACLs off), S3-managed encryption (the pages are public on purpose, so
+  CloudFront gets no grant on our data key), HTTPS only, Retain; CloudFront is its
+  only reader, through an origin access control. GET and HEAD only, index.html as
+  the root, [aws] site_price_class, and a response headers policy: HSTS a year,
+  no framing, no MIME guessing, a content security policy (data_stack.SITE_CSP:
+  the page and its Google fonts, no form posts). Its bucket policy denies writes
+  and deletes to everyone but the engine and the admins. The engine role may only
+  put pages and list names there. After a good run the engine copies
+  data/site/*.html (flat) to the site bucket, only pages whose MD5 changed, with
+  Cache-Control max-age [aws] site_cache_seconds, never to outputs/, never
+  deleting; a failed run sends nothing. Address: the SiteUrl output.
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
@@ -750,6 +773,9 @@ One JSON event per line, one file per day in `data/events/`.
   open; GuardDuty: one detector with only the plans we need, or none when off;
   Cost Anomaly Detection: a custom monitor and a daily email from settings, or
   nothing without an address, and no address in settings.toml;
+  the public site: its own private bucket (blocks, SSE-S3, Retain), CloudFront the
+  only reader through an OAC, HTTPS only, GET/HEAD, the headers and the CSP, the
+  write perimeter, the engine's put-and-list-only rights, nothing when site = false;
   Access Analyzer: one free account analyzer, named from settings).
   Exit 1 on any FAIL.
 - `tests/slack_lambda_test.py`: the Slack listener's handler from its real
@@ -796,7 +822,9 @@ One JSON event per line, one file per day in `data/events/`.
 - `security_check.py`: live security checks, read-only (`python
   security_check.py` after `aws login`). Finds the deployed roles and functions
   in the CairnpathData stack and asks the IAM policy simulator, with the
-  bucket's and the KMS key's real policies, 39 questions: things each role must NOT be able to do
+  bucket's and the KMS key's real policies, 46 questions (7 on the site bucket, with
+  its own policy: only the engine writes, it can't read or delete, the Slack listener
+  and an s3:* identity can't change a page): things each role must NOT be able to do
   (the engine writing its inputs or the check's verdict, deleting, reading
   another secret, anything over plain HTTP; the check writing where it's
   triggered or reading the API key; the schedule starting the check or
@@ -871,8 +899,9 @@ One JSON event per line, one file per day in `data/events/`.
   2026; cockpit decisions checked on our side and AI briefs only on the
   admin's request (request_briefs.py) 5 Nov 2026; Access Analyzer baseline 0.
   Phase 7 done. Phase 8: README rewritten 5 Nov 2026 (architecture diagram,
-  one run step by step, controls and cost tables); next, the demo
-  walkthrough, then the CV line and interview story.
+  one run step by step, controls and cost tables); demo walkthrough (DEMO.md),
+  CV line and interview story 6 Nov 2026. The public demo site (CloudFront,
+  sandbox pages) 6 Nov 2026.
 - Parked ideas: maturity assessment score, customer journey stage and
   special account flags as extra QBR inputs. AI to assist CS (5 Nov 2026,
   Nikodem thinking it over; spec Feature requests): assist, not replace, e.g.

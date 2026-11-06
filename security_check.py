@@ -38,12 +38,15 @@ WANTED = {"CheckInputsServiceRole": "check", "RunEngineServiceRole": "engine",
 
 def find(cfn):
     """The deployed roles and functions, by short name: {name: physical id}; plus "key",
-    the data key's ID."""
+    the data key's ID, and "site", the public site's bucket (when [aws] site is on)."""
     found = {}
     for r in cfn.describe_stack_resources(StackName=STACK)["StackResources"]:
         kind = r["ResourceType"]
         if kind == "AWS::KMS::Key" and r["LogicalResourceId"].startswith("DataKey"):
             found["key"] = r["PhysicalResourceId"]
+            continue
+        if kind == "AWS::S3::Bucket" and r["LogicalResourceId"].startswith("Site"):
+            found["site"] = r["PhysicalResourceId"]
             continue
         if kind not in ("AWS::IAM::Role", "AWS::Lambda::Function"):
             continue
@@ -54,7 +57,7 @@ def find(cfn):
                     (kind == "AWS::IAM::Role") == is_role_name):
                 found[name] = r["PhysicalResourceId"]
                 break
-    missing = (set(WANTED.values()) | {"key"}) - set(found)
+    missing = (set(WANTED.values()) | {"key"} | ({"site"} if AWS.get("site") else set())) - set(found)
     if missing:
         sys.exit(f"Not found in stack {STACK}: {', '.join(sorted(missing))}. Deployed?")
     return found
@@ -131,6 +134,22 @@ def cases(account, region):
         ("slack", "kms:GenerateDataKey", key, ALLOW, "control: the Slack listener can encrypt a click via S3", False, VIA_S3),
         ("admin", "kms:Decrypt", key, ALLOW, "control: the admin can still use the key directly", False),
         ("admin", "kms:PutKeyPolicy", key, ALLOW, "control: the admin can still fix the key's policy (no lockout)", False),
+    ] + (site_cases() if AWS.get("site") else [])
+
+
+def site_cases():
+    """The public demo site's bucket: only the engine writes pages there (it can't read or delete
+    them), and nobody else can change the site, even with s3:* on everything."""
+    page = "arn:aws:s3:::{site}/index.html"
+    return [
+        ("engine", "s3:PutObject", page, ALLOW, "control: site: the engine can publish a page", False),
+        ("engine", "s3:GetObject", page, DENY, "site: the engine writes pages, it can't read them", False),
+        ("engine", "s3:DeleteObject", page, DENY, "site: ...nor delete one", False),
+        ("engine", "s3:PutObject", page, DENY, "site: plain HTTP refused", True),
+        ("slack", "s3:PutObject", page, DENY, "site: the Slack listener can't change the site", False),
+        ("schedule", "s3:PutObject", page, DENY,
+         "site perimeter: another identity with s3:* still can't change the site", False, PERIMETER),
+        ("admin", "s3:PutObject", page, ALLOW, "control: site: the admin can still fix a page", False),
     ]
 
 
@@ -163,6 +182,8 @@ def run(cfn, iam, s3, account, region, kms):
     # the admin role (what aws login gives you): its real ARN, path included
     arns["admin"] = iam.get_role(RoleName=AWS["admin_role_names"][0])["Role"]["Arn"]
     bucket_policy = s3.get_bucket_policy(Bucket=AWS["bucket"], ExpectedBucketOwner=account)["Policy"]
+    site_policy = (s3.get_bucket_policy(Bucket=names["site"], ExpectedBucketOwner=account)["Policy"]
+                   if "site" in names else None)
     key_arn = f"arn:aws:kms:{region}:{account}:key/{names['key']}"
     key_policy = for_simulator(kms.get_key_policy(KeyId=names["key"], PolicyName="default")["Policy"],
                                key_arn, account)
@@ -191,7 +212,9 @@ def run(cfn, iam, s3, account, region, kms):
             kw["ContextEntries"].append({"ContextKeyName": "kms:ViaService", "ContextKeyType": "string",
                                          "ContextKeyValues": [f"{options['via']}.{region}.amazonaws.com"]})
         if action.startswith("s3:"):          # the bucket's own policy counts too (e.g. HTTPS only)
-            kw.update(ResourcePolicy=bucket_policy, ResourceOwner=f"arn:aws:iam::{account}:root")
+            on_site = "site" in names and resource.startswith(f"arn:aws:s3:::{names['site']}")
+            kw.update(ResourcePolicy=site_policy if on_site else bucket_policy,
+                      ResourceOwner=f"arn:aws:iam::{account}:root")
         if action.startswith("kms:"):         # and the key's own policy for key questions
             kw.update(ResourcePolicy=key_policy, ResourceOwner=f"arn:aws:iam::{account}:root")
         result = iam.simulate_principal_policy(**kw)["EvaluationResults"][0]
