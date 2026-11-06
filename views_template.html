@@ -211,6 +211,7 @@ button.small { font: 500 0.82rem var(--font-body); border: 1px solid var(--accen
 button.small.primary { background: var(--accent); color: var(--surface); }
 button.small:disabled, td .act select:disabled { opacity: 0.5; cursor: not-allowed; }
 button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background: none; border: 0; text-decoration: underline; cursor: pointer; padding: 0; }
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .banner { font-size: 0.88rem; border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 8px 12px; border-radius: 4px; margin: 0; }
 /* my book: one owner's morning page */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
@@ -251,6 +252,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     </nav>
   </div>
   <div class="wrap">
+    <p class="banner" id="sandbox-note" hidden>Demo sandbox: what you save here stays in this browser only. Nobody else sees it, and nothing reaches the engine. Managers and CSMs can save; pick one under "Viewing as". <button type="button" class="linkish" id="sandbox-clear">Clear my changes</button></p>
     <p class="banner" id="carry-note" hidden></p>
     <div class="segbar" id="segbar" role="group" aria-label="Segment">
       <span class="grp">People</span>
@@ -724,6 +726,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     sw.addEventListener("change", async () => {
       if (!sw.value) return;
       try { sessionStorage.setItem("cockpit-switched", "1"); sessionStorage.setItem("cockpit-pins", seg.acc); } catch (e) { /* no storage here */ }
+      if (PAGE.sandbox) { location.href = sw.value + carry(); return; }   // public site: no shared database to keep
       try {
         const r = await fetch(sw.value);
         if (!r.ok) throw new Error(String(r.status));
@@ -1798,10 +1801,41 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // the database answers later (or never, in the offline file): the list draws first
   let unsubscribe = null;                       // stop listening before the switcher swaps the page
   window.__cockpitLeave = () => { try { if (typeof unsubscribe === "function") unsubscribe(); } catch (e) { /* gone already */ } };
+  // The public demo site (roles.py --site, PAGE.sandbox): no shared database, so decisions are kept
+  // in this browser's localStorage with the same few calls the page makes on the real one. Each
+  // visitor gets a private sandbox; nothing is sent anywhere. Blocked storage = no forms, as offline.
+  const SANDBOX_KEY = "cockpit-sandbox-decisions";
+  function sandboxDb() {
+    const read = () => {
+      let v = null;
+      try { v = JSON.parse(localStorage.getItem(SANDBOX_KEY) || "{}"); } catch (e) { /* unreadable: start empty */ }
+      return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    };
+    localStorage.setItem(SANDBOX_KEY, JSON.stringify(read()));                  // throws here if storage is blocked
+    const listeners = new Set();
+    const snap = () => ({ docs: Object.entries(read()).map(([id, v]) => ({ id, data: () => v })) });
+    const emit = () => { const s = snap(); for (const l of listeners) l(s); };
+    const write = (f) => { const all = read(); f(all); localStorage.setItem(SANDBOX_KEY, JSON.stringify(all)); setTimeout(emit, 0); };
+    addEventListener("storage", (e) => { if (e.key === SANDBOX_KEY || e.key === null) emit(); });   // another tab
+    return {
+      clear: () => { localStorage.removeItem(SANDBOX_KEY); emit(); },
+      collection: () => ({
+        doc: (id) => ({ set: async (v) => write((all) => { all[id] = v; }), delete: async () => write((all) => { delete all[id]; }) }),
+        onSnapshot: (cb) => { listeners.add(cb); setTimeout(() => cb(snap()), 0); return () => listeners.delete(cb); },
+      }),
+    };
+  }
   (async () => {
+    if (PAGE && PAGE.sandbox) {
+      try { db = sandboxDb(); me = "sandbox:" + PAGE.person; } catch (e) { db = null; }
+      if (db) {
+        $("sandbox-note").hidden = false;
+        $("sandbox-clear").addEventListener("click", () => db.clear());
+      }
+    }
     const use = window.claude && window.claude.use;
-    if (!use) { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } return; }
-    try {
+    if (!db && !use) { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } return; }
+    if (!db) try {
       db = await window.claude.use("db");
       const user = await window.claude.use("user");
       me = user ? await user.id() : null;

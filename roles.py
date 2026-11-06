@@ -200,8 +200,9 @@ def safe_json(obj):
     return json.dumps(obj, separators=(",", ":")).replace("</", "<\\/")
 
 
-def build(export, template=None, out=PAGES):
-    """Write one page per person, leader.html and index.html (the landing page)."""
+def build(export, template=None, out=PAGES, sandbox=False):
+    """Write one page per person, leader.html and index.html (the landing page).
+    sandbox=True: the public demo site's pages (forms save in the visitor's browser only)."""
     template = template or TEMPLATE.read_text(encoding="utf-8")
     everyone = {ROLES["leader_id"]: {"role": "leader", "name": ROLES["leader_name"], "manager": None},
                 **people(export["team"])}
@@ -211,6 +212,7 @@ def build(export, template=None, out=PAGES):
     written = {}
     for pid, person in everyone.items():
         page, meta = slice_export(export, pid, person)
+        meta["sandbox"] = bool(sandbox)
         options = "".join(f'<option value="{files[o]}"{" selected" if o == pid else ""}>'
                           f'{everyone[o]["name"]} ({kind[everyone[o]["role"]]})</option>' for o in everyone)
         html = strip_tabs(template, set(meta["tabs"]))
@@ -227,10 +229,16 @@ def build(export, template=None, out=PAGES):
 
 
 if __name__ == "__main__":
+    # python roles.py         -> data/pages/ (the cockpit, as export_views.py writes it)
+    # python roles.py --site  -> data/<[aws] site_folder>/: the public demo site's pages, in sandbox
+    #                            mode (the engine Lambda copies them to the site bucket)
     sys.stdout.reconfigure(encoding="utf-8")
+    site = "--site" in sys.argv[1:]
     src = OUTPUTS / "views_data.json"
     if not src.exists():
         sys.exit(f"{src} is missing: run python export_views.py first")
-    for pid, (name, n) in build(json.loads(src.read_text(encoding="utf-8"))).items():
+    out = OUTPUTS / SETTINGS["aws"]["site_folder"].strip("/") if site else PAGES
+    for pid, (name, n) in build(json.loads(src.read_text(encoding="utf-8")), out=out, sandbox=site).items():
         print(f"  {name:<18} {n:>4} accounts")
-    print("Saved data/pages/ (index.html = the landing page)")
+    print(f"Saved {out.relative_to(OUTPUTS.parent).as_posix()}/ (index.html = the landing page)"
+          + (" in sandbox mode, for the public site" if site else ""))

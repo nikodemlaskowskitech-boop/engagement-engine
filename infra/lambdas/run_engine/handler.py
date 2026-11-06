@@ -18,8 +18,9 @@ run.json (the summary, written last).
 
 Also runs once a day on a schedule (EventBridge Scheduler, event {"trigger":
 "schedule"}), as a safety net: if the last run is OK and was made on the data
-the check last saw, there's nothing new and it stops (SKIPPED, "up to date");
-if an event-driven run was missed or failed, the schedule catches it up.
+the check last saw, with the same engine code, there's nothing new and it stops
+(SKIPPED, "up to date"); if an event-driven run was missed or failed, or a
+deploy changed the engine's code, the schedule catches it up.
 
 Handover briefs only on request (5 Nov 2026): no automatic run calls the model.
 Every run does "handover.py --dry-run" instead, which compares each brief with
@@ -42,7 +43,12 @@ steps run, so every step sees them as CS history, like the laptop's clicks.
 Clicks don't wake the engine (one run per click would be wasteful); the daily
 schedule runs it when clicks came in since the last run.
 
-Only writes under outputs/, so it can never trigger the check or itself.
+The public demo site (6 Nov 2026): the step "roles.py --site" builds the role pages in
+sandbox mode into data/site/; after a good run they're copied to the site bucket
+(SITE_BUCKET, its own bucket behind CloudFront, never the data bucket), not to
+outputs/. Only pages that changed go up; nothing there is ever deleted.
+
+Only writes under outputs/ (and the site bucket), so it can never trigger the check or itself.
 A failing step is a real failure: run.json says FAILED, then the function raises.
 """
 
@@ -77,6 +83,9 @@ NEVER_UPLOAD = ("_key.json",)                              # redaction keys stay
 STATE_FILES = ["action_log.csv"]                         # state kept between runs (tasks already sent)
 CLICKS = os.environ.get("CLICKS_PREFIX", "state/clicks/")   # the Slack listener's clicks, one file each
 CLICKS_FILE = "engagement/slack_clicks.jsonl"              # ...merged here for the engine (never uploaded)
+SITE_BUCKET = os.environ.get("SITE_BUCKET", "")            # the public demo site's own bucket (empty = no site)
+SITE = os.environ.get("SITE_FOLDER", "site/")              # where "roles.py --site" writes the pages, under data/
+SITE_CACHE = int(os.environ.get("SITE_CACHE_SECONDS", "300"))   # how long CloudFront and browsers keep a page
 
 
 def _s3():
@@ -130,9 +139,21 @@ def newest_click(s3):
     return newest
 
 
+def code_version():
+    """A fingerprint of the engine's own code (the bundled files, not the libraries): a deploy
+    that changes a script or the settings changes it, so the schedule reruns on the new code."""
+    digest = hashlib.md5()
+    for name in sorted(CODE) + ["handler.py"]:
+        path = HERE / name
+        for f in sorted(path.rglob("*")) if path.is_dir() else [path]:
+            if f.is_file():
+                digest.update(f.relative_to(HERE).as_posix().encode() + f.read_bytes())
+    return digest.hexdigest()[:12]
+
+
 def up_to_date(s3, check):
-    """True when the last run went fine, used the same input check as now, and no
-    Slack click came in after it started."""
+    """True when the last run went fine, used the same input check and engine code as now,
+    and no Slack click came in after it started."""
     try:
         last = json.loads(s3.get_object(Bucket=BUCKET, Key=OUTPUTS + "run.json",
                                          ExpectedBucketOwner=OWNER)["Body"].read())
@@ -140,6 +161,7 @@ def up_to_date(s3, check):
         return False
     clicked = newest_click(s3)
     return (last.get("status") == "OK" and last.get("check", {}).get("checked_at") == check.get("checked_at")
+            and last.get("code") == code_version()
             and not (clicked and clicked >= last.get("started_at", "")))
 
 
@@ -187,6 +209,28 @@ def carry(s3, name, data):
     return None
 
 
+def publish_site(s3, folder):
+    """Copy the sandbox pages to the site bucket: HTML only, flat (no folders), and only the
+    pages whose content changed (compared by MD5, kept as the object's own label). Returns the
+    names sent. Never deletes: the engine has no delete right there."""
+    if not SITE_BUCKET or not folder.is_dir():
+        return []
+    have = {}
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=SITE_BUCKET, ExpectedBucketOwner=OWNER):
+        for obj in page.get("Contents", []):
+            have[obj["Key"]] = obj.get("ETag", "").strip('"')
+    sent = []
+    for p in sorted(folder.glob("*.html")):          # flat: a page name is never a path
+        digest = md5(p)
+        if have.get(p.name) == digest:                # SSE-S3, single part: the ETag is the MD5
+            continue
+        s3.put_object(Bucket=SITE_BUCKET, Key=p.name, Body=p.read_bytes(),
+                      ContentType="text/html; charset=utf-8",
+                      CacheControl=f"public, max-age={SITE_CACHE}", ExpectedBucketOwner=OWNER)
+        sent.append(p.name)
+    return sent
+
+
 def run_steps(work, secrets=None, steps=None):
     """Run each engine step in order, like run_all.ps1 (a step may carry arguments, e.g. --dry-run).
     Returns (ok, log, failed step, step times, warnings). secrets go to the briefs step only."""
@@ -227,7 +271,7 @@ def handler(event, context, s3=None, work=None, ssm=None):
     # briefs only when explicitly asked for, never on an S3 event (those carry Records)
     briefs = bool(event.get("briefs")) and not event.get("Records")
     steps = [BRIEFS_STEP if briefs and s == DRY_RUN else s for s in STEPS]
-    summary = {"started_at": now(), "triggered_by": trigger, "briefs": briefs}
+    summary = {"started_at": now(), "triggered_by": trigger, "briefs": briefs, "code": code_version()}
 
     check = check_status(s3)
     summary["check"] = {k: check.get(k) for k in ("status", "errors", "warnings", "checked_at")}
@@ -266,6 +310,7 @@ def handler(event, context, s3=None, work=None, ssm=None):
         for p in sorted(data.rglob("*")):
             rel = p.relative_to(data).as_posix()
             if (not p.is_file() or rel in set(inputs) | set(state) or rel.endswith(NEVER_UPLOAD)
+                    or rel.startswith(SITE)                                   # goes to the site bucket instead
                     or (rel.startswith(CACHE) and cache.get(rel[len(CACHE):]) == md5(p))
                     or (rel == LEDGER and ledger == md5(p))):         # no new model call: no new version
                 continue
@@ -275,10 +320,12 @@ def handler(event, context, s3=None, work=None, ssm=None):
                     "csv": "text/csv; charset=utf-8", "parquet": "application/vnd.apache.parquet"
                     }.get(name.rsplit(".", 1)[-1], "text/plain; charset=utf-8")
             put(s3, OUTPUTS + name, (data / name).read_bytes(), kind)
+        site = publish_site(s3, data / SITE.strip("/")) if ok else []        # never half a failed run's pages
     finally:
         shutil.rmtree(work, ignore_errors=True)
     summary.update(status="OK" if ok else "FAILED", failed_step=failed, warnings=warnings, step_seconds=times,
-                   inputs=len(inputs), slack_clicks=clicks, outputs=written, seconds=round(time.time() - started, 1))
+                   inputs=len(inputs), slack_clicks=clicks, outputs=written, site_pages=site,
+                   seconds=round(time.time() - started, 1))
     put(s3, OUTPUTS + "last_run.txt", log)
     put(s3, OUTPUTS + "run.json", json.dumps(summary, indent=2), "application/json")   # last
     print(json.dumps(summary))

@@ -48,10 +48,13 @@ stack = DataStack(app, "Test", env=cdk.Environment(account=str(SETTINGS["aws"]["
                                                    region=SETTINGS["aws"]["region"]))
 t = Template.from_stack(stack)
 buckets = t.find_resources("AWS::S3::Bucket")
-bucket = next(iter(buckets.values()), {})
+data_buckets = {k: v for k, v in buckets.items() if k.startswith("Data")}
+data_id, bucket = next(iter(data_buckets.items()), (None, {}))
+site_buckets = {k: v for k, v in buckets.items() if k.startswith("Site")}
 
 print("\nData bucket: safe by default")
-check(len(buckets) == 1, "exactly one bucket", f"{len(buckets)} found")
+check(len(data_buckets) == 1 and len(buckets) == 1 + len(site_buckets) and len(site_buckets) == int(bool(SETTINGS["aws"].get("site"))),
+      "one data bucket (plus the public site's own bucket when [aws] site is on), nothing else", sorted(buckets))
 keys = t.find_resources("AWS::KMS::Key")
 key_id = next(iter(keys), None)
 r = has(t, "AWS::S3::Bucket", {"BucketEncryption": {"ServerSideEncryptionConfiguration": [
@@ -307,7 +310,8 @@ check(aws["slack_clicks_prefix"].startswith(aws["state_prefix"])
       "clicks land in state/ (the engine reads them), and nothing wakes on state/ (no run per click)")
 
 print("\nData perimeter: the bucket refuses everyone but our roles and the admin")
-bp = next(iter(t.find_resources("AWS::S3::BucketPolicy").values()), {}).get("Properties", {})
+bp = next((v for v in t.find_resources("AWS::S3::BucketPolicy").values()
+           if v["Properties"].get("Bucket") == {"Ref": data_id}), {}).get("Properties", {})
 stmts = {st.get("Sid"): st for st in bp.get("PolicyDocument", {}).get("Statement", [])}
 outside, others = stmts.get("DenyOutsideThisAccount", {}), stmts.get("DenyDataToAnyoneElse", {})
 check(outside.get("Effect") == "Deny" and outside.get("Principal") == {"AWS": "*"} and outside.get("Action") == "s3:*"
@@ -426,6 +430,90 @@ check(len(analyzers) == 1 and analyzers[0].get("Type") == "ACCOUNT"
       "one free external-access analyzer for this account, named from settings (not the paid unused-access kind)",
       analyzers)
 check("AccessAnalyzerArn" in t.find_outputs("*"), "prints its ARN after deploy")
+
+print("\nPublic demo site: CloudFront in front of a private bucket of its own")
+from data_stack import SITE_CSP                         # noqa: E402
+dists = t.find_resources("AWS::CloudFront::Distribution")
+if aws.get("site"):
+    site_id, site = next(iter(site_buckets.items()), (None, {}))
+    sp = site.get("Properties", {})
+    check(site_id and site_id != data_id, "its own bucket, never the data bucket")
+    check(sp.get("PublicAccessBlockConfiguration") == {"BlockPublicAcls": True, "BlockPublicPolicy": True,
+                                                       "IgnorePublicAcls": True, "RestrictPublicBuckets": True}
+          and sp.get("OwnershipControls") == {"Rules": [{"ObjectOwnership": "BucketOwnerEnforced"}]},
+          "private: all four public-access blocks on, ACLs off (the bucket itself is never public)", sp)
+    check(sp.get("BucketEncryption", {}).get("ServerSideEncryptionConfiguration", [{}])[0]
+          .get("ServerSideEncryptionByDefault", {}).get("SSEAlgorithm") == "AES256"
+          and "BucketName" not in sp and site.get("DeletionPolicy") == "Retain",
+          "S3-managed encryption (CloudFront gets no grant on our data key), name left to AWS, kept", sp.get("BucketEncryption"))
+    sbp = next((v for v in t.find_resources("AWS::S3::BucketPolicy").values()
+                if v["Properties"].get("Bucket") == {"Ref": site_id}), {}).get("Properties", {})
+    sst = sbp.get("PolicyDocument", {}).get("Statement", [])
+    allows = [st for st in sst if st.get("Effect") == "Allow"]
+    check(len(allows) == 1 and allows[0].get("Principal") == {"Service": "cloudfront.amazonaws.com"}
+          and actions_of(allows[0]) == ["s3:GetObject"] and "AWS:SourceArn" in json.dumps(allows[0].get("Condition"))
+          and (len(dists) == 1 and next(iter(dists)) in json.dumps(allows[0].get("Condition"))),
+          "its only reader: CloudFront, for this one distribution (origin access control), GetObject only", allows)
+    check(any(st.get("Effect") == "Deny" and st.get("Condition") == {"Bool": {"aws:SecureTransport": "false"}} for st in sst),
+          "plain HTTP refused", sst)
+    walls = [st for st in sst if st.get("Sid") == "DenyWritesToAnyoneElse"]
+    wall_text = json.dumps(walls)
+    check(walls and walls[0]["Effect"] == "Deny" and {"s3:PutObject*", "s3:DeleteObject*"} <= set(actions_of(walls[0]))
+          and role_ids["engine"] in wall_text and all(f"role/*{n}" in wall_text for n in aws["admin_role_names"])
+          and not any(role_ids[k] in wall_text for k in ("check", "slack", "crawler")),
+          "its own perimeter: only the engine and the admins may write or delete a page", walls)
+    dist = next(iter(dists.values()), {}).get("Properties", {}).get("DistributionConfig", {})
+    beh = dist.get("DefaultCacheBehavior", {})
+    origin = (dist.get("Origins") or [{}])[0]
+    check(dist.get("DefaultRootObject") == "index.html" and beh.get("ViewerProtocolPolicy") == "redirect-to-https"
+          and sorted(beh.get("AllowedMethods", [])) == ["GET", "HEAD"],
+          "opens on index.html, HTTPS only (HTTP is redirected), read-only methods", beh)
+    oacs = t.find_resources("AWS::CloudFront::OriginAccessControl")
+    oac = next(iter(oacs.values()), {}).get("Properties", {}).get("OriginAccessControlConfig", {})
+    check(len(oacs) == 1 and oac.get("SigningBehavior") == "always" and oac.get("OriginAccessControlOriginType") == "s3"
+          and "OriginAccessControlId" in origin and site_id in json.dumps(origin.get("DomainName")),
+          "the bucket is reached through an origin access control (signed requests), not a public website", origin)
+    check(dist.get("PriceClass") == aws["site_price_class"], f"price class from settings ({aws['site_price_class']})")
+    rhps = t.find_resources("AWS::CloudFront::ResponseHeadersPolicy")
+    sec = next(iter(rhps.values()), {}).get("Properties", {}).get("ResponseHeadersPolicyConfig", {}).get("SecurityHeadersConfig", {})
+    check(len(rhps) == 1 and next(iter(rhps)) in json.dumps(beh.get("ResponseHeadersPolicyId"))
+          and sec.get("StrictTransportSecurity", {}).get("AccessControlMaxAgeSec") == 31536000
+          and sec.get("FrameOptions", {}).get("FrameOption") == "DENY" and sec.get("ContentTypeOptions", {}).get("Override")
+          and sec.get("ContentSecurityPolicy", {}).get("ContentSecurityPolicy") == SITE_CSP,
+          "security headers on every page: HSTS a year, no framing, no MIME guessing, the content policy", sec)
+    check("frame-ancestors 'none'" in SITE_CSP and "default-src 'none'" in SITE_CSP and "form-action 'none'" in SITE_CSP,
+          "the content policy starts from nothing allowed, and no form posts anywhere")
+    estmts = [st for v in t.find_resources("AWS::IAM::Policy").values()
+              if any(r.get("Ref") == role_ids["engine"] for r in v["Properties"].get("Roles", []))
+              for st in v["Properties"]["PolicyDocument"]["Statement"]]
+    on_site = [st for st in estmts if site_id in json.dumps(st.get("Resource"))]
+    site_acts = sorted({a for st in on_site for a in actions_of(st)})
+    check(on_site and any(a.startswith("s3:PutObject") for a in site_acts) and "s3:ListBucket" in site_acts
+          and not any(a.startswith(("s3:Get", "s3:Delete")) or a == "s3:*" for a in site_acts),
+          "the engine may write pages and list their names there; never read or delete", site_acts)
+    others_on_site = [st for v in t.find_resources("AWS::IAM::Policy").values()
+                      if not any(r.get("Ref") == role_ids["engine"] for r in v["Properties"].get("Roles", []))
+                      for st in v["Properties"]["PolicyDocument"]["Statement"] if site_id in json.dumps(st.get("Resource"))]
+    check(not others_on_site, "no other role has any right on the site bucket", others_on_site)
+    eenv = ours[next(k for k, v in ours.items() if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"])]
+    ev = eenv["Properties"]["Environment"]["Variables"]
+    check(ev.get("SITE_BUCKET") == {"Ref": site_id} and ev.get("SITE_FOLDER") == aws["site_folder"]
+          and ev.get("SITE_CACHE_SECONDS") == str(aws["site_cache_seconds"]),
+          "the engine is told the site bucket, folder and cache time (from settings)", {k: ev.get(k) for k in ("SITE_BUCKET", "SITE_FOLDER", "SITE_CACHE_SECONDS")})
+    check({"SiteUrl", "SiteBucket"} <= set(t.find_outputs("*")), "prints the site's address after deploy")
+    check("roles.py --site" in aws["engine_steps"], "the engine builds the sandbox pages each run (roles.py --site)")
+    aws["site"] = False                                   # switched off: built again without it
+    try:
+        t2 = Template.from_stack(DataStack(cdk.App(), "TestNoSite", env=stack.environment and cdk.Environment(
+            account=str(aws["account_id"]), region=aws["region"])))
+        check(not t2.find_resources("AWS::CloudFront::Distribution")
+              and not [k for k in t2.find_resources("AWS::S3::Bucket") if k.startswith("Site")]
+              and "SITE_BUCKET" not in json.dumps(t2.find_resources("AWS::Lambda::Function")),
+              "[aws] site = false: no distribution, no site bucket, the engine isn't told one")
+    finally:
+        aws["site"] = True
+else:
+    check(not dists and not site_buckets, "[aws] site = false: no distribution, no site bucket")
 
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)

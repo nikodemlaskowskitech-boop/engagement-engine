@@ -173,3 +173,23 @@ python request_briefs.py
 
 Only the admin can start the engine this way; the schedule and S3 events can't.
 
+
+## The public demo site
+
+The role pages at a public address, no login: CloudFront in front of a second,
+private bucket that holds only the sandbox pages (fake data; forms save in the
+visitor's own browser). The data bucket is never involved. Switch it off with
+`site = false` in settings.toml [aws] and `cdk deploy` (the bucket is kept).
+
+```
+cdk diff --profile cairnpath      # adds: the site bucket, its policy, CloudFront, an origin access control, a headers policy
+cdk deploy --profile cairnpath    # prints SiteUrl (https://xxxx.cloudfront.net) and SiteBucket
+python security_check.py          # 46 questions now, 7 on the site bucket
+```
+
+The pages appear after the next engine run: the daily schedule (06:17) sees the
+new engine code and runs, or start one now with `python request_briefs.py`
+(a full run plus the briefs; only changed briefs cost anything). A first deploy
+of CloudFront takes a few minutes. If it fails with "access denied" on
+cloudfront:..., the organization's region guardrail (SCP) blocks CloudFront,
+which is a global service: allow `cloudfront:*` in that SCP's exceptions.

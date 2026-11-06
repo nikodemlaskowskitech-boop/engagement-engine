@@ -26,7 +26,8 @@ SLACK_FILES = ["slack_loop.py", "settings.py", "settings.toml"]   # the Slack li
 ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "flags.py", "journeys.py",
                 "team_report.py", "backtest.py", "onboarding_report.py", "export_views.py",
                 "to_parquet.py", "views_template.html", "handover.py", "llm.py", "stories",
-                "pull_clicks.py"]                       # its combine() merges the Slack clicks
+                "pull_clicks.py",                       # its combine() merges the Slack clicks
+                "roles.py"]                             # export_views.py builds the role pages with it
 NEVER_BUNDLE = ["answer_key.json", "README.md"]     # stories/: the test's answer key never reaches AWS
 LAMBDA_PACKAGES = ["duckdb", "anthropic"]           # third-party libraries the engine needs, pinned in requirements.txt
 LAMBDA_PLATFORMS = ["manylinux_2_28_aarch64", "manylinux_2_27_aarch64", "manylinux2014_aarch64"]
