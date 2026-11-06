@@ -248,6 +248,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     </nav>
   </div>
   <div class="wrap">
+    <p class="banner" id="carry-note" hidden></p>
     <div class="segbar" id="segbar" role="group" aria-label="Segment">
       <span class="grp">People</span>
       <label>Manager <select id="seg-manager"></select></label>
@@ -601,7 +602,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const SEG_KEY = "cockpit-seg" + (PAGE ? "-" + PAGE.person : "");
   if (PAGE && PAGE.role === "manager") seg.manager = PAGE.person;                 // a manager opens on their team
   if (PAGE && (PAGE.role === "csm" || PAGE.role === "member")) seg.owner = PAGE.person;   // a CSM on their own book
-  try { const saved = JSON.parse(localStorage.getItem(SEG_KEY) || "{}"); for (const k in seg) if (typeof saved[k] === "string") seg[k] = saved[k]; } catch (e) { /* no storage here */ }
+  // arriving through the switcher: the person's own defaults, never a filter saved earlier
+  const SWITCHED = (() => { try { const s = sessionStorage.getItem("cockpit-switched"); sessionStorage.removeItem("cockpit-switched"); return !!s; } catch (e) { return false; } })();
+  if (!SWITCHED) try { const saved = JSON.parse(localStorage.getItem(SEG_KEY) || "{}"); for (const k in seg) if (typeof saved[k] === "string") seg[k] = saved[k]; } catch (e) { /* no storage here */ }
   const saveSeg = () => { try { localStorage.setItem(SEG_KEY, JSON.stringify(seg)); } catch (e) { /* no storage here */ } };
   const segOn = () => Object.values(seg).some(Boolean);
   // whose book is open: a named owner, or a pool (its team + the Scale tier)
@@ -697,16 +700,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // Switch person without leaving this page: a published artifact gives only its main page
     // the database, so the chosen person's file is fetched and written into this one (each file
     // still holds only that person's data). Offline, fetch can't read files: open it instead.
+    // the account open on the timeline goes with the switch (its id only: the new page opens it
+    // if it's on that page, else says so); the new page starts on its own defaults
+    const carry = () => (current === "timeline" && sel.value ? "#" + sel.value : "");
     sw.addEventListener("change", async () => {
       if (!sw.value) return;
+      try { sessionStorage.setItem("cockpit-switched", "1"); } catch (e) { /* no storage here */ }
       try {
         const r = await fetch(sw.value);
         if (!r.ok) throw new Error(String(r.status));
         const html = await r.text();
         if (window.__cockpitLeave) window.__cockpitLeave();
-        try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* not allowed in some frames */ }
+        try { history.replaceState(null, "", location.pathname + location.search + carry()); } catch (e) { /* not allowed in some frames */ }
         document.open(); document.write(html); document.close();
-      } catch (e) { location.href = sw.value; }
+      } catch (e) { location.href = sw.value + carry(); }
     });
   }
   let current = views[0];
@@ -2141,6 +2148,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
   const hashToken = (location.hash || "").replace("#", "");
   if (byId[hashToken]) { sel.value = hashToken; drawTimeline(hashToken); show("timeline"); }
+  else if (PAGE && /^acc_[A-Za-z0-9_-]+$/.test(hashToken)) {     // an account from another page, or a Slack link
+    const note = $("carry-note");
+    note.textContent = `${hashToken} isn't on ${PAGE.name}'s page: it belongs to another team, so it was never put in this file.`;
+    note.hidden = false;
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* not allowed in some frames */ }
+    show(views[0]);
+  }
   else show(hashToken);
 })();
 </script>

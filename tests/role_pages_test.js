@@ -119,6 +119,25 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       `then to Mia: her forecast and next-step forms on ${mine}`, `${await person()}`);
     check(await p.evaluate(() => window.__subs.size) === 1, "one live database subscription after two switches (the old page's is stopped)");
     check(p.url().split("#")[0].endsWith("/index.html") && !errors.length, "still on the main page, no script error", `${p.url()} ${errors}`);
+    // the walkthrough: an open account goes with the switch while it's on the new page
+    const shown = () => p.evaluate(() => ({ view: (document.querySelector('nav button[aria-selected="true"]') || {}).dataset?.view,
+      acc: document.getElementById("tl-account").value, note: document.getElementById("carry-note").hidden ? "" : document.getElementById("carry-note").textContent,
+      owner: document.getElementById("seg-owner").value, manager: document.getElementById("seg-manager").value, region: document.getElementById("seg-region").value }));
+    await switchTo("leader.html");
+    await p.click("#tab-timeline"); await p.fill("#tl-find", "acc_024"); await p.keyboard.press("Enter"); await p.waitForTimeout(300);
+    await p.evaluate(() => localStorage.setItem("cockpit-seg-csm_mia", JSON.stringify({ owner: "", region: "Nordics" })));   // an old filter of Mia's
+    await switchTo("mgr_sophie.html"); let r = await shown();
+    check(r.view === "timeline" && r.acc === "acc_024" && !r.note, "leader -> Sophie: Yarrow Studio (acc_024) stays open (it's her team's)", JSON.stringify(r));
+    await switchTo("csm_mia.html"); r = await shown();
+    check(r.view === "timeline" && r.acc === "acc_024" && r.owner === "csm_mia" && r.region === "",
+      "-> Mia: still open, and her page starts on its defaults (an old saved filter ignored)", JSON.stringify(r));
+    await switchTo("mgr_james.html"); r = await shown();
+    check(r.view === "tasks" && r.note.includes("acc_024") && r.note.includes("isn't on") && r.manager === "mgr_james"
+      && !(await p.evaluate(() => document.documentElement.innerHTML.includes("Yarrow Studio"))),
+      "-> James: a note says acc_024 isn't on his page, it opens on his first tab, and its name isn't anywhere in the page", JSON.stringify(r));
+    await p.click("#tab-timeline"); await p.click("#tab-tasks"); await switchTo("csm_tom.html"); r = await shown();
+    check(r.view === "mybook" && !r.note && r.owner === "csm_tom", "not on the timeline: the next page simply opens on its defaults", JSON.stringify(r));
+    check(!errors.length, "no script error in the walkthrough", errors.join(" / "));
     await p.close(); server.close();
   }
   await b.close();

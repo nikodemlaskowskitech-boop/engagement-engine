@@ -78,6 +78,12 @@ page).
   cockpit). roles.py now works the medians out once on the whole export and puts
   only the numbers on each page. `[roles] peer_median = "team"` switches to the
   team's own medians; the leader always gets the book's.
+- **The open account goes with a switch** (6 Nov 2026, from the acceptance
+  check). Switching person while an account is open on the timeline opens it on
+  the new page if it's there; if not, a note says it isn't on that person's page
+  and the page opens as usual. Only the id travels, so the boundary shows without
+  anything crossing it. Every switch starts the new page on its own defaults,
+  never a filter saved earlier.
 - **A small book in full sight** (6 Nov 2026, same check). My book folds accounts
   with no flags away, risk first; in a book of `[cockpit] open_no_flags_up_to`
   (15) or fewer they're listed open, so a CSM sees all of theirs at a glance.
