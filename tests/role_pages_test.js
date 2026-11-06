@@ -137,6 +137,27 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       "-> James: a note says acc_024 isn't on his page, it opens on his first tab, and its name isn't anywhere in the page", JSON.stringify(r));
     await p.click("#tab-timeline"); await p.click("#tab-tasks"); await switchTo("csm_tom.html"); r = await shown();
     check(r.view === "mybook" && !r.note && r.owner === "csm_tom", "not on the timeline: the next page simply opens on its defaults", JSON.stringify(r));
+    // pinned accounts: Find in the bar pins; every tab shows exactly the pins; they survive tabs and switches
+    const pin = async (id) => { await p.fill("#seg-find", id); await p.waitForTimeout(150); await p.keyboard.press("Enter"); await p.waitForTimeout(250); };
+    const pins = () => p.$$eval("#seg-pins .pin", (c) => c.map((x) => x.firstChild.textContent));
+    await switchTo("csm_mia.html");
+    const mia = meta("csm_mia.html"), teammate = mia.accounts.find((a) => !mia.edit.forecast.includes(a));
+    await pin(mia.edit.forecast[0]); await pin(teammate);
+    await p.click("#tab-book"); await p.click("#tab-tasks");
+    const count = await p.textContent("#seg-count");
+    const taskAccs = await p.$$eval("#tk-list [data-open]", (b) => [...new Set(b.map((x) => x.dataset.open))]);
+    check((await pins()).length === 2 && count.startsWith("2 of") && taskAccs.every((a) => [mia.edit.forecast[0], teammate].includes(a)),
+      "Mia pins her account and a teammate's: two chips, '2 of 98', the Tasks tab only on those two (still after changing tab)", JSON.stringify({ pins: await pins(), count, taskAccs }));
+    await p.click("#seg-pins .pin-x"); await p.waitForTimeout(150);
+    check((await pins()).length === 1, "x unpins one", JSON.stringify(await pins()));
+    await pin(mia.edit.forecast[0]);                      // back to two: one of Sophie's team's
+    await switchTo("mgr_james.html"); r = await shown();
+    check((await pins()).length === 0 && r.note.includes("2 of 2 pinned accounts aren't on James's page"),
+      "-> James: the two pins (Sophie's team's) stay behind, and the note says so", JSON.stringify({ pins: await pins(), note: r.note }));
+    await switchTo("mgr_sophie.html");
+    await pin(mia.edit.forecast[0]); await pin(teammate);
+    await switchTo("csm_lukas.html");
+    check((await pins()).length === 2 && !(await shown()).note, "Sophie -> Lukas (same team): both pins travel, no note", JSON.stringify(await pins()));
     check(!errors.length, "no script error in the walkthrough", errors.join(" / "));
     await p.close(); server.close();
   }
