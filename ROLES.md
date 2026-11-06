@@ -121,3 +121,9 @@ The pages are tested as a black box, from this page and the inputs only.
 3. The pages are built until those tests pass.
 4. Another separate agent reviews the code.
 5. Nikodem's acceptance check.
+
+Built 6 Nov 2026: `roles.py` cuts the export per person (export_views.py calls it);
+`tests/roles_test.py` (the separate agent's, from this page only) and
+`tests/role_pages_test.js` (the pages in a browser) check it. The tests found one
+leak before anything shipped: an example account id in a code comment of the
+template, on every page of the other team.

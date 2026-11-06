@@ -68,6 +68,8 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; lett
 .lede { margin: 0; color: var(--ink-2); max-width: 70ch; }
 nav { display: flex; gap: 4px; overflow-x: auto; }
 nav button { font: 500 0.92rem var(--font-body); color: var(--ink-2); background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px 12px; cursor: pointer; white-space: nowrap; }
+.page-switch { margin-left: auto; font-size: 0.85rem; color: var(--muted); }
+.page-switch select { margin-left: 0.4rem; }
 nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 nav button:hover { color: var(--ink); }
 button:focus-visible, select:focus-visible, input:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -230,6 +232,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     <div class="brand">
       <h1>Cairnpath CS Cockpit</h1>
       <span class="asof" id="asof"></span>
+      <label class="page-switch" id="page-switch-wrap" hidden>Viewing as <select id="page-switch">__PAGE_OPTIONS__</select></label>
     </div>
     <p class="lede">Nine views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
     <nav role="tablist" aria-label="Views">
@@ -509,10 +512,15 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 <div class="tip" id="tip" hidden></div>
 
 <script id="views-data" type="application/json">__VIEWS_DATA__</script>
+<script id="page-meta" type="application/json">__PAGE_META__</script>
 <script>
 (function () {
   "use strict";
   const D = JSON.parse(document.getElementById("views-data").textContent);
+  // One page per person (ROLES.md): which role, which tabs, and what this person may change.
+  // The data above already holds only what the role may see; this decides what the page offers.
+  const PAGE = (() => { try { return JSON.parse(document.getElementById("page-meta").textContent); } catch (e) { return null; } })();
+  const mayEdit = (action, id) => !PAGE || ((PAGE.edit || {})[action] || []).includes(id);
   const $ = (id) => document.getElementById(id);
   const NS = "http://www.w3.org/2000/svg";
   const el = (tag, attrs = {}, parent) => {
@@ -584,8 +592,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const teamById = Object.fromEntries(D.team.map((t) => [t.owner_id, t]));
   const homeOf = Object.fromEntries(D.team.map((t) => [t.owner_id, t.region]));   // owner -> the team they sit in
   const crossRegion = (a) => !!homeOf[a.owner_id] && homeOf[a.owner_id] !== a.region;
-  try { const saved = JSON.parse(localStorage.getItem("cockpit-seg") || "{}"); for (const k in seg) if (typeof saved[k] === "string") seg[k] = saved[k]; } catch (e) { /* no storage here */ }
-  const saveSeg = () => { try { localStorage.setItem("cockpit-seg", JSON.stringify(seg)); } catch (e) { /* no storage here */ } };
+  const SEG_KEY = "cockpit-seg" + (PAGE ? "-" + PAGE.person : "");
+  if (PAGE && PAGE.role === "manager") seg.manager = PAGE.person;                 // a manager opens on their team
+  if (PAGE && (PAGE.role === "csm" || PAGE.role === "member")) seg.owner = PAGE.person;   // a CSM on their own book
+  try { const saved = JSON.parse(localStorage.getItem(SEG_KEY) || "{}"); for (const k in seg) if (typeof saved[k] === "string") seg[k] = saved[k]; } catch (e) { /* no storage here */ }
+  const saveSeg = () => { try { localStorage.setItem(SEG_KEY, JSON.stringify(seg)); } catch (e) { /* no storage here */ } };
   const segOn = () => Object.values(seg).some(Boolean);
   // whose book is open: a named owner, or a pool (its team + the Scale tier)
   // An owner's work: tasks routed to them, plus, for a pool member, the tasks
@@ -671,10 +682,17 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
 
   // tabs, with a bookmarkable #token per view
-  const views = ["overview", "lead", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
-  let current = "overview";
+  const views = PAGE ? PAGE.tabs.slice() : ["overview", "lead", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
+  if (PAGE) {                                    // tabs this role doesn't have aren't in the file at all (roles.py)
+    const nav = document.querySelector("nav[role=tablist]");
+    for (const v of views) nav.append($("tab-" + v));
+    const sw = $("page-switch");
+    $("page-switch-wrap").hidden = false;
+    sw.addEventListener("change", () => { if (sw.value) location.href = sw.value; });
+  }
+  let current = views[0];
   const show = (v) => {
-    if (!views.includes(v)) v = "overview";
+    if (!views.includes(v)) v = views[0];
     current = v;
     for (const w of views) {
       $("view-" + w).hidden = w !== v;
@@ -961,7 +979,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     let h = `<h3>Action planned</h3>`;
     h += p ? `<p><b>${planText(a, p)}</b>${p.kind === "step" ? ` · ${p.role === "manager" ? esc(managerName(p.by)) + " (manager)" : esc(ownerName[p.by] || p.by)}` : ""}${p.note ? `<br><small>${esc(p.note)}</small>` : ""}</p>`
       : `<p class="${a.flags.some((f) => f.flag === "churn" && f.status === "Act") ? "bad" : "muted"}">No next step recorded.</p>`;
-    const who = forecastRole(a);
+    const who = forecastRole(a, "next_step");
     if (dbState !== "ready") h += `<p class="note">Next steps are recorded in the published cockpit.</p>`;
     else if (!who) h += actAsHtml(a, "plan a next step");
     else h += `<div class="fc-form"><select id="ns-type" aria-label="Next step">${Object.entries(STEP_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>` +
@@ -992,7 +1010,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // with a reason, and its history. Like a CRM forecast field; the gap between
   // the person and the data is worth a conversation.
   const whenText = (s) => { const d = String(s || "").slice(0, 10); return d.length === 10 ? fmt(d) : ""; };
-  const forecastRole = (a) => {
+  const forecastRole = (a, action = "forecast") => {
+    if (PAGE) {                                              // a person's page: their rights, nothing else
+      if (!mayEdit(action, a.account_id)) return null;
+      return { by: PAGE.person, role: PAGE.role === "manager" ? "manager" : "owner" };
+    }
     const o = segOwner();
     if (o && (o === a.owner_id || (a.pool && o === a.pool))) return { by: o, role: "owner" };   // the owner, or their pool
     if (seg.manager && seg.manager === a.manager) return { by: seg.manager, role: "manager" };
@@ -1068,7 +1090,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const ids = new Set(h.sources.map((x) => x.id));
     const conf = (handoverConfirms[id] || []).slice(-1)[0];
     const current = conf && conf.version === h.version;          // confirmed this very version
-    const who = (() => { const r = forecastRole(a); return r && (r.role === "manager" || r.by === h.from) ? r : null; })();
+    const who = (() => { const r = forecastRole(a, "handover_confirm"); return r && (r.role === "manager" || r.by === h.from) ? r : null; })();
     const status = current ? `<span class="badge Done">Confirmed</span>`
       : conf ? `<span class="badge Open">Draft: rewritten since it was confirmed</span>` : `<span class="badge Open">Draft</span>`;
     let x = `<div class="ho-head"><h2>Handover brief: ${esc(ownerName[h.from] || h.from)} → ${esc(ownerName[h.to] || h.to)}</h2>${status}</div>`;
@@ -1138,6 +1160,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       old: old.length, act: act.length };
   }
   function drawOnboarding() {
+    if (!$("view-onboarding")) return;                     // not on this person's page
     const rows = D.onboarding.filter((r) => (obTier === "all" || r.tier === obTier) && inSegId(r.account_id));
     const S = Object.fromEntries(GROUPS.map((g) => [g.key, obStats(rows.filter((r) => r.welcome_group === g.key))]));
     const w = S["welcomed"], c = S["control (no email)"];
@@ -1199,6 +1222,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   }
 
   function drawTeam() {
+    if (!$("view-team")) return;                     // not on this person's page
     const all = D.time_to_action.filter((r) => inSegId(r.account_id)), called = all.filter((r) => r.call_date);
     const ownerRows = teamRows(all);
     const csm = ownerRows.filter((r) => r.o.owner_type === "csm"), pool = ownerRows.filter((r) => r.o.owner_type === "pool");
@@ -1305,6 +1329,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   }
 
   function drawBook() {
+    if (!$("view-book")) return;                     // not on this person's page
     const regions = REGIONS, tiers = TIERS;
     const weeks = D.week_ends.filter((we) => day(we) >= day(D.util_dates[0]));
     const idx = weeks.map((we) => D.util_dates.indexOf(we));
@@ -1437,6 +1462,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     document.querySelectorAll("#ov-sieve g.stage").forEach((g) => g.setAttribute("opacity", g.dataset.key === st.key ? 1 : 0.55));
   }
   function drawSieve() {
+    if (!$("view-overview")) return;                     // not on this person's page
     const S = D.churn_signals.filter((r) => inSegId(r.account_id)), total = S.length || 1, n = {};
     for (const st of STAGES) n[st.key] = S.filter(st.test).length;
     const act = n.act, fast = n.fast;
@@ -1462,6 +1488,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // ---------------------------------------------------------------- overview: renewals ahead
   const REN_ORDER = ["Act", "Shelfware", "Watch", "No churn flag"];
   function drawRenewals() {
+    if (!$("view-overview")) return;                     // not on this person's page
     const start = day(D.as_of), buckets = [0, 1, 2, 3, 4, 5].map((b) => ({ from: start + 1 + 30 * b, to: start + 30 * (b + 1), items: [] }));
     for (const a of D.accounts.filter(inSeg)) {
       const d = day(a.renewal_date), b = Math.floor((d - start - 1) / 30);
@@ -1523,7 +1550,37 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     { label: "Usage now", r: true, get: (r) => (r.util_now != null ? `${Math.round(r.util_now)}%` : "—") },
   ];
   function listOutcomes(title, items, short) { accountList($("oc-list"), $("oc-list-title"), title, items, OUT_COLS, short); }
+  // Below manager level the page holds only the team's totals, never a row per account:
+  // with account assignment driving commission, per-owner results invite comparing luck of the draw.
+  function drawOutcomesTotal() {
+    const T = D.outcomes_total, LATE = D.settings.too_late_days;
+    $("oc-late").textContent = LATE;
+    for (const id of ["oc-list", "oc-list-title"]) $(id).innerHTML = "";
+    if (!T.renewals) { for (const id of ["oc-stats", "oc-matrix", "oc-warning", "oc-calls", "oc-value", "oc-value-finding"]) $(id).innerHTML = "";
+      $("oc-finding").textContent = "Your team: no renewals in the six months after the data."; return; }
+    $("oc-finding").textContent = `Your team: the churn flags caught ${T.tp} of the ${T.lost} accounts that churned or shrank at renewal (${pct(T.tp, T.lost)}%), a median of ${T.median_warning ?? "—"} days before. Team totals only: results by owner are for managers.`;
+    $("oc-stats").innerHTML = [
+      ["Caught (recall)", `${T.tp} <small>of ${T.lost} · ${pct(T.tp, T.lost)}%</small>`],
+      ["Right when flagged (precision)", `${T.tp} <small>of ${T.flagged} · ${pct(T.tp, T.flagged)}%</small>`],
+      ["Median warning", `${T.median_warning ?? "—"} <small>days</small>`],
+      ["Too late to act", `${T.too_late} <small>of ${T.warned} under ${LATE} days</small>`],
+    ].map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+    const cell = (n, name, cls) => `<td><span class="cellbtn ${cls}"><span class="v">${n}</span><span class="k">${name}</span></span></td>`;
+    $("oc-matrix").innerHTML = `<table class="matrix"><thead><tr><th></th><th>Lost at renewal</th><th>Kept or grew</th></tr></thead><tbody>
+      <tr><th>Flagged</th>${cell(T.tp, "Caught", "good")}${cell(T.fp, "False alarm", "warning")}</tr>
+      <tr><th>Not flagged</th>${cell(T.fn, "Missed", "critical")}${cell(T.tn, "Quiet, kept", "neutral")}</tr></tbody></table>`;
+    $("oc-warning").innerHTML = `<table><thead><tr><th>Days of warning</th><th class="r">Caught</th></tr></thead><tbody>` +
+      T.warning_bins.map((b) => `<tr><td>${b.to == null ? b.from + "+" : b.from + "–" + b.to}</td><td class="r num">${b.n}</td></tr>`).join("") + "</tbody></table>";
+    $("oc-calls").innerHTML = `<table><thead><tr><th>Act accounts</th><th class="r">Accounts</th><th class="r">Churned</th><th class="r">Kept whole</th></tr></thead><tbody>` +
+      T.calls.map((r) => `<tr><td>${esc(r.group)}</td><td class="r num">${r.n}</td><td class="r num">${r.churned} (${pct(r.churned, r.n)}%)</td><td class="r num">${r.kept} (${pct(r.kept, r.n)}%)</td></tr>`).join("") + "</tbody></table>";
+    if (!T.value.length) { $("oc-value").innerHTML = ""; $("oc-value-finding").textContent = "The renewal outcomes have no renewal_arr column, so the value comparison is off."; return; }
+    $("oc-value-finding").textContent = "";
+    $("oc-value").innerHTML = `<table><thead><tr><th>Status today</th><th class="r">Renewals</th><th class="r">ARR</th><th class="r">At risk (rule)</th><th class="r">Really lost</th><th class="r">Lost / at risk</th></tr></thead><tbody>` +
+      T.value.map((g) => `<tr><td>${g.group === "All renewals" ? "<b>All renewals</b>" : esc(g.group)}</td><td class="r num">${g.n}</td><td class="r num">${money(g.arr)}</td><td class="r num">${g.at_risk ? money(g.at_risk) : "–"}</td><td class="r num">${money(g.lost)}</td><td class="r num">${g.at_risk ? pct(g.lost, g.at_risk) + "%" : "–"}</td></tr>`).join("") + "</tbody></table>";
+  }
   function drawOutcomes() {
+    if (!$("view-outcomes")) return;                     // not on this person's page
+    if (D.outcomes_total) return drawOutcomesTotal();
     const R = D.renewals.filter((r) => inSegId(r.account_id)), LATE = D.settings.too_late_days;
     $("oc-late").textContent = LATE;
     if (!R.length) {
@@ -1622,18 +1679,19 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       group("Your team", mine) + group("Other teams", rest) + "</select>";
   }
   function decisionCell(t) {
-    const live = dbState === "ready" && seg.manager && t.manager === seg.manager;
+    const live = dbState === "ready" && seg.manager && t.manager === seg.manager && (!PAGE || PAGE.person === seg.manager);
     const a = decisions[docId("assign", t)], h = decisions[docId("handback", t)];
-    if (canApprove(t) && t.routed_to === seg.manager) {
+    if (canApprove(t) && t.routed_to === seg.manager && mayEdit("handback", t.account_id)) {
       if (h) return `<span class="pending">Hand-back approved: back to the pool on the next run</span> ${live ? `<button class="link" data-undo="${esc(docId("handback", t))}">Undo</button>` : ""}`;
       return live ? `<button class="small primary" data-approve="${esc(docId("handback", t))}">Approve hand-back</button>` : "—";
     }
-    if (!canAssign(t)) return "—";
+    if (!canAssign(t) || !mayEdit("assign", t.account_id)) return "—";
     if (a && a.to_owner !== t.routed_to)
       return `<span class="pending">Going to ${esc(ownerName[a.to_owner] || a.to_owner)} on the next run</span> ${live ? `<button class="link" data-undo="${esc(docId("assign", t))}">Undo</button>` : ""}`;
     return live ? `<div class="act">${assignSelect(t)}</div>` : "—";
   }
   function drawTasks() {
+    if (!$("view-tasks")) return;                     // not on this person's page
     const T = TASKS.filter(taskInSeg);
     const n = Object.fromEntries(TASK_STATES.map((s) => [s, T.filter((t) => t.action_status === s).length]));
     const open = T.filter((t) => t.action_status === "Open");
@@ -1720,6 +1778,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // Churn (what is red, action taken, action planned), growth by value, and the
   // team's time in front of customers. Every list sorted by value at stake.
   function drawLeadership() {
+    if (!$("view-lead")) return;                     // not on this person's page
     const accs = D.accounts.filter(inSeg), person = (a) => a.tier !== "Self-service";
     const flagOf = (a, f) => a.flags.find((x) => x.flag === f);
     const churn = accs.filter((a) => flagOf(a, "churn") && person(a)).sort((a, b) => (valueOf(flagOf(b, "churn")) || 0) - (valueOf(flagOf(a, "churn")) || 0));
@@ -1850,6 +1909,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   }
 
   function drawMyBook() {
+    if (!$("view-mybook")) return;                     // not on this person's page
     // a pool's book = its team + the Scale tier (pools aren't in the Owner list)
     const o = segOwner(), name = ownerName[o] || o;
     $("mb-pick").innerHTML = "";
@@ -2020,7 +2080,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const firstPick = picks.length ? picks[0].id : D.accounts[0].account_id;
   sel.value = firstPick; drawTimeline(firstPick);
   redraw();
-  // a link like ...#acc_069 (from Slack's Open timeline) opens that account
+  // a link like ...#<account id> (from Slack's Open timeline) opens that account
   // Account search: type part of a name or an ID; accounts in the current
   // segment come first, then flagged ones. Enter or a click opens the timeline.
   function accountSearch(input, list) {

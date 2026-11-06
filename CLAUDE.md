@@ -400,6 +400,21 @@ One JSON event per line, one file per day in `data/events/`.
   (backtest.py's view) and tasks (action_status, with each task's manager).
   Opens in any browser offline. The page only draws; the numbers come from
   the export.
+- `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
+  called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
+  the export to the person's accounts (the team = everyone under one manager;
+  Self-service for managers in their team's regions; the leader the whole book),
+  takes the role's missing tabs out of the HTML, swaps "Did it work?" for team
+  totals below manager level (no row per account), and writes a page-meta block
+  (person, role, tabs, accounts, edit rights per action). The page reads it to
+  open on the role's first tab and to offer a form only where the person may act.
+  Writes data/pages/<owner_id>.html, leader.html and index.html (the landing
+  page, with a switcher to every page: demo only, see THREAT_MODEL.md).
+  `tests/roles_test.py`: written from ROLES.md alone by a separate agent (raw
+  HTML: no out-of-scope id or name, meta against the spec, cockpit_sync refusals);
+  `tests/role_pages_test.js`: the pages in a browser (no script error, tabs, forms
+  only where allowed). Run both on any PR that touches roles.py, the template,
+  export_views.py or [roles]; also cockpit_test.js for the full page.
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to
@@ -444,7 +459,10 @@ One JSON event per line, one file per day in `data/events/`.
   a downsize between 0 and ARR, an owner only on their own accounts, a manager
   only on their team's, a reason on every forecast); a bad one is skipped and
   listed with why, never a crash; free text cut to [cockpit] max_text, control
-  characters removed. Who decided stays self-declared (THREAT_MODEL.md).
+  characters removed. The rights come from settings.toml [roles] (may(): a role
+  without an action in its edit list is refused, "own" or "team" decides on which
+  accounts; cs_team owner_type picks csm or member). Who decided stays
+  self-declared (THREAT_MODEL.md).
   `tests/cockpit_sync_test.py`: no DuckDB, a small made-up CRM.
 - `pull_clicks.py`: first step of run_all. Gathers the Slack clicks the AWS
   listener saved under [aws] slack_clicks_prefix into

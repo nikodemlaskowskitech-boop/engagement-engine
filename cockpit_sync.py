@@ -86,7 +86,13 @@ def is_day(value):
         return False
 
 
-def problem(d, accounts, team):
+def may(role, action):
+    """What settings.toml [roles] lets a role do: "own", "team", or None (not at all).
+    So changing [roles] changes what is accepted here too (ROLES.md), not only the page."""
+    return SETTINGS.get("roles", {}).get(role, {}).get("edit", {}).get(action)
+
+
+def problem(d, accounts, team, kinds=None):
     """Why this decision can't be used, or None when it can. accounts: {id: {"arr", "owners"}}
     (owners = the CSM, pool and pool member on the account); team: {owner_id: manager}."""
     if not isinstance(d, dict):
@@ -112,6 +118,8 @@ def problem(d, accounts, team):
             return "not a known flag, or no status"
         if d.get("manager") not in managers:
             return f"{str(d.get('manager'))[:30]!r} isn't a manager"
+        if not may("manager", kind):
+            return f"managers may not {kind} ([roles.manager] edit)"
         if d["manager"] not in {team.get(o) for o in acc["owners"]}:      # audit F4: own team only
             return f"{d['manager']!r} doesn't manage this account's owner"
         if kind == "assign" and d.get("to_owner") not in team:
@@ -121,10 +129,16 @@ def problem(d, accounts, team):
     if d.get("role") not in ROLES:
         return f"unknown role {str(d.get('role'))[:30]!r}"
     by = d.get("by")
-    if d["role"] == "owner" and by not in acc["owners"]:
-        return f"{str(by)[:30]!r} doesn't own this account"
+    role = "manager" if d["role"] == "manager" else (kinds or {}).get(by, "csm")
+    where = may(role, kind)
+    if not where:
+        return f"a {role} may not set a {kind} ([roles.{role}] edit)"
     if d["role"] == "manager" and by not in {team.get(o) for o in acc["owners"]}:
         return f"{str(by)[:30]!r} doesn't manage this account's owner"
+    if d["role"] == "owner" and where == "own" and by not in acc["owners"]:
+        return f"{str(by)[:30]!r} doesn't own this account"
+    if d["role"] == "owner" and where == "team" and (by not in team or team[by] not in {team.get(o) for o in acc["owners"]}):
+        return f"{str(by)[:30]!r} isn't in this account's team"
     if kind == "forecast":
         if d.get("call") not in CALLS:
             return f"unknown forecast {str(d.get('call'))[:30]!r}"
@@ -144,14 +158,14 @@ def problem(d, accounts, team):
     return None
 
 
-def build(decisions, as_of, run_date, accounts, team):
+def build(decisions, as_of, run_date, accounts, team, kinds=None):
     """The events to write, the decisions skipped (with why), and how many were on older data."""
     if not isinstance(decisions, list):
         return [], [("the file", "isn't a list of decisions")], 0
     good, skipped = [], []
     for d in decisions:
         try:
-            why = problem(d, accounts, team)
+            why = problem(d, accounts, team, kinds)
         except Exception as e:                  # never let one entry stop the run (audit F2)
             why = f"unreadable ({type(e).__name__})"
         if why:
@@ -207,13 +221,14 @@ def build(decisions, as_of, run_date, accounts, team):
 
 
 def reference(con):
-    """What a decision is checked against: each account's ARR and owners, each person's manager."""
+    """What a decision is checked against: each account's ARR and owners, each person's manager and kind."""
     accounts = {}
     for acc, arr, csm, pool, member in con.sql(
             "SELECT account_id, arr, csm_owner, cs_pool, pool_owner FROM crm").fetchall():   # arr: the crm view's
         accounts[acc] = {"arr": float(arr or 0), "owners": {o for o in (csm, pool, member) if o}}
     team = dict(con.sql("SELECT owner_id, manager FROM cs_team").fetchall())
-    return accounts, team
+    kinds = dict(con.sql("SELECT owner_id, owner_type FROM cs_team").fetchall())   # csm | member | pool: their [roles]
+    return accounts, team, kinds
 
 
 def main():
