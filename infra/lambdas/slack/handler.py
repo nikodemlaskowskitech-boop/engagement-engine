@@ -35,6 +35,7 @@ import re
 import time
 import urllib.parse
 import urllib.request
+import uuid
 from datetime import datetime, timezone
 
 from slack_loop import (CALL_TOPIC, OUTCOMES, call_form, call_logged_blocks, claimed_blocks, form_answers,
@@ -98,10 +99,24 @@ def slack(method, token, payload, opener=None):
     return answer
 
 
-def save(s3, ref, event_name, topic, user, outcome=None, note=None):
-    """One click, one file under state/clicks/<run date>/."""
+def click_id(payload):
+    """Slack's own identity of this click: the button press's action_ts, or the form's view id.
+    A request replayed within the signature window carries the same one, so it lands on the same
+    file and overwrites it instead of adding a second click (audit 6 Nov 2026). None if missing."""
+    if payload.get("type") == "block_actions":
+        act = (payload.get("actions") or [{}])[0]
+        parts = [act.get("action_ts"), act.get("action_id")]
+    else:
+        parts = [payload.get("view", {}).get("id")]
+    if not all(parts):
+        return None
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, "slack:" + "|".join(map(str, parts + [payload.get("user", {}).get("id")]))))
+
+
+def save(s3, ref, event_name, topic, user, outcome=None, note=None, event_id=None):
+    """One click, one file under state/clicks/<run date>/<click id>.json."""
     day = ref.get("d") if DAY.match(str(ref.get("d", ""))) else datetime.now(timezone.utc).date().isoformat()
-    event = make_event(day, ref["a"], event_name, ref["o"], topic, user, outcome, note)
+    event = make_event(day, ref["a"], event_name, ref["o"], topic, user, outcome, note, event_id)
     s3.put_object(Bucket=BUCKET, Key=f"{CLICKS}{day}/{event['event_id']}.json", Body=json.dumps(event).encode(),
                   ContentType="application/json", ExpectedBucketOwner=OWNER)
     return event
@@ -135,7 +150,7 @@ def handler(event, context, s3=None, ssm=None, opener=None, now=None):
         channel, ts = payload.get("channel", {}).get("id"), payload.get("message", {}).get("ts")
         blocks = payload.get("message", {}).get("blocks", [])
         if kind == "claim":
-            save(s3, ref, "task_claimed", ref["f"], user)
+            save(s3, ref, "task_claimed", ref["f"], user, event_id=click_id(payload))
             slack("chat.update", token, {"channel": channel, "ts": ts, "text": f"{ref['n']}: taken",
                                          "blocks": claimed_blocks(blocks, user)}, opener)
             print(f"  claimed     {ref['a']}  {ref['n']}")
@@ -143,7 +158,7 @@ def handler(event, context, s3=None, ssm=None, opener=None, now=None):
             slack("views.open", token, {"trigger_id": payload.get("trigger_id"),
                                         "view": call_form(ref, channel, ts)}, opener)
         elif kind == "approve_handback":
-            save(s3, ref, "handback_approved", "handback", user)
+            save(s3, ref, "handback_approved", "handback", user, event_id=click_id(payload))
             slack("chat.update", token, {"channel": channel, "ts": ts, "text": f"{ref['n']}: hand-back approved",
                                          "blocks": handback_blocks(blocks, user)}, opener)
             print(f"  hand-back   {ref['a']}  {ref['n']}  (approved)")
@@ -156,7 +171,7 @@ def handler(event, context, s3=None, ssm=None, opener=None, now=None):
         if outcome not in OUTCOMES:
             return answer(200)
         topic = CALL_TOPIC.get(ref["f"], "follow_up")
-        save(s3, ref, "meeting_held", topic, user, outcome, note)
+        save(s3, ref, "meeting_held", topic, user, outcome, note, click_id(payload))
         slack("chat.update", token, {"channel": ref["channel"], "ts": ref["ts"], "text": f"{ref['n']}: call logged",
                                      "blocks": call_logged_blocks(ref, user, outcome, note)}, opener)
         print(f"  call logged {ref['a']}  {ref['n']}  ({topic}, {OUTCOMES[outcome]})")

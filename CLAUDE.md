@@ -492,7 +492,8 @@ One JSON event per line, one file per day in `data/events/`.
   ANTHROPIC_API_KEY in `.env`). brief.py and handover.py ask it for a client.
   The AI spend ledger (5 Nov 2026): every model call goes through
   `llm.call(client, feature, account_id, ...)`, which checks the feature's
-  monthly budget first ([llm.monthly_budget_usd]: qbr_brief, handover; real
+  monthly budget first ([llm.monthly_budget_usd.laptop] and [....aws]: each place its
+  own share, as their ledgers can't see each other (audit 6 Nov 2026); qbr_brief, handover; real
   calendar month, UTC; at or over it = OverBudget, no call; a feature with no
   budget is refused too), then appends one row to data/ai_spend.csv ([llm]
   ledger_file: time, month, feature, account, provider, model, tokens, cost at
@@ -653,7 +654,9 @@ One JSON event per line, one file per day in `data/events/`.
   refuses with 401 anything unsigned, wrongly signed or older than [aws]
   slack_max_age_seconds, before any other work. Then it does what listener.py
   does and saves each click as its own file, [aws]
-  slack_clicks_prefix/<run date>/<event_id>.json (state/clicks/). Its role may
+  slack_clicks_prefix/<run date>/<event_id>.json (state/clicks/; the event_id is
+  made from Slack's own click id, so a replayed request overwrites, never doubles:
+  audit 6 Nov 2026). Its role may
   only write there and read its two Parameter Store secrets ([aws]
   slack_signing_secret_parameter, slack_bot_token_parameter; put_key.py
   --slack). The engine merges the clicks into
@@ -713,7 +716,7 @@ One JSON event per line, one file per day in `data/events/`.
 - `tests/slack_lambda_test.py`: the Slack listener's handler from its real
   bundle, with requests signed like Slack signs them (made-up secret) against
   stand-in S3, Parameter Store and Slack: unsigned, wrongly signed, tampered
-  and stale requests refused with nothing saved; each button's event and card
+  stale and future-dated requests refused with nothing saved; a replay saved once; each button's event and card
   update; a bad run date can't leave state/clicks/; Slack down = click still
   saved; secrets read once and never printed. Exit 1 on any FAIL.
 - `to_parquet.py`: the last engine step. Writes each [aws] athena_tables

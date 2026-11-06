@@ -11,7 +11,7 @@ Both speak the same Messages API, so brief.py and handover.py don't care which
 one answers. Switching provider = one line in settings.toml, never a script.
 
 Every model call goes through call(): it checks the feature's monthly budget
-first ([llm.monthly_budget_usd]; over it = refused, no call), then records the
+first ([llm.monthly_budget_usd.laptop] or .aws; over it = refused, no call), then records the
 call in the AI spend ledger, data/ai_spend.csv ([llm] ledger_file): when, which
 feature and account, model, tokens, cost at the prices in [llm], laptop or AWS.
 
@@ -77,7 +77,7 @@ def describe():
 
 # --- the AI spend ledger and budgets ---
 LEDGER = OUTPUTS / LLM.get("ledger_file", "ai_spend.csv")
-BUDGETS = LLM.get("monthly_budget_usd", {})
+_BUDGETS = LLM.get("monthly_budget_usd", {})
 COLUMNS = ["time_utc", "month", "feature", "account_id", "provider", "model",
            "input_tokens", "output_tokens", "cost_usd", "where", "stop_reason"]
 
@@ -89,6 +89,18 @@ class OverBudget(Exception):
 def where():
     """Laptop or AWS: the engine Lambda has AWS_LAMBDA_FUNCTION_NAME set."""
     return "aws" if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") else "laptop"
+
+
+def budgets_here(place=None):
+    """This place's budgets: [llm.monthly_budget_usd.laptop] or [....aws]. The two ledgers can't
+    see each other, so each place gets its own share of the total (audit 6 Nov 2026). An old flat
+    section (feature = amount) still works, for both places."""
+    if _BUDGETS and all(isinstance(v, (int, float)) for v in _BUDGETS.values()):
+        return dict(_BUDGETS)
+    return dict(_BUDGETS.get(place or where(), {}))
+
+
+BUDGETS = budgets_here()
 
 
 def this_month():
@@ -107,8 +119,10 @@ def spent(feature=None, month=None):
         return 0.0
     month = month or this_month()
     with LEDGER.open(encoding="utf-8", newline="") as f:
+        # only this place's rows: a ledger copied from the other place can't use up our budget
         return sum(float(r["cost_usd"]) for r in csv.DictReader(f)
-                   if r["month"] == month and (feature is None or r["feature"] == feature))
+                   if r["month"] == month and r.get("where", where()) == where()
+                   and (feature is None or r["feature"] == feature))
 
 
 def record(feature, account_id, response):
@@ -133,11 +147,11 @@ def call(client, feature, account_id, **request):
     """The only way the scripts call the model: budget first, then the call, then the ledger.
     A feature with no budget in settings is refused too: every feature must have a limit."""
     if feature not in BUDGETS:
-        raise OverBudget(f"no budget for '{feature}' in settings.toml [llm.monthly_budget_usd]")
+        raise OverBudget(f"no budget for '{feature}' in settings.toml [llm.monthly_budget_usd.{where()}]")
     so_far = spent(feature)
     if so_far >= BUDGETS[feature]:
         raise OverBudget(f"{feature}: ${so_far:.2f} spent in {this_month()}, budget ${BUDGETS[feature]:.2f} "
-                         f"(settings.toml [llm.monthly_budget_usd])")
+                         f"(settings.toml [llm.monthly_budget_usd.{where()}])")
     response = client.messages.create(**request)
     record(feature, account_id, response)
     return response
@@ -145,7 +159,7 @@ def call(client, feature, account_id, **request):
 
 def spend_report(month=None):
     month = month or this_month()
-    lines = [f"AI spend in {month} ({where()} ledger {LEDGER.name}; estimate at the [llm] prices)"]
+    lines = [f"AI spend in {month} ({where()} ledger {LEDGER.name}, {where()} budgets; estimate at the [llm] prices)"]
     for feature, budget in sorted(BUDGETS.items()):
         s = spent(feature, month)
         lines.append(f"  {feature:<12} ${s:7.3f} of ${budget:.2f}  ({s / budget:.0%})" if budget else f"  {feature}: no budget")
