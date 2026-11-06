@@ -216,6 +216,8 @@ One JSON event per line, one file per day in `data/events/`.
   Spec for the per-person pages (6 Nov 2026), built the independent way: tests by
   a separate agent from the spec only, then the build, then a separate review.
   Update it whenever a role, a tab or an edit right changes.
+- `DEMO.md`: the 3-minute walkthrough (what to click and say, numbers as of the
+  demo data; check them after a regenerate), linked from the README.
 - `ENGAGEMENT_LOGIC.md`: the logic by tier as Mermaid diagrams (GitHub
   renders them): coverage table, overview, Self-service journey, Scale
   queue and hand-back, Enterprise QBR first, action status. Update it when
