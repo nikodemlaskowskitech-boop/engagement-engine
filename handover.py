@@ -336,10 +336,20 @@ def leak_check(sent, key):
     allow = set(CONF.get("leak_check_allow", []))
     found = set()
     for match in PERSON_SHAPED.finditer(sent):
-        words = match.group(0).split()
-        if match.group(0) in allow or any(w.capitalize() in NOT_A_NAME for w in words):
+        if match.group(0) in allow:
             continue
-        found.add(match.group(0))
+        # Drop the words that aren't names (roles, greetings, dates, product words) and look at
+        # what's left: two or more capitalised words still in a row look like a person.
+        # (Audit 6 Nov 2026: skipping the whole match on one such word let "Finance Director
+        # Hannah Weiss" and "Thanks Hannah Weiss" through.)
+        run = []
+        for w in match.group(0).split() + [None]:
+            if w is not None and w.capitalize() not in NOT_A_NAME:
+                run.append(w)
+                continue
+            if len(run) >= 2 and " ".join(run) not in allow:
+                found.add(" ".join(run))
+            run = []
     # belt and braces: a name redaction knew about must never be in the text
     for label, real in key.items():
         if label != "the customer" and real in sent:

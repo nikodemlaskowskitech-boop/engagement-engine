@@ -123,5 +123,12 @@ with contextlib.redirect_stdout(out):
     handover.run(acc, True, False)
 check(len(calls) == before and "BLOCKED" in out.getvalue(), "--dry-run shows the block too (and never calls the model)")
 
+print("\nNames next to a role or greeting (audit, 6 Nov 2026)")
+for text in ("Thanks Hannah Weiss for the call.", "Our Finance Director Hannah Weiss signs off.",
+             "Dear Hannah Weiss,", "Head of Data Hannah Weiss agreed"):
+    check(handover.leak_check(text, {}) == ["Hannah Weiss"], f"caught in: {text!r}", handover.leak_check(text, {}))
+check(handover.leak_check("Customer A and CS 1 met the Head of Data", {}) == [],
+      "labels and roles on their own are still not people")
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)
