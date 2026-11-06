@@ -28,11 +28,28 @@ OUT = REPO / "data" / "handover"
 KEY = json.loads((REPO / "stories" / "answer_key.json").read_text(encoding="utf-8"))
 
 failed = 0
-print("\n1. Privacy: what the model would see")
+print("\n1. Privacy: what the model would see (made fresh now, from today's code)")
+# Audit 6 Nov 2026: this used to read the _sent.txt files the last run left behind, so turning
+# redaction off didn't fail it until someone re-ran the dry run. Now the test makes them itself,
+# with handover.py --dry-run into a temporary folder (no model, no key), and a missing one FAILs.
+import tempfile                                   # noqa: E402
+sys.path.insert(0, str(REPO))
+import handover                                   # noqa: E402
+import llm                                        # noqa: E402
+FRESH = Path(tempfile.mkdtemp())
+handover.OUT, llm.LEDGER = FRESH, FRESH / "ai_spend.csv"
+if not handover.VIEWS.exists():
+    failed += 1
+    print("  FAIL  no data/views_data.json: run .\\run_all.ps1 first (privacy can't be checked without it)")
 for account in [k for k in KEY if not k.startswith("_")]:
-    sent_path, key_path = OUT / f"{account}_sent.txt", OUT / f"{account}_key.json"
+    try:
+        handover.run(account, True, False)
+    except SystemExit:
+        pass                                      # a leak check that blocks still writes what it saw
+    sent_path, key_path = FRESH / f"{account}_sent.txt", FRESH / f"{account}_key.json"
     if not sent_path.exists():
-        print(f"  SKIP  {account}: run python handover.py --dry-run first"); continue
+        failed += 1
+        print(f"  FAIL  {account}: the dry run wrote nothing to check"); continue
     sent, key = sent_path.read_text(encoding="utf-8"), json.loads(key_path.read_text(encoding="utf-8"))
     leaks = []
     for label, real in key.items():

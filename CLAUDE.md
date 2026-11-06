@@ -541,7 +541,9 @@ One JSON event per line, one file per day in `data/events/`.
   Leak check (PRIVACY.md upgrade C): before the model call, leak_check() scans
   the exact text to be sent for anything person-shaped ("First Last" that
   isn't a label, role, greeting, date, product word or on [handover]
-  leak_check_allow), a name from the key, an email or a phone number; any hit
+  leak_check_allow; those words are dropped first and two capitalised words
+  still in a row count, so "Finance Director Hannah Weiss" is caught: audit
+  6 Nov 2026), a name from the key, an email or a phone number; any hit
   stops the call for that account (no brief), lists what it found, and
   handover.py exits 1 (in AWS: a warning in run.json).
 - `stories/`: three hand-written account stories (Yarrow Studio: champion
@@ -552,7 +554,9 @@ One JSON event per line, one file per day in `data/events/`.
   `stories/answer_key.json` holds what a good brief must find and must not
   claim; for testing only, never shown to the model.
 - `tests/handover_test.py`: privacy first (no real name, first name, email,
-  phone or company in any `_sent.txt`; runs without a key), then quality once
+  phone or company in any `_sent.txt`, made fresh by the test itself with a
+  dry run into a temporary folder, never the last run's files; runs without
+  a key; a missing one FAILs), then quality once
   briefs exist (planted facts found, forbidden claims, citation checks). FAIL
   when a brief is missing after a run, empty, not a finished answer, finds
   under half the planted facts or claims a forbidden one. Run it
