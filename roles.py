@@ -119,6 +119,48 @@ def outcomes_total(renewals, too_late):
             "warning_bins": bins, "calls": calls, "value": value}
 
 
+def peer_medians(export, owners_in):
+    """The medians a page compares people with, by kind of owner (csm, member, pool), over the
+    owners in owners_in, computed here on the whole export: a page cut to one team can't work
+    out a book-wide median itself (6 Nov 2026). Numbers only, no names. Same rules as the page."""
+    from datetime import date, timedelta
+    as_of = date.fromisoformat(export["as_of"])
+    since = (as_of - timedelta(days=29)).isoformat()                  # the page's "last 30 days"
+    accounts, tasks = export["accounts"], export.get("tasks", [])
+    met = {t["account_id"] for t in export.get("touches", []) if t["event"] == "meeting_held" and t["date"] >= since}
+    team = {t["owner_id"]: t for t in export["team"]}
+
+    def book(o):
+        return [a for a in accounts if (a.get("pool") if team[o]["owner_type"] == "pool" else a.get("owner_id")) == o]
+
+    def work(o):                                  # tasks routed to them, plus a member's own accounts' pool tasks
+        t, own = team[o], {a["account_id"] for a in accounts if a.get("owner_id") == o}
+        return [x for x in tasks if x["routed_to"] == o
+                or (t["owner_type"] == "member" and x["routed_to"] == t.get("pool") and x["account_id"] in own)]
+
+    def med(xs):
+        xs = [x for x in xs if x is not None]
+        return round(statistics.median(xs), 2) if xs else None
+
+    out = {}
+    for kind in ("csm", "member", "pool"):
+        people = [o for o in owners_in if o in team and team[o]["owner_type"] == kind]
+        if not people:
+            continue
+        stats = []
+        for o in people:
+            b = book(o)
+            calls = [r["days_to_call"] for r in export.get("time_to_action", []) if r["routed_to"] == o and r.get("call_date")]
+            stats.append({"accs": len(b), "open": sum(x["action_status"] == "Open" for x in work(o)),
+                          "meetings": sum(1 for t in export.get("touches", []) if t["event"] == "meeting_held"
+                                          and t.get("owner_id") == o and t["date"] >= since),
+                          "met": sum(a["account_id"] in met for a in b) / len(b) if b else None,
+                          "calls": statistics.median(calls) if calls else None})
+        out[kind] = {k: med([s[k] for s in stats]) for k in ("accs", "open", "meetings", "met", "calls")}
+        out[kind]["met_all"] = med([s["met"] or 0 for s in stats])      # owners with no accounts as 0%
+    return out
+
+
 def slice_export(export, person_id, person):
     """The export as this person's page may hold it, and the page's meta."""
     accounts, team = export["accounts"], export["team"]
@@ -129,6 +171,11 @@ def slice_export(export, person_id, person):
     for key in ACCOUNT_ROWS:
         page[key] = [r for r in export.get(key, []) if r.get("account_id") in ids]
     page["handovers"] = {k: v for k, v in export.get("handovers", {}).items() if k in ids}
+    # "against the median": the whole book's people of the same kind, or only the team's ([roles] peer_median)
+    everyone = [t["owner_id"] for t in export["team"]]
+    peers = everyone if cfg["scope"] == "book" or ROLES.get("peer_median", "book") == "book" \
+        else [t["owner_id"] for t in export["team"] if t["manager"] == person["manager"]]
+    page["peer_medians"] = {"scope": "book" if peers == everyone else "team", **peer_medians(export, peers)}
     if cfg["outcomes"] == "team_total":                   # totals only: no row per account
         page["outcomes_total"] = outcomes_total(page["renewals"], export["settings"]["too_late_days"])
         page["renewals"] = []

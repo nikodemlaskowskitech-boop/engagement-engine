@@ -231,7 +231,8 @@ export = {
                  "churn_line": SETTINGS["churn"]["util_below"],
                  "follow_up_days": SETTINGS["follow_ups"]["after_days"],
                  "currency": SETTINGS["money"]["currency"],
-                 "forecast_gap_share": SETTINGS["money"]["forecast_gap_share"]},
+                 "forecast_gap_share": SETTINGS["money"]["forecast_gap_share"],
+                 "open_no_flags_up_to": SETTINGS["cockpit"].get("open_no_flags_up_to", 15)},
 }
 
 out = DATA / "views_data.json"

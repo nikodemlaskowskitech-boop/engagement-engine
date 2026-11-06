@@ -72,6 +72,15 @@ page).
 - **Call speed by owner is for managers** (6 Nov 2026, from the code review).
   Below manager level the CS team tab shows the team's accounts, not an
   owner-by-owner table; My book shows your own number next to a median.
+- **Medians from the whole book** (6 Nov 2026, found in the acceptance check). A
+  page holds only its team, so "against the median" on it compared people with
+  their team alone (Mia's "median for CSMs" read 0.5 on her page, 1 on the full
+  cockpit). roles.py now works the medians out once on the whole export and puts
+  only the numbers on each page. `[roles] peer_median = "team"` switches to the
+  team's own medians; the leader always gets the book's.
+- **A small book in full sight** (6 Nov 2026, same check). My book folds accounts
+  with no flags away, risk first; in a book of `[cockpit] open_no_flags_up_to`
+  (15) or fewer they're listed open, so a CSM sees all of theirs at a glance.
 - **Landing on the leader's page, a dropdown to the others** (5 Nov 2026). For
   the demo only, so a visitor can switch views. In real use each person gets
   their own page's link, or signs in (SSO) and is sent to it; the dropdown and
@@ -102,6 +111,7 @@ element still counts.
 | Self-service on the page | `[roles.<role>] self_service` |
 | What a role may change | `[roles.<role>] edit` = `{ forecast = "own" \| "team", ... }`; a missing entry = can't |
 | Outcomes by owner or team total | `[roles.<role>] outcomes` = `"by_owner"` or `"team_total"` |
+| Medians: the whole book's or the team's | `[roles] peer_median` = `"book"` or `"team"` |
 | Who is in which team | `cs_team.csv` `manager` column (your own data: `[columns.team]`) |
 | The leader's name | `[roles] leader_name` |
 

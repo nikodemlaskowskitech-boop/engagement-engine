@@ -532,6 +532,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
   const day = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5;
   const fmt = (s) => new Date(day(s) * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  // A person's page holds only their team, so it can't work out a book-wide median itself:
+  // roles.py computes them once (D.peer_medians, by kind of owner) and the page uses those.
+  const PM = D.peer_medians || null;
+  const peerMed = (kind, key, fallback) => PM ? ((PM[kind] || {})[key] ?? null) : fallback();
+  const PM_TEAM = PM && PM.scope === "team";
   const median = (xs) => { if (!xs.length) return null; const a = [...xs].sort((x, y) => x - y), m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
   $("n-accounts").textContent = D.accounts.length;   // from the export, never typed in
   const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
@@ -1331,7 +1336,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       open: workOf(t.owner_id).filter((x) => x.action_status === "Open").length,
       away: D.accounts.filter((a) => a.owner_id === t.owner_id && crossRegion(a)).length }));
     const med = {};
-    for (const k of Object.keys(KIND_ORDER)) { const g = all.filter((r) => r.t.owner_type === k); med[k] = { accs: median(g.map((r) => r.accs)), open: median(g.map((r) => r.open)) }; }
+    for (const k of Object.keys(KIND_ORDER)) { const g = all.filter((r) => r.t.owner_type === k); med[k] = { accs: peerMed(k, "accs", () => median(g.map((r) => r.accs))), open: peerMed(k, "open", () => median(g.map((r) => r.open))) }; }
     const rows = all.filter((r) => people.includes(r.t)).sort((x, y) => KIND_ORDER[x.t.owner_type] - KIND_ORDER[y.t.owner_type] || x.open - y.open);
     const room = (r) => r.t.owner_type !== "pool" && r.open < med[r.t.owner_type].open;   // a queue has no room; people do
     const cell = (v, m) => `${v} <small>(median ${m})</small>`;
@@ -1849,7 +1854,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const m = D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > RUN - 31).length;
       return { t, book: book.length, arr: sum(book, (a) => a.arr), risk: sum(book, (a) => valueOf(flagOf(a, "churn"))), meetings: m, met: book.filter((a) => met30(a.account_id)).length }; };
     const all = D.team.map(stat), med = {};
-    for (const k of Object.keys(KIND_ORDER)) { const g = all.filter((r) => r.t.owner_type === k); med[k] = { m: median(g.map((r) => r.meetings)), s: median(g.map((r) => r.book ? r.met / r.book : 0)) }; }
+    for (const k of Object.keys(KIND_ORDER)) { const g = all.filter((r) => r.t.owner_type === k); med[k] = { m: peerMed(k, "meetings", () => median(g.map((r) => r.meetings))), s: peerMed(k, "met_all", () => median(g.map((r) => r.book ? r.met / r.book : 0))) }; }
     // people only: a pool is a queue, its meetings are its members'
     const rows = all.filter((r) => people.includes(r.t) && r.t.owner_type !== "pool").sort((x, y) => KIND_ORDER[x.t.owner_type] - KIND_ORDER[y.t.owner_type]);
     const pc = (x) => Math.round(100 * x);               // compare what the reader sees
@@ -1945,7 +1950,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         saveSeg(); redraw(); }));
       return;
     }
-    const peers = peersOf(o), kind = kindName((teamById[o] || {}).owner_type);
+    const peers = peersOf(o), okind = (teamById[o] || {}).owner_type, kind = kindName(okind) + (PM_TEAM ? " in the team" : "");
     const med = (f) => { const m = median(peers.map(f)); return m == null ? "–" : Math.round(m * 10) / 10; };
 
     // 1. workload
@@ -1958,7 +1963,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       : live[0].age_days ? `${name}: ${plural(live.length, "task")} on the plate; the oldest has waited ${plural(live[0].age_days, "day")}.`
       : `${name}: ${plural(live.length, "task")} on the plate, all sent today.`;
     $("mb-work").innerHTML =
-      tile("Open", open.length, `median for ${kind}: ${med((p) => mine(p).filter((t) => t.action_status === "Open").length)}`, false) +
+      tile("Open", open.length, `median for ${kind}: ${PM ? (peerMed(okind, "open") ?? "–") : med((p) => mine(p).filter((t) => t.action_status === "Open").length)}`, false) +
       tile("Claimed, not done", live.length - open.length, "taken in Slack, no meeting yet", false) +
       tile(`Waiting ${FAST}+ days`, old.length, `of ${live.length} on the plate`, old.length > 0) +
       tile("Given to me by a manager", given.length, given.length ? `from ${[...new Set(given.map((t) => ownerName[t.assigned_from] || t.assigned_from))].join(", ")}` : "none", false) +
@@ -1974,7 +1979,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const accs = accountsOf(o), ids = new Set(accs.map((a) => a.account_id));
     const share = (p) => { const as = accountsOf(p); return as.length ? as.filter((a) => met30(a.account_id)).length / as.length : null; };
     const m30 = accs.filter((a) => met30(a.account_id)).length;
-    $("mb-eng-finding").textContent = `${name} met ${m30} of ${plural(accs.length, "account")} (${pct(m30, accs.length)}%) in the last 30 days; the median for ${kind} is ${Math.round(100 * (median(peers.map(share).filter((x) => x != null)) || 0))}%.`;
+    $("mb-eng-finding").textContent = `${name} met ${m30} of ${plural(accs.length, "account")} (${pct(m30, accs.length)}%) in the last 30 days; the median for ${kind} is ${Math.round(100 * (peerMed(okind, "met", () => median(peers.map(share).filter((x) => x != null))) || 0))}%.`;
     const weeks = D.week_ends, counts = weeks.map((we) => {
       const c = { qbr: 0, call: 0, other: 0 };
       for (const t of D.touches) if (t.event === "meeting_held" && ids.has(t.account_id) && day(t.date) > day(we) - 7 && day(t.date) <= day(we)) c[MEET_KIND(t.topic)]++;
@@ -1999,9 +2004,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       .sort((a, b) => (a.last ? day(a.last.date) : 0) - (b.last ? day(b.last.date) : 0));
     const myCalls = D.time_to_action.filter((r) => ids.has(r.account_id) && r.call_date).map((r) => r.days_to_call);
     const teamCalls = (p) => median(D.time_to_action.filter((r) => r.routed_to === p && r.call_date).map((r) => r.days_to_call));
+    const callsMed = PM ? (peerMed(okind, "calls") ?? "–") : (() => { const m = median(peers.map(teamCalls).filter((x) => x != null)); return m == null ? "–" : Math.round(m * 10) / 10; })();
     $("mb-eng-tiles").innerHTML =
       tile("Gone quiet", quiet.length, `of ${plural(accs.length, "account")}`, quiet.length > 0) +
-      tile("Days from signal to call", myCalls.length ? median(myCalls) : "–", `median for ${kind}: ${med(teamCalls)}`, false);
+      tile("Days from signal to call", myCalls.length ? median(myCalls) : "–", `median for ${kind}: ${callsMed}`, false);
     shortList($("mb-quiet"), quiet, [
       { label: "Account", get: (a) => esc(a.account_name) },
       { label: "Last touch", get: (a) => a.last ? `${fmtFull(a.last.date)} <small>${esc(topicName(a.last.topic))}</small>` : '<span class="muted">none on record</span>' },
@@ -2042,7 +2048,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         `<td>${(() => { const p = planOf(a); if (p) return planText(a, p) + (p.note ? `<small><br>${esc(p.note)}</small>` : "");
           return f ? `<span class="${flag && flag.status === "Act" ? "bad" : "muted"}">no next step recorded</span>` : ""; })()}</td></tr>`;
     };
-    let restOpen = false;
+    let restOpen = accs.length <= (D.settings.open_no_flags_up_to ?? 15);   // a small book: every account in sight
     const drawPort = () => {
       $("mb-port").innerHTML = `<table><thead><tr><th>Account</th><th>Value</th><th>Utilisation, 90 days</th><th>Renewal</th><th>Why</th><th>Last action</th><th>Action planned</th></tr></thead><tbody>` +
         `<tr class="group"><td colspan="7">Churn risk (${churn.length})</td></tr>` + churn.map((a) => row(a, "churn", ["churn_call", "qbr"])).join("") +

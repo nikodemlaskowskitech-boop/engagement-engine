@@ -74,6 +74,20 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     check(btn === want, `${f}: ${acc} handover ${want ? "can" : "can't"} be confirmed here`, `button ${btn}`);
     await p.close();
   }
+  console.log("\nMy book on a CSM's page: the same medians as the full cockpit, a small book in full sight");
+  {
+    const full = path.join(DIR, "..", "views.html");
+    if (fs.existsSync(full)) {
+      const read = async (url, owner) => { const p = await b.newPage(); await p.goto(url); if (owner) await p.selectOption("#seg-owner", owner);
+        await p.click("#tab-mybook"); await p.waitForTimeout(250);
+        const r = await p.evaluate(() => ({ med: [...document.querySelectorAll("#mb-work .tile .ref, #mb-eng-tiles .tile .ref")].map((x) => x.innerText).join(" | "),
+          eng: document.getElementById("mb-eng-finding").innerText.replace(/.*median/, ""), rows: document.querySelectorAll("#mb-port tbody tr.click").length }));
+        await p.close(); return r; };
+      const a = await read("file://" + full, "csm_mia"), m = await read("file://" + path.join(DIR, "csm_mia.html"));
+      check(a.med === m.med && a.eng === m.eng, "Mia's page: every 'median for CSMs' matches the full cockpit (book-wide, not her team's)", JSON.stringify({ full: a, page: m }));
+      check(m.rows === meta("csm_mia.html").edit.forecast.length, "Mia's 8 accounts all listed, the 'No flags' ones too", `${m.rows} rows`);
+    } else console.log("  SKIP  no data/views.html to compare with");
+  }
   console.log("\nThe switcher keeps the database (published: only the main page gets it)");
   {
     const http = require("http");
