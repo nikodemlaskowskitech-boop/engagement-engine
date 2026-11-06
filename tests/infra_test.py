@@ -502,6 +502,35 @@ if aws.get("site"):
           "the engine is told the site bucket, folder and cache time (from settings)", {k: ev.get(k) for k in ("SITE_BUCKET", "SITE_FOLDER", "SITE_CACHE_SECONDS")})
     check({"SiteUrl", "SiteBucket"} <= set(t.find_outputs("*")), "prints the site's address after deploy")
     check("roles.py --site" in aws["engine_steps"], "the engine builds the sandbox pages each run (roles.py --site)")
+    check(not dist.get("Aliases") and "AcmCertificateArn" not in json.dumps(dist.get("ViewerCertificate", {}))
+          if not aws.get("site_domain") else True,
+          "no [aws] site_domain: the xxxx.cloudfront.net address with CloudFront's own certificate")
+    check("SiteCloudFrontDomain" in t.find_outputs("*"), "prints the CloudFront address (the target for the domain's CNAME)")
+    # our own address: built again with a domain and a certificate from us-east-1
+    saved = (aws.get("site_domain", ""), aws.get("site_certificate_arn", ""))
+    cert = "arn:aws:acm:us-east-1:%s:certificate/test-123" % aws["account_id"]
+    env = cdk.Environment(account=str(aws["account_id"]), region=aws["region"])
+    try:
+        aws["site_domain"], aws["site_certificate_arn"] = "cairnpath.example.com", cert
+        t3 = Template.from_stack(DataStack(cdk.App(), "TestDomain", env=env))
+        d3 = next(iter(t3.find_resources("AWS::CloudFront::Distribution").values()))["Properties"]["DistributionConfig"]
+        vc = d3.get("ViewerCertificate", {})
+        check(d3.get("Aliases") == ["cairnpath.example.com"] and vc.get("AcmCertificateArn") == cert
+              and vc.get("SslSupportMethod") == "sni-only" and vc.get("MinimumProtocolVersion") == "TLSv1.2_2021",
+              "with [aws] site_domain: that address, the us-east-1 certificate, TLS 1.2 or newer only", vc)
+        url = t3.find_outputs("SiteUrl")
+        check("https://cairnpath.example.com" in json.dumps(url), "...and SiteUrl is the domain", url)
+        for dom, arn, why in (("cairnpath.example.com", "", "a domain without a certificate"),
+                              ("cairnpath.example.com", cert.replace("us-east-1", "eu-north-1"),
+                               "a certificate outside us-east-1 (CloudFront refuses it)")):
+            aws["site_domain"], aws["site_certificate_arn"] = dom, arn
+            try:
+                DataStack(cdk.App(), "TestBad", env=env)
+                check(False, f"{why}: stops the build with a clear message")
+            except ValueError:
+                check(True, f"{why}: stops the build with a clear message")
+    finally:
+        aws["site_domain"], aws["site_certificate_arn"] = saved
     aws["site"] = False                                   # switched off: built again without it
     try:
         t2 = Template.from_stack(DataStack(cdk.App(), "TestNoSite", env=stack.environment and cdk.Environment(

@@ -42,6 +42,10 @@ renewal (backtest).
 Below: what it does, how it's built, and how it's secured and tested. The
 technical depth is the proof.
 
+**Try it:** the live demo at https://dgesy1voanyey.cloudfront.net. The data is fake.
+Switch person under "Viewing as". On a manager's or CSM's page you can plan next steps
+and set forecasts, and what you save stays in your own browser.
+
 A 3-minute walkthrough of the cockpit, with what to click and say: [DEMO.md](DEMO.md).
 
 ## What it does today

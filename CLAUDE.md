@@ -42,7 +42,7 @@ with short comments, and work in small steps (one PR per change).
   cost), `python tests/check_lambda_test.py`, `python
   tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); so does
   any PR that changes what an engine step imports (engine_lambda_test checks the
-  bundle has it: #120 added roles.py to export_views.py and only #127 bundled it); one that touches upload.py runs `python tests/upload_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one that touches llm.py, brief.py or handover.py runs `python tests/ai_spend_test.py`; one that touches cockpit_sync.py runs `python tests/cockpit_sync_test.py`; one
+  bundle has it: #120 added roles.py to export_views.py and only #127 bundled it); one that touches upload.py runs `python tests/upload_test.py`; one that touches site_cert.py runs `python tests/site_cert_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one that touches llm.py, brief.py or handover.py runs `python tests/ai_spend_test.py`; one that touches cockpit_sync.py runs `python tests/cockpit_sync_test.py`; one
   that touches roles or policies also runs `python tests/security_check_test.py`
   and, after the deploy, Nikodem runs `python security_check.py` (live). Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
@@ -757,6 +757,14 @@ One JSON event per line, one file per day in `data/events/`.
   data/site/*.html (flat) to the site bucket, only pages whose MD5 changed, with
   Cache-Control max-age [aws] site_cache_seconds, never to outputs/, never
   deleting; a failed run sends nothing. Address: the SiteUrl output.
+  Its own address (optional, option B 6 Nov 2026): [aws] site_domain plus
+  site_certificate_arn give CloudFront that name (TLS 1.2+); the domain and its DNS
+  are at Cloudflare (two records by hand: the certificate's validation CNAME and
+  the domain's CNAME to SiteCloudFrontDomain, both "DNS only"). `site_cert.py`
+  asks ACM in us-east-1 for the certificate (CloudFront's rule; a script, not CDK,
+  because a us-east-1 stack would need a bootstrap in a region the SCPs keep
+  closed), prints both records, `--wait`s until issued and prints the two settings
+  lines. `tests/site_cert_test.py`: stand-in ACM.
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
