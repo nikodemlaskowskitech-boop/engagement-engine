@@ -78,6 +78,14 @@ bad = {
     "a missing decided_at": {k: v for k, v in REAL[1].items() if k != "decided_at"},
     "an unknown kind": {**REAL[0], "kind": "delete_everything"},
     "not even a decision": "DROP TABLE accounts;",
+    # found by the independent audit, 6 Nov 2026
+    "a kind that's a list": {**REAL[0], "kind": ["forecast"]},
+    "an account that's a dict": {**REAL[0], "account_id": {}},
+    "a role that's a list": {**REAL[0], "role": []},
+    "a 'by' that's a list": {**REAL[0], "by": ["csm_mia"]},
+    "an impossible time": {**REAL[1], "decided_at": "2026-13-45T99:99:99Z"},
+    "a reassignment by another team's manager": {**REAL[2], "manager": "mgr_james"},
+    "a reassignment on a flag that doesn't exist": {**REAL[2], "flag": "anything"},
 }
 for name, d in bad.items():
     try:
