@@ -2,8 +2,11 @@
 
 **A sandbox for designing a Customer Success operating model that scales.**
 
+Built by a former CS leader as the tool he wished he'd had: a way to test how
+the team works, then put the changes straight into the system.
+
 Every CS leader asks the same question: *am I using the people I have to get
-the best results?* Most can't answer it. The CRM was built for sales: it knows
+the best results?* Few can answer it with data. The CRM was built for sales: it knows
 contracts and opportunities, not how customers use the product or what CS did
 about it.
 
@@ -18,8 +21,8 @@ on your book, on your laptop: your files never leave it.
 
 **A template, not a platform.** Coverage models (self-service, pooled, named
 CSM), routing, thresholds and who sees what all live in one settings file.
-Change the operating model by editing settings, not code, and see what it does
-to the work before you change the team.
+Change the operating model by editing settings, not code, rerun, and compare
+the work it creates before you change the team.
 
 What a CS team gets:
 
