@@ -29,6 +29,7 @@ from aws_cdk import aws_accessanalyzer as accessanalyzer
 from aws_cdk import aws_apigatewayv2 as apigwv2
 from aws_cdk import aws_apigatewayv2_integrations as integrations
 from aws_cdk import aws_athena as athena
+from aws_cdk import aws_certificatemanager as acm
 from aws_cdk import aws_ce as ce
 from aws_cdk import aws_cloudfront as cloudfront
 from aws_cdk import aws_cloudfront_origins as origins
@@ -361,6 +362,17 @@ class DataStack(Stack):
                         referrer_policy=cloudfront.HeadersReferrerPolicy.NO_REFERRER, override=True),
                     content_security_policy=cloudfront.ResponseHeadersContentSecurityPolicy(
                         content_security_policy=SITE_CSP, override=True)))
+            # Our own address (optional): [aws] site_domain, with a certificate made by site_cert.py
+            # in us-east-1 (the only region CloudFront takes certificates from). The DNS lives at
+            # the registrar (Cloudflare), so its two records are added there by hand.
+            domain, cert_arn = aws.get("site_domain", ""), aws.get("site_certificate_arn", "")
+            if bool(domain) != bool(cert_arn):
+                raise ValueError("[aws] site_domain and site_certificate_arn go together: run python site_cert.py")
+            if cert_arn and ":us-east-1:" not in cert_arn:
+                raise ValueError("[aws] site_certificate_arn must be in us-east-1 (CloudFront's rule)")
+            own = {"domain_names": [domain],
+                   "certificate": acm.Certificate.from_certificate_arn(self, "SiteCert", cert_arn),
+                   "minimum_protocol_version": cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021} if domain else {}
             site = cloudfront.Distribution(
                 self, "SiteCdn",
                 comment="Cairnpath demo cockpit (sandbox pages, fake data)",
@@ -374,7 +386,7 @@ class DataStack(Stack):
                 price_class={"PriceClass_100": cloudfront.PriceClass.PRICE_CLASS_100,
                              "PriceClass_200": cloudfront.PriceClass.PRICE_CLASS_200,
                              "PriceClass_All": cloudfront.PriceClass.PRICE_CLASS_ALL}[aws["site_price_class"]],
-                http_version=cloudfront.HttpVersion.HTTP2_AND_3)
+                http_version=cloudfront.HttpVersion.HTTP2_AND_3, **own)
             site_bucket.grant_put(engine)                     # writes pages; reads and deletes nothing
             engine.add_to_role_policy(iam.PolicyStatement(    # the engine's "changed?" check lists names only
                 actions=["s3:ListBucket"], resources=[site_bucket.bucket_arn]))
@@ -389,7 +401,9 @@ class DataStack(Stack):
                 resources=[site_bucket.arn_for_objects("*")],
                 conditions={"ArnNotLike": {"aws:PrincipalArn": [engine.role.role_arn] + admins}, **not_a_service}))
             CfnOutput(self, "SiteBucket", value=site_bucket.bucket_name)
-            CfnOutput(self, "SiteUrl", value="https://" + site.distribution_domain_name)
+            CfnOutput(self, "SiteUrl", value="https://" + (domain or site.distribution_domain_name))
+            # what the domain's CNAME record points at (the DNS entry at the registrar)
+            CfnOutput(self, "SiteCloudFrontDomain", value=site.distribution_domain_name)
 
         # --- GuardDuty, on trial ([aws] guardduty): watches the account's own logs for signs
         # of a break-in (credentials used from odd places, crypto-mining, data pulled out of the

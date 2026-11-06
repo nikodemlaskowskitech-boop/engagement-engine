@@ -3,8 +3,11 @@
 A script to say out loud, with the clicks in brackets. The numbers are from the
 demo data as of 18 Oct 2026; after a regenerate, check them on the pages first.
 
-**Before you start:** open the published cockpit on the leader's page, clear
-any pins ("Whole book"), full-width window.
+**Before you start:** open the cockpit on the leader's page, either the public
+site (https://dgesy1voanyey.cloudfront.net, no login, saves stay in your
+browser) or the published claude.ai cockpit. Clear any pins ("Whole book") and
+use a full-width window. To show saving on the public site, switch to Mia or
+Sophie first: the leader's page has no forms.
 
 ## 1. The question (15 s)
 

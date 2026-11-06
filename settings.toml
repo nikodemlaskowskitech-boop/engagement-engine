@@ -168,6 +168,12 @@ site = true                      # false + cdk deploy removes the distribution (
 site_folder = "site/"
 site_cache_seconds = 300         # how long CloudFront and browsers keep a page: a new run shows within 5 minutes
 site_price_class = "PriceClass_100"   # edge locations in Europe and North America only: the cheapest set
+# Our own address for the site (optional; empty = the xxxx.cloudfront.net address). The domain is
+# registered and its DNS kept at Cloudflare; python site_cert.py asks AWS for the certificate (in
+# us-east-1, CloudFront's rule), prints the two DNS records to add at Cloudflare, waits until the
+# certificate is issued and prints its ARN for the line below. Then cdk deploy. Neither is a secret.
+site_domain = ""
+site_certificate_arn = ""
 
 [cockpit]
 # Decisions saved in the published cockpit (cockpit_sync.py checks every one again: never trust the page).

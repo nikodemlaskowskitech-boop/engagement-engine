@@ -193,3 +193,20 @@ new engine code and runs, or start one now with `python request_briefs.py`
 of CloudFront takes a few minutes. If it fails with "access denied" on
 cloudfront:..., the organization's region guardrail (SCP) blocks CloudFront,
 which is a global service: allow `cloudfront:*` in that SCP's exceptions.
+
+### Its own address (domain at Cloudflare)
+
+1. Buy the domain at Cloudflare (Domain Registration). Turn on two-factor sign-in
+   for the Cloudflare account: whoever controls the DNS controls the address.
+2. Ask for the certificate (in us-east-1, CloudFront's rule) and get the DNS records:
+   ```
+   python site_cert.py cairnpath.yourdomain.com
+   ```
+3. At Cloudflare, DNS > Records, add the two records it prints, both with
+   Proxy status = **DNS only** (grey cloud).
+4. Wait for the certificate (usually minutes):
+   ```
+   python site_cert.py cairnpath.yourdomain.com --wait
+   ```
+   It prints two lines for settings.toml [aws] (site_domain, site_certificate_arn).
+5. `cdk deploy --profile cairnpath`: SiteUrl becomes your address.
