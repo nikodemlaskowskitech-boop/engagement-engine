@@ -139,7 +139,8 @@ class DataStack(Stack):
             retry_attempts=0,                                  # same data, same result: a retry wouldn't help
             # one run at a time: a second trigger waits in Lambda's queue (S3 events and the
             # schedule are asynchronous, so a throttled one is tried again, not lost)
-            reserved_concurrent_executions=aws["engine_max_runs"],
+            # (0 = no limit: possible only once the account has more than 10 slots in all)
+            reserved_concurrent_executions=aws["engine_max_runs"] or None,
             log_group=logs.LogGroup(self, "RunEngineLogs",
                                     retention=logs.RetentionDays.ONE_MONTH,
                                     removal_policy=RemovalPolicy.DESTROY),
