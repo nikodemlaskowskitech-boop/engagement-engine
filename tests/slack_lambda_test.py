@@ -110,10 +110,10 @@ CARD = [{"type": "section", "text": {"type": "mrkdwn", "text": "*Yarrow Studio*"
             {"type": "button", "action_id": "open_timeline", "url": "https://example.invalid/#acc_037"}]}]
 
 
-def click(action_id, ref=REF):
+def click(action_id, ref=REF, action_ts="1762420000.123456"):
     return {"type": "block_actions", "user": {"id": "U_ANNA"}, "trigger_id": "trig-1",
             "channel": {"id": "C_QUEUE"}, "message": {"ts": "111.222", "blocks": CARD},
-            "actions": [{"action_id": action_id, "value": json.dumps(ref)}]}
+            "actions": [{"action_id": action_id, "value": json.dumps(ref), "action_ts": action_ts}]}
 
 
 def request(payload, secret=SIGNING, age=0, tamper=False, b64=True, headers=True):
@@ -143,7 +143,9 @@ print("\nRefused before anything happens (401, nothing saved, Slack not called)"
 for title, ev in [("no signature at all", request(click("claim"), headers=False)),
                   ("signed with the wrong secret", request(click("claim"), secret="not-the-secret")),
                   ("body changed after Slack signed it", request(click("claim"), tamper=True)),
-                  ("signed 6 minutes ago (a replayed request)", request(click("claim"), age=360))]:
+                  ("signed 6 minutes ago (a replayed request)", request(click("claim"), age=360)),
+                  # audit 6 Nov 2026: a timestamp in the future is as suspicious as an old one
+                  ("signed 6 minutes in the future", request(click("claim"), age=-360))]:
     result, s3, _, slack, _ = run(ev)
     check(result["statusCode"] == 401 and not s3.objects and not slack.calls, title, result)
 result, s3, _, _, _ = run(request(click("claim"), age=60))
@@ -210,6 +212,28 @@ check(next(iter(s3.objects), "").startswith(CLICKS), "a card from before run dat
 result, s3, _, slack, printed = run(request(click("claim")), slack=FakeSlack(down=True))
 check(result["statusCode"] == 200 and len(s3.objects) == 1 and "TimeoutError" in printed,
       "Slack slow or down: the click is saved anyway, the failure logged", printed)
+check(not any(v in printed or v[:10] in printed or v[-8:] in printed for v in (SIGNING, TOKEN)),
+      "...and that failure message holds no part of a secret (audit 6 Nov 2026)", printed)
+
+print("\nThe same click twice (a request replayed inside the 5-minute window, audit 6 Nov 2026)")
+s3, ssm, slack = FakeS3(), FakeSSM(), FakeSlack()
+same = request(click("claim"))
+with contextlib.redirect_stdout(io.StringIO()):
+    for _ in range(2):
+        handler.handler(same, None, s3=s3, ssm=ssm, opener=slack)
+check(len(s3.objects) == 1, "is saved once: the file is named after Slack's own click id, so a replay overwrites it",
+      list(s3.objects))
+with contextlib.redirect_stdout(io.StringIO()):
+    handler.handler(request(click("claim", action_ts="1762420099.000001")), None, s3=s3, ssm=ssm, opener=slack)
+check(len(s3.objects) == 2, "a real second click (its own action_ts) is still a second event", list(s3.objects))
+form = {**submit, "view": {**submit["view"], "id": "V_123"}}
+s3 = FakeS3()
+with contextlib.redirect_stdout(io.StringIO()):
+    for _ in range(2):
+        handler.handler(request(form), None, s3=s3, ssm=ssm, opener=slack)
+check(len(s3.objects) == 1, "a call form submitted twice (the same view id) is one call", list(s3.objects))
+check(handler.click_id(form) == handler.click_id(json.loads(json.dumps(form))) and handler.click_id({"type": "x"}) is None,
+      "the click id comes from Slack's ids only; without them, a fresh id (as before)")
 
 handler._secrets.clear()
 s3, ssm, slack, printed = FakeS3(), FakeSSM(), FakeSlack(), io.StringIO()

@@ -101,6 +101,28 @@ except llm.OverBudget:
 check("handover" in llm.spend_report() and "qbr_brief" in llm.spend_report(),
       "python llm.py --spend lists each feature against its budget")
 
+print("\nBudgets split by place (audit 6 Nov 2026): the laptop and AWS can't see each other's ledger")
+with llm.LEDGER.open("a", encoding="utf-8", newline="") as f:      # AWS spent a lot this month
+    csv.DictWriter(f, fieldnames=llm.COLUMNS).writerow({**rows()[0], "where": "aws", "cost_usd": "999",
+                                                       "feature": "qbr_brief", "month": llm.this_month()})
+check(llm.spent("qbr_brief") < 1, "AWS's spend doesn't use up the laptop's budget", llm.spent("qbr_brief"))
+os.environ["AWS_LAMBDA_FUNCTION_NAME"] = "RunEngine"
+check(llm.spent("qbr_brief") >= 999, "...and counts against AWS's own", llm.spent("qbr_brief"))
+os.environ.pop("AWS_LAMBDA_FUNCTION_NAME")
+real = llm._BUDGETS
+llm._BUDGETS = {"laptop": {"qbr_brief": 1.0}, "aws": {"qbr_brief": 2.0}}
+check(llm.budgets_here("laptop") == {"qbr_brief": 1.0} and llm.budgets_here("aws") == {"qbr_brief": 2.0},
+      "each place reads its own section")
+llm._BUDGETS = {"qbr_brief": 3.0}
+check(llm.budgets_here("laptop") == llm.budgets_here("aws") == {"qbr_brief": 3.0},
+      "an old flat section (one amount per feature) still works, for both places")
+llm._BUDGETS = real
+places = {p: llm.budgets_here(p) for p in ("laptop", "aws")}
+check(all(set(b) == {"qbr_brief", "handover"} for b in places.values()),
+      "settings.toml gives the laptop and AWS a budget for both features", places)
+total = sum(v for b in places.values() for v in b.values())
+check(total <= 10, f"both places together (${total:.2f}) stay under the $10 Anthropic spend limit")
+
 print("\nNothing goes around the ledger")
 for script in ("brief.py", "handover.py"):
     source = (REPO / script).read_text(encoding="utf-8")

@@ -114,12 +114,14 @@ def run_date():
     return connect().sql("SELECT as_of_date + 1 FROM as_of").fetchone()[0]
 
 
-def make_event(day, account_id, event_name, owner_id, topic, slack_user, outcome=None, note=None):
+def make_event(day, account_id, event_name, owner_id, topic, slack_user, outcome=None, note=None,
+               event_id=None):
     """One click as an engagement event, dated on the pipeline's run date at the
-    real time of day of the click."""
+    real time of day of the click. event_id: Slack's own identity of the click, when known,
+    so the same click sent twice is the same event (a replay overwrites, never doubles)."""
     now = datetime.now(timezone.utc)
     return {
-        "event_id": str(uuid.uuid4()),
+        "event_id": event_id or str(uuid.uuid4()),
         "event_name": event_name,
         "event_type": "engagement",
         "timestamp": f"{day}T{now:%H:%M:%S}Z",

@@ -283,5 +283,11 @@ ledger_file = "ai_spend.csv"
 # ledger reaches it, the call is refused and the run says why. Far above what the demo spends
 # (cents a run) and well below the Anthropic account's spend limit, so a loop hits ours first.
 # One call can still go over by its own cost (at most max_output_tokens' worth).
-qbr_brief = 2.00
-handover = 3.00
+# Split by place (audit 6 Nov 2026): the laptop and AWS each keep their own ledger and can't see
+# each other's, so each gets its own share; together they stay within the total.
+[llm.monthly_budget_usd.laptop]
+qbr_brief = 1.00
+handover = 1.50
+[llm.monthly_budget_usd.aws]
+qbr_brief = 1.00
+handover = 1.50

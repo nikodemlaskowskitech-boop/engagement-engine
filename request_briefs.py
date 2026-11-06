@@ -9,7 +9,7 @@ Every other run (an upload, the daily schedule) only checks, for free, whether
 each brief is out of date; the cockpit shows which ones are. This starts one
 engine run with {"briefs": true}: handover.py rewrites the briefs whose context
 changed (the cache skips the rest), within the monthly budget in settings.toml
-[llm.monthly_budget_usd], and every call goes in the AI spend ledger.
+[llm.monthly_budget_usd.aws], and every call goes in the AI spend ledger.
 
 Only the admin can do this: starting the engine function is allowed to the admin
 role (aws login), the daily schedule (whose input is fixed) and S3 events, and
