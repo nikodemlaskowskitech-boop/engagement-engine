@@ -113,6 +113,7 @@ athena_scan_limit_mb = 1024                 # a query that would scan more is ca
 engine_memory_mb = 2048        # the engine Lambda: memory (and CPU with it)
 engine_timeout_seconds = 900   # ...how long it may run (Lambda's maximum; ~1.5 min today, more when briefs are rewritten)
 engine_disk_mb = 2048          # ...its /tmp disk: the inputs, the code and what it writes
+engine_max_runs = 1            # ...runs at once: a second one waits its turn (two at once could overwrite each other's outputs and AI spend rows; audit 6 Nov 2026)
 # A daily safety net: EventBridge Scheduler wakes the engine at this time. It only computes when
 # the last event-driven run was missed or failed; otherwise it says "up to date" and stops.
 engine_schedule = "cron(17 6 * * ? *)"      # every day at 06:17 (cron: minute hour day month weekday year)

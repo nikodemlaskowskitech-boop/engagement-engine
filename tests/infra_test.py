@@ -170,6 +170,16 @@ cacts = [a for st in cstmts for a in actions_of(st)]
 check(bool(cstmts) and not any(a.startswith(("s3:Put", "s3:Delete")) or a == "s3:*" for a in cacts)
       and '/' + aws["outputs_prefix"] + 'tables/*"' in json.dumps(cstmts),
       "the crawler may read outputs/tables/* only, never write to the bucket", cacts)
+crole_res = t.find_resources("AWS::IAM::Role").get(crole, {}).get("Properties", {})
+check(not crole_res.get("ManagedPolicyArns"),
+      "the crawler has no AWS managed policy (AWSGlueServiceRole lets it write any aws-glue-* path)",
+      crole_res.get("ManagedPolicyArns"))
+glue_res = json.dumps([st["Resource"] for st in cstmts if any(a.startswith("glue:") for a in actions_of(st))])
+check(all(a.startswith(("s3:Get", "s3:List", "glue:", "logs:", "kms:")) for a in cacts)
+      and f'database/{aws["glue_database"]}' in glue_res and '"*"' not in glue_res
+      and all('/aws-glue/crawlers' in json.dumps(st["Resource"]) for st in cstmts
+              if any(a.startswith("logs:") for a in actions_of(st))),
+      f"its Glue rights cover only the {aws['glue_database']} database, its logs only /aws-glue/crawlers", cacts)
 wgs = t.find_resources("AWS::Athena::WorkGroup")
 wg = next(iter(wgs.values()), {}).get("Properties", {})
 wcfg = wg.get("WorkGroupConfiguration", {})
@@ -178,8 +188,9 @@ check(wg.get("Name") == aws["athena_workgroup"] and wcfg.get("EnforceWorkGroupCo
 check(wcfg.get("BytesScannedCutoffPerQuery") == aws["athena_scan_limit_mb"] * 1024 * 1024,
       f"a query scanning over {aws['athena_scan_limit_mb']} MB is cancelled (cost guard)")
 check(f'/{aws["athena_results_prefix"]}' in json.dumps(wcfg.get("ResultConfiguration", {}).get("OutputLocation"))
-      and wcfg["ResultConfiguration"].get("EncryptionConfiguration", {}).get("EncryptionOption") == "SSE_S3",
-      "query results go to athena-results/ in our bucket, encrypted")
+      and wcfg["ResultConfiguration"].get("EncryptionConfiguration", {}).get("EncryptionOption") == "SSE_KMS"
+      and "DataKey" in json.dumps(wcfg["ResultConfiguration"]["EncryptionConfiguration"].get("KmsKey")),
+      "query results go to athena-results/ in our bucket, encrypted with our own key")
 r = has(t, "AWS::S3::Bucket", {"LifecycleConfiguration": {"Rules": Match.array_with([Match.object_like({
     "Prefix": aws["athena_results_prefix"], "ExpirationInDays": aws["athena_results_keep_days"]})])}})
 check(r is True, f"query results deleted after {aws['athena_results_keep_days']} days", r)
@@ -188,6 +199,8 @@ check(not any(c["Filter"]["Key"]["FilterRules"][0]["Value"].startswith((aws["out
 
 print("\nEngine Lambda: the API key for the briefs")
 eng = next(v for v in ours.values() if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"])
+check(eng["Properties"].get("ReservedConcurrentExecutions") == aws["engine_max_runs"] == 1,
+      "one engine run at a time ([aws] engine_max_runs): two at once could overwrite each other's outputs")
 evars = eng["Properties"]["Environment"]["Variables"]
 check(evars.get("API_KEY_PARAMETER") == aws["api_key_parameter"] and evars.get("LLM_PROVIDER") == aws["briefs_llm_provider"]
       and json.loads(evars.get("OPTIONAL_STEPS", "[]")) == aws["engine_optional_steps"],

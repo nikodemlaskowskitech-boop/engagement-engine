@@ -101,6 +101,9 @@ def cases(account, region):
         # the Glue crawler
         ("crawler", "s3:PutObject", f"{b}/{o}tables/x/x.parquet", DENY, "read-only", False),
         ("crawler", "s3:GetObject", f"{b}/{i}crm_accounts.csv", DENY, "reads the result tables, not the raw inputs", False),
+        ("crawler", "s3:PutObject", f"{b}/{o}aws-glue-x/x.json", DENY,
+         "can't write an aws-glue-* path either (AWS's managed Glue policy allowed it)", False),
+        ("crawler", "s3:DeleteObject", f"{b}/{o}aws-glue-x/x.json", DENY, "...nor delete one", False),
         ("crawler", "s3:GetObject", f"{b}/{o}tables/crm/crm.parquet", ALLOW, "control: it can read the tables", False),
         # the Slack listener: public-facing, so the narrowest of all
         ("slack", "s3:GetObject", f"{b}/{i}crm_accounts.csv", DENY, "can't read any data", False),

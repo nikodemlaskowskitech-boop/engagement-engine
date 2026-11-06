@@ -156,6 +156,12 @@ leaky = FakeIAM(leak=lambda role, action, res: "SlackListener" in role and actio
 bad = [r for r in sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
 check(len(bad) == 1 and bad[0]["role"] == "slack" and "read any data" in bad[0]["why"],
       "a Slack listener that can read data is caught (it faces the internet)", bad)
+# audit 6 Nov 2026 (F5): what AWS's managed AWSGlueServiceRole allowed on any aws-glue-* path
+leaky = FakeIAM(leak=lambda role, action, res: "CrawlerRole" in role and action in ("s3:PutObject", "s3:DeleteObject")
+                and "/aws-glue-" in res)
+bad = [r for r in sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
+check(len(bad) == 2 and all(r["role"] == "crawler" for r in bad),
+      "a crawler that can write or delete an aws-glue-* path is caught (the managed Glue policy)", bad)
 check(quiet(sc.report, results) == 1, "...and the report counts it as a failure (exit 1)")
 orig = sc.run
 def no_region_run():
