@@ -415,7 +415,9 @@ One JSON event per line, one file per day in `data/events/`.
   offline, where fetch can't read files, it opens the file instead.
   An account open on the timeline goes with the switch (its id in the #): opened
   if it's on the new page, else a note says it isn't; every switch starts the new
-  page on its own segment defaults.
+  page on its own segment defaults. Pinned accounts (seg.acc): the bar's Find pins an account as a
+  chip; while any are pinned every tab shows exactly them; they travel with a switch
+  (ids only), the ones not on the new page counted in the note.
   Medians ("against the median") come from peer_medians(), on the whole export,
   numbers only: [roles] peer_median = "book" (default) or "team"; the leader always
   the book's. My book lists "No flags" accounts open for books of [cockpit]

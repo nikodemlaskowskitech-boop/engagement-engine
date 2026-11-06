@@ -84,6 +84,12 @@ page).
   and the page opens as usual. Only the id travels, so the boundary shows without
   anything crossing it. Every switch starts the new page on its own defaults,
   never a filter saved earlier.
+- **Pinned accounts** (6 Nov 2026, Nikodem's idea). The Find box in the segment
+  bar pins an account as a chip; pin several, and every tab shows exactly the
+  pinned ones, whatever the other filters say, until they're unpinned (x) or
+  "Whole book". They stay across tabs and visits, and travel with a switch: the
+  ones on the new page are kept, the rest left behind and counted in a note (ids
+  only, never a name).
 - **A small book in full sight** (6 Nov 2026, same check). My book folds accounts
   with no flags away, risk first; in a book of `[cockpit] open_no_flags_up_to`
   (15) or fewer they're listed open, so a CSM sees all of theirs at a glance.
