@@ -1,24 +1,43 @@
 # Cairnpath engagement engine
 
-A working demo of a signal-triggered customer success engine. Product usage
-data goes in; flags come out that tell Customer Success **who needs attention,
-why, and who should act**.
+**A sandbox for designing a Customer Success operating model that scales.**
 
-Cairnpath is a fictional product analytics SaaS with about 500 European
-customers across three tiers. The data is generated, but the rules are the
-kind a real CS team runs.
+Every CS leader asks the same question: *am I using the people I have to get
+the best results?* Most can't answer it. The CRM was built for sales: it knows
+contracts and opportunities, not how customers use the product or what CS did
+about it.
 
-Why it exists: a CRM is built for sales. It knows opportunities and contracts,
-not how customers use the product or what CS did about it, so a CS team at
-scale ends up with a book of business it can't see. This engine joins usage
-and CS engagement into one view of the success book of business, and tells
-each CSM, pool and manager where to act.
+This engine answers it. Product usage and CS activity go in. Out come flags
+that say which accounts need attention, why, and who should act, and a check
+of whether acting worked.
 
-It doesn't replace CSMs. It lets a CS organisation scale: automation covers
-the many accounts that only need a nudge, so people's time goes where it
-changes the outcome. Think of it as an engagement funnel, measured at every
-stage: signal (flags) -> task (actions) -> action taken (action status, time
-to action) -> outcome at renewal (backtest).
+**Try it on simulated data, then replay it on your own history.** The demo runs
+on about 500 generated customers of Cairnpath, a fictional product analytics
+SaaS. Point it at your own CRM, team and usage exports and the same rules run
+on your book, on your laptop: your files never leave it.
+
+**A template, not a platform.** Coverage models (self-service, pooled, named
+CSM), routing, thresholds and who sees what all live in one settings file.
+Change the operating model by editing settings, not code, and see what it does
+to the work before you change the team.
+
+What a CS team gets:
+
+- **A page per person.** A CSM sees her book, a manager his team's queue, the
+  leader the whole book. Each page holds only what that role may see.
+- **People where they count.** Automation takes the many accounts that only
+  need a nudge; people get the ones that need a conversation.
+- **Nothing on trust.** Every flag shows its numbers, and every number clicks
+  through to the accounts behind it.
+- **"Did it work?"** The flags are tested against what happened at renewal:
+  what they caught, what they missed, how much warning they gave.
+
+It doesn't replace CSMs. It's an engagement funnel, measured at every stage:
+signal (flags), task (actions), action taken (time to action), outcome at
+renewal (backtest).
+
+Below: what it does, how it's built, and how it's secured and tested. The
+technical depth is the proof.
 
 ## What it does today
 
