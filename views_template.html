@@ -689,7 +689,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     for (const v of views) nav.append($("tab-" + v));
     const sw = $("page-switch");
     $("page-switch-wrap").hidden = false;
-    sw.addEventListener("change", () => { if (sw.value) location.href = sw.value; });
+    // Switch person without leaving this page: a published artifact gives only its main page
+    // the database, so the chosen person's file is fetched and written into this one (each file
+    // still holds only that person's data). Offline, fetch can't read files: open it instead.
+    sw.addEventListener("change", async () => {
+      if (!sw.value) return;
+      try {
+        const r = await fetch(sw.value);
+        if (!r.ok) throw new Error(String(r.status));
+        const html = await r.text();
+        if (window.__cockpitLeave) window.__cockpitLeave();
+        try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* not allowed in some frames */ }
+        document.open(); document.write(html); document.close();
+      } catch (e) { location.href = sw.value; }
+    });
   }
   let current = views[0];
   const show = (v) => {
@@ -1752,6 +1765,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     try { await db.collection("decisions").doc(id).delete(); } catch (e) { saveError = "The undo wasn't saved. Try again in a moment."; drawTasks(); }
   }
   // the database answers later (or never, in the offline file): the list draws first
+  let unsubscribe = null;                       // stop listening before the switcher swaps the page
+  window.__cockpitLeave = () => { try { if (typeof unsubscribe === "function") unsubscribe(); } catch (e) { /* gone already */ } };
   (async () => {
     const use = window.claude && window.claude.use;
     if (!use) { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } return; }
@@ -1762,7 +1777,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     } catch (e) { db = null; }
     if (!db) { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } return; }
     dbState = "ready";
-    db.collection("decisions").onSnapshot((snap) => {
+    unsubscribe = db.collection("decisions").onSnapshot((snap) => {
       decisions = {}; const fs = [];
       for (const d of snap.docs) {
         const v = d.data(); if (!v) continue;

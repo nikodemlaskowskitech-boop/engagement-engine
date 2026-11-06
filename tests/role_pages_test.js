@@ -74,6 +74,39 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     check(btn === want, `${f}: ${acc} handover ${want ? "can" : "can't"} be confirmed here`, `button ${btn}`);
     await p.close();
   }
+  console.log("\nThe switcher keeps the database (published: only the main page gets it)");
+  {
+    const http = require("http");
+    const server = http.createServer((q, r) => { const f = path.join(DIR, path.basename(q.url.split("?")[0]) || "index.html");
+      if (!fs.existsSync(f)) { r.writeHead(404); return r.end(); } r.writeHead(200, { "Content-Type": "text/html" }); r.end(fs.readFileSync(f)); });
+    await new Promise((ok) => server.listen(0, ok));
+    const p = await b.newPage(), errors = [];
+    p.on("pageerror", (e) => errors.push(e.message));
+    await p.goto(`http://localhost:${server.address().port}/index.html`);
+    // the runtime given once, to the main page only, with live subscriptions counted
+    await p.evaluate(() => {
+      const docs = {}, subs = new Set();
+      const snap = () => ({ docs: Object.entries(docs).map(([id, v]) => ({ id, data: () => v })) });
+      const db = { collection: () => ({ onSnapshot: (f) => { subs.add(f); f(snap()); return () => subs.delete(f); },
+        doc: (id) => ({ set: async (v) => { docs[id] = v; subs.forEach((f) => f(snap())); }, delete: async () => {} }) }) };
+      window.__subs = subs; window.claude = { use: async (n) => n === "db" ? db : n === "user" ? { id: async () => "tester" } : null };
+    });
+    const person = () => p.evaluate(() => JSON.parse(document.getElementById("page-meta").textContent).person);
+    const switchTo = async (f) => { await p.selectOption("#page-switch", f); await p.waitForTimeout(600); };
+    await switchTo("mgr_sophie.html");
+    await p.click("#tab-tasks");
+    const assigns = await p.$$eval("select[data-assign]", (x) => x.length);
+    check(await person() === "mgr_sophie" && assigns > 0, "switch to Sophie: her page, and her reassign controls work (database reached)", `${await person()}, ${assigns} controls`);
+    await switchTo("csm_mia.html");
+    const mine = meta("csm_mia.html").edit.forecast[0];
+    await p.click("#tab-timeline");
+    await p.fill("#tl-find", mine); await p.keyboard.press("Enter"); await p.waitForTimeout(300);
+    check(await person() === "csm_mia" && !!(await p.$("#fc-save")) && !!(await p.$("#ns-save")),
+      `then to Mia: her forecast and next-step forms on ${mine}`, `${await person()}`);
+    check(await p.evaluate(() => window.__subs.size) === 1, "one live database subscription after two switches (the old page's is stopped)");
+    check(p.url().split("#")[0].endsWith("/index.html") && !errors.length, "still on the main page, no script error", `${p.url()} ${errors}`);
+    await p.close(); server.close();
+  }
   await b.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

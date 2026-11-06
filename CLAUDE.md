@@ -409,7 +409,10 @@ One JSON event per line, one file per day in `data/events/`.
   (person, role, tabs, accounts, edit rights per action). The page reads it to
   open on the role's first tab and to offer a form only where the person may act.
   Writes data/pages/<owner_id>.html, leader.html and index.html (the landing
-  page, with a switcher to every page: demo only, see THREAT_MODEL.md).
+  page, with a switcher to every page: demo only, see THREAT_MODEL.md). Published,
+  only the main page gets the database, so the switcher fetches the chosen file and
+  writes it into the main page (stopping the old page's database listener first);
+  offline, where fetch can't read files, it opens the file instead.
   `tests/roles_test.py`: written from ROLES.md alone by a separate agent (raw
   HTML: no out-of-scope id or name, meta against the spec, cockpit_sync refusals);
   `tests/role_pages_test.js`: the pages in a browser (no script error, tabs, forms
