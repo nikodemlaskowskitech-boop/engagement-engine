@@ -163,6 +163,48 @@ cost_alert_threshold_usd = 5
 # Decisions saved in the published cockpit (cockpit_sync.py checks every one again: never trust the page).
 max_text = 200        # notes and reasons are cut to this many characters (the page's own limit)
 
+[roles]
+# Who sees what, and who may change what (ROLES.md explains each choice and how to change it).
+# One page per person, holding only what their role may see: data minimisation, not a filter.
+# The boundary is the team = everyone under the same manager (cs_team.csv manager column).
+# Limits are on what people can DO, not on what they can SEE inside their team (6 Nov 2026).
+leader_id = "leader"                 # the leader isn't in cs_team.csv: their page id and name
+leader_name = "Head of CS"
+landing = "leader"                   # the page people land on (the whole book, read-only)
+# tabs: views_template.html tab names; first = where the page opens
+# scope: "book" = every account, "team" = accounts owned by anyone in the person's team
+# self_service: whether Self-service accounts (no owner) are on the page; for a manager, those
+#   whose customer region is one their team covers
+# edit: what the person may change, and on which accounts ("own" or "team"); missing = can't
+# outcomes: "Did it work?" by owner (names) or as a team total (no names)
+[roles.leader]
+tabs = ["lead", "overview", "outcomes", "team", "book", "tasks", "timeline", "onboarding"]
+scope = "book"
+self_service = true
+outcomes = "by_owner"
+edit = {}                            # read-only: a leader never overrides someone's forecast
+
+[roles.manager]
+tabs = ["tasks", "lead", "overview", "outcomes", "team", "book", "timeline", "onboarding"]
+scope = "team"
+self_service = true
+outcomes = "by_owner"
+edit = { forecast = "team", next_step = "team", assign = "team", handback = "team", handover_confirm = "team" }
+
+[roles.csm]
+tabs = ["mybook", "tasks", "timeline", "overview", "outcomes", "team", "book", "onboarding"]
+scope = "team"
+self_service = false
+outcomes = "team_total"              # account assignment may drive commission: no per-owner results
+edit = { forecast = "own", next_step = "own", handover_confirm = "own" }
+
+[roles.member]                       # a Scale pool member: like a CSM, on the accounts named to them
+tabs = ["mybook", "tasks", "timeline", "overview", "outcomes", "team", "book", "onboarding"]
+scope = "team"
+self_service = false
+outcomes = "team_total"
+edit = { forecast = "own", next_step = "own", handover_confirm = "own" }
+
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo
 # stories), and how long a brief may be. The model and its price are in [llm].
