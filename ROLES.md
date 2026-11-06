@@ -56,9 +56,9 @@ page).
 - **Outcomes by owner only for managers and the leader** (6 Nov 2026). Where
   account assignment drives commission, per-owner results next to colleagues'
   invite comparison on luck of the draw. Below manager level, the team total.
-- **No Leadership tab below manager** (default, to confirm). It compares owners
+- **No Leadership tab below manager** (confirmed 6 Nov 2026). It compares owners
   against the median: a management view.
-- **Self-service only for managers and the leader** (default, to confirm). Those
+- **Self-service only for managers and the leader** (confirmed 6 Nov 2026). Those
   accounts have no owner; they go to the Self-service report, not to a person.
 - **Landing on the leader's page, a dropdown to the others** (5 Nov 2026). For
   the demo only, so a visitor can switch views. In real use each person gets
@@ -90,6 +90,28 @@ element still counts.
 
 A different operating model, for example regions as the boundary instead of
 managers, is a change to how a team is worked out, not to the matrix.
+
+## Build contract (what the tests may rely on)
+
+The pages are tested as a black box, from this page and the inputs only.
+
+- `python export_views.py` writes one page per person to `data/pages/`:
+  `<owner_id>.html` for every manager, CSM and pool member in `cs_team.csv`
+  (pools are queues, not people: no page), `leader.html` for the leader
+  (`[roles] leader_id`), and `index.html`, a copy of the landing page.
+- Managers are the ids in the `manager` column (they have no row of their own);
+  their name is their id without `mgr_`, capitalised (`mgr_sophie` = Sophie).
+- Every page carries one `<script type="application/json" id="page-meta">` with:
+  `person` (id), `role` (leader | manager | csm | member), `tabs` (in order,
+  the first is where it opens), `accounts` (every account id on the page),
+  `edit` (for each action in the role's `edit`, the account ids it is allowed
+  on), `outcomes` (by_owner | team_total).
+- Every page has a page switcher (`<select id="page-switch">`) whose options
+  link to the other pages' file names. In the demo it lists every page.
+- Account ids look like `acc_123`. Any `acc_` id in a page's raw HTML,
+  anywhere, counts as being on the page.
+- `cockpit_sync.py` refuses a decision the role may not make, by the person in
+  `by` (or `manager` for an assignment), on top of its existing checks.
 
 ## How it's built and tested (the independent way)
 
