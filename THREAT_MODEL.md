@@ -31,7 +31,7 @@ address, a new secret, a new place data goes).
 | --- | --- | --- | --- | --- |
 | 1 | A forged or replayed Slack click | HMAC signature with the signing secret, 5-minute window, 401 before any work | `slack_lambda_test.py` (unsigned, wrong, tampered, stale) | None known |
 | 2 | A flood of requests to the public address (cost, noise) | API Gateway throttle 5/s, burst 20; Lambda timeout 10 s | `infra_test.py` | A flood still costs a little until throttled |
-| 3 | A workload role's credentials stolen | One role per job, least privilege; the Slack listener can't read anything | `security_check.py` (37 live questions) | The engine role can still read all inputs, by design |
+| 3 | A workload role's credentials stolen | One role per job, least privilege; the Slack listener can't read anything | `security_check.py` (39 live questions) | The engine role can still read all inputs, by design |
 | 4 | A careless `s3:*` policy elsewhere in the account | Data perimeter: the bucket refuses everyone but 4 roles and the admins | `security_check.py` perimeter cases | Admins are trusted |
 | 5 | Data or a resource reachable from outside | Public access blocks, DenyOutsideThisAccount, HTTPS only | `infra_test.py`, Access Analyzer (`access_report.py`: 0) | None known |
 | 6 | Encrypted data copied out and decrypted | Our own KMS key, usable only through S3 (except admins), every use logged | `security_check.py` key cases | A copy made through S3 by an allowed role |

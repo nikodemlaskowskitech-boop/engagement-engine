@@ -597,7 +597,8 @@ One JSON event per line, one file per day in `data/events/`.
   A data ERROR is a result, not a crash. May only read inputs/* and write
   reports/check_inputs/* (so it can't trigger itself); logs kept 30 days;
   memory, timeout and disk in [aws]. Plus the engine Lambda (RunEngine, same
-  runtime): wakes when the check writes reports/check_inputs/latest.json, and
+  runtime, one run at a time: [aws] engine_max_runs, a second waits its turn):
+  wakes when the check writes reports/check_inputs/latest.json, and
   if its status is ERROR writes outputs/run.json SKIPPED and stops (the gate).
   Otherwise it copies the engine's code (bundle.py ENGINE_FILES) and a data/
   folder into /tmp/work (inputs/ plus state/action_log.csv), runs [aws]
@@ -634,10 +635,12 @@ One JSON event per line, one file per day in `data/events/`.
   failed event-driven run is caught up). Its role may only invoke the engine.
   Plus Athena: a Glue database ([aws] glue_database) filled by a Glue crawler
   that reads outputs/tables/ (one target per [aws] athena_tables entry, tables
-  made at folder level 4 so same-shaped flag tables stay separate; run it by
+  made at folder level 4 so same-shaped flag tables stay separate; its role
+  is our own narrow policy, not AWS's AWSGlueServiceRole, which may write and delete
+  any aws-glue-* path in any bucket: audit 6 Nov 2026; run it by
   hand once and after a column change: `aws glue start-crawler`), and an
   Athena workgroup ([aws] athena_workgroup, settings enforced, results to
-  athena-results/ encrypted and deleted after [aws] athena_results_keep_days,
+  athena-results/ encrypted with our KMS key and deleted after [aws] athena_results_keep_days,
   a query scanning over [aws] athena_scan_limit_mb is cancelled).
   Plus the Slack listener: an HTTP API (API Gateway, one route POST
   /slack/actions, rate limit [aws] slack_rate_per_second / slack_burst, an
@@ -749,11 +752,11 @@ One JSON event per line, one file per day in `data/events/`.
 - `security_check.py`: live security checks, read-only (`python
   security_check.py` after `aws login`). Finds the deployed roles and functions
   in the CairnpathData stack and asks the IAM policy simulator, with the
-  bucket's and the KMS key's real policies, 37 questions: things each role must NOT be able to do
+  bucket's and the KMS key's real policies, 39 questions: things each role must NOT be able to do
   (the engine writing its inputs or the check's verdict, deleting, reading
   another secret, anything over plain HTTP; the check writing where it's
   triggered or reading the API key; the schedule starting the check or
-  reading data; the crawler writing or reading raw inputs; the Slack listener
+  reading data; the crawler writing (even an aws-glue-* path) or reading raw inputs; the Slack listener
   reading any data, writing anything but clicks or reading the API key; the
   engine reading Slack's bot token; the perimeter: an identity in the account
   with s3:* on everything, simulated as the schedule role plus an extra

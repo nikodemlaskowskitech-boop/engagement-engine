@@ -137,6 +137,9 @@ class DataStack(Stack):
                          "LLM_PROVIDER": aws["briefs_llm_provider"],
                          "LEDGER_FILE": SETTINGS["llm"]["ledger_file"]},
             retry_attempts=0,                                  # same data, same result: a retry wouldn't help
+            # one run at a time: a second trigger waits in Lambda's queue (S3 events and the
+            # schedule are asynchronous, so a throttled one is tried again, not lost)
+            reserved_concurrent_executions=aws["engine_max_runs"],
             log_group=logs.LogGroup(self, "RunEngineLogs",
                                     retention=logs.RetentionDays.ONE_MONTH,
                                     removal_policy=RemovalPolicy.DESTROY),
@@ -186,10 +189,25 @@ class DataStack(Stack):
                                     database_input=glue.CfnDatabase.DatabaseInputProperty(
                                         name=aws["glue_database"],
                                         description="Cairnpath engine results (outputs/tables/), for Athena"))
+        # Its own narrow policy, not AWS's AWSGlueServiceRole: that managed policy lets a crawler
+        # write and delete any S3 path containing "aws-glue-" in every bucket, ours included
+        # (outputs/aws-glue-x/...), and use Glue, EC2 and CloudWatch account-wide (audit 6 Nov 2026).
         crawler_role = iam.Role(
-            self, "CrawlerRole", assumed_by=iam.ServicePrincipal("glue.amazonaws.com"),
-            managed_policies=[iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSGlueServiceRole")])
+            self, "CrawlerRole", assumed_by=iam.ServicePrincipal("glue.amazonaws.com", conditions={
+                "StringEquals": {"aws:SourceAccount": self.account}}))           # only our own crawler
         self.bucket.grant_read(crawler_role, outputs + "tables/*")             # reads the tables, nothing else
+        glue_db = f"arn:aws:glue:{self.region}:{self.account}"
+        crawler_role.add_to_policy(iam.PolicyStatement(        # the table list: our database only
+            actions=["glue:GetDatabase", "glue:GetTable", "glue:GetTables", "glue:CreateTable",
+                     "glue:UpdateTable", "glue:DeleteTable", "glue:BatchDeleteTable",
+                     "glue:GetPartition", "glue:GetPartitions", "glue:BatchGetPartition",
+                     "glue:CreatePartition", "glue:BatchCreatePartition", "glue:UpdatePartition",
+                     "glue:BatchUpdatePartition", "glue:DeletePartition", "glue:BatchDeletePartition"],
+            resources=[f"{glue_db}:catalog", f"{glue_db}:database/{aws['glue_database']}",
+                       f"{glue_db}:table/{aws['glue_database']}/*"]))
+        crawler_role.add_to_policy(iam.PolicyStatement(        # its own logs, nothing else
+            actions=["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+            resources=[f"arn:aws:logs:{self.region}:{self.account}:log-group:/aws-glue/crawlers*"]))
         crawler = glue.CfnCrawler(
             self, "TablesCrawler", role=crawler_role.role_arn,
             database_name=aws["glue_database"],
@@ -215,8 +233,9 @@ class DataStack(Stack):
                 publish_cloud_watch_metrics_enabled=True,
                 result_configuration=athena.CfnWorkGroup.ResultConfigurationProperty(
                     output_location=f"s3://{self.bucket.bucket_name}/{aws['athena_results_prefix']}",
+                    # our own key, like everything else in the bucket (SSE_S3 used AWS's key)
                     encryption_configuration=athena.CfnWorkGroup.EncryptionConfigurationProperty(
-                        encryption_option="SSE_S3"))))
+                        encryption_option="SSE_KMS", kms_key=self.key.key_arn))))
         CfnOutput(self, "Crawler", value=crawler.ref)
 
         # --- the Slack listener: clicks on task cards, without the laptop ---

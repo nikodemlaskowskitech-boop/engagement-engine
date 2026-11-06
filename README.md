@@ -138,7 +138,7 @@ In AWS (after `aws login --profile cairnpath`; deploying is in
 ```
 python upload.py            # new or changed inputs to the bucket; the check and the engine run by themselves
 python request_briefs.py    # the AI handover briefs, only when you ask (changed ones only, within budget)
-python security_check.py    # live: 37 questions on what each deployed role can and can't do
+python security_check.py    # live: 39 questions on what each deployed role can and can't do
 python access_report.py     # anything reachable from outside the account (baseline: 0)
 python guardduty_report.py  # threat findings and the cost so far
 python llm.py --spend       # this month's AI spend by feature, against its budget
@@ -163,7 +163,7 @@ leaves open, is in [THREAT_MODEL.md](THREAT_MODEL.md) (16 threats).
 
 | Control | What it stops | Proven by |
 | --- | --- | --- |
-| One role per job, least privilege | A stolen workload credential doing more than its one job | `security_check.py`: 37 questions to AWS's policy simulator, on what's deployed |
+| One role per job, least privilege | A stolen workload credential doing more than its one job | `security_check.py`: 39 questions to AWS's policy simulator, on what's deployed |
 | Data perimeter (bucket policy) | Anyone else in the account, even with `s3:*`, reading or writing the data | `security_check.py` |
 | Own KMS key, usable only through S3 | A copied file decrypted outside the bucket's rules | `security_check.py` |
 | Public access blocked, HTTPS only, versioned | Exposure, eavesdropping, a bad run you can't undo | `tests/infra_test.py` (87 checks on the template) |
