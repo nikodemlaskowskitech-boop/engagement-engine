@@ -24,7 +24,6 @@
   --neutral-fill: #4F5A52;  /* "nothing to flag" in charts: visible, but recedes */
   --accent: #D9CBA8;        /* sand: selection, links, focus */
   --accent-soft: #2B2A21;
-  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;   /* categories (fixed order) */
   /* Three colour groups (10 Nov 2026), never mixed:
      - brand: the look (--bg, --surface, --ink*, --accent sand, the logo's stones)
      - status: state only (--good, --warning, --serious, --critical); amber is always a warning
@@ -35,9 +34,15 @@
   --viz-qbr: #579F68;       /* sage: QBRs, booked or held */
   --viz-call: #8F68CB;      /* lavender: churn, growth and activation calls, follow-ups */
   --viz-renewal: #4493D0;   /* slate blue: renewals */
-  --viz-other: #7E877C;     /* stone: kickoffs, check-ins, other meetings (recedes) */
+  --viz-other: #5E665D;     /* stone: kickoffs, check-ins, other meetings (recedes). Review 10 Nov:
+                               #7E877C failed against sage (ΔE 9.5); this passes (16.8 normal, 14.6
+                               deutan). A neutral by design, so under the chroma floor, and 2.8:1 on
+                               the panel: its bars always carry a total and sit beside a legend */
+  --viz-touch: #B9B3A5;     /* light stone: emails and workshops on the timeline (shape tells which) */
+  --viz-measure: #7FA6CF;   /* steel blue: an amount over time (utilisation, a sieve stage, days) */
+  --viz-measure-soft: #52708D;   /* the same, as a backdrop (weekly active users), 3:1 on the panel */
   --viz-label: #0E1311;     /* a count printed inside a coloured segment */
-  --tip-bg: #0B0F0D;        /* tooltips: darker than the panels */
+  --tip-bg: #0B0F0D;        /* tooltips: darker than the panels, in both themes (cream text) */
   /* Palette rules (validated with the dataviz validator):
      - status colours (good, warning, critical) only for state; amber is always a warning
      - stacked categories: the --viz-* colours above; never blue next to violet.
@@ -57,7 +62,6 @@
   --bg: #F5F1E8; --surface: #FFFDF8; --head: #F1ECDF; --ink: #1E2320; --ink-2: #4F564F; --ink-3: #5E655F;
   --rule: #DDD6C8; --contour: #D9D1BF; --neutral-fill: #C9C3B4;
   --accent: #6B5A2E; --accent-soft: #EFE8D6;
-  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;
   --seq-0: #edf3fb; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #5598e7; --seq-4: #256abf; --seq-5: #104281;
   --good: #2F6B47; --warning: #C9921E; --serious: #C46A3A; --critical: #A8322A;
   --good-ink: #24543A; --warning-ink: #6E4A00; --serious-ink: #8A4220; --critical-ink: #8C2A22;
@@ -132,7 +136,7 @@ svg .lbl { fill: var(--ink-2); font-size: 12px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--ink-2); margin-top: 10px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend svg { width: 12px; height: 12px; display: inline; }
-.tip { position: fixed; z-index: 20; pointer-events: none; background: var(--tip-bg); color: var(--ink); border: 1px solid var(--rule); font-size: 0.82rem; line-height: 1.45; padding: 8px 10px; border-radius: 8px; max-width: 300px; box-shadow: 0 6px 18px rgb(0 0 0 / 0.45); }
+.tip { position: fixed; z-index: 20; pointer-events: none; background: var(--tip-bg); color: #E9E3D5; border: 1px solid var(--rule); font-size: 0.82rem; line-height: 1.45; padding: 8px 10px; border-radius: 8px; max-width: 300px; box-shadow: 0 6px 18px rgb(0 0 0 / 0.45); }
 .tip .row { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; }
 .tip .sw { width: 10px; height: 10px; border-radius: 2px; }
 .tip .tot { border-top: 1px solid var(--rule); margin-top: 4px; padding-top: 4px; font-weight: 600; }
@@ -198,8 +202,9 @@ button.link.back { display: inline-block; margin: 0 0 8px; padding: 4px 0; font-
 .segbar.on { box-shadow: inset 0 -2px 0 var(--accent-soft); }
 /* tasks */
 .badge { display: inline-block; font: 600 0.72rem var(--font-body); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
-.badge.Open { background: var(--warning-bg); color: var(--warning-ink); }
-.badge.Claimed { background: var(--accent-soft); color: var(--accent); }
+.badge.Open { background: var(--bg); color: var(--ink-2); border: 1px solid var(--rule); }
+.badge.Open.stale, .badge.Draft { background: var(--warning-bg); color: var(--warning-ink); border: 0; }
+.badge.Claimed { background: var(--bg); color: var(--ink); border: 1px solid var(--ink-3); }
 .badge.Done { background: var(--good-bg); color: var(--good-ink); }
 .badge.Resolved { background: var(--bg); color: var(--ink-3); border: 1px solid var(--rule); }
 .sum-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 24px; }
@@ -277,6 +282,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
 <header>
   <svg aria-hidden="true" width="0" height="0" style="position: absolute">
+    <pattern id="hatch-warning" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+      <rect width="6" height="6" style="fill: var(--warning-bg)"></rect><rect width="3" height="6" style="fill: var(--warning)"></rect>
+    </pattern>
     <symbol id="logo-path" viewBox="0 0 48 56">
       <defs><clipPath id="logo-path-clip"><path d="M4.5 46.5 C3.8 41.2 12 38.4 23.6 38.1 C35.4 37.8 44.6 39.8 44.9 44.6 C45.2 49.4 37 52.6 24.4 52.8 C12 53 5 51 4.5 46.5 Z"></path><path d="M9.2 33.6 C8.8 29.6 15 27.5 23.8 27.3 C32.6 27.1 39.2 28.7 39.4 32.4 C39.6 36.1 33.4 38.2 24.4 38.3 C15.4 38.4 9.6 37 9.2 33.6 Z"></path><path d="M13.4 22.5 C13.1 19.4 17.6 17.6 24 17.5 C30.4 17.4 35 18.8 35.1 21.7 C35.2 24.6 30.8 26.4 24.4 26.5 C18 26.6 13.7 25.3 13.4 22.5 Z"></path><path d="M17.6 13 C17.4 10.6 20.2 9.1 24.1 9.1 C28 9.1 30.6 10.4 30.6 12.6 C30.6 14.8 28 16 24.2 16.1 C20.4 16.2 17.8 15 17.6 13 Z"></path></clipPath></defs>
       <ellipse cx="24.6" cy="53.6" rx="19" ry="2" fill="#0A0E0C" opacity="0.7"></ellipse>
@@ -583,7 +591,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <div class="panel">
           <h2>Meetings per week</h2>
           <div id="tm-weeks"></div>
-          <p class="note">All meetings held, QBRs and check-ins included. Darker means more.</p>
+          <p class="note">All meetings held, QBRs and check-ins included. One cell is one person's week; the key under the grid gives the scale.</p>
         </div>
       </div>
       <div class="panel">
@@ -857,10 +865,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
   // ---------------------------------------------------------------- timeline
   const TOUCH = {
-    email_sent: { name: "Email sent", color: "var(--s1)", shape: "circle-open" },
-    email_opened: { name: "Email opened", color: "var(--s1)", shape: "circle" },
-    workshop_attended: { name: "Workshop attended", color: "var(--s3)", shape: "square" },
-    meeting_held: { name: "Meeting held", color: "var(--s4)", shape: "diamond" },
+    email_sent: { name: "Email sent", color: "var(--viz-touch)", shape: "circle-open" },
+    email_opened: { name: "Email opened", color: "var(--viz-touch)", shape: "circle" },
+    workshop_attended: { name: "Workshop attended", color: "var(--viz-touch)", shape: "square" },
+    meeting_held: { name: "Meeting held", color: "var(--viz-other)", shape: "diamond" },   // coloured by type when drawn
   };
   const PROBLEM = new Set(["churn_call", "growth_call", "activation_call", "follow_up"]);
   const topicName = (t) => (t || "").replace(/_/g, " ");
@@ -932,12 +940,18 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
   const TOUCH_ORDER = ["email_sent", "email_opened", "workshop_attended", "meeting_held"];
   for (const k of TOUCH_ORDER) {
+    if (k === "meeting_held") {                       // one swatch per meeting type, as on My book
+      for (const [col, nm] of [["var(--viz-qbr)", "QBR"], ["var(--viz-call)", "Call or follow-up"], ["var(--viz-other)", "Other meeting"]]) {
+        const s = document.createElement("span"); s.append(legendSwatch("diamond", col), nm); $("tl-legend").appendChild(s);
+      }
+      continue;
+    }
     const s = document.createElement("span"); s.append(legendSwatch(TOUCH[k].shape, TOUCH[k].color), TOUCH[k].name); $("tl-legend").appendChild(s);
   }
   { const s = document.createElement("span"); const sv = document.createElementNS(NS, "svg"); sv.setAttribute("viewBox", "0 0 12 12");
-    el("line", { x1: 0, y1: 6, x2: 12, y2: 6, stroke: "var(--accent)", "stroke-width": 2 }, sv); s.append(sv, "30-day utilisation"); $("tl-legend").appendChild(s);
+    el("line", { x1: 0, y1: 6, x2: 12, y2: 6, stroke: "var(--viz-measure)", "stroke-width": 2 }, sv); s.append(sv, "30-day utilisation"); $("tl-legend").appendChild(s);
     const s2 = document.createElement("span"); const sv2 = document.createElementNS(NS, "svg"); sv2.setAttribute("viewBox", "0 0 12 12");
-    el("rect", { x: 2, y: 3, width: 8, height: 9, rx: 1, fill: "var(--seq-2)" }, sv2); s2.append(sv2, "Weekly active users"); $("tl-legend").appendChild(s2); }
+    el("rect", { x: 2, y: 3, width: 8, height: 9, rx: 1, fill: "var(--viz-measure-soft)" }, sv2); s2.append(sv2, "Weekly active users"); $("tl-legend").appendChild(s2); }
 
   function drawTimeline(id) {
     const a = byId[id]; if (!a) return;
@@ -964,9 +978,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     }
     const pts = a.util.map((u, i) => (u == null ? null : [X(day(D.util_dates[i])), UY(u)])).filter(Boolean);
     if (pts.length) {
-      el("path", { d: "M" + pts.map((p) => p.join(" ")).join("L"), fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+      el("path", { d: "M" + pts.map((p) => p.join(" ")).join("L"), fill: "none", stroke: "var(--viz-measure)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
       const last = pts[pts.length - 1], lastU = a.util.filter((u) => u != null).slice(-1)[0];
-      el("circle", { cx: last[0], cy: last[1], r: 4, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
+      el("circle", { cx: last[0], cy: last[1], r: 4, fill: "var(--viz-measure)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
       el("text", { x: last[0] - 8, y: last[1] - 9, "text-anchor": "end", class: "val" }, svg).textContent = lastU + "%";
       // hover band for daily values
       const hit = el("rect", { x: X(day(D.util_dates[0])), y: uTop, width: X(x1) - X(day(D.util_dates[0])), height: uH, fill: "transparent" }, svg);
@@ -994,7 +1008,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const xe = X(day(we) + 1), xs = Math.max(L, X(day(we) - 6));
       const v = a.wau[i], y = WY(v);
       if (v > 0) {
-        const r = el("path", { d: `M${xs + 1} ${wTop + wH}V${y + 3}Q${xs + 1} ${y} ${xs + 4} ${y}H${xe - 4}Q${xe - 1} ${y} ${xe - 1} ${y + 3}V${wTop + wH}Z`, fill: "var(--seq-2)" }, svg);
+        const r = el("path", { d: `M${xs + 1} ${wTop + wH}V${y + 3}Q${xs + 1} ${y} ${xs + 4} ${y}H${xe - 4}Q${xe - 1} ${y} ${xe - 1} ${y + 3}V${wTop + wH}Z`, fill: "var(--viz-measure-soft)" }, svg);
         hover(r, `<b>Week ending ${fmt(we)}</b><br>${v} weekly active user${v === 1 ? "" : "s"}`);
       }
     });
@@ -1008,7 +1022,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const k = TOUCH[t.event]; if (!k) continue;
       const cx = X(day(t.date) + 0.5), cy = tY + rows[t.event];
       const strong = t.event === "meeting_held" && PROBLEM.has(t.topic);
-      const m = drawShape(svg, k.shape, cx, cy, k.color, strong ? 6 : 5);
+      const MCOL = { qbr: "var(--viz-qbr)", call: "var(--viz-call)", other: "var(--viz-other)" };   // the same as My book's charts
+      const m = drawShape(svg, k.shape, cx, cy, t.event === "meeting_held" ? MCOL[MEET_KIND(t.topic)] : k.color, strong ? 6 : 5);
       const owner = ownerName[t.owner_id] || t.owner_id;
       const src = t.source === "actions.py" ? " · sent by the engine" : t.source === "slack" ? " · logged in Slack" : "";
       hover(m, `<b>${k.name}</b> · ${esc(topicName(t.topic))}<br>${fmt(t.date)} · ${esc(owner)}${src}`);
@@ -1244,7 +1259,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const current = conf && conf.version === h.version;          // confirmed this very version
     const who = (() => { const r = forecastRole(a, "handover_confirm"); return r && (r.role === "manager" || r.by === h.from) ? r : null; })();
     const status = current ? `<span class="badge Done">Confirmed</span>`
-      : conf ? `<span class="badge Open">Draft: rewritten since it was confirmed</span>` : `<span class="badge Open">Draft</span>`;
+      : conf ? `<span class="badge Draft">Draft: rewritten since it was confirmed</span>` : `<span class="badge Draft">Draft</span>`;
     let x = `<div class="ho-head"><h2>Handover brief: ${esc(ownerName[h.from] || h.from)} → ${esc(ownerName[h.to] || h.to)}</h2>${status}</div>`;
     x += `<p class="note">Written by AI from ${h.sources.length - 1} documents (support cases, emails, call transcripts) and the engine's data` +
       (h.written_as_of ? `, on data as of ${fmt(h.written_as_of)}` : "") + `. Click a source tag to see what the model read.` +
@@ -1296,7 +1311,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   function pressChips(id) { document.querySelectorAll("#tl-picks .chip").forEach((c) => c.setAttribute("aria-pressed", String(c.id === "pick-" + id))); }
 
   // ---------------------------------------------------------------- onboarding
-  const GROUPS = [{ key: "welcomed", name: "Welcomed", color: "var(--s1)" }, { key: "control (no email)", name: "Control (no email)", color: "var(--ink-3)" }];
+  const GROUPS = [{ key: "welcomed", name: "Welcomed", color: "var(--viz-touch)" }, { key: "control (no email)", name: "Control (no email)", color: "var(--ink-3)" }];
   for (const g of GROUPS) { const s = document.createElement("span"); s.append(legendSwatch("circle", g.color), g.name); $("ob-legend").appendChild(s); }
   let obTier = "all";
   document.querySelectorAll("#ob-tier button").forEach((b) => b.addEventListener("click", () => {
@@ -1406,7 +1421,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         const cx = (a.call_date ? X(Math.min(a.days_to_call, maxD)) : noCallX) + (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 8;
         const isGrowth = a.flag === "expansion";
         const m = a.call_date
-          ? el("circle", { cx, cy, r: 4.5, fill: isGrowth ? "var(--good)" : "var(--s1)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg)
+          ? (isGrowth ? el("rect", { x: cx - 4.5, y: cy - 4.5, width: 9, height: 9, rx: 1, fill: "var(--viz-call)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg)
+                      : el("circle", { cx, cy, r: 4.5, fill: "var(--viz-call)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg))
           : el("circle", { cx, cy, r: 4.5, fill: "var(--surface)", stroke: "var(--critical)", "stroke-width": 2 }, svg);
         const name = byId[a.account_id]?.account_name || a.account_id;
         hover(m, `<b>${esc(name)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>${a.call_date ? (a.via === "qbr" ? "Covered by the QBR on " + fmt(a.call_date) + ", " + a.days_to_call + " days later" : a.called_early ? "Called " + fmt(a.call_date) + ", before the signal" : "Called " + fmt(a.call_date) + ", " + a.days_to_call + " days later") : "No call yet"}${a.escalated ? "<br>Escalated to the manager" : ""}`);
@@ -1415,7 +1431,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       }
     });
     $("tm-legend").innerHTML = "";
-    for (const [shape, color, name] of [["circle", "var(--s1)", "Churn Act, called"], ["circle", "var(--good)", "Expansion Act, called"], ["circle-open", "var(--critical)", "No call yet"]]) {
+    for (const [shape, color, name] of [["circle", "var(--viz-call)", "Churn Act, called"], ["square", "var(--viz-call)", "Expansion Act, called"], ["circle-open", "var(--critical)", "No call yet"]]) {
       const s = document.createElement("span"); s.append(legendSwatch(shape, color), name); $("tm-legend").appendChild(s);
     }
     drawCapacity();
@@ -1423,7 +1439,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
     // owner table
     const head = `<tr><th>Owner</th><th class="r">Act</th><th class="r">Called</th><th class="r">Median days</th><th class="r">Escalated</th></tr>`;
-    const line = (r) => `<tr><td>${esc(r.o.owner_name)}</td><td class="r num">${r.n}</td><td class="r num${r.called < r.n ? " bad" : ""}">${r.called} (${pct(r.called, r.n)}%)</td><td class="r num">${r.med == null ? "–" : r.med}</td><td class="r num">${r.esc || "–"}</td></tr>`;
+    const line = (r) => `<tr><td>${esc(r.o.owner_name)}</td><td class="r num">${r.n}</td><td class="r num">${r.called} (${pct(r.called, r.n)}%)</td><td class="r num">${r.med == null ? "–" : r.med}</td><td class="r num">${r.esc || "–"}</td></tr>`;
     // each group ends with its median, so every owner's number has a reference
     const medRow = (rs) => { if (rs.length < 2) return ""; const m = (f) => { const v = median(rs.map(f).filter((x) => x != null)); return v == null ? "–" : Math.round(v * 10) / 10; };
       return `<tr><td><small>Median</small></td><td class="r num"><small>${m((r) => r.n)}</small></td><td class="r num"><small>${m((r) => pct(r.called, r.n))}%</small></td><td class="r num"><small>${m((r) => r.med)}</small></td><td class="r num"><small>${m((r) => r.esc)}</small></td></tr>`; };
@@ -1440,7 +1456,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const counts = team.map((t) => weeks.map((we) => D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > day(we) - 7 && day(x.date) <= day(we)).length));
     const max = Math.max(1, ...counts.flat());
     if (!team.length) { wh.innerHTML = '<p class="note">Nobody on the CS team covers this segment.</p>'; return; }
-    const GW = 360, GL = 120, cw = (GW - GL) / weeks.length, ch = 20, GH = team.length * (ch + 3) + 26;
+    const GW = 360, GL = 120, cw = (GW - GL) / weeks.length, ch = 20, GH = team.length * (ch + 3) + 46;
     const gs = el("svg", { viewBox: `0 0 ${GW} ${GH}`, role: "img", "aria-label": "Meetings per week by owner" }, wh);
     const ramp = ["var(--seq-0)", "var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
     team.forEach((t, i) => {
@@ -1453,7 +1469,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         hover(r, `<b>${esc(t.owner_name)}</b><br>Week ending ${fmt(we)}: ${v} meeting${v === 1 ? "" : "s"}`);
       });
     });
-    [0, 6, 12].forEach((j) => { el("text", { x: GL + j * cw + cw / 2, y: GH - 6, "text-anchor": "middle" }, gs).textContent = fmt(weeks[j]); });
+    [0, 6, 12].forEach((j) => { el("text", { x: GL + j * cw + cw / 2, y: GH - 26, "text-anchor": "middle" }, gs).textContent = fmt(weeks[j]); });
+    // the key: the ramp from none to the busiest week (review 10 Nov: "darker means more" was backwards in dark mode)
+    const ky = GH - 14;
+    el("text", { x: GL - 6, y: ky + 9, "text-anchor": "end" }, gs).textContent = "0";
+    ramp.forEach((c, k) => el("rect", { x: GL + k * 18, y: ky, width: 16, height: 10, rx: 2, fill: c }, gs));
+    el("text", { x: GL + 6 * 18 + 4, y: ky + 9 }, gs).textContent = `${max} meeting${max === 1 ? "" : "s"} a week`;
   }
 
   // ---------------------------------------------------------------- book of business
@@ -1534,7 +1555,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         if (c.live) {
           const t = el("text", { x: LBL + j * cw + cw / 2, y: y + 16, "text-anchor": "middle", class: "val" }, svg);
           t.textContent = c.hit ? pct(c.hit, c.live) + "%" : "–";
-          t.style.fill = s / shareMax > 0.6 ? "var(--surface)" : "var(--ink-2)";
+          t.style.fill = inkOn(fill);
           t.style.pointerEvents = "none";
         }
         hover(r, `<b>${esc(x.r)} · ${x.t}</b><br>Week ending ${fmt(weeks[j])}<br>${c.hit} of ${c.live} live accounts (${pct(c.hit, c.live)}%) ${bkM === "risk" ? "under 40%" : "at 80% and up"}`);
@@ -1587,7 +1608,23 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const ownerOf = (id) => esc(byId[id] ? (byId[id].owner || "None") : "");
   const churnFlag = (a) => (a.flags.find((f) => f.flag === "churn") || null);
   // one meaning per colour: red = act now, amber = needs attention, neutrals for the rest
-  const STATUS_COLOR = { Act: "var(--critical)", Watch: "var(--warning)", Shelfware: "var(--ink-3)", "No churn flag": "var(--neutral-fill)" };
+  // a task's status badge: Done green, Open neutral until it has waited STALE days (then amber:
+  // needs attention), Claimed and Resolved neutral (decision 10 Nov 2026)
+  const STALE = D.settings.stale_task_days || 14;
+  // text on a coloured fill: near-black on light fills, cream on dark ones, chosen from the fill's
+  // real luminance (a CSS variable is read from the page, so it works in both themes)
+  const inkOn = (fill) => {
+    const m = /var\((--[\w-]+)\)/.exec(fill), hex = m ? getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim() : fill;
+    const c = /^#([0-9a-f]{6})$/i.exec(hex); if (!c) return "var(--ink)";
+    const lin = (i) => { const v = parseInt(c[1].slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const L = 0.2126 * lin(0) + 0.7152 * lin(2) + 0.0722 * lin(4);
+    const onCream = 0.81 / (L + 0.05), onDark = (L + 0.05) / 0.056;   // cream #E9E3D5 (L 0.76), near-black #0E1311
+    return onCream >= onDark ? "#E9E3D5" : "#0E1311";
+  };
+  const badge = (t) => `<span class="badge ${esc(t.action_status)}${t.action_status === "Open" && t.age_days >= STALE ? " stale" : ""}"` +
+    `${t.action_status === "Open" && t.age_days >= STALE ? ` title="Open for ${t.age_days} days"` : ""}>${esc(t.action_status)}</span>`;
+  // Shelfware needs attention like Watch (amber, as on every pill), told apart by its hatching
+  const STATUS_COLOR = { Act: "var(--critical)", Watch: "var(--warning)", Shelfware: "url(#hatch-warning)", "No churn flag": "var(--neutral-fill)" };
 
   // ---------------------------------------------------------------- overview: the sieve
   const FAST = D.settings.fast_days;
@@ -1630,7 +1667,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const y = 4 + i * RH, w = Math.max(2, (BAR * n[st.key]) / total);
       const g = el("g", { class: "stage", "data-key": st.key, style: "cursor:pointer" }, svg);
       el("text", { x: 4 + st.depth * 18, y: y + 19, class: "lbl" }, g).textContent = (st.depth ? "└ " : "") + st.label;
-      el("rect", { x: LBL, y: y + 5, width: w, height: RH - 12, rx: 3, fill: st.color || "var(--accent)" }, g);
+      el("rect", { x: LBL, y: y + 5, width: w, height: RH - 12, rx: 3, fill: st.color || "var(--viz-measure)" }, g);
       el("text", { x: LBL + w + 8, y: y + 19, class: "val" }, g).textContent = n[st.key];
       if (st.parent) el("text", { x: W - 4, y: y + 19, "text-anchor": "end" }, g).textContent = `${pct(n[st.key], n[st.parent])}% of the stage above`;
       g.addEventListener("click", () => listStage(st));
@@ -1773,7 +1810,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     bins.forEach((b, i) => {
       const h = ((H - 20) * b.items.length) / maxN, x = i * bw + 6;
       const g = el("g", { style: "cursor:pointer" }, svg);
-      el("rect", { x, y: H - h, width: bw - 12, height: h, rx: 2, fill: b.from < LATE ? "var(--critical)" : "var(--accent)" }, g);
+      el("rect", { x, y: H - h, width: bw - 12, height: h, rx: 2, fill: b.from < LATE ? "var(--critical)" : "var(--viz-measure)" }, g);
       el("text", { x: x + (bw - 12) / 2, y: H - h - 5, "text-anchor": "middle", class: "val" }, g).textContent = b.items.length;
       el("text", { x: x + (bw - 12) / 2, y: H + 16, "text-anchor": "middle" }, svg).textContent = b.to == null ? `${b.from}+` : `${b.from}–${b.to}`;
       g.addEventListener("click", () => listOutcomes(`Caught with ${b.to == null ? b.from + "+" : b.from + "–" + b.to} days of warning`, b.items));
@@ -1878,7 +1915,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         `<td>${esc(byId[t.account_id] ? byId[t.account_id].region : "—")}</td>` +
         `<td>${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small></td>` +
         `<td>${ownerCell(t)}</td><td class="r num">${t.age_days} d</td>` +
-        `<td><span class="badge ${esc(t.action_status)}">${esc(t.action_status)}</span></td><td>${decisionCell(t)}</td></tr>`).join("") + "</tbody></table>";
+        `<td>${badge(t)}</td><td>${decisionCell(t)}</td></tr>`).join("") + "</tbody></table>";
     const byDoc = Object.fromEntries(items.flatMap((t) => [[docId("assign", t), t], [docId("handback", t), t]]));
     host.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
     host.querySelectorAll("select[data-assign]").forEach((s) => s.addEventListener("change", () => { if (s.value) decide("assign", byDoc[s.dataset.assign], s.value, s); }));
@@ -2004,7 +2041,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       { key: "act", v: act.length, l: "at Act", r: pct(act.length, churn.length), list: act,
         lvl: act.length ? "act" : "ok", u: act.length ? `call within ${FAST} days` : "none at Act" },
       { key: "called", v: actCalled, l: "called", r: act.length ? pct(actCalled, act.length) : "no Act account", list: act.filter(called),
-        lvl: notCalled.length ? "attention" : "ok", u: notCalled.length ? `${notCalled.length} still to call` : "all called", gap: notCalled },
+        lvl: notCalled.length ? "act" : "ok", u: notCalled.length ? `${notCalled.length} still to call` : "all called", gap: notCalled },
       { key: "planned", v: actPlanned, l: "with a next step", r: (act.length ? pct(actPlanned, act.length) : "no Act account") + (overdue.length ? ` · ${overdue.length} overdue` : " · none overdue"),
         list: act.filter(planned), lvl: noPlan.length || overdue.length ? "act" : "ok", u: noPlan.length ? `${noPlan.length} with no plan` : overdue.length ? `${overdue.length} overdue` : "all planned", gap: noPlan },
     ];
@@ -2218,7 +2255,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     shortList($("mb-work-list"), live, [
       { label: "Oldest first", get: (t) => nameOf(t.account_id) },
       { label: "Task", get: (t) => `${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small>` },
-      { label: "Status", get: (t) => `<span class="badge ${esc(t.action_status)}">${esc(t.action_status)}</span>` },
+      { label: "Status", get: (t) => badge(t) },
       { label: "Age", r: true, get: (t) => `${t.age_days} d` },
     ], "No open or claimed tasks.");
 

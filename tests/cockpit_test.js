@@ -348,6 +348,82 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // --- the visualisation review of 10 Nov 2026: each finding gets a check -------------------
+  {
+    const { page, errors } = await open(browser);
+    // colour groups: no chart mark uses the brand accent or the retired --s1..--s4 colours
+    const bad = [];
+    for (const t of ["overview", "lead", "mybook", "outcomes", "timeline", "onboarding", "team", "book"]) {
+      if (t === "mybook") await segment(page, { owner: "csm_mia" }); else await segment(page, {});
+      await tab(page, t);
+      bad.push(...await page.$$eval("main svg [fill], main svg [stroke]", (els) => els.flatMap((e) =>
+        ["fill", "stroke"].map((a) => e.getAttribute(a) || "").filter((v) => /--accent\b|--s[1-4]\)/.test(v)))).then((xs) => xs.map((x) => t + ": " + x)));
+    }
+    check(!bad.length, "review: no chart uses the brand accent or the retired category colours", bad.slice(0, 5).join(" | "));
+    // the meeting colours: stone, sage and lavender apart by OKLab ΔE ≥ 15 for normal vision
+    const okl = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+      const l = Math.cbrt(0.4122214708 * c[0] + 0.5363325363 * c[1] + 0.0514459929 * c[2]), m = Math.cbrt(0.2119034982 * c[0] + 0.6806995451 * c[1] + 0.1073969566 * c[2]), s = Math.cbrt(0.0883024619 * c[0] + 0.2817188376 * c[1] + 0.6299787005 * c[2]);
+      return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s]; };
+    const dE = (a, b) => 100 * Math.hypot(...okl(a).map((x, i) => x - okl(b)[i]));
+    const viz = await page.evaluate(() => Object.fromEntries(["qbr", "call", "renewal", "other"].map((k) => [k, getComputedStyle(document.documentElement).getPropertyValue("--viz-" + k).trim()])));
+    const pairs = [["other", "qbr"], ["qbr", "call"], ["renewal", "qbr"]].map(([a, b]) => [a + "/" + b, Math.round(dE(viz[a], viz[b]) * 10) / 10]);
+    check(pairs.every(([, d]) => d >= 15), "review: stacked neighbours differ by ΔE 15+ (stone vs sage was 9.5)", JSON.stringify(pairs));
+    // heatmap labels readable on their cells (4.5:1)
+    await segment(page, {}); await tab(page, "book");
+    const worst = await page.evaluate(() => {
+      const lum = (rgb) => { const c = rgb.match(/\d+/g).slice(0, 3).map((v) => v / 255).map((v) => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+      let w = 99;
+      for (const t of document.querySelectorAll("#bk-heat text.val")) {
+        const r = t.previousElementSibling; if (!r || r.tagName !== "rect") continue;
+        const a = lum(getComputedStyle(t).fill), b = lum(getComputedStyle(r).fill), c = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        w = Math.min(w, c);
+      }
+      return Math.round(w * 100) / 100;
+    });
+    check(worst >= 4.5, "review: every heatmap label is readable on its cell (4.5:1 or better)", `worst ${worst}:1`);
+    // the CS team heatmap has a key with its maximum, not "darker means more"
+    await tab(page, "team");
+    const key = await page.textContent("#tm-weeks");
+    check(/meetings? a week/.test(key) && !/Darker means more/.test(await page.textContent("#view-team")), "review: the meetings heatmap has a key with its maximum");
+    check(!(await page.$("#tm-table td.bad")), "decision 10 Nov: the CS team 'Called' column is neutral");
+    const dotFills = await page.$$eval("#tm-legend svg *", (els) => els.map((e) => e.getAttribute("fill") || ""));
+    check(!dotFills.some((f) => /--good/.test(f)), "review: the dot plot uses no status green for a category", dotFills.join(","));
+    // timeline: a meeting's diamond is coloured by its type, as on My book
+    const qbrAcc = D.touches.find((t) => t.event === "meeting_held" && t.topic === "qbr");
+    if (qbrAcc) {
+      await page.goto(PAGE + "#" + qbrAcc.account_id); await page.waitForTimeout(500);
+      const cols = await page.$$eval("#tl-chart svg path, #tl-chart svg rect, #tl-chart svg circle", (els) => [...new Set(els.map((e) => e.getAttribute("fill") || ""))]);
+      check(cols.includes("var(--viz-qbr)"), "review: the timeline colours a QBR sage, like My book", cols.join(","));
+    }
+    // tasks: Open is neutral until it has waited 14 days, then amber; Claimed is neutral
+    await tab(page, "tasks");
+    const bad2 = await page.$$eval("#view-tasks .badge", (bs) => bs.map((b) => {
+      const tr = b.closest("tr"); const age = tr ? +(tr.textContent.match(/(\d+) d\b/) || [0, -1])[1] : -1;
+      return { cls: b.className, age, bg: getComputedStyle(b).backgroundColor };
+    }));
+    const warnBg = await page.evaluate(() => { const d = document.createElement("span"); d.style.background = "var(--warning-bg)"; document.body.append(d); const c = getComputedStyle(d).backgroundColor; d.remove(); return c; });
+    const wrong = bad2.filter((b) => /\bOpen\b/.test(b.cls) && b.age >= 0 && ((b.age >= 14) !== (b.bg === warnBg)));
+    check(bad2.length > 0 && !wrong.length, "decision 10 Nov: an Open task is amber only once it has waited 14 days", JSON.stringify(wrong.slice(0, 3)));
+    // Leadership trail: Act accounts not called yet are "act now", as on Overview
+    await tab(page, "lead");
+    const calledCls = await page.$eval('#ld-tiles .wp[data-stage="called"]', (b) => b.className);
+    check(/\bact\b/.test(calledCls) || /\bok\b/.test(calledCls), "decision 10 Nov: 'not called yet' is red on the trail", calledCls);
+    check(!errors.length, "no script errors in the review checks", errors.join("; "));
+    await page.close();
+  }
+  // tooltips stay readable in the light theme
+  {
+    const { page } = await open(browser);
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+    await segment(page, { owner: "csm_mia" }); await tab(page, "mybook");
+    const bar = (await page.$$("#mb-pipe g.bar"))[0]; await bar.scrollIntoViewIfNeeded();
+    const bb = await bar.boundingBox(); await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height - 8); await page.waitForTimeout(120);
+    const c = await page.$eval(".tip", (t) => { const lum = (rgb) => { const c = rgb.match(/\d+/g).slice(0, 3).map((v) => v / 255).map((v) => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+      const s = getComputedStyle(t), a = lum(s.color), b = lum(s.backgroundColor); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); });
+    check(c >= 4.5, "review: tooltips are readable in the light theme too", `${c.toFixed(2)}:1`);
+    await page.close();
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
