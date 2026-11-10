@@ -445,6 +445,12 @@ One JSON event per line, one file per day in `data/events/`.
   of three instead of drifting onto the next day.
   Light theme: the engagement colours pass on paper as they are; touches and the
   measure blues darken there (3:1+ on the paper, cockpit_test checks every --viz).
+  Re-review (10 Nov 2026, the same separate reviewer): 8 of 10 fixed, then the rest:
+  heatmap labels pick white where cream falls under 4.5:1 (light theme), inside counts
+  4.8:1, stone #636B62 (3:1 on the panel, still 15+ from sage), the onboarding control
+  group a dim stone (was a near-twin of "welcomed"), Leadership's "book met" red only
+  [cockpit] below_median_points (10) under the median, phone: a 4th equal dot is "+n",
+  the last week label end-anchored, warning buckets say where they start.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;

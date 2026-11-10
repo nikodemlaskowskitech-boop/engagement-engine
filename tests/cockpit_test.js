@@ -528,6 +528,52 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // --- the re-review of 10 Nov 2026: each new finding gets a check ------------------------------
+  const lumOf = (rgb) => { const c = rgb.match(/\d+/g).slice(0, 3).map((v) => v / 255).map((v) => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  {
+    // light theme: heatmap labels 4.5:1 on their cells (the mid blue needed white)
+    const { page } = await open(browser);
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+    await segment(page, {}); await tab(page, "book");
+    await page.click("#bk-growth"); await page.click("#bk-risk"); await page.waitForTimeout(100);   // redraw under the light theme
+    const worstL = await page.$$eval("#bk-heat text.val", (ts) => ts.map((t) => [getComputedStyle(t).fill, t.previousElementSibling && getComputedStyle(t.previousElementSibling).fill]).filter(([, b]) => b));
+    const wl = Math.min(...worstL.map(([a, b]) => { const x = lumOf(a), y = lumOf(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }));
+    check(wl >= 4.5, "light theme: every heatmap label is 4.5:1 on its cell", `worst ${wl.toFixed(2)}:1`);
+    await page.close();
+  }
+  {
+    const { page } = await open(browser, { scheme: "dark" });
+    const v = await page.evaluate(() => { const st = getComputedStyle(document.documentElement), g = (k) => st.getPropertyValue(k).trim(); return { touch: g("--viz-touch"), other: g("--viz-other"), call: g("--viz-call"), label: g("--viz-label"), surface: g("--surface") }; });
+    const hexLum = (h) => lumOf(`rgb(${[1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(",")})`);
+    const ratio = (a, b) => { const x = hexLum(a), y = hexLum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    check(ratio(v.label, v.call) >= 4.5, "inside counts are 4.5:1 on the call colour", ratio(v.label, v.call).toFixed(2));
+    check(ratio(v.other, v.surface) >= 3, "'other meetings' stone is 3:1 on the dark panel", ratio(v.other, v.surface).toFixed(2));
+    // onboarding: welcomed vs. control are clearly apart (they sit side by side)
+    const okl = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((x) => x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+      const l = Math.cbrt(0.4122214708 * c[0] + 0.5363325363 * c[1] + 0.0514459929 * c[2]), m = Math.cbrt(0.2119034982 * c[0] + 0.6806995451 * c[1] + 0.1073969566 * c[2]), q = Math.cbrt(0.0883024619 * c[0] + 0.2817188376 * c[1] + 0.6299787005 * c[2]);
+      return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * q, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * q, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * q]; };
+    const dE = 100 * Math.hypot(...okl(v.touch).map((x, i) => x - okl(v.other)[i]));
+    check(dE >= 15, "onboarding: welcomed and control bars are ΔE 15+ apart", dE.toFixed(1));
+    // Leadership: "book met" is red only when 10+ points under the median
+    await tab(page, "lead");
+    const reds = await page.$$eval("#ld-team td.bad", (tds) => tds.map((td) => { const m = td.textContent.match(/\((\d+)%\).*median (\d+)%/); return m ? +m[2] - +m[1] : -1; }));
+    check(reds.every((d) => d >= (D.settings.below_median_points ?? 10)), "Leadership: 'book met' turns red only 10+ points under the median", JSON.stringify(reds));
+    await page.close();
+  }
+  {
+    // phone: the outcomes matrix stays in its panel, chart labels stay inside their chart and don't touch
+    const { page } = await open(browser, { width: 390, scheme: "dark" });
+    await tab(page, "outcomes");
+    const over = await page.$eval("#oc-matrix", (m) => { const p = m.closest(".panel").getBoundingClientRect(), r = m.getBoundingClientRect(); return r.right - p.right; });
+    check(over <= 0, "phone: the outcomes matrix stays inside its panel", `${over.toFixed(0)}px over`);
+    const wt = await page.$$eval("#oc-warning svg > text", (ts) => ts.map((t) => { const b = t.getBBox(); return { x: b.x, y: b.y, width: b.width }; }).filter((b) => b.y > 170 && b.y < 190).sort((a, b) => a.x - b.x));
+    check(wt.length > 3 && wt.every((b, i) => !i || b.x >= wt[i - 1].x + wt[i - 1].width + 2), "phone: warning-time labels don't touch", JSON.stringify(wt.map((b) => [Math.round(b.x), Math.round(b.y), Math.round(b.width)])));
+    await segment(page, { owner: "csm_mia" }); await tab(page, "mybook");
+    const clipped = await page.$$eval("#view-mybook svg.stack", (svgs) => svgs.flatMap((s) => [...s.querySelectorAll(":scope > text")].filter((t) => { const b = t.getBBox(); return b.x < -1 || b.x + b.width > s.viewBox.baseVal.width + 1; }).map((t) => t.textContent)));
+    check(!clipped.length, "phone: no week label runs past the chart's edge", clipped.join(","));
+    await page.close();
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
