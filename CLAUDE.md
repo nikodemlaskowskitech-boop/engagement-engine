@@ -415,7 +415,17 @@ One JSON event per line, one file per day in `data/events/`.
   with the trail: at risk -> at Act -> called -> with a next step, one cairn each,
   its urgency in colour, height and words ("13 still to call"); a click lists the
   accounts (who is missing, where a stage falls short). Then ARR at risk, Upside
-  and Forecast ≠ data as tiles.
+  and Forecast ≠ data as tiles. Colours in three groups that never mix (10 Nov
+  2026): brand (the look), status (--good/--warning/--serious/--critical, state
+  only) and data (--viz-qbr sage, --viz-call lavender, --viz-renewal slate blue,
+  --viz-other stone: one colour per engagement type on every chart, validated with
+  the dataviz checker on the dark surface). stackChart() is the reference chart
+  (My book's meetings and pipeline): bottom to top other/renewal, QBR, calls and
+  follow-ups (blue never touches violet), a 2px gap between segments, totals on
+  top, a segment's count inside only when it fits and the bar has more than one,
+  dashed recessive gridlines, a darker tooltip with every category and the total,
+  the legend in stack order; Watch accounts named beside the pipeline, never in it.
+  New charts follow it.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;
