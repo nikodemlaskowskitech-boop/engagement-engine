@@ -1441,53 +1441,74 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const ownerRows = teamRows(all);
     const csm = ownerRows.filter((r) => r.o.owner_type === "csm"), pool = ownerRows.filter((r) => r.o.owner_type === "pool");
     const sum = (rs, k) => rs.reduce((s, r) => s + r[k], 0);
-    $("tm-finding").textContent = !all.length ? `${segName()}: no account at churn or expansion Act with a CSM or a pool.` : `${segOn() ? segName() + ": " : ""}${all.length - called.length} of ${all.length} Act accounts have had no call: ${sum(pool, "n") - sum(pool, "called")} with the Scale pools, ${sum(csm, "n") - sum(csm, "called")} with named CSMs.`;
+    $("tm-finding").textContent = !all.length ? `${segName()}: no account at churn or expansion Act with a CSM or a pool.` : `${segOn() ? segName() + ": " : ""}${all.length - called.length} of ${all.length} Act accounts have had no call yet, ${all.filter((a) => !a.call_date && day(D.as_of) - day(a.signal_date) >= (D.settings.call_target_days ?? 14)).length} of them past the ${D.settings.call_target_days ?? 14}-day target: ${sum(pool, "n") - sum(pool, "called")} with the Scale pools, ${sum(csm, "n") - sum(csm, "called")} with named CSMs.`;
 
-    // dot plot: one row per owner, days 0..20, plus a "no call" column
+    // dot plot (redesigned 10 Nov 2026): one axis, days since the signal, for every Act account.
+    // Called = a filled mark on the day of the call. Not called yet = an open ring at how long it
+    // has waited so far: neutral while there's still time, red past the target (the same 14 days
+    // after which journeys.py escalates). The axis is stretched near zero (square root) so the
+    // calls in the first two weeks don't crowd, while a 60-day wait still fits.
     const host = $("tm-dots"); host.innerHTML = "";
-    const ph = isPhone(), W = fitW(760, 330), L = ph ? 100 : 150, R = ph ? 62 : 90, rowH = 30, top = 8, H = top + ownerRows.length * rowH + 40, maxD = 20;
-    const X = (d) => L + (d / maxD) * (W - L - R);
-    const noCallX = W - R + (ph ? 34 : 50);
-    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Days from signal to first call per account, by owner" }, host);
-    const yEnd = top + ownerRows.length * rowH;
-    for (let d = 0; d <= maxD; d += 5) {
-      el("line", { x1: X(d), x2: X(d), y1: top, y2: yEnd, stroke: "var(--rule)" }, svg);
-      el("text", { x: X(d), y: yEnd + 16, "text-anchor": "middle", class: "val" }, svg).textContent = d === maxD ? `${maxD}+` : d;
+    const TARGET = D.settings.call_target_days ?? 14, ASOF = day(D.as_of);
+    const waited = (a) => ASOF - day(a.signal_date);
+    const val = (a) => (a.call_date ? Math.max(0, a.days_to_call) : waited(a));
+    const hi = Math.max(TARGET, ...ownerRows.flatMap((r) => r.rs.map(val)));
+    const maxD = hi <= 30 ? 30 : hi <= 60 ? 60 : 90;
+    const TICKS = [0, 3, 7, 14, 30, 60, 90].filter((t) => t <= maxD);
+    const ph = isPhone(), W = fitW(760, 330), L = ph ? 0 : 150, R = ph ? 8 : 190;
+    const X = (d) => L + 6 + Math.sqrt(Math.min(d, maxD) / maxD) * (W - L - R - 12);
+    // rows: a header per group, then one row per owner (on a phone the name and summary sit above the dots)
+    const lab = ph ? 30 : 0, rowH = 32 + lab, headH = 22, top = 20;   // top: room for the target's label
+    const groups = [["Named CSMs", csm, "about 8 accounts each"], ["Scale pools", pool, "a regional book of about 40"]].filter(([, rs]) => rs.length);
+    let y = top; const layout = [];
+    for (const [g, rs, note] of groups) { layout.push({ head: `${g} (${note})`, y }); y += headH; for (const r of rs) { layout.push({ r, y }); y += rowH; } }
+    const yEnd = y, H = yEnd + 40;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Days since the signal per Act account: called on day N, or still waiting N days" }, host);
+    for (const t of TICKS) {
+      el("line", { x1: X(t), x2: X(t), y1: top, y2: yEnd, stroke: "var(--rule)", "stroke-dasharray": t === TARGET ? "none" : "2 4" }, svg);
+      el("text", { x: X(t), y: yEnd + 16, "text-anchor": "middle", class: "val" }, svg).textContent = t === maxD ? `${t}+` : t;
     }
-    el("text", { x: (L + X(maxD)) / 2, y: yEnd + 32, "text-anchor": "middle" }, svg).textContent = "days from signal to first call";
-    el("line", { x1: noCallX, x2: noCallX, y1: top, y2: yEnd, stroke: "var(--rule)", "stroke-dasharray": "2 3" }, svg);
-    el("text", { x: noCallX, y: yEnd + 16, "text-anchor": "middle", class: "lbl" }, svg).textContent = "no call";
-    ownerRows.forEach((r, i) => {
-      const cyRow = top + i * rowH + rowH / 2;
-      if (i === csm.length && i > 0) el("line", { x1: 0, x2: W, y1: top + i * rowH, y2: top + i * rowH, stroke: "var(--ink-3)", "stroke-width": 1 }, svg);
-      el("text", { x: 0, y: cyRow + 4, class: "lbl" }, svg).textContent = ph ? r.o.owner_name.replace(" Scale team", " pool") : r.o.owner_name;
-      const stack = {};
-      for (const a of r.rs) {
-        const k = a.call_date ? String(Math.min(a.days_to_call, maxD)) : "none";
-        const n = (stack[k] = (stack[k] || 0) + 1) - 1;
-        // the same value stacks in columns of three (middle, above, below), then a new column to
-        // the right, so a dot never drifts onto a neighbouring day
-        const col = Math.floor(n / 3), cyo = [0, -10, 10][n % 3];
-        if (ph && col > 0) {                               // phone: no room for a second column
-          const more = r.rs.filter((x) => (x.call_date ? String(Math.min(x.days_to_call, maxD)) : "none") === k).length - 3;
-          if (n === 3) { const t = el("text", { x: (a.call_date ? X(Math.min(a.days_to_call, maxD)) : noCallX) + 7, y: cyRow + 4, class: "val" }, svg); t.textContent = `+${more}`; }
-          continue;
-        }
-        const cx = (a.call_date ? X(Math.min(a.days_to_call, maxD)) : noCallX) + col * 11;
-        const cy = cyRow + cyo;
-        const isGrowth = a.flag === "expansion";
+    // the target: past this line an account still waiting is late
+    el("line", { x1: X(TARGET), x2: X(TARGET), y1: top, y2: yEnd, stroke: "var(--ink-3)", "stroke-width": 1.5 }, svg);
+    el("text", { x: X(TARGET), y: 12, "text-anchor": "middle", class: "val" }, svg).textContent = `${TARGET}-day target`;
+    el("text", { x: (X(0) + X(maxD)) / 2, y: yEnd + 32, "text-anchor": "middle" }, svg).textContent = "days since the signal (stretched near zero)";
+    for (const it of layout) {
+      if (it.head) { el("text", { x: 0, y: it.y + 15, class: "lbl", "font-weight": 600 }, svg).textContent = it.head; continue; }
+      const r = it.r, cyRow = it.y + lab + 16;
+      const wait = r.rs.filter((a) => !a.call_date), late = wait.filter((a) => waited(a) >= TARGET);
+      const summary = `${r.med == null ? "no calls" : "median " + r.med + " d"} · ${wait.length} waiting`;
+      el("line", { x1: 0, x2: W, y1: it.y + rowH, y2: it.y + rowH, stroke: "var(--rule)", "stroke-opacity": 0.5 }, svg);
+      const name = ph ? r.o.owner_name.replace(" Scale team", " pool") : r.o.owner_name;
+      el("text", { x: 0, y: ph ? it.y + 13 : cyRow + 4, class: "lbl" }, svg).textContent = name;
+      const st = el("text", { x: ph ? 0 : W, y: ph ? it.y + 26 : cyRow + 4, "text-anchor": ph ? "start" : "end", class: "val" }, svg);
+      st.textContent = summary;
+      if (late.length) { const t = el("tspan", {}, st); t.textContent = `, ${late.length} late`; t.style.fill = "var(--critical)"; t.style.fontWeight = "600"; }
+      // each mark takes the first lane (middle, above, below) where it touches nothing already drawn;
+      // with all three taken (only on a phone, in practice) it shows as "+n" beside the middle one
+      const placed = [], extra = {};
+      for (const a of [...r.rs].sort((x, z) => val(x) - val(z))) {
+        const v = val(a), x0 = X(v);
+        const lane = [0, -9, 9].find((o) => !placed.some((q) => q.o === o && Math.abs(q.x - x0) < 10));
+        if (lane === undefined) { const near = placed.find((q) => q.o === 0 && Math.abs(q.x - x0) < 10); extra[near.x] = (extra[near.x] || 0) + 1; continue; }
+        placed.push({ x: x0, o: lane });
+        const cyo = lane, col = 0;
+        const cx = X(v) + col * 10, cy = cyRow + cyo;
+        const isGrowth = a.flag === "expansion", isLate = !a.call_date && v >= TARGET;
         const m = a.call_date
           ? (isGrowth ? el("rect", { x: cx - 4.5, y: cy - 4.5, width: 9, height: 9, rx: 1, fill: "var(--viz-call)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg)
                       : el("circle", { cx, cy, r: 4.5, fill: "var(--viz-call)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg))
-          : el("circle", { cx, cy, r: 4.5, fill: "var(--surface)", stroke: "var(--critical)", "stroke-width": 2 }, svg);
-        const name = byId[a.account_id]?.account_name || a.account_id;
-        hover(m, `<b>${esc(name)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>${a.call_date && a.days_to_call > maxD ? `${a.days_to_call} days (shown at ${maxD}+)<br>` : ""}${a.call_date ? (a.via === "qbr" ? "Covered by the QBR on " + fmt(a.call_date) + ", " + a.days_to_call + " days later" : a.called_early ? "Called " + fmt(a.call_date) + ", before the signal" : "Called " + fmt(a.call_date) + ", " + a.days_to_call + " days later") : "No call yet"}${a.escalated ? "<br>Escalated to the manager" : ""}`);
+          : el("circle", { cx, cy, r: 4.5, fill: "var(--surface)", stroke: isLate ? "var(--critical)" : "var(--ink-3)", "stroke-width": 2, class: isLate ? "late" : "waiting" }, svg);
+        const nm = byId[a.account_id]?.account_name || a.account_id;
+        hover(m, `<b>${esc(nm)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>` + (a.call_date
+          ? (a.via === "qbr" ? `Covered by the QBR on ${fmt(a.call_date)}, ${a.days_to_call} days later` : a.called_early ? `Called ${fmt(a.call_date)}, before the signal` : `Called ${fmt(a.call_date)}, ${a.days_to_call} days later`)
+          : `No call yet: waiting ${v} days` + (isLate ? `, past the ${TARGET}-day target` : "")) + (v > maxD ? ` (shown at ${maxD}+)` : "") + (a.escalated ? "<br>Escalated to the manager" : ""));
         m.style.cursor = "pointer";
         m.addEventListener("click", () => openAccount(a.account_id));
       }
-    });
+      for (const [x, n] of Object.entries(extra)) el("text", { x: +x + 8, y: cyRow + 4, class: "val" }, svg).textContent = `+${n}`;
+    }
     $("tm-legend").innerHTML = "";
-    for (const [shape, color, name] of [["circle", "var(--viz-call)", "Churn Act, called"], ["square", "var(--viz-call)", "Expansion Act, called"], ["circle-open", "var(--critical)", "No call yet"]]) {
+    for (const [shape, color, name] of [["circle", "var(--viz-call)", "Churn Act, called on that day"], ["square", "var(--viz-call)", "Expansion Act, called on that day"], ["circle-open", "var(--ink-3)", "Not called yet, still in time"], ["circle-open", "var(--critical)", `Not called, waiting past ${D.settings.call_target_days ?? 14} days`]]) {
       const s = document.createElement("span"); s.append(legendSwatch(shape, color), name); $("tm-legend").appendChild(s);
     }
     drawCapacity();
