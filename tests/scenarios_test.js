@@ -178,7 +178,7 @@ const due = (days) => new Date(Date.parse(D.as_of) + days * 864e5).toISOString()
     const p = await open(browser); await tab(p, "lead"); const tiles = await text(p, "#ld-tiles");
     const risk = money(people.reduce((t, a) => t + value(a, "churn"), 0));
     const called = act.filter((a) => { const t = D.time_to_action.find((r) => r.account_id === a.account_id && r.flag === "churn"); return t ? !!t.call_date : false; }).length;
-    const ok = tiles.includes(risk) && tiles.includes(`${act.length} at Act`) && tiles.includes("Act: next step planned") && tiles.includes("Forecast ≠ data");
+    const ok = tiles.includes(risk) && tiles.includes(`${act.length} at Act`) && tiles.includes("with a next step") && tiles.includes("called") && tiles.includes("Forecast ≠ data");
     record("s13", ok, `tiles show ${risk} at risk, ${act.length} at Act, called and planned counts, forecasts ≠ data (data: about ${called} Act accounts called)`); await p.close();
   });
   await run("s14", async () => {

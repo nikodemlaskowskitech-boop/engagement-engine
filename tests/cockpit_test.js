@@ -91,6 +91,27 @@ const segment = async (page, values) => {
     check(tiles.includes(money(atRisk)), `Leadership ARR at risk = the export (${money(atRisk)})`, tiles.slice(0, 80));
     check(tiles.includes(`${act} at Act`), `Leadership Act count = the export (${act})`);
 
+    // the trail: four cairns, the urgency said by colour, height and words, and every stage opens its accounts
+    const stages = await page.$$eval("#ld-tiles .wp", (bs) => bs.map((b) => ({ key: b.dataset.stage, cls: b.className, v: +b.querySelector(".v").textContent,
+      cairn: b.querySelector("use").getAttribute("href"), u: b.querySelector(".u").textContent })));
+    const churnRows = people.filter((a) => a.flags.some((f) => f.flag === "churn"));
+    check(stages.length === 4 && stages[0].v === churnRows.length && stages[1].v === act,
+      `the trail: ${churnRows.length} at risk, then ${act} at Act`, JSON.stringify(stages.map((x) => x.v)));
+    const CAIRN = { act: "#cairn-red", attention: "#cairn-amber", ok: "#cairn-green" };
+    check(stages.every((st) => { const lvl = ["act", "attention", "ok"].find((c) => st.cls.split(" ").includes(c)); return lvl && st.cairn === CAIRN[lvl] && st.u.length > 0; }),
+      "each cairn's colour and height match its urgency, and the urgency is also in words", JSON.stringify(stages));
+    const heights = await page.$$eval("symbol[id^='cairn-'] ", (ss) => Object.fromEntries(ss.map((x) => [x.id, x.querySelectorAll(':scope > path[fill]:not([fill="none"])').length])));
+    check(heights["cairn-red"] === 4 && heights["cairn-amber"] === 3 && heights["cairn-green"] === 2, "red = 4 stones, amber = 3, green = 2", JSON.stringify(heights));
+    const planned = stages[3];
+    await page.click('#ld-tiles .wp[data-stage="planned"]');
+    const rows = await page.$$eval("#ld-trail-list tbody tr", (r) => r.length);
+    const missing = act - planned.v;
+    check(!(await page.isHidden("#ld-trail-panel")) && rows === (missing || planned.v),
+      `clicking "with a next step" lists the ${missing} Act accounts with no plan`, `${rows} rows`);
+    const logo = await page.$eval("header .logo use", (u) => u.getAttribute("href"));
+    const logoFills = await page.$$eval("#logo-path path[fill]", (ps) => ps.map((p) => p.getAttribute("fill").toLowerCase()));
+    check(logo === "#logo-path" && !logoFills.some((f) => ["#e07a6a", "#e3b65a", "#7fbf94"].includes(f)), "the logo uses stone colours only, never a status colour");
+
     // one CSM: My book and Leadership tell the same story
     const mia = D.accounts.filter((a) => a.owner_id === "csm_mia");
     const miaRisk = mia.reduce((t, a) => t + churnValue(a), 0);

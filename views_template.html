@@ -231,6 +231,24 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 .trend { font-size: 0.8rem; margin-left: 4px; color: var(--ink-2); }   /* the number stays ink; the arrow carries the colour */
 .trend.down b { color: var(--critical-ink); } .trend.up b { color: var(--good-ink); } .trend.flat { color: var(--ink-3); }
 .muted { color: var(--ink-3); }
+/* the trail on Leadership: from the signal to a plan, one cairn per stage. The cairn says
+   the urgency twice, by colour and by height: red top + 4 stones = act now, amber + 3 =
+   needs attention, green + 2 = healthy; the line under the number says it in words. */
+.voice { margin: 0; font: italic 400 0.98rem var(--font-display); color: var(--ink-2); max-width: 75ch; }
+.trail { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 4px 0 2px; }
+.trail .path { position: absolute; left: 6%; right: 6%; top: 34px; height: 40px; width: 88%; pointer-events: none; }
+.trail .path path { fill: none; stroke: var(--ink-3); stroke-opacity: 0.6; stroke-width: 2; stroke-dasharray: 2 7; stroke-linecap: round; }
+.wp { position: relative; display: grid; justify-items: center; gap: 2px; text-align: center; background: none; border: 0; border-radius: 10px; padding: 6px 4px 10px; cursor: pointer; font: inherit; color: var(--ink); }
+.wp:hover { background: var(--surface); }
+.wp svg { width: 52px; height: 65px; background: var(--bg); border-radius: 10px; padding: 2px 4px; }
+.wp .v { font: 600 2.1rem/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.wp .l { font-size: 0.85rem; color: var(--ink-2); }
+.wp .r { font-size: 0.78rem; color: var(--ink-3); }
+.wp .u { font-size: 0.8rem; font-weight: 600; }
+.wp.act .u { color: var(--critical-ink); } .wp.attention .u { color: var(--warning-ink); } .wp.ok .u { color: var(--good-ink); }
+#ld-tiles { display: grid; gap: 16px; }
+@media (max-width: 640px) { .trail { grid-template-columns: repeat(2, minmax(0, 1fr)); } .trail .path { display: none; } }
+
 .pickers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 @media (prefers-reduced-motion: no-preference) { .fade { animation: fade 0.25s ease-out; } @keyframes fade { from { opacity: 0.4; } to { opacity: 1; } } }
 </style>
@@ -253,6 +271,33 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <path d="M9 52.5 C20 50.5 34 47.6 33.2 42.6 C32.4 38 16.4 37.4 16.3 32.6 C16.2 28.6 30.8 27.2 30.4 22.5 C30 18.8 23.2 18.2 24 12.6" stroke="#EFE6D2" stroke-width="2.2"></path>
       </g>
     </symbol>
+    <symbol id="cairn-red" viewBox="0 0 40 50">
+        <ellipse cx="20.5" cy="46.2" rx="16" ry="2.2" fill="#000" opacity="0.7"></ellipse>
+        <path d="M4.6 40.6 C3.6 36.4 9.2 33.2 17.4 32.9 C25.8 32.5 33.6 33.6 35.6 36.9 C37.4 40 33.8 44 25.8 44.8 C16.8 45.7 6 44.6 4.6 40.6 Z" fill="#525A50"></path>
+        <path d="M7.2 37.2 C11 34.4 21 33.4 30.6 34.8" fill="none" stroke="#7A8376" stroke-width="1.3" stroke-linecap="round"></path>
+        <path d="M8.6 30.9 C7.9 27.3 12.3 24.9 19.4 24.6 C26.4 24.3 31.3 25.8 31.8 28.8 C32.3 31.8 28 33.5 20.8 33.8 C13.9 34.1 9.3 33.3 8.6 30.9 Z" fill="#6A7367"></path>
+        <path d="M10.8 28.2 C14 26.2 21.6 25.6 28.4 26.6" fill="none" stroke="#909A8C" stroke-width="1.2" stroke-linecap="round"></path>
+        <path d="M13.3 23.6 C12.5 20.9 15.6 18.5 20.9 18.1 C26.2 17.8 29.3 19.4 29.3 22 C29.3 24.6 26 25.6 21 25.8 C16.3 26 13.8 25.4 13.3 23.6 Z" fill="#858E81"></path>
+        <path d="M15.2 21.2 C17.8 19.6 22.6 19.2 26.8 19.9" fill="none" stroke="#A9B2A4" stroke-width="1.1" stroke-linecap="round"></path>
+        <path d="M16.4 16.9 C15.9 14.3 18.2 12.2 21.6 12.1 C24.8 12 26.9 13.6 26.6 15.8 C26.3 18 23.8 18.8 21.2 18.9 C18.6 19 16.8 18.5 16.4 16.9 Z" fill="#E07A6A"></path>
+        <path d="M18.1 14.6 C19.6 13.4 22.2 13.1 24.4 13.6" fill="none" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="1" stroke-linecap="round"></path>
+      </symbol>
+    <symbol id="cairn-amber" viewBox="0 0 40 50">
+        <ellipse cx="20.5" cy="46.2" rx="16" ry="2.2" fill="#000" opacity="0.7"></ellipse>
+        <path d="M4.6 40.6 C3.6 36.4 9.2 33.2 17.4 32.9 C25.8 32.5 33.6 33.6 35.6 36.9 C37.4 40 33.8 44 25.8 44.8 C16.8 45.7 6 44.6 4.6 40.6 Z" fill="#525A50"></path>
+        <path d="M7.2 37.2 C11 34.4 21 33.4 30.6 34.8" fill="none" stroke="#7A8376" stroke-width="1.3" stroke-linecap="round"></path>
+        <path d="M8.6 30.9 C7.9 27.3 12.3 24.9 19.4 24.6 C26.4 24.3 31.3 25.8 31.8 28.8 C32.3 31.8 28 33.5 20.8 33.8 C13.9 34.1 9.3 33.3 8.6 30.9 Z" fill="#6A7367"></path>
+        <path d="M10.8 28.2 C14 26.2 21.6 25.6 28.4 26.6" fill="none" stroke="#909A8C" stroke-width="1.2" stroke-linecap="round"></path>
+        <path d="M13.3 23.6 C12.5 20.9 15.6 18.5 20.9 18.1 C26.2 17.8 29.3 19.4 29.3 22 C29.3 24.6 26 25.6 21 25.8 C16.3 26 13.8 25.4 13.3 23.6 Z" fill="#E3B65A"></path>
+        <path d="M15.2 21.2 C17.8 19.6 22.6 19.2 26.8 19.9" fill="none" stroke="#F6DC9E" stroke-width="1.1" stroke-linecap="round"></path>
+      </symbol>
+    <symbol id="cairn-green" viewBox="0 0 40 50">
+        <ellipse cx="20.5" cy="46.2" rx="16" ry="2.2" fill="#000" opacity="0.7"></ellipse>
+        <path d="M4.6 40.6 C3.6 36.4 9.2 33.2 17.4 32.9 C25.8 32.5 33.6 33.6 35.6 36.9 C37.4 40 33.8 44 25.8 44.8 C16.8 45.7 6 44.6 4.6 40.6 Z" fill="#525A50"></path>
+        <path d="M7.2 37.2 C11 34.4 21 33.4 30.6 34.8" fill="none" stroke="#7A8376" stroke-width="1.3" stroke-linecap="round"></path>
+        <path d="M8.6 30.9 C7.9 27.3 12.3 24.9 19.4 24.6 C26.4 24.3 31.3 25.8 31.8 28.8 C32.3 31.8 28 33.5 20.8 33.8 C13.9 34.1 9.3 33.3 8.6 30.9 Z" fill="#7FBF94"></path>
+        <path d="M10.8 28.2 C14 26.2 21.6 25.6 28.4 26.6" fill="none" stroke="#B8E2C4" stroke-width="1.2" stroke-linecap="round"></path>
+      </symbol>
   </svg>
   <svg class="contours" aria-hidden="true" viewBox="0 0 760 200" preserveAspectRatio="xMaxYMid slice">
     <g fill="none" stroke="var(--contour)" stroke-width="1.2">
@@ -327,9 +372,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     </section>
 
     <section class="view" id="view-lead" role="tabpanel" aria-labelledby="tab-lead" hidden>
+      <p class="voice">Leadership always asked me two things: what's red and what are we doing about it, and is the team in front of customers. This page answers both.</p>
       <p class="finding" id="ld-finding"></p>
-      <p class="sub">The one page leadership asks for: what is at risk, what was done and what is planned; where the growth is; and whether the team is in front of its customers. Sorted by value, which guides the work and is never anyone's credit. The segment bar applies.</p>
-      <div class="tiles" id="ld-tiles"></div>
+      <p class="sub">Sorted by value, which guides the work and is never anyone's credit. The segment bar applies; every number opens its accounts.</p>
+      <div id="ld-tiles"></div>
+      <div class="panel" id="ld-trail-panel" hidden>
+        <h2 id="ld-trail-title"></h2>
+        <div class="tablewrap" id="ld-trail-list"></div>
+      </div>
         <div class="panel">
           <h2>Churn: biggest ARR at risk first</h2>
           <p class="finding small" id="ld-churn-finding"></p>
@@ -1895,6 +1945,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // ---------------------------------------------------------------- leadership: the one-pager
   // Churn (what is red, action taken, action planned), growth by value, and the
   // team's time in front of customers. Every list sorted by value at stake.
+  let leadStages = [];
+  const TRAIL_COLS = [
+    { label: "Account", get: (a) => `${esc(a.account_name)}<small><br>${esc(a.owner || "")}</small>` },
+    { label: "At risk", r: true, get: (a) => money(valueOf(a.flags.find((f) => f.flag === "churn"))) },
+    { label: "Status", get: (a) => esc((a.flags.find((f) => f.flag === "churn") || {}).status || "") },
+    { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${a.renewal_date.slice(0, 4)}` },
+    { label: "Action planned", get: (a) => { const p = planOf(a); return p ? planText(a, p) : '<span class="bad">none</span>'; } },
+  ];
   function drawLeadership() {
     if (!$("view-lead")) return;                     // not on this person's page
     const accs = D.accounts.filter(inSeg), person = (a) => a.tier !== "Self-service";
@@ -1914,12 +1972,41 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("ld-finding").textContent = churn.length
       ? `${segOn() ? segName() + ": " : ""}${money(atRisk)} of ${money(bookArr)} ARR is at risk; ${!act.length ? "no account is at Act." : act.length === actPlanned ? `all ${act.length} Act accounts have a next step planned.` : `${act.length - actPlanned} of ${act.length} Act accounts have no next step planned.`}`
       : `${segName()}: no CSM or pool account at churn risk.`;
+    // the trail: four stages, each a cairn whose colour and height say how urgent it is
+    const pct = (n, d) => d ? `${n} of ${d} (${Math.round(100 * n / d)}%)` : `${n}`;
+    const notCalled = act.filter((a) => !called(a)), noPlan = act.filter((a) => !planned(a));
+    const stages = [
+      { key: "risk", v: churn.length, l: "accounts at risk", r: `${money(atRisk)} of ${money(bookArr)} ARR`, list: churn,
+        lvl: churn.length > act.length ? "attention" : churn.length ? "act" : "ok",
+        u: churn.length > act.length ? `${churn.length - act.length} at Watch or Shelfware` : churn.length ? "all at Act" : "nothing at risk" },
+      { key: "act", v: act.length, l: "at Act", r: pct(act.length, churn.length), list: act,
+        lvl: act.length ? "act" : "ok", u: act.length ? `call within ${FAST} days` : "none at Act" },
+      { key: "called", v: actCalled, l: "called", r: act.length ? pct(actCalled, act.length) : "no Act account", list: act.filter(called),
+        lvl: notCalled.length ? "attention" : "ok", u: notCalled.length ? `${notCalled.length} still to call` : "all called", gap: notCalled },
+      { key: "planned", v: actPlanned, l: "with a next step", r: (act.length ? pct(actPlanned, act.length) : "no Act account") + (overdue.length ? ` · ${overdue.length} overdue` : " · none overdue"),
+        list: act.filter(planned), lvl: noPlan.length || overdue.length ? "act" : "ok", u: noPlan.length ? `${noPlan.length} with no plan` : overdue.length ? `${overdue.length} overdue` : "all planned", gap: noPlan },
+    ];
+    const CAIRN = { act: "cairn-red", attention: "cairn-amber", ok: "cairn-green" };
+    const LEVEL = { act: "act now", attention: "needs attention", ok: "on track" };
+    leadStages = stages;
     $("ld-tiles").innerHTML =
+      `<div class="trail" role="group" aria-label="From the signal to a plan"><svg class="path" aria-hidden="true" viewBox="0 0 1000 40" preserveAspectRatio="none"><path d="M0 20 C150 0 260 40 360 20 S590 0 650 20 S850 40 1000 20"></path></svg>` +
+      stages.map((st) => `<button type="button" class="wp ${st.lvl}" data-stage="${st.key}" aria-label="${st.v} ${st.l}, ${LEVEL[st.lvl]}: ${esc(st.u)}. Show the accounts">` +
+        `<svg aria-hidden="true" viewBox="0 0 40 50"><use href="#${CAIRN[st.lvl]}"></use></svg>` +
+        `<span class="v">${st.v}</span> <span class="l">${st.l}</span> <span class="r">${st.r}</span> <span class="u">${esc(st.u)}</span></button>`).join("") +
+      `</div><div class="tiles">` +
       tile("ARR at risk", money(atRisk), `${churn.length} accounts · ${act.length} at Act`, act.length > 0) +
-      tile("Act: called", `${actCalled} of ${act.length}`, "churn call or QBR since the signal", actCalled < act.length) +
-      tile("Act: next step planned", `${actPlanned} of ${act.length}`, overdue.length ? `${overdue.length} overdue` : "none overdue", actPlanned < act.length) +
       tile("Upside", money(upside), `${growth.length} accounts with an expansion flag`, false) +
-      tile("Forecast ≠ data", gaps.length, "owner's forecast a quarter of the ARR from the data", gaps.length > 0);
+      tile("Forecast ≠ data", gaps.length, "owner's forecast a quarter of the ARR from the data", gaps.length > 0) + `</div>`;
+    $("ld-trail-panel").hidden = true;
+    $("ld-tiles").querySelectorAll(".wp").forEach((b) => b.addEventListener("click", () => {
+      const st = leadStages.find((x) => x.key === b.dataset.stage);
+      const items = st.gap && st.gap.length ? st.gap : st.list;           // the stages that fall short list who's missing
+      const title = st.gap && st.gap.length ? st.u : `${st.v} ${st.l}`;
+      $("ld-trail-panel").hidden = false;
+      accountList($("ld-trail-list"), $("ld-trail-title"), title[0].toUpperCase() + title.slice(1), items, TRAIL_COLS, false);
+      $("ld-trail-panel").scrollIntoView({ block: "nearest" });
+    }));
     const lastCust = (id) => { const t = (touchesBy[id] || []).filter((x) => ["meeting_held", "email_sent", "workshop_attended"].includes(x.event)).slice(-1)[0];
       return t ? `${esc(topicName(t.topic))} <small>${fmt(t.date)}</small>` : '<span class="muted">none in 90 days</span>'; };
     const planCell = (a) => { const p = planOf(a); return p ? planText(a, p) : '<span class="bad">none</span>'; };
