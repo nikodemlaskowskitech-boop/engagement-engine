@@ -179,6 +179,7 @@ site_certificate_arn = "arn:aws:acm:us-east-1:809071263914:certificate/fd64b2a2-
 # Decisions saved in the published cockpit (cockpit_sync.py checks every one again: never trust the page).
 max_text = 200        # notes and reasons are cut to this many characters (the page's own limit)
 open_no_flags_up_to = 15   # My book: "No flags" accounts listed open when the book is this small or smaller (else folded, risk first)
+stale_task_days = 14      # Tasks: an Open task turns amber (needs attention) once it has waited this long; before that it's neutral
 
 [roles]
 # Who sees what, and who may change what (ROLES.md explains each choice and how to change it).

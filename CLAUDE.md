@@ -426,6 +426,14 @@ One JSON event per line, one file per day in `data/events/`.
   dashed recessive gridlines, a darker tooltip with every category and the total,
   the legend in stack order; Watch accounts named beside the pipeline, never in it.
   New charts follow it.
+  Review fixes (10 Nov 2026, separate reviewer): other meetings a darker stone
+  (#5E665D: the old one was too close to sage), a timeline meeting coloured by its
+  type, no status colour as a category (dot plot: called = lavender, churn a circle,
+  expansion a square), tooltips always dark (light theme too), heatmap labels
+  ink chosen by contrast, the CS team heatmap has a key with its max. Status
+  meanings: not called = red; the Called column neutral; an Open task neutral, amber
+  once it has waited [cockpit] stale_task_days (14); Claimed neutral, Done green.
+  cockpit_test.js checks each.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;

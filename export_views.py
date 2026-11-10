@@ -227,6 +227,7 @@ export = {
         ORDER BY s.age_days DESC, s.account_id, s.flag, s.status"""),
     "handovers": handovers(),
     "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
+                 "stale_task_days": SETTINGS["cockpit"]["stale_task_days"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"],
                  "follow_up_days": SETTINGS["follow_ups"]["after_days"],
