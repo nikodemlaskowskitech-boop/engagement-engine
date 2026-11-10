@@ -2,57 +2,56 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap">
 <style>
-/* Layout: a working cockpit. One header band with the four views as tabs; each view
-   opens with its one-line finding, then the chart, then the detail. Colour is kept
-   for state (risk, growth, escalation) and for the touch types on the timeline. */
+/* Look: "Night trail" (10 Nov 2026). Cairnpath means a path of cairns, the stone
+   markers that show walkers the way, and the cockpit's job is the same for CS. A warm
+   forest-black ground (not the usual cold slate), cream text instead of pure white
+   (less glare), stone greys, a sand accent, serif headlines (Fraunces) over a plain
+   sans (Inter). Map contours behind the header; cairns as the urgency markers:
+   red top + 4 stones = act now, amber + 3 = needs attention, green + 2 = healthy.
+   Dark is the default whatever the device says; a warm-paper light set stays for
+   data-theme="light". Colour is kept for state, as before. */
 :root {
-  --bg: #f6f7f6;            /* page: grey with a faint green-slate bias */
-  --surface: #ffffff;       /* chart and table surfaces */
-  --ink: #15201d;           /* primary text */
-  --ink-2: #4b5753;         /* secondary text */
-  --ink-3: #7b8682;         /* muted: axes, captions */
-  --rule: #dfe3e1;          /* hairlines, grid */
-  --neutral-fill: #c9cfcc;  /* "nothing to flag" in charts: visible, but recedes */
-  --routine-1: #4f9a90; --routine-2: #a8d2cb;   /* routine work in charts (teal, two steps) */
-  --accent: #1f6f5c;        /* cairn green: selection, links, focus */
-  --accent-soft: #e3efeb;
-  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;   /* categories (fixed order) */
-  /* Palette rules (validated with the dataviz validator, light and dark):
+  --bg: #121815;            /* page: forest black */
+  --surface: #18201B;       /* panels, tables */
+  --head: #141B17;          /* header band */
+  --ink: #E9E3D5;           /* primary text: cream, not white */
+  --ink-2: #C9C3B6;         /* secondary text */
+  --ink-3: #A3A99F;         /* muted: axes, captions (7:1 on the surface) */
+  --rule: #2A342D;          /* hairlines, grid */
+  --contour: #1F2A23;       /* map contours behind the header */
+  --neutral-fill: #4F5A52;  /* "nothing to flag" in charts: visible, but recedes */
+  --routine-1: #8A9A86; --routine-2: #4A574C;   /* routine work in charts (sage stone, two steps) */
+  --accent: #D9CBA8;        /* sand: selection, links, focus */
+  --accent-soft: #2B2A21;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;   /* categories (fixed order) */
+  /* Palette rules (validated with the dataviz validator):
      - status colours (good, warning, critical) only for state; amber is always a warning
      - stacked categories: one highlight colour (violet) for what needs attention, the
-       routine in two teal steps (--routine-1, --routine-2); never blue next to violet.
-       Greys are only for "nothing to flag": dark grey on a dark surface disappears
+       routine in two sage steps (--routine-1, --routine-2); never blue next to violet.
+       Greys are only for "nothing to flag"
      - "nothing to flag" is --neutral-fill, never the hairline colour
      - stacked segments are separated by a 2px gap in the surface colour */
-  --seq-0: #edf3fb; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #5598e7; --seq-4: #256abf; --seq-5: #104281;
-  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
-  --good-ink: #0b6b1f; --warning-ink: #8a5a00; --serious-ink: #a4461f; --critical-ink: #b02a2a;
-  --good-bg: #e7f4e6; --warning-bg: #fdf3dc; --serious-bg: #fbeae2; --critical-bg: #f9e3e3;
-  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
-  --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
-  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #111715; --surface: #18201d; --ink: #e9eeec; --ink-2: #b4bfbb; --ink-3: #85918c;
-    --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32; --neutral-fill: #4a5652; --routine-1: #52a99d; --routine-2: #2c5c56;
-    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
-    --seq-0: #1b2530; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
-    --good-ink: #6fd16f; --warning-ink: #fab219; --serious-ink: #f0a07f; --critical-ink: #f08080;
-    --good-bg: #17301a; --warning-bg: #352a0e; --serious-bg: #3a2318; --critical-bg: #3a1c1c;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #111715; --surface: #18201d; --ink: #e9eeec; --ink-2: #b4bfbb; --ink-3: #85918c;
-  --rule: #2a3531; --accent: #5cc0a3; --accent-soft: #1e3a32; --neutral-fill: #4a5652; --routine-1: #52a99d; --routine-2: #2c5c56;
-  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;
   --seq-0: #1b2530; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
-  --good-ink: #6fd16f; --warning-ink: #fab219; --serious-ink: #f0a07f; --critical-ink: #f08080;
-  --good-bg: #17301a; --warning-bg: #352a0e; --serious-bg: #3a2318; --critical-bg: #3a1c1c;
+  --good: #7FBF94; --warning: #E3B65A; --serious: #E39A6F; --critical: #E07A6A;
+  --good-ink: #9FD3AE; --warning-ink: #EBC777; --serious-ink: #F0B48F; --critical-ink: #F0A598;
+  --good-bg: #1C3324; --warning-bg: #3A2F17; --serious-bg: #3A2618; --critical-bg: #3A1F1B;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-data: "Inter", "Segoe UI", system-ui, sans-serif;   /* with tabular figures (.num) */
   color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #F5F1E8; --surface: #FFFDF8; --head: #F1ECDF; --ink: #1E2320; --ink-2: #4F564F; --ink-3: #5E655F;
+  --rule: #DDD6C8; --contour: #D9D1BF; --neutral-fill: #C9C3B4; --routine-1: #6E7F6A; --routine-2: #B7C2B3;
+  --accent: #6B5A2E; --accent-soft: #EFE8D6;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;
+  --seq-0: #edf3fb; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #5598e7; --seq-4: #256abf; --seq-5: #104281;
+  --good: #2F6B47; --warning: #C9921E; --serious: #C46A3A; --critical: #A8322A;
+  --good-ink: #24543A; --warning-ink: #6E4A00; --serious-ink: #8A4220; --critical-ink: #8C2A22;
+  --good-bg: #DCEBDF; --warning-bg: #F5E7C6; --serious-bg: #F6E1D4; --critical-bg: #F6DEDA;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -60,11 +59,16 @@
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
 .wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 
-header { border-bottom: 1px solid var(--rule); background: var(--surface); }
+header { position: relative; overflow: hidden; border-bottom: 1px solid var(--rule); background: var(--head); }
+header .contours { position: absolute; top: 0; right: 0; width: min(760px, 70%); height: 100%; pointer-events: none; }
+header .wrap { position: relative; }
+.logo { display: inline-flex; align-items: center; gap: 12px; }
+.logo svg { width: 38px; height: 44px; flex: none; }
+.logo .tag { display: block; font: 400 0.78rem var(--font-body); color: var(--ink-3); }
 header .wrap { padding-block: 20px 0; display: grid; gap: 14px; }
-.brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
-h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
-.asof { font-family: var(--font-data); font-size: 0.8rem; color: var(--ink-3); }
+.brand { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: 1.55rem; letter-spacing: -0.01em; margin: 0; line-height: 1.1; text-wrap: balance; }
+.asof { font-family: var(--font-data); font-size: 0.8rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .lede { margin: 0; color: var(--ink-2); max-width: 70ch; }
 nav { display: flex; gap: 4px; overflow-x: auto; }
 nav button { font: 500 0.92rem var(--font-body); color: var(--ink-2); background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px 12px; cursor: pointer; white-space: nowrap; }
@@ -78,8 +82,8 @@ main .wrap { padding-block: 24px 48px; display: grid; gap: 20px; }
 section.view { display: grid; gap: 20px; }
 .finding { font-family: var(--font-display); font-weight: 600; font-size: 1.3rem; line-height: 1.3; margin: 0; max-width: 60ch; text-wrap: balance; }
 .sub { margin: -10px 0 0; color: var(--ink-2); max-width: 75ch; }
-.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 18px; min-width: 0; }
-.panel h2 { font: 600 0.78rem var(--font-body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); margin: 0 0 12px; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 20px; min-width: 0; }
+.panel h2 { font: 600 0.74rem var(--font-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin: 0 0 12px; }
 .grid2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
 @media (max-width: 860px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
 .note { font-size: 0.85rem; color: var(--ink-3); margin: 10px 0 0; max-width: 80ch; }
@@ -117,7 +121,7 @@ svg .lbl { fill: var(--ink-2); font-size: 12px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--ink-2); margin-top: 10px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend svg { width: 12px; height: 12px; display: inline; }
-.tip { position: fixed; z-index: 20; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 0.8rem; line-height: 1.4; padding: 7px 9px; border-radius: 6px; max-width: 280px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.18); }
+.tip { position: fixed; z-index: 20; pointer-events: none; background: var(--ink); color: #121815; font-size: 0.8rem; line-height: 1.4; padding: 7px 9px; border-radius: 6px; max-width: 280px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.18); }
 .tip b { font-weight: 600; }
 
 /* tables */
@@ -215,7 +219,7 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
 .banner { font-size: 0.88rem; border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 8px 12px; border-radius: 4px; margin: 0; }
 /* my book: one owner's morning page */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.tile { border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
+.tile { border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; background: var(--surface); }
 .tile .k { font-size: 0.8rem; color: var(--ink-3); }
 .tile .v { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; line-height: 1.2; }
 .tile .ref { font-size: 0.78rem; color: var(--ink-3); }
@@ -232,9 +236,38 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 </style>
 
 <header>
+  <svg aria-hidden="true" width="0" height="0" style="position: absolute">
+    <symbol id="logo-path" viewBox="0 0 48 56">
+      <defs><clipPath id="logo-path-clip"><path d="M4.5 46.5 C3.8 41.2 12 38.4 23.6 38.1 C35.4 37.8 44.6 39.8 44.9 44.6 C45.2 49.4 37 52.6 24.4 52.8 C12 53 5 51 4.5 46.5 Z"></path><path d="M9.2 33.6 C8.8 29.6 15 27.5 23.8 27.3 C32.6 27.1 39.2 28.7 39.4 32.4 C39.6 36.1 33.4 38.2 24.4 38.3 C15.4 38.4 9.6 37 9.2 33.6 Z"></path><path d="M13.4 22.5 C13.1 19.4 17.6 17.6 24 17.5 C30.4 17.4 35 18.8 35.1 21.7 C35.2 24.6 30.8 26.4 24.4 26.5 C18 26.6 13.7 25.3 13.4 22.5 Z"></path><path d="M17.6 13 C17.4 10.6 20.2 9.1 24.1 9.1 C28 9.1 30.6 10.4 30.6 12.6 C30.6 14.8 28 16 24.2 16.1 C20.4 16.2 17.8 15 17.6 13 Z"></path></clipPath></defs>
+      <ellipse cx="24.6" cy="53.6" rx="19" ry="2" fill="#0A0E0C" opacity="0.7"></ellipse>
+      <path d="M4.5 46.5 C3.8 41.2 12 38.4 23.6 38.1 C35.4 37.8 44.6 39.8 44.9 44.6 C45.2 49.4 37 52.6 24.4 52.8 C12 53 5 51 4.5 46.5 Z" fill="#7A7262"></path>
+      <path d="M8 42.6 C14 39.8 26 39 38.6 40.2" fill="none" stroke="#968D7B" stroke-width="1.1" stroke-linecap="round"></path>
+      <path d="M9.2 33.6 C8.8 29.6 15 27.5 23.8 27.3 C32.6 27.1 39.2 28.7 39.4 32.4 C39.6 36.1 33.4 38.2 24.4 38.3 C15.4 38.4 9.6 37 9.2 33.6 Z" fill="#958B77"></path>
+      <path d="M12.2 30.4 C17 28.6 26 28.1 34.6 29" fill="none" stroke="#B0A68F" stroke-width="1.1" stroke-linecap="round"></path>
+      <path d="M13.4 22.5 C13.1 19.4 17.6 17.6 24 17.5 C30.4 17.4 35 18.8 35.1 21.7 C35.2 24.6 30.8 26.4 24.4 26.5 C18 26.6 13.7 25.3 13.4 22.5 Z" fill="#B1A68E"></path>
+      <path d="M16 19.9 C19.6 18.6 26 18.3 31.6 19" fill="none" stroke="#CBC1A9" stroke-width="1.1" stroke-linecap="round"></path>
+      <path d="M17.6 13 C17.4 10.6 20.2 9.1 24.1 9.1 C28 9.1 30.6 10.4 30.6 12.6 C30.6 14.8 28 16 24.2 16.1 C20.4 16.2 17.8 15 17.6 13 Z" fill="#D3C6A6"></path>
+      <path d="M19.6 11.2 C21.4 10.2 24.6 10 27.2 10.4" fill="none" stroke="#EDE4CC" stroke-width="1.1" stroke-linecap="round"></path>
+      <g clip-path="url(#logo-path-clip)" fill="none" stroke-linecap="round">
+        <path d="M9 52.5 C20 50.5 34 47.6 33.2 42.6 C32.4 38 16.4 37.4 16.3 32.6 C16.2 28.6 30.8 27.2 30.4 22.5 C30 18.8 23.2 18.2 24 12.6" stroke="#121815" stroke-width="3.6"></path>
+        <path d="M9 52.5 C20 50.5 34 47.6 33.2 42.6 C32.4 38 16.4 37.4 16.3 32.6 C16.2 28.6 30.8 27.2 30.4 22.5 C30 18.8 23.2 18.2 24 12.6" stroke="#EFE6D2" stroke-width="2.2"></path>
+      </g>
+    </symbol>
+  </svg>
+  <svg class="contours" aria-hidden="true" viewBox="0 0 760 200" preserveAspectRatio="xMaxYMid slice">
+    <g fill="none" stroke="var(--contour)" stroke-width="1.2">
+      <path d="M40 200 C120 150 220 140 320 150 S540 200 760 140"></path>
+      <path d="M80 214 C150 170 240 160 330 168 S540 214 760 168"></path>
+      <path d="M0 186 C90 118 200 104 312 118 S540 172 760 108"></path>
+      <path d="M-20 170 C70 82 190 64 302 80 S544 140 760 72"></path>
+      <path d="M-40 150 C60 46 182 22 296 40 S548 104 760 34"></path>
+      <path d="M520 112 C556 94 612 98 630 118 S600 152 566 148 S500 128 520 112 Z"></path>
+      <path d="M546 116 C568 106 600 108 610 120 S592 140 572 138 S534 128 546 116 Z"></path>
+    </g>
+  </svg>
   <div class="wrap">
     <div class="brand">
-      <h1>Cairnpath CS Cockpit</h1>
+      <div class="logo"><svg role="img" aria-label="Cairnpath logo" viewBox="0 0 48 56"><use href="#logo-path"></use></svg><div><h1>Cairnpath</h1><span class="tag">CS cockpit</span></div></div>
       <span class="asof" id="asof"></span>
       <label class="page-switch" id="page-switch-wrap" hidden>Viewing as <select id="page-switch">__PAGE_OPTIONS__</select></label>
     </div>

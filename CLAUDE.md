@@ -404,7 +404,14 @@ One JSON event per line, one file per day in `data/events/`.
   forecasts (forecast_set events), churn_signals, renewals
   (backtest.py's view) and tasks (action_status, with each task's manager).
   Opens in any browser offline. The page only draws; the numbers come from
-  the export.
+  the export. Look "Night trail" (10 Nov 2026, chosen from mockups on the
+  "Cairnpath cockpit look" canvas): dark by default whatever the device says
+  (a warm forest black, cream text, stone greys, a sand accent; no slate and teal),
+  Fraunces headlines over Inter, map contours behind the header, and the logo: a
+  cairn of four stones with a trail cut into them (stone colours only, never a
+  status colour). Cairns as urgency markers: red top + 4 stones = act now, amber
+  + 3 = needs attention, green + 2 = healthy (height and colour, never colour
+  alone). A warm-paper light set stays behind data-theme="light".
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;
