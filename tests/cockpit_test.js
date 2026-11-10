@@ -513,6 +513,21 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // light theme: every data colour stands out from the paper (3:1, WCAG for graphics)
+  {
+    const { page } = await open(browser);
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+    const low = await page.evaluate(() => {
+      const st = getComputedStyle(document.documentElement), hex = (k) => st.getPropertyValue(k).trim();
+      const lum = (h) => { const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+      const bg = lum(hex("--surface"));
+      return ["--viz-qbr", "--viz-call", "--viz-renewal", "--viz-other", "--viz-touch", "--viz-measure", "--viz-measure-soft"]
+        .map((k) => { const l = lum(hex(k)); return [k, (Math.max(l, bg) + 0.05) / (Math.min(l, bg) + 0.05)]; }).filter(([, c]) => c < 3).map(([k, c]) => `${k} ${c.toFixed(2)}:1`);
+    });
+    check(!low.length, "light theme: every chart colour is 3:1 or more on the paper", low.join(", "));
+    await page.close();
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
