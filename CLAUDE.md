@@ -411,7 +411,11 @@ One JSON event per line, one file per day in `data/events/`.
   cairn of four stones with a trail cut into them (stone colours only, never a
   status colour). Cairns as urgency markers: red top + 4 stones = act now, amber
   + 3 = needs attention, green + 2 = healthy (height and colour, never colour
-  alone). A warm-paper light set stays behind data-theme="light".
+  alone). A warm-paper light set stays behind data-theme="light". Leadership opens
+  with the trail: at risk -> at Act -> called -> with a next step, one cairn each,
+  its urgency in colour, height and words ("13 still to call"); a click lists the
+  accounts (who is missing, where a stage falls short). Then ARR at risk, Upside
+  and Forecast ≠ data as tiles.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;
