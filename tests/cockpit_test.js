@@ -461,6 +461,58 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // --- every number lists its accounts (review 10 Nov 2026: five charts had hover only) ---------
+  {
+    const { page, errors } = await open(browser);
+    const n = (txt) => +((txt.match(/: (\d+) /) || [])[1] ?? -1);
+    // My book meetings: the busiest week's bar lists exactly its total
+    await segment(page, { owner: "csm_mia" }); await tab(page, "mybook");
+    const bars = await page.$$("#mb-eng-chart g.bar");
+    let best = null, bestT = -1;
+    for (const b of bars) { const t = +(await b.$eval("text.tot", (x) => x.textContent).catch(() => 0)); if (t > bestT) { bestT = t; best = b; } }
+    await best.click(); await page.waitForTimeout(100);
+    const mt = await page.textContent("#mb-eng-title"), mr = await page.$$eval("#mb-eng-list tbody tr", (r) => r.length);
+    check(bestT > 0 && n(mt) === bestT && mr === bestT, `My book: a week of ${bestT} meetings lists ${bestT}`, `${mt} / ${mr} rows`);
+    // CS team heatmap: a cell lists that person's meetings that week
+    await segment(page, {}); await tab(page, "team");
+    // the first person's last week, counted independently from the export
+    const first = D.team.find((t) => t.owner_type !== "pool"), we = D.week_ends[D.week_ends.length - 1];
+    const dayN = (d) => Math.floor(Date.parse(d + "T00:00:00Z") / 864e5);
+    const expectM = D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === first.owner_id && dayN(x.date) > dayN(we) - 7 && dayN(x.date) <= dayN(we)).length;
+    const cells = await page.$$("#tm-weeks rect.cell");
+    const rowLen = D.week_ends.length;
+    const order = await page.$$eval("#tm-weeks svg text.lbl", (ts) => ts.map((t) => t.textContent));
+    const ri = order.indexOf(first.owner_name);
+    await cells[ri * rowLen + rowLen - 1].dispatchEvent("click"); await page.waitForTimeout(100);
+    const tt = await page.textContent("#tm-weeks-title"), tr = await page.$$eval("#tm-weeks-list tbody tr", (r) => r.length);
+    check(ri >= 0 && tt.startsWith(first.owner_name) && n(tt) === expectM && (tr === expectM || (expectM === 0 && tr === 0)),
+      `CS team: ${first.owner_name}'s last week lists ${expectM} meetings`, `${tt} / ${tr} rows`);
+    // CS team dot plot: equal values stack in columns, every dot inside its day's lane
+    const lanes = await page.$$eval("#tm-dots svg", (svgs) => { const s = svgs[0]; return [...s.querySelectorAll("text.val")].map((t) => t.textContent); });
+    check(lanes.includes("20+"), 'CS team: the last tick says "20+" (dots past 20 days are pinned there)', lanes.join(","));
+    // Book heatmap: a cell's list matches its count
+    await tab(page, "book");
+    const bcell = (await page.$$("#bk-heat rect.cell[style*='pointer']"))[5];
+    await bcell.dispatchEvent("click"); await page.waitForTimeout(100);
+    const bt = await page.textContent("#bk-cell-title"), br = await page.$$eval("#bk-cell-list tbody tr", (r) => r.length);
+    const shown = await page.evaluate((i) => { const c = document.querySelectorAll("#bk-heat rect.cell[style*='pointer']")[i]; const t = c.nextElementSibling; return t && t.tagName === "text" ? t.textContent : ""; }, 5);
+    check(n(bt) === br, "Book: a heatmap cell lists the accounts behind it", `${bt} / ${br} rows, cell shows ${shown}`);
+    // Onboarding: a histogram bar and an outcome row list what they count
+    await tab(page, "onboarding");
+    const obBar = (await page.$$("#ob-dots path.bar"))[0];
+    const obV = await page.evaluate((b) => +b.nextElementSibling.textContent, obBar);
+    await obBar.dispatchEvent("click"); await page.waitForTimeout(100);
+    const ot = await page.textContent("#ob-list-title");
+    check(n(ot) === obV, `Onboarding: a histogram bar of ${obV} lists ${obV}`, ot);
+    const row = (await page.$$("#ob-funnel g.obbar"))[2];
+    const want = await row.$eval("text.val", (t) => +t.textContent.split(" ")[0]);
+    await row.dispatchEvent("click"); await page.waitForTimeout(100);
+    const ot2 = await page.textContent("#ob-list-title");
+    check(n(ot2) === want, `Onboarding: an outcome bar of ${want} lists ${want}`, ot2);
+    check(!errors.length, "no script errors in the click-through checks", errors.join("; "));
+    await page.close();
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

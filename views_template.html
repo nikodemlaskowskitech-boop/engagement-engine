@@ -444,6 +444,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
             <p class="finding" style="font-size:1rem" id="mb-eng-finding"></p>
             <div id="mb-eng-chart"></div>
             <div class="legend" id="mb-eng-legend"></div>
+            <h2 id="mb-eng-title" style="margin-top:14px">Click a week to list its meetings</h2>
+            <div class="tablewrap" id="mb-eng-list"></div>
           </div>
           <div class="panel">
             <h2>Gone quiet: no touch in 30+ days</h2>
@@ -572,6 +574,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <p class="note">Activated: SDK in and 2+ active users within 14 days of signing, counted only for accounts signed 14+ days ago.</p>
         </div>
       </div>
+      <div class="panel">
+        <h2 id="ob-list-title">Click a bar to list its accounts</h2>
+        <div class="tablewrap" id="ob-list"></div>
+      </div>
     </section>
 
     <section class="view" id="view-team" role="tabpanel" aria-labelledby="tab-team" hidden>
@@ -592,6 +598,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <h2>Meetings per week</h2>
           <div id="tm-weeks"></div>
           <p class="note">All meetings held, QBRs and check-ins included. One cell is one person's week; the key under the grid gives the scale.</p>
+          <h2 id="tm-weeks-title" style="margin-top:14px">Click a cell to list its meetings</h2>
+          <div class="tablewrap" id="tm-weeks-list"></div>
         </div>
       </div>
       <div class="panel">
@@ -613,7 +621,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <div class="panel">
         <h2 id="bk-title">Share of live accounts under 40% utilisation, by week</h2>
         <div class="tablewrap" id="bk-heat"></div>
-        <p class="note">Each cell is the share of the row's accounts on that week's last day, using 30-day utilisation; hover for counts. Accounts appear once they have 30 days of data.</p>
+        <p class="note">Each cell is the share of the row's accounts on that week's last day, using 30-day utilisation; hover for counts, click to list them. Accounts appear once they have 30 days of data.</p>
+        <h2 id="bk-cell-title" style="margin-top:14px">Click a cell to list its accounts</h2>
+        <div class="tablewrap" id="bk-cell-list"></div>
       </div>
       <div class="panel">
         <h2>Shelfware: live 60+ days, never above 40%</h2>
@@ -1343,6 +1353,15 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
     // histogram: accounts per day from signing to SDK install, one row per group
     const host = $("ob-dots"); host.innerHTML = "";
+    $("ob-list-title").textContent = "Click a bar to list its accounts"; $("ob-list").innerHTML = "";
+    const OB_COLS = [
+      { label: "Account", get: (r) => nameOf(r.account_id) },
+      { label: "Tier", get: (r) => esc(r.tier) },
+      { label: "Signed", r: true, get: (r) => fmt(r.contract_start) },
+      { label: "SDK", r: true, get: (r) => (r.sdk_date ? `day ${day(r.sdk_date) - day(r.contract_start)}` : "not yet") },
+      { label: "Users in 14 days", r: true, get: (r) => r.users_first_14d ?? "–" },
+    ];
+    const obList = (title, items) => accountList($("ob-list"), $("ob-list-title"), title, items, OB_COLS);
     const ph = isPhone(), W = fitW(640), L = ph ? 0 : 150, R = ph ? 4 : 16, rowH = ph ? 120 : 86, H = 2 * rowH + 40, maxD = 14;
     const slot = (W - L - R) / (maxD + 1);
     const X = (d) => L + Math.min(d, maxD) * slot;
@@ -1365,15 +1384,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       H2[gi].forEach((v, d) => {
         if (!v) return;
         const h = Math.max(3, (v / top) * (rowH - (ph ? 66 : 26))), x = X(d) + (ph ? 1.5 : 3), w = slot - (ph ? 3 : 6);
-        const bar = el("path", { d: `M${x} ${base}V${base - h + 3}Q${x} ${base - h} ${x + 3} ${base - h}H${x + w - 3}Q${x + w} ${base - h} ${x + w} ${base - h + 3}V${base}Z`, fill: g.color }, svg);
+        const bar = el("path", { d: `M${x} ${base}V${base - h + 3}Q${x} ${base - h} ${x + 3} ${base - h}H${x + w - 3}Q${x + w} ${base - h} ${x + w} ${base - h + 3}V${base}Z`, fill: g.color, class: "bar", style: "cursor:pointer" }, svg);
+        const when = d === maxD ? "14+ days" : `${d} day${d === 1 ? "" : "s"}`;
+        bar.addEventListener("click", () => obList(`${g.name}: SDK in ${when} after signing`,
+          rows.filter((r) => r.welcome_group === g.key && r.sdk_date && Math.min(maxD, day(r.sdk_date) - day(r.contract_start)) === d)));
         el("text", { x: x + w / 2, y: base - h - 4, "text-anchor": "middle", class: "val" }, svg).textContent = v;
-        hover(bar, `<b>${g.name}</b><br>${v} account${v === 1 ? "" : "s"} installed the SDK ${d === maxD ? "14+ days" : d + " day" + (d === 1 ? "" : "s")} after signing`);
+        hover(bar, `<b>${g.name}</b><br>${v} account${v === 1 ? "" : "s"} installed the SDK ${when} after signing<br>Click to list them`);
       });
     });
 
     // outcome bars
     const fh = $("ob-funnel");
     const stages = [["Signed", (s) => s.n, (s) => s.n], ["SDK installed", (s) => s.inst, (s) => s.n], ["First chart", (s) => s.chart, (s) => s.n], ["Activated in 14 days", (s) => s.act, (s) => s.old]];
+    const reached = [() => true, (r) => r.sdk_date, (r) => r.first_chart_date,
+      (r) => r.old_enough && r.sdk_date && day(r.sdk_date) < day(r.contract_start) + 14 && r.users_first_14d >= 2];
     fh.innerHTML = "";
     const FW = fitW(320, 300), rowF = 54, FH = stages.length * rowF + 6;
     const fsvg = el("svg", { viewBox: `0 0 ${FW} ${FH}`, role: "img", "aria-label": "Onboarding outcome by group" }, fh);
@@ -1384,9 +1408,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         const s = S[g.key], n = num(s), d = den(s), p = d ? n / d : 0;
         const by = y + 18 + gi * 14, bw = Math.max(2, p * (FW - 110));
         el("rect", { x: 0, y: by, width: FW - 110, height: 10, rx: 2, fill: "var(--bg)" }, fsvg);
-        const bar = el("rect", { x: 0, y: by, width: bw, height: 10, rx: 2, fill: g.color }, fsvg);
-        el("text", { x: FW - 104, y: by + 9, class: "val" }, fsvg).textContent = `${n} of ${d} (${pct(n, d)}%)`;
-        hover(bar, `<b>${g.name}</b> · ${label}<br>${n} of ${d} accounts (${pct(n, d)}%)`);
+        const hit = el("g", { class: "obbar", style: "cursor:pointer" }, fsvg);
+        el("rect", { x: 0, y: by - 2, width: FW, height: 14, fill: "transparent" }, hit);          // the whole row is the target
+        const bar = el("rect", { x: 0, y: by, width: bw, height: 10, rx: 2, fill: g.color }, hit);
+        el("text", { x: FW - 104, y: by + 9, class: "val" }, hit).textContent = `${n} of ${d} (${pct(n, d)}%)`;
+        hover(hit, `<b>${g.name}</b> · ${label}<br>${n} of ${d} accounts (${pct(n, d)}%)<br>Click to list them`);
+        hit.addEventListener("click", () => obList(`${g.name}: ${label.toLowerCase()}`, rows.filter((r) => r.welcome_group === g.key && reached[si](r))));
       });
     });
   }
@@ -1417,27 +1444,31 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const yEnd = top + ownerRows.length * rowH;
     for (let d = 0; d <= maxD; d += 5) {
       el("line", { x1: X(d), x2: X(d), y1: top, y2: yEnd, stroke: "var(--rule)" }, svg);
-      el("text", { x: X(d), y: yEnd + 16, "text-anchor": "middle", class: "val" }, svg).textContent = d;
+      el("text", { x: X(d), y: yEnd + 16, "text-anchor": "middle", class: "val" }, svg).textContent = d === maxD ? `${maxD}+` : d;
     }
     el("text", { x: (L + X(maxD)) / 2, y: yEnd + 32, "text-anchor": "middle" }, svg).textContent = "days from signal to first call";
     el("line", { x1: noCallX, x2: noCallX, y1: top, y2: yEnd, stroke: "var(--rule)", "stroke-dasharray": "2 3" }, svg);
     el("text", { x: noCallX, y: yEnd + 16, "text-anchor": "middle", class: "lbl" }, svg).textContent = "no call";
     ownerRows.forEach((r, i) => {
-      const cy = top + i * rowH + rowH / 2;
+      const cyRow = top + i * rowH + rowH / 2;
       if (i === csm.length && i > 0) el("line", { x1: 0, x2: W, y1: top + i * rowH, y2: top + i * rowH, stroke: "var(--ink-3)", "stroke-width": 1 }, svg);
-      el("text", { x: 0, y: cy + 4, class: "lbl" }, svg).textContent = ph ? r.o.owner_name.replace(" Scale team", " pool") : r.o.owner_name;
+      el("text", { x: 0, y: cyRow + 4, class: "lbl" }, svg).textContent = ph ? r.o.owner_name.replace(" Scale team", " pool") : r.o.owner_name;
       const stack = {};
       for (const a of r.rs) {
         const k = a.call_date ? String(Math.min(a.days_to_call, maxD)) : "none";
         const n = (stack[k] = (stack[k] || 0) + 1) - 1;
-        const cx = (a.call_date ? X(Math.min(a.days_to_call, maxD)) : noCallX) + (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 8;
+        // the same value stacks in columns of three (middle, above, below), then a new column to
+        // the right, so a dot never drifts onto a neighbouring day
+        const col = Math.floor(n / 3), cyo = [0, -10, 10][n % 3];
+        const cx = (a.call_date ? X(Math.min(a.days_to_call, maxD)) : noCallX) + col * 11;
+        const cy = cyRow + cyo;
         const isGrowth = a.flag === "expansion";
         const m = a.call_date
           ? (isGrowth ? el("rect", { x: cx - 4.5, y: cy - 4.5, width: 9, height: 9, rx: 1, fill: "var(--viz-call)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg)
                       : el("circle", { cx, cy, r: 4.5, fill: "var(--viz-call)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg))
           : el("circle", { cx, cy, r: 4.5, fill: "var(--surface)", stroke: "var(--critical)", "stroke-width": 2 }, svg);
         const name = byId[a.account_id]?.account_name || a.account_id;
-        hover(m, `<b>${esc(name)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>${a.call_date ? (a.via === "qbr" ? "Covered by the QBR on " + fmt(a.call_date) + ", " + a.days_to_call + " days later" : a.called_early ? "Called " + fmt(a.call_date) + ", before the signal" : "Called " + fmt(a.call_date) + ", " + a.days_to_call + " days later") : "No call yet"}${a.escalated ? "<br>Escalated to the manager" : ""}`);
+        hover(m, `<b>${esc(name)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>${a.call_date && a.days_to_call > maxD ? `${a.days_to_call} days (shown at ${maxD}+)<br>` : ""}${a.call_date ? (a.via === "qbr" ? "Covered by the QBR on " + fmt(a.call_date) + ", " + a.days_to_call + " days later" : a.called_early ? "Called " + fmt(a.call_date) + ", before the signal" : "Called " + fmt(a.call_date) + ", " + a.days_to_call + " days later") : "No call yet"}${a.escalated ? "<br>Escalated to the manager" : ""}`);
         m.style.cursor = "pointer";
         m.addEventListener("click", () => openAccount(a.account_id));
       }
@@ -1467,6 +1498,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       && (!seg.tier || (seg.tier === "Enterprise" ? t.owner_type === "csm" : seg.tier === "Scale" ? t.owner_type === "member" : false)));
     const counts = team.map((t) => weeks.map((we) => D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > day(we) - 7 && day(x.date) <= day(we)).length));
     const max = Math.max(1, ...counts.flat());
+    $("tm-weeks-title").textContent = "Click a cell to list its meetings"; $("tm-weeks-list").innerHTML = "";
     if (!team.length) { wh.innerHTML = '<p class="note">Nobody on the CS team covers this segment.</p>'; return; }
     const GW = fitW(360, 310), GL = isPhone() ? 96 : 120, cw = (GW - GL) / weeks.length, ch = 20, GH = team.length * (ch + 3) + 46;
     const gs = el("svg", { viewBox: `0 0 ${GW} ${GH}`, role: "img", "aria-label": "Meetings per week by owner" }, wh);
@@ -1477,8 +1509,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       weeks.forEach((we, j) => {
         const v = counts[i][j];
         const c = v === 0 ? ramp[0] : ramp[Math.min(5, 1 + Math.floor(((v - 1) / Math.max(1, max - 1)) * 4.999))];
-        const r = el("rect", { x: GL + j * cw + 1, y, width: cw - 2, height: ch, rx: 2, fill: c }, gs);
-        hover(r, `<b>${esc(t.owner_name)}</b><br>Week ending ${fmt(we)}: ${v} meeting${v === 1 ? "" : "s"}`);
+        const r = el("rect", { x: GL + j * cw + 1, y, width: cw - 2, height: ch, rx: 2, fill: c, class: "cell", style: "cursor:pointer" }, gs);
+        hover(r, `<b>${esc(t.owner_name)}</b><br>Week ending ${fmt(we)}: ${v} meeting${v === 1 ? "" : "s"}<br>Click to list them`);
+        r.addEventListener("click", () => accountList($("tm-weeks-list"), $("tm-weeks-title"), `${t.owner_name}, week ending ${fmt(we)}`,
+          D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > day(we) - 7 && day(x.date) <= day(we)).sort((a, b) => a.date.localeCompare(b.date)), MEETING_COLS, false, "meeting"));
       });
     });
     [0, 6, 12].forEach((j, k) => { el("text", { x: k === 2 ? GW : GL + j * cw + cw / 2, y: GH - 26, "text-anchor": k === 2 ? "end" : "middle" }, gs).textContent = fmt(weeks[j]); });
@@ -1527,7 +1561,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     for (const r of regions) for (const t of tiers) {
       const accs = D.accounts.filter((a) => a.region === r && a.tier === t && inSeg(a));
       if (!accs.length) continue;                       // outside the segment
-      const cells = idx.map((i) => { const live = accs.filter((a) => a.util[i] != null); const hit = live.filter((a) => test(a.util[i])); return { live: live.length, hit: hit.length }; });
+      const cells = idx.map((i) => { const live = accs.filter((a) => a.util[i] != null); const hit = live.filter((a) => test(a.util[i])); return { live: live.length, hit: hit.length, accs: hit.map((a) => ({ ...a, u: a.util[i] })) }; });
       rows.push({ r, t, n: accs.length, cells });
     }
     const last = rows.map((x) => x.cells[x.cells.length - 1]), first = rows.map((x) => x.cells[0]);
@@ -1553,6 +1587,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const shareMax = Math.max(0.01, ...rows.flatMap((x) => x.cells.map((c) => (c.live ? c.hit / c.live : 0))));
     const ramp = ["var(--seq-0)", "var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
     const host = $("bk-heat"); host.innerHTML = "";
+    $("bk-cell-title").textContent = "Click a cell to list its accounts"; $("bk-cell-list").innerHTML = "";
     if (!rows.length) { $("bk-finding").textContent = `${segName()}: no accounts.`; return; }
     const ph = isPhone(), W = fitW(880, 640), LBL = ph ? 186 : 250, TX = ph ? 70 : 116, cw = (W - LBL) / weeks.length, ch = 24, H = rows.length * (ch + 3) + 54;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Book of business heatmap", style: "min-width:640px" }, host);
@@ -1564,14 +1599,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       x.cells.forEach((c, j) => {
         const s = c.live ? c.hit / c.live : 0;
         const fill = c.live === 0 ? "var(--bg)" : s === 0 ? ramp[0] : ramp[Math.min(5, 1 + Math.floor((s / shareMax) * 4.999))];
-        const r = el("rect", { x: LBL + j * cw + 1, y, width: cw - 2, height: ch, rx: 2, fill }, svg);
+        const r = el("rect", { x: LBL + j * cw + 1, y, width: cw - 2, height: ch, rx: 2, fill, class: "cell", style: c.live ? "cursor:pointer" : "" }, svg);
+        if (c.live) r.addEventListener("click", () => accountList($("bk-cell-list"), $("bk-cell-title"), `${x.r} · ${x.t}, ${bkM === "risk" ? "under 40%" : "at 80% and up"} on ${fmt(weeks[j])}`,
+          [...c.accs].sort((a, b) => (bkM === "risk" ? a.u - b.u : b.u - a.u)), [
+            { label: "Account", get: (a) => esc(a.account_name) },
+            { label: "Owner", get: (a) => esc(a.owner || "None") },
+            { label: "Utilisation", r: true, get: (a) => `${a.u}%` },
+          ]));
         if (c.live) {
           const t = el("text", { x: LBL + j * cw + cw / 2, y: y + 16, "text-anchor": "middle", class: "val" }, svg);
           t.textContent = c.hit ? pct(c.hit, c.live) + "%" : "–";
           t.style.fill = inkOn(fill);
           t.style.pointerEvents = "none";
         }
-        hover(r, `<b>${esc(x.r)} · ${x.t}</b><br>Week ending ${fmt(weeks[j])}<br>${c.hit} of ${c.live} live accounts (${pct(c.hit, c.live)}%) ${bkM === "risk" ? "under 40%" : "at 80% and up"}`);
+        hover(r, `<b>${esc(x.r)} · ${x.t}</b><br>Week ending ${fmt(weeks[j])}<br>${c.hit} of ${c.live} live accounts (${pct(c.hit, c.live)}%) ${bkM === "risk" ? "under 40%" : "at 80% and up"}` + (c.live ? "<br>Click to list them" : ""));
       });
     });
     // legend
@@ -1602,8 +1643,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   document.addEventListener("pointerover", (e) => { const tr = e.target.closest && e.target.closest("tr.click"); if (tr && !tr.title) tr.title = "Open this account's timeline"; });
   // short = true for the list a view opens with: two example rows and "View all (n)"
   // (a summary, not a dump); a click on a bar or cell asks for the list, so it gets all of it
-  function accountList(host, titleEl, title, items, cols, short) {
-    titleEl.textContent = `${title}: ${items.length} account${items.length === 1 ? "" : "s"}`;
+  function accountList(host, titleEl, title, items, cols, short, noun = "account") {
+    titleEl.textContent = `${title}: ${items.length} ${noun}${items.length === 1 ? "" : "s"}`;
     if (!items.length) { host.innerHTML = '<p class="note">No accounts here.</p>'; return; }
     const head = cols.map((c) => `<th${c.r ? ' class="r"' : ""}>${c.label}</th>`).join("");
     const body = (short ? items.slice(0, 2) : items).map((it) => `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` +
@@ -1611,13 +1652,19 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     host.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` +
       (short && items.length > 2 ? `<button class="link" data-all>View all (${items.length})</button>` : "");
     const all = host.querySelector("[data-all]");
-    if (all) all.addEventListener("click", () => accountList(host, titleEl, title, items, cols, false));
+    if (all) all.addEventListener("click", () => accountList(host, titleEl, title, items, cols, false, noun));
     host.querySelectorAll("tr.click").forEach((tr) => {
       tr.addEventListener("click", () => openAccount(tr.dataset.id));
       tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); });
     });
   }
   const nameOf = (id) => esc(byId[id] ? byId[id].account_name : id);
+  const MEETING_COLS = [
+    { label: "Account", get: (t) => nameOf(t.account_id) },
+    { label: "Meeting", get: (t) => esc(topicName(t.topic)) },
+    { label: "Held by", get: (t) => esc(ownerName[t.owner_id] || t.owner_id || "") },
+    { label: "Date", r: true, get: (t) => fmt(t.date) },
+  ];
   const ownerOf = (id) => esc(byId[id] ? (byId[id].owner || "None") : "");
   const churnFlag = (a) => (a.flags.find((f) => f.flag === "churn") || null);
   // one meaning per colour: red = act now, amber = needs attention, neutrals for the rest
@@ -2287,8 +2334,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       return c;
     });
     const start = (we) => new Date((day(we) - 6) * 864e5).toISOString().slice(0, 10);
+    const meetingsIn = (we) => D.touches.filter((t) => t.event === "meeting_held" && ids.has(t.account_id) && day(t.date) > day(we) - 7 && day(t.date) <= day(we)).sort((a, b) => a.date.localeCompare(b.date));
     stackChart($("mb-eng-chart"), { W: 560, cats: MEET, unit: "meeting", aria: `Meetings per week for ${name}`,
-      bars: weeks.map((we, i) => ({ label: fmt(start(we)), tip: `Week commencing ${fmt(start(we))}`, counts: counts[i] })) });
+      bars: weeks.map((we, i) => ({ label: fmt(start(we)), tip: `Week commencing ${fmt(start(we))}`, counts: counts[i],
+        onClick: () => accountList($("mb-eng-list"), $("mb-eng-title"), `Week commencing ${fmt(start(we))}`, meetingsIn(we), MEETING_COLS, false, "meeting") })) });
+    $("mb-eng-title").textContent = "Click a week to list its meetings"; $("mb-eng-list").innerHTML = "";
     stackLegend($("mb-eng-legend"), MEET);
     const quiet = accs.map((a) => ({ ...a, last: lastTouch(a.account_id) }))
       .filter((a) => !a.last || day(a.last.date) <= RUN - 31)

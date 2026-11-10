@@ -439,6 +439,10 @@ One JSON event per line, one file per day in `data/events/`.
   (labels above bars, fewer week labels, no numbers inside stacked segments); the book
   heatmap keeps 640 and scrolls inside its panel. Crossing the breakpoint redraws.
   On desktop only QBR and call segments carry an inside number (cats' `inside`).
+  Honest charts (10 Nov 2026): every chart lists what it counts on click (My book's
+  meetings, the CS team heatmap: meetings; the book heatmap and onboarding bars:
+  accounts); the dot plot's last tick reads "20+" and equal values stack in columns
+  of three instead of drifting onto the next day.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;
