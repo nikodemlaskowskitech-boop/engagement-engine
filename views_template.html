@@ -78,8 +78,8 @@
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
 .wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 
-header { position: relative; overflow: hidden; border-bottom: 1px solid var(--rule); background: var(--head); }
-header .contours { position: absolute; top: 0; right: 0; width: min(760px, 70%); height: 100%; pointer-events: none; }
+header { position: relative; z-index: 5; border-bottom: 1px solid var(--rule); background: var(--head); }   /* above main, so Find's list shows over the page */
+header .contours { position: absolute; top: 0; right: 0; width: min(760px, 70%); height: 100%; pointer-events: none; overflow: hidden; }
 header .wrap { position: relative; }
 .logo { display: inline-flex; align-items: center; gap: 12px; }
 .logo svg { width: 38px; height: 44px; flex: none; }
@@ -177,7 +177,10 @@ table.matrix td { padding: 6px; }
 .cellbtn .k { font-size: 0.8rem; color: var(--ink-2); }
 .cellbtn.good { border-left-color: var(--good); } .cellbtn.warning { border-left-color: var(--warning); }
 .cellbtn.critical { border-left-color: var(--critical); } .cellbtn.neutral { border-left-color: var(--rule); }
-.cellbtn:hover { border-color: var(--accent); }
+button.cellbtn:hover { border-color: var(--accent); }
+span.cellbtn { cursor: default; }                     /* team totals: a count, not a link */
+button.cellbtn.on { border-color: var(--accent); background: var(--surface); }
+.pinbar { margin: 4px 0 10px; }
 /* segment bar: who is looking, at which part of the book */
 .segbar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 10px 0 12px; }
 .segbar label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--ink-3); }
@@ -518,6 +521,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       </div>
       <div class="panel">
         <h2 id="oc-list-title">Accounts</h2>
+        <div class="pinbar" id="oc-pinbar" hidden><button class="link" id="oc-pin"></button></div>
         <div class="tablewrap" id="oc-list"></div>
       </div>
     </section>
@@ -1872,7 +1876,23 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <tr><th>Flagged</th>${cell(tp, "Caught", "good")}${cell(fp, "False alarm", "warning")}</tr>
       <tr><th>Not flagged</th>${cell(fn, "Missed", "critical")}${cell(tn, "Quiet, kept", "neutral")}</tr></tbody></table>`;
     const groups = { Caught: tp, "False alarm": fp, Missed: fn, "Quiet, kept": tn };
-    document.querySelectorAll("#oc-matrix .cellbtn").forEach((b) => b.addEventListener("click", () => listOutcomes(b.dataset.name, groups[b.dataset.name])));
+    $("oc-pinbar").hidden = true;
+    document.querySelectorAll("#oc-matrix .cellbtn").forEach((b) => {
+      const items = groups[b.dataset.name];
+      // hover: who is in it; click: the list (it stays selected) and a way to carry them to every tab
+      const names = items.slice(0, 6).map((r) => nameOf(r.account_id)).join("<br>");
+      hover(b, `<b>${b.dataset.name}: ${items.length} account${items.length === 1 ? "" : "s"}</b>` + (items.length ? `<br>${names}${items.length > 6 ? `<br>and ${items.length - 6} more` : ""}<br>Click to list them` : ""));
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", () => {
+        document.querySelectorAll("#oc-matrix .cellbtn").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
+        listOutcomes(b.dataset.name, items);
+        const pin = $("oc-pin");
+        $("oc-pinbar").hidden = !items.length;
+        pin.textContent = `Show only these ${items.length} account${items.length === 1 ? "" : "s"} on every tab, starting with Leadership`;
+        pin.onclick = () => { seg.acc = items.map((r) => r.account_id).join(","); saveSeg(); redraw(); show("lead"); window.scrollTo(0, 0); };
+        $("oc-list-title").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
 
     // warning time, in 30-day buckets
     const edges = [0, 30, 60, 90, 120, 150, 180], host = $("oc-warning"); host.innerHTML = "";

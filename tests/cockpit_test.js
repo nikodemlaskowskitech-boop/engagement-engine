@@ -574,6 +574,42 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // --- Find's list shows over the page (10 Nov 2026: the header clipped it, typing showed nothing) ---
+  {
+    const { page } = await open(browser);
+    await tab(page, "lead");
+    await page.fill("#seg-find", "a"); await page.waitForTimeout(150);
+    const onTop = await page.evaluate(() => { const l = document.getElementById("seg-find-list"); if (l.hidden) return "hidden";
+      const b = l.getBoundingClientRect(), y = Math.min(b.bottom - 6, b.top + 60), hit = document.elementFromPoint(b.left + 20, y);
+      return l.contains(hit) ? "ok" : `covered by ${hit && (hit.id || hit.className || hit.tagName)}`; });
+    check(onTop === "ok", "Find: the suggestion list is on top of the page, not behind it", onTop);
+    await page.close();
+  }
+  // --- Did it work? 2x2: hover names the accounts, a click lists them, stays selected, and can pin them ---
+  {
+    const { page } = await open(browser);
+    await tab(page, "outcomes");
+    const btn = (await page.$$("#oc-matrix button.cellbtn"))[0];
+    const n0 = +(await btn.$eval(".v", (v) => v.textContent));
+    await btn.hover(); await page.waitForTimeout(120);
+    const tip = await page.$eval(".tip", (t) => t.textContent);
+    check(/Caught: \d+ account/.test(tip) && /Click to list them/.test(tip), "Did it work?: hovering a cell names its accounts", tip.slice(0, 80));
+    await btn.click(); await page.waitForTimeout(400);
+    const title = await page.textContent("#oc-list-title");
+    const sel = await page.$$eval("#oc-matrix button.cellbtn.on", (b) => b.map((x) => x.dataset.name));
+    const inView = await page.$eval("#oc-list-title", (h) => { const r = h.getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; });
+    check(title.includes(`${n0} account`) && sel.length === 1 && sel[0] === "Caught" && inView, "Did it work?: a click lists the cell, keeps it selected and scrolls to the list", `${title} · ${sel} · in view ${inView}`);
+    await page.click("#oc-pin"); await page.waitForTimeout(250);
+    const pins = await page.$$eval("#seg-pins .pin", (p) => p.length);
+    const onLead = await page.$eval("#view-lead", (v) => !v.hidden);
+    check(pins === n0 && onLead, `Did it work?: "show only these" pins the ${n0} accounts and opens Leadership`, `${pins} pinned, Leadership ${onLead}`);
+    // the team-totals version has no click, so it mustn't look clickable
+    const cursor = await page.evaluate(() => { const s = document.createElement("span"); s.className = "cellbtn good"; document.body.append(s); const c = getComputedStyle(s).cursor; s.remove(); return c; });
+    check(cursor === "default", "Did it work?: a team-totals cell (not a link) doesn't show a pointer", cursor);
+    await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    await page.close();
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
