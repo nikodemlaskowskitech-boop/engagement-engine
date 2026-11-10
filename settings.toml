@@ -172,8 +172,8 @@ site_price_class = "PriceClass_100"   # edge locations in Europe and North Ameri
 # registered and its DNS kept at Cloudflare; python site_cert.py asks AWS for the certificate (in
 # us-east-1, CloudFront's rule), prints the two DNS records to add at Cloudflare, waits until the
 # certificate is issued and prints its ARN for the line below. Then cdk deploy. Neither is a secret.
-site_domain = ""
-site_certificate_arn = ""
+site_domain = "cairnpath.nikodem-laskowski.com"
+site_certificate_arn = "arn:aws:acm:us-east-1:809071263914:certificate/fd64b2a2-8b18-45e5-8255-b7fd8e36c489"
 
 [cockpit]
 # Decisions saved in the published cockpit (cockpit_sync.py checks every one again: never trust the page).
