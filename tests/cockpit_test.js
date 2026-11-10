@@ -424,6 +424,43 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // --- phone: chart text stays readable (review 10 Nov 2026: an 880-wide chart shrank to 4px text) ---
+  {
+    const { page, errors } = await open(browser, { width: 390, scheme: "dark" });
+    const small = [];
+    let inside = 0;
+    for (const t of TABS) {
+      if (t === "mybook") await segment(page, { owner: "csm_mia" });
+      await tab(page, t);
+      small.push(...await page.$$eval(`#view-${t} svg[viewBox]`, (svgs, tt) => svgs
+        .filter((s) => s.getBoundingClientRect().width > 60 && !s.closest(".trail") && s.querySelector("text"))
+        .map((s) => { const k = s.getBoundingClientRect().width / s.viewBox.baseVal.width;
+          const px = Math.min(...[...s.querySelectorAll("text")].map((x) => parseFloat(getComputedStyle(x).fontSize) * k));
+          return [tt + ": " + (s.getAttribute("aria-label") || s.parentElement.id), px]; })
+        .filter(([, px]) => px < 9.9).map(([n, px]) => `${n} ${px.toFixed(1)}px`), t));
+      inside += await page.$$eval(`#view-${t} svg.stack text.seg`, (x) => x.length);
+    }
+    check(!small.length, "phone: every chart's text is 10px or more", small.join(" | "));
+    check(inside === 0, "phone: no numbers inside stacked segments (the tooltip and the total carry them)", `${inside} inside`);
+    // the labels under a stacked chart never run into each other
+    await segment(page, { owner: "csm_mia" }); await tab(page, "mybook");
+    const overlap = await page.$$eval("#view-mybook svg.stack", (svgs) => svgs.some((s) => {
+      const H = s.viewBox.baseVal.height, xs = [...s.querySelectorAll(":scope > text")].filter((t) => +t.getAttribute("y") > H - 10).map((t) => t.getBBox()).sort((a, b) => a.x - b.x);
+      return xs.some((b, i) => i && b.x < xs[i - 1].x + xs[i - 1].width + 2);
+    }));
+    check(!overlap, "phone: week labels under the stacked charts don't overlap");
+    check(!errors.length, "phone: no script errors", errors.join("; "));
+    await page.close();
+  }
+  // desktop: numbers inside only on QBR and call segments, never on "other" or renewals
+  {
+    const { page } = await open(browser);
+    await segment(page, { owner: "csm_mia" }); await tab(page, "mybook");
+    const fills = await page.$$eval("svg.stack text.seg", (ts) => ts.map((t) => t.previousElementSibling.getAttribute("fill")));
+    check(fills.length > 0 && fills.every((f) => /viz-qbr|viz-call/.test(f)), "desktop: inside numbers only on QBR and call segments", [...new Set(fills)].join(","));
+    await page.close();
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

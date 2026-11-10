@@ -434,6 +434,11 @@ One JSON event per line, one file per day in `data/events/`.
   meanings: not called = red; the Called column neutral; an Open task neutral, amber
   once it has waited [cockpit] stale_task_days (14); Claimed neutral, Done green.
   cockpit_test.js checks each.
+  Phone (10 Nov 2026): under 640px every chart is drawn at about the panel's width
+  (fitW(): text stays 10px+, not an 880 box shrunk to 4px), with a shorter layout
+  (labels above bars, fewer week labels, no numbers inside stacked segments); the book
+  heatmap keeps 640 and scrolls inside its panel. Crossing the breakpoint redraws.
+  On desktop only QBR and call segments carry an inside number (cats' `inside`).
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;

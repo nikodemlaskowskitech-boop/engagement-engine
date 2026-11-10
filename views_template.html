@@ -644,6 +644,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const PAGE_ACCOUNTS = new Set(PAGE ? PAGE.accounts : []);
   const $ = (id) => document.getElementById(id);
   const NS = "http://www.w3.org/2000/svg";
+  // Phone layout (review 10 Nov 2026): a chart is drawn in a fixed coordinate box and scaled to
+  // its panel, so an 880-wide chart on a 300px phone panel shrank its text to 4px. On a phone
+  // every chart is drawn in a box about as wide as the panel (text stays at its real size) with
+  // a shorter layout; crossing the breakpoint redraws everything.
+  const PHONE_MQ = window.matchMedia ? matchMedia("(max-width: 640px)") : { matches: false };
+  const isPhone = () => PHONE_MQ.matches;
+  const fitW = (desk, phone = 320) => (isPhone() ? phone : desk);
   const el = (tag, attrs = {}, parent) => {
     const n = document.createElementNS(NS, tag);
     for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
@@ -958,7 +965,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     sumAll = false;                                      // a new account starts with the short list
     pressChips(id);
     const host = $("tl-chart"); host.innerHTML = ""; host.classList.remove("fade"); void host.offsetWidth; host.classList.add("fade");
-    const W = 720, H = 330, L = 44, R = 16, top = 12;
+    const ph = isPhone(), W = fitW(720, 330), H = 330, L = ph ? 36 : 44, R = ph ? 6 : 16, top = 12;
     const x0 = day("2026-07-21"), x1 = day(D.as_of) + 1;
     const X = (d) => L + ((d - x0) / (x1 - x0)) * (W - L - R);
     const uTop = top, uH = 150, wTop = 188, wH = 64, tY = 292;
@@ -972,7 +979,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       el("line", { x1: L, x2: W - R, y1: UY(g), y2: UY(g), stroke: "var(--rule)", "stroke-width": 1 }, svg);
       el("text", { x: L - 6, y: UY(g) + 4, "text-anchor": "end", class: "val" }, svg).textContent = g + "%";
     }
-    for (const [v, label] of [[40, "churn line 40%"], [80, "expansion line 80%"]]) {
+    for (const [v, label] of [[40, ph ? "churn 40%" : "churn line 40%"], [80, ph ? "expansion 80%" : "expansion line 80%"]]) {
       el("line", { x1: L, x2: W - R, y1: UY(v), y2: UY(v), stroke: "var(--ink-3)", "stroke-width": 1, "stroke-dasharray": "4 4" }, svg);
       el("text", { x: W - R, y: UY(v) - 4, "text-anchor": "end" }, svg).textContent = label;
     }
@@ -996,7 +1003,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     } else {
       el("text", { x: (L + W - R) / 2, y: uTop + uH / 2, "text-anchor": "middle", class: "lbl" }, svg).textContent = "No usage yet";
     }
-    if (pts.length) el("text", { x: X(x0) + 2, y: uTop + uH - 6 }, svg).textContent = "before 19 Aug: no 30-day average yet";
+    if (pts.length) el("text", { x: X(x0) + 2, y: uTop + uH - 6 }, svg).textContent = (ph ? "no 30-day average before 19 Aug" : "before 19 Aug: no 30-day average yet");
 
     // weekly active users
     const wMax = Math.max(1, ...a.wau);
@@ -1336,7 +1343,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
     // histogram: accounts per day from signing to SDK install, one row per group
     const host = $("ob-dots"); host.innerHTML = "";
-    const W = 640, L = 150, R = 16, rowH = 86, H = 2 * rowH + 40, maxD = 14;
+    const ph = isPhone(), W = fitW(640), L = ph ? 0 : 150, R = ph ? 4 : 16, rowH = ph ? 120 : 86, H = 2 * rowH + 40, maxD = 14;
     const slot = (W - L - R) / (maxD + 1);
     const X = (d) => L + Math.min(d, maxD) * slot;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Days from signing to SDK install by group" }, host);
@@ -1346,13 +1353,18 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     el("text", { x: (L + W - R) / 2, y: H - 2, "text-anchor": "middle" }, svg).textContent = "days from signing to SDK install";
     GROUPS.forEach((g, gi) => {
       const base = 10 + (gi + 1) * rowH - 8, st = S[g.key];
-      el("text", { x: 0, y: base - rowH / 2, class: "lbl" }, svg).textContent = g.name;
-      el("text", { x: 0, y: base - rowH / 2 + 16 }, svg).textContent = `${st.inst} of ${st.n} installed`;
-      el("text", { x: 0, y: base - rowH / 2 + 32 }, svg).textContent = st.mSdk == null ? "" : `median ${st.mSdk} days`;
+      if (ph) {                                           // phone: the group's numbers on one line above its bars
+        const t = el("text", { x: 0, y: base - rowH + 26, class: "lbl" }, svg); t.textContent = g.name;
+        el("text", { x: 0, y: base - rowH + 42 }, svg).textContent = `${st.inst} of ${st.n} installed` + (st.mSdk == null ? "" : `, median ${st.mSdk} days`);
+      } else {
+        el("text", { x: 0, y: base - rowH / 2, class: "lbl" }, svg).textContent = g.name;
+        el("text", { x: 0, y: base - rowH / 2 + 16 }, svg).textContent = `${st.inst} of ${st.n} installed`;
+        el("text", { x: 0, y: base - rowH / 2 + 32 }, svg).textContent = st.mSdk == null ? "" : `median ${st.mSdk} days`;
+      }
       el("line", { x1: L, x2: W - R, y1: base, y2: base, stroke: "var(--rule)" }, svg);
       H2[gi].forEach((v, d) => {
         if (!v) return;
-        const h = Math.max(3, (v / top) * (rowH - 26)), x = X(d) + 3, w = slot - 6;
+        const h = Math.max(3, (v / top) * (rowH - (ph ? 66 : 26))), x = X(d) + (ph ? 1.5 : 3), w = slot - (ph ? 3 : 6);
         const bar = el("path", { d: `M${x} ${base}V${base - h + 3}Q${x} ${base - h} ${x + 3} ${base - h}H${x + w - 3}Q${x + w} ${base - h} ${x + w} ${base - h + 3}V${base}Z`, fill: g.color }, svg);
         el("text", { x: x + w / 2, y: base - h - 4, "text-anchor": "middle", class: "val" }, svg).textContent = v;
         hover(bar, `<b>${g.name}</b><br>${v} account${v === 1 ? "" : "s"} installed the SDK ${d === maxD ? "14+ days" : d + " day" + (d === 1 ? "" : "s")} after signing`);
@@ -1363,7 +1375,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const fh = $("ob-funnel");
     const stages = [["Signed", (s) => s.n, (s) => s.n], ["SDK installed", (s) => s.inst, (s) => s.n], ["First chart", (s) => s.chart, (s) => s.n], ["Activated in 14 days", (s) => s.act, (s) => s.old]];
     fh.innerHTML = "";
-    const FW = 320, rowF = 54, FH = stages.length * rowF + 6;
+    const FW = fitW(320, 300), rowF = 54, FH = stages.length * rowF + 6;
     const fsvg = el("svg", { viewBox: `0 0 ${FW} ${FH}`, role: "img", "aria-label": "Onboarding outcome by group" }, fh);
     stages.forEach(([label, num, den], si) => {
       const y = si * rowF;
@@ -1398,9 +1410,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
     // dot plot: one row per owner, days 0..20, plus a "no call" column
     const host = $("tm-dots"); host.innerHTML = "";
-    const W = 760, L = 150, R = 90, rowH = 30, top = 8, H = top + ownerRows.length * rowH + 40, maxD = 20;
+    const ph = isPhone(), W = fitW(760, 330), L = ph ? 100 : 150, R = ph ? 62 : 90, rowH = 30, top = 8, H = top + ownerRows.length * rowH + 40, maxD = 20;
     const X = (d) => L + (d / maxD) * (W - L - R);
-    const noCallX = W - R + 50;
+    const noCallX = W - R + (ph ? 34 : 50);
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Days from signal to first call per account, by owner" }, host);
     const yEnd = top + ownerRows.length * rowH;
     for (let d = 0; d <= maxD; d += 5) {
@@ -1413,7 +1425,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     ownerRows.forEach((r, i) => {
       const cy = top + i * rowH + rowH / 2;
       if (i === csm.length && i > 0) el("line", { x1: 0, x2: W, y1: top + i * rowH, y2: top + i * rowH, stroke: "var(--ink-3)", "stroke-width": 1 }, svg);
-      el("text", { x: 0, y: cy + 4, class: "lbl" }, svg).textContent = r.o.owner_name;
+      el("text", { x: 0, y: cy + 4, class: "lbl" }, svg).textContent = ph ? r.o.owner_name.replace(" Scale team", " pool") : r.o.owner_name;
       const stack = {};
       for (const a of r.rs) {
         const k = a.call_date ? String(Math.min(a.days_to_call, maxD)) : "none";
@@ -1456,7 +1468,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const counts = team.map((t) => weeks.map((we) => D.touches.filter((x) => x.event === "meeting_held" && x.owner_id === t.owner_id && day(x.date) > day(we) - 7 && day(x.date) <= day(we)).length));
     const max = Math.max(1, ...counts.flat());
     if (!team.length) { wh.innerHTML = '<p class="note">Nobody on the CS team covers this segment.</p>'; return; }
-    const GW = 360, GL = 120, cw = (GW - GL) / weeks.length, ch = 20, GH = team.length * (ch + 3) + 46;
+    const GW = fitW(360, 310), GL = isPhone() ? 96 : 120, cw = (GW - GL) / weeks.length, ch = 20, GH = team.length * (ch + 3) + 46;
     const gs = el("svg", { viewBox: `0 0 ${GW} ${GH}`, role: "img", "aria-label": "Meetings per week by owner" }, wh);
     const ramp = ["var(--seq-0)", "var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
     team.forEach((t, i) => {
@@ -1469,12 +1481,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         hover(r, `<b>${esc(t.owner_name)}</b><br>Week ending ${fmt(we)}: ${v} meeting${v === 1 ? "" : "s"}`);
       });
     });
-    [0, 6, 12].forEach((j) => { el("text", { x: GL + j * cw + cw / 2, y: GH - 26, "text-anchor": "middle" }, gs).textContent = fmt(weeks[j]); });
+    [0, 6, 12].forEach((j, k) => { el("text", { x: k === 2 ? GW : GL + j * cw + cw / 2, y: GH - 26, "text-anchor": k === 2 ? "end" : "middle" }, gs).textContent = fmt(weeks[j]); });
     // the key: the ramp from none to the busiest week (review 10 Nov: "darker means more" was backwards in dark mode)
     const ky = GH - 14;
     el("text", { x: GL - 6, y: ky + 9, "text-anchor": "end" }, gs).textContent = "0";
-    ramp.forEach((c, k) => el("rect", { x: GL + k * 18, y: ky, width: 16, height: 10, rx: 2, fill: c }, gs));
-    el("text", { x: GL + 6 * 18 + 4, y: ky + 9 }, gs).textContent = `${max} meeting${max === 1 ? "" : "s"} a week`;
+    const kw = isPhone() ? 12 : 18;
+    ramp.forEach((c, k) => el("rect", { x: GL + k * kw, y: ky, width: kw - 2, height: 10, rx: 2, fill: c }, gs));
+    el("text", { x: GL + 6 * kw + 4, y: ky + 9 }, gs).textContent = `${max} meeting${max === 1 ? "" : "s"} a week`;
   }
 
   // ---------------------------------------------------------------- book of business
@@ -1541,13 +1554,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const ramp = ["var(--seq-0)", "var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
     const host = $("bk-heat"); host.innerHTML = "";
     if (!rows.length) { $("bk-finding").textContent = `${segName()}: no accounts.`; return; }
-    const W = 880, LBL = 250, cw = (W - LBL) / weeks.length, ch = 24, H = rows.length * (ch + 3) + 54;
+    const ph = isPhone(), W = fitW(880, 640), LBL = ph ? 186 : 250, TX = ph ? 70 : 116, cw = (W - LBL) / weeks.length, ch = 24, H = rows.length * (ch + 3) + 54;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Book of business heatmap", style: "min-width:640px" }, host);
-    weeks.forEach((we, j) => { el("text", { x: LBL + j * cw + cw / 2, y: 12, "text-anchor": "middle" }, svg).textContent = fmt(we); });
+    weeks.forEach((we, j) => { if (!ph || j % 2 === 0) el("text", { x: LBL + j * cw + cw / 2, y: 12, "text-anchor": "middle" }, svg).textContent = fmt(we); });
     rows.forEach((x, i) => {
       const y = 22 + i * (ch + 3);
-      if (i === 0 || rows[i - 1].r !== x.r) el("text", { x: 0, y: y + 16, class: "lbl", "font-weight": 600 }, svg).textContent = x.r;
-      el("text", { x: 116, y: y + 16, class: "lbl" }, svg).textContent = `${x.t} (${x.n})`;
+      if (i === 0 || rows[i - 1].r !== x.r) el("text", { x: 0, y: y + 16, class: "lbl", "font-weight": 600 }, svg).textContent = ph ? x.r.replace("France & Benelux", "F&B") : x.r;
+      el("text", { x: TX, y: y + 16, class: "lbl" }, svg).textContent = `${x.t} (${x.n})`;
       x.cells.forEach((c, j) => {
         const s = c.live ? c.hit / c.live : 0;
         const fill = c.live === 0 ? "var(--bg)" : s === 0 ? ramp[0] : ramp[Math.min(5, 1 + Math.floor((s / shareMax) * 4.999))];
@@ -1661,15 +1674,16 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       ? `${segOn() ? segName() + ": " : ""}${n.nocall} of the ${act} accounts that need a call (${pct(n.nocall, act)}%) haven't had one yet.`
       : `${segOn() ? segName() + ": " : ""}no account at Act needs a call.`;
     const host = $("ov-sieve"); host.innerHTML = "";
-    const W = 880, LBL = 300, BAR = W - LBL - 150, RH = 34;
+    // desktop: label, bar, share in one row; phone: the label above its bar, the share as "n%"
+    const ph = isPhone(), W = fitW(880), LBL = ph ? 0 : 300, BAR = ph ? W - 90 : W - LBL - 150, RH = ph ? 44 : 34;
     const svg = el("svg", { viewBox: `0 0 ${W} ${STAGES.length * RH + 6}`, role: "img", "aria-label": "Engagement sieve" }, host);
     STAGES.forEach((st, i) => {
-      const y = 4 + i * RH, w = Math.max(2, (BAR * n[st.key]) / total);
+      const y = 4 + i * RH, w = Math.max(2, (BAR * n[st.key]) / total), by = ph ? y + 20 : y + 5, ty = ph ? y + 32 : y + 19, x0 = ph ? 4 + st.depth * 10 : LBL;
       const g = el("g", { class: "stage", "data-key": st.key, style: "cursor:pointer" }, svg);
-      el("text", { x: 4 + st.depth * 18, y: y + 19, class: "lbl" }, g).textContent = (st.depth ? "└ " : "") + st.label;
-      el("rect", { x: LBL, y: y + 5, width: w, height: RH - 12, rx: 3, fill: st.color || "var(--viz-measure)" }, g);
-      el("text", { x: LBL + w + 8, y: y + 19, class: "val" }, g).textContent = n[st.key];
-      if (st.parent) el("text", { x: W - 4, y: y + 19, "text-anchor": "end" }, g).textContent = `${pct(n[st.key], n[st.parent])}% of the stage above`;
+      el("text", { x: 4 + st.depth * (ph ? 10 : 18), y: ph ? y + 13 : y + 19, class: "lbl" }, g).textContent = (st.depth ? "└ " : "") + st.label;
+      el("rect", { x: x0, y: by, width: Math.min(w, W - x0 - 70), height: ph ? 16 : RH - 12, rx: 3, fill: st.color || "var(--viz-measure)" }, g);
+      el("text", { x: x0 + Math.min(w, W - x0 - 70) + 6, y: ty, class: "val" }, g).textContent = n[st.key];
+      if (st.parent) el("text", { x: W - 4, y: ty, "text-anchor": "end" }, g).textContent = ph ? `${pct(n[st.key], n[st.parent])}%` : `${pct(n[st.key], n[st.parent])}% of the stage above`;
       g.addEventListener("click", () => listStage(st));
       hover(g, `<b>${esc(st.label)}</b><br>${n[st.key]} accounts${st.parent ? `, ${pct(n[st.key], n[st.parent])}% of the stage above` : ""}<br>Click to list them`);
     });
@@ -1691,10 +1705,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // the bars show only renewals with a churn flag, on their own scale; the healthy majority
     // would otherwise fill 85% of every bar. "of N renewing" above each bar keeps the reference.
     const risky = (k) => k.items.filter((a) => a.churn !== "No churn flag");
-    const W = 880, H = 190, B = 34, L = 40, cw = (W - L) / 6, maxN = Math.max(1, ...buckets.map((k) => risky(k).length));
+    const ph = isPhone(), W = fitW(880), H = 190, B = 34, L = ph ? 4 : 40, cw = (W - L) / 6, maxN = Math.max(1, ...buckets.map((k) => risky(k).length));
     const svg = el("svg", { viewBox: `0 0 ${W} ${H + 40}`, role: "img", "aria-label": "Renewals by month and flag" }, host);
     buckets.forEach((k, i) => {
-      const x = L + i * cw + 14, bw = cw - 28;
+      const x = L + i * cw + (ph ? 4 : 14), bw = cw - (ph ? 8 : 28);
       let y = H;
       const g = el("g", { style: "cursor:pointer" }, svg);
       for (const s of REN_ORDER.filter((x) => x !== "No churn flag")) {
@@ -1704,10 +1718,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         el("rect", { x, y, width: bw, height: Math.max(1, h - 2), fill: STATUS_COLOR[s] }, g);   // 2px gap below
       }
       el("text", { x: x + bw / 2, y: y - 20, "text-anchor": "middle", class: "val" }, g).textContent = risky(k).length;
-      el("text", { x: x + bw / 2, y: y - 6, "text-anchor": "middle" }, g).textContent = `of ${k.items.length} renewing`;
+      el("text", { x: x + bw / 2, y: y - 6, "text-anchor": "middle" }, g).textContent = ph ? `of ${k.items.length}` : `of ${k.items.length} renewing`;
       el("rect", { x, y: 0, width: bw, height: H, fill: "transparent" }, g);      // the whole column is clickable
       const from = new Date(k.from * 864e5).toISOString().slice(0, 10), to = new Date(k.to * 864e5).toISOString().slice(0, 10);
-      el("text", { x: x + bw / 2, y: H + 18, "text-anchor": "middle" }, svg).textContent = `${fmt(from)} – ${fmt(to)}`;
+      el("text", { x: x + bw / 2, y: H + 18, "text-anchor": "middle" }, svg).textContent = ph ? fmt(from) : `${fmt(from)} – ${fmt(to)}`;
+      if (ph) el("text", { x: x + bw / 2, y: H + 32, "text-anchor": "middle" }, svg).textContent = "– " + fmt(to);
       const counts = REN_ORDER.map((s) => `${s}: ${k.items.filter((a) => a.churn === s).length}`).join("<br>");
       hover(g, `<b>Renewing ${fmt(from)} – ${fmt(to)}</b><br>${counts}<br>Click to list them`);
       g.addEventListener("click", () => {
@@ -1805,7 +1820,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // warning time, in 30-day buckets
     const edges = [0, 30, 60, 90, 120, 150, 180], host = $("oc-warning"); host.innerHTML = "";
     const bins = edges.map((e, i) => ({ from: e, to: edges[i + 1], items: tp.filter((r) => r.warning_days != null && r.warning_days >= e && (edges[i + 1] == null || r.warning_days < edges[i + 1])) }));
-    const W = 340, H = 170, maxN = Math.max(1, ...bins.map((b) => b.items.length)), bw = W / bins.length;
+    const W = fitW(340, 300), H = 170, maxN = Math.max(1, ...bins.map((b) => b.items.length)), bw = W / bins.length;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H + 34}`, role: "img", "aria-label": "Warning time histogram" }, host);
     bins.forEach((b, i) => {
       const h = ((H - 20) * b.items.length) / maxN, x = i * bw + 6;
@@ -2123,8 +2138,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // calm on dark and light: one highlight colour for what needs a conversation (problem calls,
   // follow-ups), two neutrals for the routine cadence. Order keeps violet between the greys.
   // bottom to top, the same order in the legend; one colour per engagement type on every chart
-  const MEET = [{ k: "other", name: "Kickoff, check-in, other", color: "var(--viz-other)" }, { k: "qbr", name: "QBR", color: "var(--viz-qbr)" }, { k: "call", name: "Churn, growth or activation call, follow-up", color: "var(--viz-call)" }];
-  const PIPE = [{ k: "renewal", name: "Renewal", color: "var(--viz-renewal)" }, { k: "qbr", name: "QBR booked", color: "var(--viz-qbr)" }, { k: "followup", name: "Follow-up due", color: "var(--viz-call)" }];
+  // inside: the segment may show its own count (QBRs and calls, the work that matters; never "other")
+  const MEET = [{ k: "other", name: "Kickoff, check-in, other", color: "var(--viz-other)" }, { k: "qbr", name: "QBR", color: "var(--viz-qbr)", inside: true }, { k: "call", name: "Churn, growth or activation call, follow-up", color: "var(--viz-call)", inside: true }];
+  const PIPE = [{ k: "renewal", name: "Renewal", color: "var(--viz-renewal)" }, { k: "qbr", name: "QBR booked", color: "var(--viz-qbr)", inside: true }, { k: "followup", name: "Follow-up due", color: "var(--viz-call)", inside: true }];
   // The reference stacked bar chart (10 Nov 2026): one bar per week, categories bottom to top in
   // `cats` order with a 2px gap in the surface colour between segments, the total on top, a
   // segment's count inside it only when it fits, recessive gridlines, every week labelled when
@@ -2132,6 +2148,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // tip, counts:{k:n}, onClick?}]. Returns nothing; draws into host.
   const stackChart = (host, { bars, cats, W, H = 170, aria, unit }) => {
     host.innerHTML = "";
+    W = fitW(W);                                                         // a phone draws at its own width
     const L = 30, T = 18, B = 24, plotH = H - T - B, n = bars.length, bw = (W - L) / n, gap = Math.min(10, bw * 0.18);
     const total = (b) => cats.reduce((t, c) => t + (b.counts[c.k] || 0), 0);
     const max = Math.max(1, ...bars.map(total));
@@ -2143,7 +2160,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       el("text", { x: L - 6, y: yOf(v) + 4, "text-anchor": "end" }, svg).textContent = v;
     }
     el("line", { x1: L, x2: W, y1: yOf(0), y2: yOf(0), class: "base" }, svg);
-    const every = bw >= 46 ? 1 : bw >= 26 ? 2 : 3;
+    const every = bw >= 46 ? 1 : bw >= 26 ? 2 : bw >= 14 ? 3 : 4;
     bars.forEach((b, i) => {
       const g = el("g", { class: "bar", style: b.onClick ? "cursor:pointer" : "" }, svg), x = L + i * bw + gap / 2, w = bw - gap;
       let y = yOf(0);
@@ -2152,13 +2169,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         const v = b.counts[c.k] || 0; if (!v) continue;
         const h = (plotH * v) / top;
         el("rect", { x, y: y - h + 2, width: w, height: Math.max(1, h - 2), fill: c.color, class: "fill", rx: 2 }, g);   // 2px gap below each segment
-        if (parts > 1 && h >= 16 && w >= 18) el("text", { x: x + w / 2, y: y - h / 2 + 5, "text-anchor": "middle", class: "seg" }, g).textContent = v;
+        if (c.inside && !isPhone() && parts > 1 && h >= 16 && w >= 18) el("text", { x: x + w / 2, y: y - h / 2 + 5, "text-anchor": "middle", class: "seg" }, g).textContent = v;
         y -= h;
       }
       const t = total(b);
       if (t) el("text", { x: x + w / 2, y: y - 4, "text-anchor": "middle", class: "tot" }, g).textContent = t;
       el("rect", { x: L + i * bw, y: T - 14, width: bw, height: plotH + 14, fill: "transparent" }, g);    // hit target: the whole column
-      if (i % every === 0 || i === n - 1) el("text", { x: L + i * bw + bw / 2, y: H - 6, "text-anchor": "middle" }, svg).textContent = b.label;
+      if (i % every === 0) el("text", { x: L + i * bw + bw / 2, y: H - 6, "text-anchor": "middle" }, svg).textContent = b.label;
       hover(g, `<b>${b.tip}</b>` + [...cats].reverse().map((c) => `<div class="row"><span class="sw" style="background:${c.color}"></span><span>${c.name}</span><b>${b.counts[c.k] || 0}</b></div>`).join("") +
         `<div class="row tot"><span></span><span>Total</span><b>${plural(t, unit)}</b></div>` + (b.onClick ? '<div class="muted">Click to list them</div>' : ""));
       if (b.onClick) g.addEventListener("click", b.onClick);
@@ -2370,6 +2387,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const firstPick = picks.length ? picks[0].id : D.accounts[0].account_id;
   sel.value = firstPick; drawTimeline(firstPick);
   redraw();
+  const relayout = () => { redraw(); if (sel.value) drawTimeline(sel.value); };
+  if (PHONE_MQ.addEventListener) PHONE_MQ.addEventListener("change", relayout); else if (PHONE_MQ.addListener) PHONE_MQ.addListener(relayout);
   // a link like ...#<account id> (from Slack's Open timeline) opens that account
   // Account search: type part of a name or an ID; accounts in the current
   // segment come first, then flagged ones. Enter or a click opens the timeline.
