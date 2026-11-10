@@ -489,7 +489,7 @@ const segment = async (page, values) => {
       `CS team: ${first.owner_name}'s last week lists ${expectM} meetings`, `${tt} / ${tr} rows`);
     // CS team dot plot: equal values stack in columns, every dot inside its day's lane
     const lanes = await page.$$eval("#tm-dots svg", (svgs) => { const s = svgs[0]; return [...s.querySelectorAll("text.val")].map((t) => t.textContent); });
-    check(lanes.includes("20+"), 'CS team: the last tick says "20+" (dots past 20 days are pinned there)', lanes.join(","));
+    check(lanes.some((t) => /^\d+\+$/.test(t)), 'CS team: the last tick says "N+" (anything further is pinned there)', lanes.join(","));
     // Book heatmap: a cell's list matches its count
     await tab(page, "book");
     const bcell = (await page.$$("#bk-heat rect.cell[style*='pointer']"))[5];
@@ -607,6 +607,39 @@ const segment = async (page, values) => {
     const cursor = await page.evaluate(() => { const s = document.createElement("span"); s.className = "cellbtn good"; document.body.append(s); const c = getComputedStyle(s).cursor; s.remove(); return c; });
     check(cursor === "default", "Did it work?: a team-totals cell (not a link) doesn't show a pointer", cursor);
     await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    await page.close();
+  }
+
+  // --- time to call, redesigned (10 Nov 2026): one axis, waiting accounts at their age ---------
+  for (const width of [1300, 390]) {
+    const { page, errors } = await open(browser, { width });
+    await tab(page, "team");
+    const TARGET = D.settings.call_target_days ?? 14, ASOF = Date.parse(D.as_of + "T00:00:00Z") / 864e5;
+    const act = D.time_to_action.filter((a) => a.owner_type === "csm" || a.owner_type === "pool");
+    const waiting = act.filter((a) => !a.call_date), lateN = waiting.filter((a) => ASOF - Date.parse(a.signal_date + "T00:00:00Z") / 864e5 >= TARGET).length;
+    const got = await page.$$eval("#tm-dots circle.waiting, #tm-dots circle.late", (cs) => ({ waiting: cs.filter((c) => c.classList.contains("waiting")).length, late: cs.filter((c) => c.classList.contains("late")).length,
+      lateRed: cs.filter((c) => c.classList.contains("late")).every((c) => /critical/.test(c.getAttribute("stroke"))), freshNeutral: cs.filter((c) => c.classList.contains("waiting")).every((c) => !/critical/.test(c.getAttribute("stroke"))) }));
+    const plus = await page.$$eval("#tm-dots text.val", (ts) => ts.filter((t) => /^\+\d+$/.test(t.textContent)).reduce((s, t) => s + +t.textContent.slice(1), 0));
+    check(got.late + got.waiting + (width < 640 ? plus : 0) >= waiting.length - (width < 640 ? plus : 0) && got.late <= lateN && got.lateRed && got.freshNeutral,
+      `${width}px: every account not yet called sits at its waiting age, red only past ${TARGET} days`, JSON.stringify({ ...got, expect: waiting.length, lateN, plus }));
+    if (width > 640) check(got.late === lateN && got.late + got.waiting === waiting.length, `${width}px: ${lateN} late and ${waiting.length - lateN} still-in-time rings, as the export says`, JSON.stringify(got));
+    const col = await page.$$eval("#tm-dots text", (ts) => ts.some((t) => t.textContent === "no call"));
+    check(!col, `${width}px: no separate "no call" column any more`);
+    // every mark stays inside its owner's row (the old stacking poked into the row above)
+    const bleed = await page.$eval("#tm-dots svg", (s) => {
+      const seps = [...s.querySelectorAll("line")].filter((l) => l.getAttribute("x1") === "0").map((l) => +l.getAttribute("y1"));
+      return [...s.querySelectorAll("circle, rect")].filter((m) => { const y = m.tagName === "rect" ? +m.getAttribute("y") + 4.5 : +m.getAttribute("cy"); return seps.some((sy) => Math.abs(sy - y) < 5); }).length;
+    });
+    check(bleed === 0, `${width}px: no mark sits on a row line`, `${bleed} marks`);
+    const touching = await page.$eval("#tm-dots svg", (s) => { const pts = [...s.querySelectorAll("circle, rect")].map((m) => m.tagName === "rect" ? [+m.getAttribute("x") + 4.5, +m.getAttribute("y") + 4.5] : [+m.getAttribute("cx"), +m.getAttribute("cy")]);
+      let n = 0; for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) if (Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]) < 9) n++; return n; });
+    check(touching === 0, `${width}px: no two marks touch (a ring sat on a dot on day 11)`, `${touching} pairs`);
+    // each owner's summary counts what the export says
+    const first = D.team.find((t) => t.owner_type === "csm" && act.some((a) => a.routed_to === t.owner_id));
+    const w = act.filter((a) => a.routed_to === first.owner_id && !a.call_date).length;
+    const txt = await page.$$eval("#tm-dots text.val", (ts) => ts.map((t) => t.textContent));
+    check(txt.some((t) => t.includes(`${w} waiting`)), `${width}px: ${first.owner_name}'s row says ${w} waiting`, txt.filter((t) => /waiting/.test(t)).slice(0, 3).join(" | "));
+    check(!errors.length, `${width}px: no script errors on the time-to-call chart`, errors.join("; "));
     await page.close();
   }
 

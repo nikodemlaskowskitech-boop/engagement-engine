@@ -455,6 +455,13 @@ One JSON event per line, one file per day in `data/events/`.
   lists them, keeps the cell selected and scrolls to the list, and "Show only these N
   on every tab" pins them (seg.acc) and opens Leadership. Team-totals cells are counts,
   not links (no pointer). The header no longer clips: Find's list shows over the page.
+  Time to call (CS team, redesigned 10 Nov 2026 with Nikodem): one axis, days since the
+  signal (square-root scale, ticks 0/3/7/14/30/60+): called = a filled mark on the day of
+  the call; not called = an open ring at how long it has waited, neutral while in time, red
+  past the target ([journeys] act_for_days, exported as call_target_days); no "no call"
+  column. Groups labelled (CSMs about 8 accounts, pools about 40); each row ends with
+  "median N d · n waiting, n late". Marks take the first free lane (middle, above, below),
+  so none touch or cross a row line; a 4th in one spot is "+n".
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;
