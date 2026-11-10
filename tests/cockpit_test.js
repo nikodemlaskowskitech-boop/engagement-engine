@@ -119,6 +119,46 @@ const segment = async (page, values) => {
     await tab(page, "mybook");
     const port = await page.textContent("#mb-port-finding");
     check(port.startsWith(money(miaRisk)), `My book at risk for Mia = the export (${money(miaRisk)})`, port);
+
+    // the reference stacked charts (My book: meetings looking back, the pipeline looking ahead)
+    const charts = await page.evaluate(() => {
+      const css = getComputedStyle(document.documentElement), v = (n) => css.getPropertyValue(n).trim().toLowerCase();
+      const viz = { qbr: v("--viz-qbr"), call: v("--viz-call"), renewal: v("--viz-renewal"), other: v("--viz-other") };
+      const read = (id) => [...document.querySelectorAll(`#${id} g.bar`)].map((g) => {
+        const segs = [...g.querySelectorAll("rect.fill")].map((r) => ({ fill: r.getAttribute("fill"), y: +r.getAttribute("y"), h: +r.getAttribute("height") }));
+        const tot = g.querySelector("text.tot"); return { segs, tot: tot ? +tot.textContent : 0 };
+      });
+      const legend = (id) => [...document.querySelectorAll(`#${id} > span:not(.aside)`)].map((s) => s.textContent);
+      return { viz, eng: read("mb-eng-chart"), pipe: read("mb-pipe"), engLegend: legend("mb-eng-legend"), pipeLegend: legend("mb-pipe-legend"),
+        pipeFinding: document.getElementById("mb-pipe-finding").textContent, aside: (document.querySelector("#mb-pipe-legend .aside") || {}).textContent || "" };
+    });
+    const tokenOf = (f) => (f.match(/--viz-(\w+)/) || [])[1];
+    const segOK = (bars, order) => bars.every((b) => {
+      const ks = b.segs.map((x) => tokenOf(x.fill));                          // drawn bottom first
+      const idx = ks.map((k) => order.indexOf(k));
+      const gaps = b.segs.slice(1).every((x, i) => b.segs[i].y - (x.y + x.h) >= 1.9);   // 2px between segments
+      return ks.every(Boolean) && idx.every((x, i) => i === 0 || x > idx[i - 1]) && gaps;
+    });
+    check(charts.eng.length === 13 && segOK(charts.eng, ["other", "qbr", "call"]) && segOK(charts.pipe, ["renewal", "qbr", "followup".replace("followup", "call")]),
+      "stacked charts: data colours only (--viz-*), the same stack order everywhere, a 2px gap between segments", JSON.stringify(charts.pipe.slice(0, 3)));
+    check(!charts.pipe.some((b) => b.segs.some((x) => tokenOf(x.fill) === "renewal") && b.segs.some((x) => tokenOf(x.fill) === "call") &&
+      b.segs.findIndex((x) => tokenOf(x.fill) === "call") - b.segs.findIndex((x) => tokenOf(x.fill) === "renewal") === 1),
+      "blue never touches violet in a stack");
+    check(charts.engLegend.join("|") === "Kickoff, check-in, other|QBR|Churn, growth or activation call, follow-up" &&
+      charts.pipeLegend.join("|") === "Renewal|QBR booked|Follow-up due", "legends list the categories in stack order", JSON.stringify([charts.engLegend, charts.pipeLegend]));
+    const booked = +(charts.pipeFinding.match(/has (\d+) booked/) || [])[1];
+    check(charts.pipe.reduce((t, b) => t + b.tot, 0) === booked && /on Watch/.test(charts.aside),
+      "pipeline totals add up to the booked engagements; Watch accounts are named beside it, not counted", `${charts.pipe.map((b) => b.tot)} vs ${booked}`);
+    check(Object.values(charts.viz).every((c) => /^#[0-9a-f]{6}$/.test(c)) && !Object.values(charts.viz).some((c) => ["#7fbf94", "#e3b65a", "#e07a6a", "#e39a6f"].includes(c)),
+      "data colours are their own set, never a status colour", JSON.stringify(charts.viz));
+    const bar = await page.$$("#mb-pipe g.bar"); const withItems = charts.pipe.findIndex((b) => b.tot > 0);
+    if (withItems >= 0) {
+      await bar[withItems].scrollIntoViewIfNeeded(); const bb = await bar[withItems].boundingBox(); await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height - 10); await page.waitForTimeout(100);
+      const tipText = await page.$eval(".tip", (t) => t.hidden ? "" : t.innerText);
+      check(/Week commencing/.test(tipText) && /Renewal/.test(tipText) && /QBR booked/.test(tipText) && /Follow-up due/.test(tipText) && /Total/.test(tipText),
+        "the tooltip gives the week and every category with the total", tipText.replace(/\n/g, " | "));
+      await page.mouse.move(5, 5);
+    }
     await tab(page, "lead");
     const lead = await page.textContent("#ld-finding");
     check(lead.includes(money(miaRisk)), "Leadership for Mia = My book for Mia", lead);

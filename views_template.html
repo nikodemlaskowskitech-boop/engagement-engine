@@ -22,15 +22,26 @@
   --rule: #2A342D;          /* hairlines, grid */
   --contour: #1F2A23;       /* map contours behind the header */
   --neutral-fill: #4F5A52;  /* "nothing to flag" in charts: visible, but recedes */
-  --routine-1: #8A9A86; --routine-2: #4A574C;   /* routine work in charts (sage stone, two steps) */
   --accent: #D9CBA8;        /* sand: selection, links, focus */
   --accent-soft: #2B2A21;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #9085e9;   /* categories (fixed order) */
+  /* Three colour groups (10 Nov 2026), never mixed:
+     - brand: the look (--bg, --surface, --ink*, --accent sand, the logo's stones)
+     - status: state only (--good, --warning, --serious, --critical); amber is always a warning
+     - data: categories in charts (--viz-*). Engagement types keep one colour on every chart.
+       Validated with the dataviz checker on the dark surface (lightness band, chroma floor,
+       colour-blind and normal-vision separation, 3:1 contrast). Stack order bottom to top:
+       other or renewal, then QBR, then calls and follow-ups, so blue never touches violet. */
+  --viz-qbr: #579F68;       /* sage: QBRs, booked or held */
+  --viz-call: #8F68CB;      /* lavender: churn, growth and activation calls, follow-ups */
+  --viz-renewal: #4493D0;   /* slate blue: renewals */
+  --viz-other: #7E877C;     /* stone: kickoffs, check-ins, other meetings (recedes) */
+  --viz-label: #0E1311;     /* a count printed inside a coloured segment */
+  --tip-bg: #0B0F0D;        /* tooltips: darker than the panels */
   /* Palette rules (validated with the dataviz validator):
      - status colours (good, warning, critical) only for state; amber is always a warning
-     - stacked categories: one highlight colour (violet) for what needs attention, the
-       routine in two sage steps (--routine-1, --routine-2); never blue next to violet.
-       Greys are only for "nothing to flag"
+     - stacked categories: the --viz-* colours above; never blue next to violet.
+       Greys are only for "nothing to flag" (and the receding "other" stone)
      - "nothing to flag" is --neutral-fill, never the hairline colour
      - stacked segments are separated by a 2px gap in the surface colour */
   --seq-0: #1b2530; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
@@ -44,7 +55,7 @@
 }
 :root[data-theme="light"] {
   --bg: #F5F1E8; --surface: #FFFDF8; --head: #F1ECDF; --ink: #1E2320; --ink-2: #4F564F; --ink-3: #5E655F;
-  --rule: #DDD6C8; --contour: #D9D1BF; --neutral-fill: #C9C3B4; --routine-1: #6E7F6A; --routine-2: #B7C2B3;
+  --rule: #DDD6C8; --contour: #D9D1BF; --neutral-fill: #C9C3B4;
   --accent: #6B5A2E; --accent-soft: #EFE8D6;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #6250d6;
   --seq-0: #edf3fb; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #5598e7; --seq-4: #256abf; --seq-5: #104281;
@@ -121,7 +132,18 @@ svg .lbl { fill: var(--ink-2); font-size: 12px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--ink-2); margin-top: 10px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend svg { width: 12px; height: 12px; display: inline; }
-.tip { position: fixed; z-index: 20; pointer-events: none; background: var(--ink); color: #121815; font-size: 0.8rem; line-height: 1.4; padding: 7px 9px; border-radius: 6px; max-width: 280px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.18); }
+.tip { position: fixed; z-index: 20; pointer-events: none; background: var(--tip-bg); color: var(--ink); border: 1px solid var(--rule); font-size: 0.82rem; line-height: 1.45; padding: 8px 10px; border-radius: 8px; max-width: 300px; box-shadow: 0 6px 18px rgb(0 0 0 / 0.45); }
+.tip .row { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; }
+.tip .sw { width: 10px; height: 10px; border-radius: 2px; }
+.tip .tot { border-top: 1px solid var(--rule); margin-top: 4px; padding-top: 4px; font-weight: 600; }
+/* stacked bar charts (the reference chart): recessive grid, readable labels, totals on top */
+.stack text { font-size: 11.5px; fill: var(--ink-2); }
+.stack .grid { stroke: var(--rule); stroke-dasharray: 2 4; }
+.stack .base { stroke: var(--ink-3); stroke-opacity: 0.5; }
+.stack .tot { fill: var(--ink); font-weight: 600; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.stack .seg { fill: var(--viz-label); font-weight: 600; font-size: 11px; font-variant-numeric: tabular-nums; }
+.stack .bar:hover rect.fill { filter: brightness(1.12); }
+.legend .aside { color: var(--ink-3); flex-basis: 100%; }
 .tip b { font-weight: 600; }
 
 /* tables */
@@ -2063,8 +2085,53 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // follow-ups violet; routine in two teal steps. Never blue next to violet.
   // calm on dark and light: one highlight colour for what needs a conversation (problem calls,
   // follow-ups), two neutrals for the routine cadence. Order keeps violet between the greys.
-  const MEET = [{ k: "qbr", name: "QBR", color: "var(--routine-1)" }, { k: "call", name: "Churn, growth, activation call or follow-up", color: "var(--s4)" }, { k: "other", name: "Kickoff, check-in, other", color: "var(--routine-2)" }];
-  const PIPE = [{ k: "qbr", name: "QBR booked", color: "var(--routine-1)" }, { k: "followup", name: "Follow-up due", color: "var(--s4)" }, { k: "renewal", name: "Renewal", color: "var(--routine-2)" }];
+  // bottom to top, the same order in the legend; one colour per engagement type on every chart
+  const MEET = [{ k: "other", name: "Kickoff, check-in, other", color: "var(--viz-other)" }, { k: "qbr", name: "QBR", color: "var(--viz-qbr)" }, { k: "call", name: "Churn, growth or activation call, follow-up", color: "var(--viz-call)" }];
+  const PIPE = [{ k: "renewal", name: "Renewal", color: "var(--viz-renewal)" }, { k: "qbr", name: "QBR booked", color: "var(--viz-qbr)" }, { k: "followup", name: "Follow-up due", color: "var(--viz-call)" }];
+  // The reference stacked bar chart (10 Nov 2026): one bar per week, categories bottom to top in
+  // `cats` order with a 2px gap in the surface colour between segments, the total on top, a
+  // segment's count inside it only when it fits, recessive gridlines, every week labelled when
+  // there's room, and a tooltip with the full breakdown in the same colours. bars: [{label,
+  // tip, counts:{k:n}, onClick?}]. Returns nothing; draws into host.
+  const stackChart = (host, { bars, cats, W, H = 170, aria, unit }) => {
+    host.innerHTML = "";
+    const L = 30, T = 18, B = 24, plotH = H - T - B, n = bars.length, bw = (W - L) / n, gap = Math.min(10, bw * 0.18);
+    const total = (b) => cats.reduce((t, c) => t + (b.counts[c.k] || 0), 0);
+    const max = Math.max(1, ...bars.map(total));
+    const step = max <= 4 ? 1 : max <= 10 ? 2 : Math.ceil(max / 5);            // a few round gridlines
+    const top = Math.ceil(max / step) * step, yOf = (v) => T + plotH - (plotH * v) / top;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": aria, class: "stack" }, host);
+    for (let v = step; v <= top; v += step) {
+      el("line", { x1: L, x2: W, y1: yOf(v), y2: yOf(v), class: "grid" }, svg);
+      el("text", { x: L - 6, y: yOf(v) + 4, "text-anchor": "end" }, svg).textContent = v;
+    }
+    el("line", { x1: L, x2: W, y1: yOf(0), y2: yOf(0), class: "base" }, svg);
+    const every = bw >= 46 ? 1 : bw >= 26 ? 2 : 3;
+    bars.forEach((b, i) => {
+      const g = el("g", { class: "bar", style: b.onClick ? "cursor:pointer" : "" }, svg), x = L + i * bw + gap / 2, w = bw - gap;
+      let y = yOf(0);
+      const parts = cats.filter((c) => b.counts[c.k]).length;          // one segment: the total on top says it all
+      for (const c of cats) {
+        const v = b.counts[c.k] || 0; if (!v) continue;
+        const h = (plotH * v) / top;
+        el("rect", { x, y: y - h + 2, width: w, height: Math.max(1, h - 2), fill: c.color, class: "fill", rx: 2 }, g);   // 2px gap below each segment
+        if (parts > 1 && h >= 16 && w >= 18) el("text", { x: x + w / 2, y: y - h / 2 + 5, "text-anchor": "middle", class: "seg" }, g).textContent = v;
+        y -= h;
+      }
+      const t = total(b);
+      if (t) el("text", { x: x + w / 2, y: y - 4, "text-anchor": "middle", class: "tot" }, g).textContent = t;
+      el("rect", { x: L + i * bw, y: T - 14, width: bw, height: plotH + 14, fill: "transparent" }, g);    // hit target: the whole column
+      if (i % every === 0 || i === n - 1) el("text", { x: L + i * bw + bw / 2, y: H - 6, "text-anchor": "middle" }, svg).textContent = b.label;
+      hover(g, `<b>${b.tip}</b>` + [...cats].reverse().map((c) => `<div class="row"><span class="sw" style="background:${c.color}"></span><span>${c.name}</span><b>${b.counts[c.k] || 0}</b></div>`).join("") +
+        `<div class="row tot"><span></span><span>Total</span><b>${plural(t, unit)}</b></div>` + (b.onClick ? '<div class="muted">Click to list them</div>' : ""));
+      if (b.onClick) g.addEventListener("click", b.onClick);
+    });
+  };
+  const stackLegend = (host, cats, aside) => {
+    host.innerHTML = "";
+    for (const c of cats) { const sp = document.createElement("span"); sp.append(legendSwatch("square", c.color), c.name); host.append(sp); }
+    if (aside) { const sp = document.createElement("span"); sp.className = "aside"; sp.textContent = aside; host.append(sp); }
+  };
   const lastTouch = (id) => { const t = touchesBy[id]; return t && t.length ? t[t.length - 1] : null; };
   const met30 = (id) => (touchesBy[id] || []).some((t) => t.event === "meeting_held" && day(t.date) > RUN - 31);
   const fmtFull = (s) => fmt(s) + " " + s.slice(0, 4);
@@ -2165,20 +2232,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       for (const t of D.touches) if (t.event === "meeting_held" && ids.has(t.account_id) && day(t.date) > day(we) - 7 && day(t.date) <= day(we)) c[MEET_KIND(t.topic)]++;
       return c;
     });
-    const host = $("mb-eng-chart"); host.innerHTML = "";
-    const W = 520, H = 150, L = 24, bw = (W - L) / weeks.length, top = Math.max(1, ...counts.map((c) => c.qbr + c.call + c.other));
-    const svg = el("svg", { viewBox: `0 0 ${W} ${H + 22}`, role: "img", "aria-label": `Meetings per week for ${name}` }, host);
-    el("line", { x1: L, x2: W, y1: H, y2: H, stroke: "var(--rule)" }, svg);
-    el("text", { x: L - 4, y: 10, "text-anchor": "end", class: "val" }, svg).textContent = top;
-    counts.forEach((c, i) => {
-      let y = H; const total = c.qbr + c.call + c.other;
-      for (const m of MEET) { if (!c[m.k]) continue; const h = ((H - 14) * c[m.k]) / top; y -= h; el("rect", { x: L + i * bw + 3, y, width: bw - 6, height: Math.max(1, h - 2), fill: m.color }, svg); }
-      const hit = el("rect", { x: L + i * bw, y: 0, width: bw, height: H, fill: "transparent" }, svg);
-      hover(hit, `<b>Week ending ${fmt(weeks[i])}</b><br>${plural(total, "meeting")}` + MEET.map((m) => c[m.k] ? `<br>${m.name}: ${c[m.k]}` : "").join(""));
-    });
-    [0, 6, 12].forEach((i) => { el("text", { x: L + i * bw + bw / 2, y: H + 16, "text-anchor": "middle" }, svg).textContent = fmt(weeks[i]); });
-    $("mb-eng-legend").innerHTML = "";
-    for (const m of MEET) { const sp = document.createElement("span"); sp.append(legendSwatch("square", m.color), m.name); $("mb-eng-legend").append(sp); }
+    const start = (we) => new Date((day(we) - 6) * 864e5).toISOString().slice(0, 10);
+    stackChart($("mb-eng-chart"), { W: 560, cats: MEET, unit: "meeting", aria: `Meetings per week for ${name}`,
+      bars: weeks.map((we, i) => ({ label: fmt(start(we)), tip: `Week commencing ${fmt(start(we))}`, counts: counts[i] })) });
+    stackLegend($("mb-eng-legend"), MEET);
     const quiet = accs.map((a) => ({ ...a, last: lastTouch(a.account_id) }))
       .filter((a) => !a.last || day(a.last.date) <= RUN - 31)
       .sort((a, b) => (a.last ? day(a.last.date) : 0) - (b.last ? day(b.last.date) : 0));
@@ -2256,28 +2313,18 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const total = wk.reduce((s, w) => s + w.items.length, 0);
     const watching = accs.filter((a) => a.flags.some((f) => f.status === "Watch")).length;
     $("mb-pipe-finding").textContent = `${name} has ${plural(total, "booked engagement")} in the next 8 weeks, on top of ${plural(live.length, "task")} on the plate today.`;
-    const ph = $("mb-pipe"); ph.innerHTML = "";
-    const PW = 880, PH = 150, PL = 24, pbw = (PW - PL) / 8, ptop = Math.max(1, ...wk.map((w) => w.items.length));
-    const psvg = el("svg", { viewBox: `0 0 ${PW} ${PH + 22}`, role: "img", "aria-label": `Booked engagements per week for ${name}` }, ph);
-    el("line", { x1: PL, x2: PW, y1: PH, y2: PH, stroke: "var(--rule)" }, psvg);
     const listWeek = (w) => {
       $("mb-pipe-title").textContent = `Week of ${fmt(new Date(w.from * 864e5).toISOString().slice(0, 10))}: ${plural(w.items.length, "engagement")}`;
       shortList($("mb-pipe-list"), [...w.items].sort((a, b) => a.date.localeCompare(b.date)), [
         { label: "Account", get: (it) => nameOf(it.account_id) }, { label: "What", get: (it) => esc(it.what) }, { label: "Date", r: true, get: (it) => fmt(it.date) },
       ], "Nothing booked this week.");
     };
-    wk.forEach((w, i) => {
-      let y = PH; const g = el("g", { style: "cursor:pointer" }, psvg);
-      for (const p of PIPE) { const n = w.items.filter((it) => it.k === p.k).length; if (!n) continue; const h = ((PH - 16) * n) / ptop; y -= h; el("rect", { x: PL + i * pbw + 8, y, width: pbw - 16, height: Math.max(1, h - 2), fill: p.color }, g); }
-      el("text", { x: PL + i * pbw + pbw / 2, y: y - 5, "text-anchor": "middle", class: "val" }, g).textContent = w.items.length || "";
-      el("rect", { x: PL + i * pbw, y: 0, width: pbw, height: PH, fill: "transparent" }, g);
-      el("text", { x: PL + i * pbw + pbw / 2, y: PH + 16, "text-anchor": "middle" }, psvg).textContent = fmt(new Date(w.from * 864e5).toISOString().slice(0, 10));
-      hover(g, `<b>Week of ${fmt(new Date(w.from * 864e5).toISOString().slice(0, 10))}</b>` + PIPE.map((p) => `<br>${p.name}: ${w.items.filter((it) => it.k === p.k).length}`).join("") + "<br>Click to list them");
-      g.addEventListener("click", () => listWeek(w));
-    });
-    $("mb-pipe-legend").innerHTML = "";
-    for (const p of PIPE) { const sp = document.createElement("span"); sp.append(legendSwatch("square", p.color), p.name); $("mb-pipe-legend").append(sp); }
-    { const sp = document.createElement("span"); sp.textContent = `Plus ${plural(watching, "account")} on Watch that may need a call.`; $("mb-pipe-legend").append(sp); }
+    const wkStart = (w) => new Date(w.from * 864e5).toISOString().slice(0, 10);
+    stackChart($("mb-pipe"), { W: 880, cats: PIPE, unit: "engagement", aria: `Booked engagements per week for ${name}`,
+      bars: wk.map((w) => ({ label: fmt(wkStart(w)), tip: `Week commencing ${fmt(wkStart(w))}`, onClick: () => listWeek(w),
+        counts: Object.fromEntries(PIPE.map((p) => [p.k, w.items.filter((it) => it.k === p.k).length])) })) });
+    // Watch accounts are potential work, not bookings: named beside the chart, never in its totals
+    stackLegend($("mb-pipe-legend"), PIPE, `Not in the chart: ${plural(watching, "account")} on Watch that may need a call.`);
     listWeek(wk.find((w) => w.items.length) || wk[0]);
   }
 
