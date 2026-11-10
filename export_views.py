@@ -228,6 +228,7 @@ export = {
     "handovers": handovers(),
     "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
                  "stale_task_days": SETTINGS["cockpit"]["stale_task_days"],
+                 "below_median_points": SETTINGS["cockpit"]["below_median_points"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"],
                  "follow_up_days": SETTINGS["follow_ups"]["after_days"],

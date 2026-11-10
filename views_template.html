@@ -34,14 +34,14 @@
   --viz-qbr: #579F68;       /* sage: QBRs, booked or held */
   --viz-call: #8F68CB;      /* lavender: churn, growth and activation calls, follow-ups */
   --viz-renewal: #4493D0;   /* slate blue: renewals */
-  --viz-other: #5E665D;     /* stone: kickoffs, check-ins, other meetings (recedes). Review 10 Nov:
+  --viz-other: #636B62;     /* stone: kickoffs, check-ins, other meetings (recedes). Review 10 Nov:
                                #7E877C failed against sage (ΔE 9.5); this passes (16.8 normal, 14.6
                                deutan). A neutral by design, so under the chroma floor, and 2.8:1 on
                                the panel: its bars always carry a total and sit beside a legend */
   --viz-touch: #B9B3A5;     /* light stone: emails and workshops on the timeline (shape tells which) */
   --viz-measure: #7FA6CF;   /* steel blue: an amount over time (utilisation, a sieve stage, days) */
   --viz-measure-soft: #52708D;   /* the same, as a backdrop (weekly active users), 3:1 on the panel */
-  --viz-label: #0E1311;     /* a count printed inside a coloured segment */
+  --viz-label: #050706;     /* a count printed inside a coloured segment */
   --tip-bg: #0B0F0D;        /* tooltips: darker than the panels, in both themes (cream text) */
   /* Palette rules (validated with the dataviz validator):
      - status colours (good, warning, critical) only for state; amber is always a warning
@@ -496,7 +496,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <div class="grid2">
         <div class="panel">
           <h2>Flagged vs. what happened at renewal</h2>
-          <div id="oc-matrix"></div>
+          <div class="tablewrap" id="oc-matrix"></div>
           <p class="note">Lost = churned or downsized. Click a cell to list its accounts.</p>
         </div>
         <div class="panel">
@@ -1332,7 +1332,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   function pressChips(id) { document.querySelectorAll("#tl-picks .chip").forEach((c) => c.setAttribute("aria-pressed", String(c.id === "pick-" + id))); }
 
   // ---------------------------------------------------------------- onboarding
-  const GROUPS = [{ key: "welcomed", name: "Welcomed", color: "var(--viz-touch)" }, { key: "control (no email)", name: "Control (no email)", color: "var(--ink-3)" }];
+  const GROUPS = [{ key: "welcomed", name: "Welcomed", color: "var(--viz-touch)" }, { key: "control (no email)", name: "Control (no email)", color: "var(--viz-other)" }];   // a baseline is a receding neutral
   for (const g of GROUPS) { const s = document.createElement("span"); s.append(legendSwatch("circle", g.color), g.name); $("ob-legend").appendChild(s); }
   let obTier = "all";
   document.querySelectorAll("#ob-tier button").forEach((b) => b.addEventListener("click", () => {
@@ -1464,6 +1464,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         // the same value stacks in columns of three (middle, above, below), then a new column to
         // the right, so a dot never drifts onto a neighbouring day
         const col = Math.floor(n / 3), cyo = [0, -10, 10][n % 3];
+        if (ph && col > 0) {                               // phone: no room for a second column
+          const more = r.rs.filter((x) => (x.call_date ? String(Math.min(x.days_to_call, maxD)) : "none") === k).length - 3;
+          if (n === 3) { const t = el("text", { x: (a.call_date ? X(Math.min(a.days_to_call, maxD)) : noCallX) + 7, y: cyRow + 4, class: "val" }, svg); t.textContent = `+${more}`; }
+          continue;
+        }
         const cx = (a.call_date ? X(Math.min(a.days_to_call, maxD)) : noCallX) + col * 11;
         const cy = cyRow + cyo;
         const isGrowth = a.flag === "expansion";
@@ -1683,7 +1688,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const lin = (i) => { const v = parseInt(c[1].slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
     const L = 0.2126 * lin(0) + 0.7152 * lin(2) + 0.0722 * lin(4);
     const onCream = 0.81 / (L + 0.05), onDark = (L + 0.05) / 0.056;   // cream #E9E3D5 (L 0.76), near-black #0E1311
-    return onCream >= onDark ? "#E9E3D5" : "#0E1311";
+    if (onDark >= onCream) return "#0E1311";
+    return onCream >= 4.5 ? "#E9E3D5" : "#FFFFFF";                      // a mid blue on paper needs pure white (re-review 10 Nov)
   };
   const badge = (t) => `<span class="badge ${esc(t.action_status)}${t.action_status === "Open" && t.age_days >= STALE ? " stale" : ""}"` +
     `${t.action_status === "Open" && t.age_days >= STALE ? ` title="Open for ${t.age_days} days"` : ""}>${esc(t.action_status)}</span>`;
@@ -1878,7 +1884,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const g = el("g", { style: "cursor:pointer" }, svg);
       el("rect", { x, y: H - h, width: bw - 12, height: h, rx: 2, fill: b.from < LATE ? "var(--critical)" : "var(--viz-measure)" }, g);
       el("text", { x: x + (bw - 12) / 2, y: H - h - 5, "text-anchor": "middle", class: "val" }, g).textContent = b.items.length;
-      el("text", { x: x + (bw - 12) / 2, y: H + 16, "text-anchor": "middle" }, svg).textContent = b.to == null ? `${b.from}+` : `${b.from}–${b.to}`;
+      el("text", { x: x + (bw - 12) / 2, y: H + 16, "text-anchor": "middle" }, svg).textContent = b.to == null ? `${b.from}+` : isPhone() ? `${b.from}–` : `${b.from}–${b.to}`;
       g.addEventListener("click", () => listOutcomes(`Caught with ${b.to == null ? b.from + "+" : b.from + "–" + b.to} days of warning`, b.items));
     });
     el("text", { x: W / 2, y: H + 32, "text-anchor": "middle" }, svg).textContent = "days of warning";
@@ -2163,12 +2169,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // people only: a pool is a queue, its meetings are its members'
     const rows = all.filter((r) => people.includes(r.t) && r.t.owner_type !== "pool").sort((x, y) => KIND_ORDER[x.t.owner_type] - KIND_ORDER[y.t.owner_type]);
     const pc = (x) => Math.round(100 * x);               // compare what the reader sees
-    const low = rows.filter((r) => r.book && pc(r.met / r.book) < pc(med[r.t.owner_type].s));
-    $("ld-team-finding").textContent = rows.length ? `${low.length} of ${rows.length} owners met a smaller share of their book in 30 days than the median for their kind.` : "Nobody on the CS team in this segment.";
+    const GAP = D.settings.below_median_points ?? 10;      // a point or two under the median is noise on a small book
+    const low = rows.filter((r) => r.book && pc(r.met / r.book) <= pc(med[r.t.owner_type].s) - GAP);
+    $("ld-team-finding").textContent = rows.length ? `${low.length} of ${rows.length} owners met a share of their book in 30 days ${GAP}+ points below the median for their kind.` : "Nobody on the CS team in this segment.";
     $("ld-team").innerHTML = `<tr><th>Owner</th><th class="r">Book ARR</th><th class="r">At risk</th><th class="r">Meetings, 30 d</th><th class="r">Book met, 30 d</th></tr>` + rows.map((r) => {
       const share = r.book ? r.met / r.book : 0, m = med[r.t.owner_type];
       return `<tr><td>${esc(r.t.owner_name)}<small><br>${esc(r.t.region)}</small></td><td class="r num">${money(r.arr)}</td><td class="r num">${money(r.risk)}</td>` +
-        `<td class="r num">${r.meetings} <small>(median ${m.m})</small></td><td class="r num${pc(share) < pc(m.s) ? " bad" : ""}">${r.met} of ${r.book} (${Math.round(100 * share)}%) <small>(median ${Math.round(100 * m.s)}%)</small></td></tr>`; }).join("");
+        `<td class="r num">${r.meetings} <small>(median ${m.m})</small></td><td class="r num${r.book && pc(share) <= pc(m.s) - GAP ? " bad" : ""}">${r.met} of ${r.book} (${Math.round(100 * share)}%) <small>(median ${Math.round(100 * m.s)}%)</small></td></tr>`; }).join("");
   }
 
   // ---------------------------------------------------------------- my book: one owner's morning page
@@ -2226,7 +2233,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const t = total(b);
       if (t) el("text", { x: x + w / 2, y: y - 4, "text-anchor": "middle", class: "tot" }, g).textContent = t;
       el("rect", { x: L + i * bw, y: T - 14, width: bw, height: plotH + 14, fill: "transparent" }, g);    // hit target: the whole column
-      if (i % every === 0) el("text", { x: L + i * bw + bw / 2, y: H - 6, "text-anchor": "middle" }, svg).textContent = b.label;
+      if (i % every === 0) { const lastOne = i >= n - every;                 // near the right edge: end-anchored so it isn't cut
+        el("text", { x: lastOne ? Math.min(W, L + i * bw + bw / 2 + 20) : L + i * bw + bw / 2, y: H - 6, "text-anchor": lastOne ? "end" : "middle" }, svg).textContent = b.label; }
       hover(g, `<b>${b.tip}</b>` + [...cats].reverse().map((c) => `<div class="row"><span class="sw" style="background:${c.color}"></span><span>${c.name}</span><b>${b.counts[c.k] || 0}</b></div>`).join("") +
         `<div class="row tot"><span></span><span>Total</span><b>${plural(t, unit)}</b></div>` + (b.onClick ? '<div class="muted">Click to list them</div>' : ""));
       if (b.onClick) g.addEventListener("click", b.onClick);
