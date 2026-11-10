@@ -451,6 +451,10 @@ One JSON event per line, one file per day in `data/events/`.
   group a dim stone (was a near-twin of "welcomed"), Leadership's "book met" red only
   [cockpit] below_median_points (10) under the median, phone: a 4th equal dot is "+n",
   the last week label end-anchored, warning buckets say where they start.
+  Did it work?'s 2x2 (10 Nov 2026, Nikodem): hover names a cell's accounts, a click
+  lists them, keeps the cell selected and scrolls to the list, and "Show only these N
+  on every tab" pins them (seg.acc) and opens Leadership. Team-totals cells are counts,
+  not links (no pointer). The header no longer clips: Find's list shows over the page.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;
