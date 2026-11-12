@@ -115,6 +115,9 @@ if crm:
                         "else counts as active): " + ", ".join(f"{k!r} ({n})" for k, n in odd.items()))
         print(f"         status: {states.get('active', 0)} active, {states.get('churned', 0)} churned "
               f"(churned accounts are history only: no flags, on no page)")
+    for col in ("customer_since", "csm_since"):   # optional, for the trends
+        if col in crm[0] and (bad := [r["account_id"] for r in crm if r[col] and not to_date(r[col])]):
+            say("WARN", f"CRM: {count(len(bad), 'account')} with an unreadable {col} (use YYYY-MM-DD): {examples(bad)}")
     if odd := {r["region"] for r in crm} - REGIONS:
         say("WARN", f"CRM: regions without a time zone in settings.toml [regions] "
                     f"(emails go out on UTC): {', '.join(sorted(odd))}")
@@ -276,6 +279,8 @@ works = [
     ("Breadth signals (active users)", bool(users_seen), "needs events with a user_id"),
     ("QBR coming up / overdue", named_tier and any((r.get("next_qbr_date") or r.get("last_qbr_date")) for r in crm or []),
      f"needs {TIERS['named_csm']} accounts with QBR dates"),
+    ("Trends over time (weekly history of flags and tasks)", bool(first) and (last - first).days + 1 >= CHURN_DAYS + 28,
+     f"needs {CHURN_DAYS + 28} days of events"),
     ("Tasks with owners and managers", bool(owners), "needs the CS team table"),
     ("Journeys, time to action, last touch", bool(eng["meeting_held"] or eng["email_sent"]),
      "needs engagement history"),

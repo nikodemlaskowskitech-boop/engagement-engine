@@ -138,6 +138,10 @@ def connect():
                {u['contract_column']}::BIGINT       AS contracted_events
                {'' if 'pool_owner' in crm_cols else ', NULL::VARCHAR AS pool_owner'}  -- optional: a Scale account's named owner
                {'' if 'status' in crm_cols else ", 'active' AS status"}  -- optional: churned = left at its renewal
+               -- optional, for the trends (history.py): when the account first signed, and
+               -- when its CSM took it. Missing = the current term's start / always had one.
+               {'' if 'customer_since' in crm_cols else ', NULL::DATE AS customer_since'}
+               {'' if 'csm_since' in crm_cols else ', NULL::DATE AS csm_since'}
         FROM raw
     """)
     # crm = today's book (what the flags and the cockpit work on); crm_all keeps the
@@ -312,13 +316,19 @@ def connect():
     # action log) whose date has passed with no QBR held since. A QBR that keeps
     # moving must not hide a flag for ever: actions.py raises these as normal
     # tasks (never folded into a QBR again) and journeys.py escalates them.
+    # The action log as a view (line = the log's own order), so every view below
+    # reads it the same way and history.py can replay it as of an earlier day.
+    if os.path.exists("data/action_log.csv"):
+        con.sql("""CREATE VIEW action_log AS
+                   SELECT *, row_number() OVER () AS line
+                   FROM read_csv('data/action_log.csv', all_varchar = true)""")
     if os.path.exists("data/action_log.csv"):
         con.sql("""
             CREATE VIEW qbr_slips AS
             WITH covered AS (
                 SELECT account_id, flag, status, logged_on::DATE AS logged_on,
                        regexp_extract(outcome, '(\\d{4}-\\d{2}-\\d{2})$', 1)::DATE AS promised_qbr
-                FROM read_csv('data/action_log.csv', all_varchar = true)
+                FROM action_log
                 WHERE channel = 'qbr'
             )
             SELECT c.*
@@ -349,10 +359,11 @@ def connect():
     flag_names = ("activation", "churn", "expansion", "qbr", "journey")
     if os.path.exists("data/action_log.csv") and all(
             os.path.exists(f"data/flags_{f}.csv") for f in flag_names):
-        flag_files = " UNION ALL ".join(
+        # the flags standing today (history.py swaps in the flags as of an earlier day)
+        con.sql("CREATE VIEW open_flags AS " + " UNION ALL ".join(
             f"SELECT account_id, '{f}' AS flag, status FROM read_csv('data/flags_{f}.csv', all_varchar = true)"
-            for f in flag_names)
-        con.sql(f"""
+            for f in flag_names))
+        con.sql("""
             CREATE VIEW action_status AS
             WITH tasks AS (
                 -- tasks for people (cards and Slack digests); the latest send of each
@@ -362,13 +373,11 @@ def connect():
                        arg_max(action, line)         AS action,
                        max(logged_on)::DATE          AS sent_on
                 -- line: the log's own order, so two sends on one day still have a last one
-                FROM (SELECT *, row_number() OVER () AS line
-                      FROM read_csv('data/action_log.csv', all_varchar = true))
+                FROM action_log
                 WHERE channel IN ('card', 'queue')
                   AND account_id IN (SELECT account_id FROM crm)   -- not accounts that left the book
                 GROUP BY account_id, flag, status
             ),
-            open_flags AS ({flag_files}),
             done AS (
                 SELECT t.account_id, t.flag, t.status, min(e.event_date) AS done_on
                 FROM tasks t

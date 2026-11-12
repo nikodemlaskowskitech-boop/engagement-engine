@@ -285,6 +285,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
 .pickers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 @media (prefers-reduced-motion: no-preference) { .fade { animation: fade 0.25s ease-out; } @keyframes fade { from { opacity: 0.4; } to { opacity: 1; } } }
+  .trend-block { margin-top: 14px; border-top: 1px solid var(--rule); padding-top: 10px; }
+  .trend-chart svg { width: 100%; max-width: 440px; display: block; }   /* never blown up past its own size */
+  .trend-block h3 { font-size: 13px; font-weight: 600; margin: 8px 0 6px; color: var(--ink-2); }
 </style>
 
 <header>
@@ -423,12 +426,26 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <p class="finding small" id="ld-queue-finding"></p>
           <div class="examples tablewrap" id="ld-queue"></div>
           <p class="note">Tasks sent to a CSM or a pool that nobody has claimed in Slack or acted on yet, oldest first. Amber once a task has waited <span id="ld-queue-stale"></span> days.</p>
+          <div class="trend-block" id="ld-queue-trend-block">
+            <h3>Over the year, week by week</h3>
+            <div class="trend-chart" id="ld-queue-trend"></div>
+            <div class="legend" id="ld-queue-legend"></div>
+            <h3 id="ld-queue-week-title">Click a week to list what was waiting</h3>
+            <div class="tablewrap" id="ld-queue-week"></div>
+          </div>
         </div>
         <div class="panel">
           <h2>New Enterprise accounts with no CSM</h2>
           <p class="finding small" id="ld-nocsm-finding"></p>
           <div class="examples tablewrap" id="ld-nocsm"></div>
           <p class="note">Enterprise accounts are meant to have a named CSM from day one. CS ops gets an alert for each; this is how long it has been waiting.</p>
+          <div class="trend-block" id="ld-nocsm-trend-block">
+            <h3>Over the year, week by week</h3>
+            <div class="trend-chart" id="ld-nocsm-trend"></div>
+            <div class="legend" id="ld-nocsm-legend"></div>
+            <h3 id="ld-nocsm-week-title">Click a week to list the accounts</h3>
+            <div class="tablewrap" id="ld-nocsm-week"></div>
+          </div>
         </div>
       </div>
         <div class="panel">
@@ -739,6 +756,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
   $("asof").textContent = "Data as of " + fmt(D.as_of) + " 2026";
   const byId = Object.fromEntries(D.accounts.map((a) => [a.account_id, a]));
+  // The weekly history (history.py): accounts no longer in the book (they left, or never had a
+  // CRM row) come under keys of their own (ob_1, ...) with only their tier, region and owner
+  const HIST = D.history || { weeks: [], off_book: [], flags: [], tasks: [] };
+  const offBook = Object.fromEntries((HIST.off_book || []).map((a) => [a.account_id, a]));
   const ownerName = Object.fromEntries(D.team.map((t) => [t.owner_id, t.owner_name]));
   ownerName.automated = "Automated email";
   ownerName.cs_ops = "CS ops";
@@ -899,6 +920,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     }
     try { history.replaceState(null, "", "#" + v); } catch (e) { /* not allowed in some frames */ }
     hideTip();
+    if (v === "lead" && typeof drawLeadership === "function") drawLeadership();   // its trends draw at the panel's real width
   };
   document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => { $("tl-back").hidden = true; show(b.dataset.view); }));
 
@@ -1701,7 +1723,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     titleEl.textContent = `${title}: ${items.length} ${noun}${items.length === 1 ? "" : "s"}`;
     if (!items.length) { host.innerHTML = '<p class="note">No accounts here.</p>'; return; }
     const head = cols.map((c) => `<th${c.r ? ' class="r"' : ""}>${c.label}</th>`).join("");
-    const body = (short ? items.slice(0, 2) : items).map((it) => `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` +
+    // an account that's no longer in the book has no timeline: its row opens nothing
+    const body = (short ? items.slice(0, 2) : items).map((it) => (byId[it.account_id] ? `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` : "<tr>") +
       cols.map((c) => `<td${c.r ? ' class="r num"' : ""}>${c.get(it)}</td>`).join("") + "</tr>").join("");
     host.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` +
       (short && items.length > 2 ? `<button class="link" data-all>View all (${items.length})</button>` : "");
@@ -1712,7 +1735,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); });
     });
   }
-  const nameOf = (id) => esc(byId[id] ? byId[id].account_name : id);
+  const nameOf = (id) => byId[id] ? esc(byId[id].account_name)
+    : offBook[id] ? `<span class="muted">${offBook[id].why === "left" ? "An account that has since left" : "No CRM record (handoff gap)"}</span>` : esc(id);
   const MEETING_COLS = [
     { label: "Account", get: (t) => nameOf(t.account_id) },
     { label: "Meeting", get: (t) => esc(topicName(t.topic)) },
@@ -2145,6 +2169,59 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${a.renewal_date.slice(0, 4)}` },
     { label: "Action planned", get: (a) => { const p = planOf(a); return p ? planText(a, p) : '<span class="bad">none</span>'; } },
   ];
+  // Trends on the Leadership page, from the weekly history: the same segment as the rest
+  // of the page (an account that has since left counts in its team, region and tier).
+  const histIn = (id) => byId[id] ? inSeg(byId[id]) : (!seg.acc && !!offBook[id] && inSegBase(offBook[id]));
+  const weekLabel = (i) => fmt(HIST.weeks[i]);
+  function drawLeadTrends(STALE, who) {
+    const has = HIST.weeks.length > 1;
+    $("ld-queue-trend-block").hidden = $("ld-nocsm-trend-block").hidden = !has;
+    if (!has) return;
+    const W = HIST.weeks.length, ago = Math.max(0, W - 5);                // four weeks back
+    // 1. not picked up: tasks still Open that week, split by how long they had waited
+    const open = HIST.tasks.filter((r) => r[5] === "Open" && histIn(r[1]));
+    const qByWeek = HIST.weeks.map((_, i) => open.filter((r) => r[0] === i));
+    const QCATS = [{ k: "fresh", name: `Waiting under ${STALE} days`, color: "var(--viz-other)" },
+                   { k: "stale", name: `Waiting ${STALE}+ days`, color: "var(--warning)" }];
+    const TASK_COLS = [
+      { label: "Account", get: (t) => nameOf(t.account_id) },
+      { label: "Task", get: (t) => `${esc(t.flag)} ${esc(t.status)}` },
+      { label: "With", get: (t) => esc(who(t.routed_to)) },
+      { label: "Waiting", r: true, get: (t) => `<span class="badge Open${t.age_days >= STALE ? " stale" : ""}">${t.age_days} days</span>` },
+    ];
+    const asTask = (r) => ({ account_id: r[1], flag: r[2], status: r[3], routed_to: r[4], age_days: r[6] });
+    const tw = (id) => Math.min(440, $(id).clientWidth || 440);          // the panel's width (hidden: a default)
+    stackChart($("ld-queue-trend"), { W: tw("ld-queue-trend"), H: 140, cats: QCATS, unit: "task", totals: "last",
+      aria: "Tasks not picked up, week by week",
+      bars: qByWeek.map((rs, i) => ({ label: weekLabel(i), tip: `Week ending ${fmtFull(HIST.weeks[i])}`,
+        counts: { fresh: rs.filter((r) => r[6] < STALE).length, stale: rs.filter((r) => r[6] >= STALE).length },
+        onClick: () => accountList($("ld-queue-week"), $("ld-queue-week-title"), `Not picked up, week ending ${fmtFull(HIST.weeks[i])}`,
+          rs.map(asTask).sort((a, b) => b.age_days - a.age_days), TASK_COLS, false, "task") })) });
+    stackLegend($("ld-queue-legend"), QCATS);
+    $("ld-queue-week-title").textContent = "Click a week to list what was waiting"; $("ld-queue-week").innerHTML = "";
+    const qNow = qByWeek[W - 1].length, qThen = qByWeek[ago].length, qMax = Math.max(...qByWeek.map((r) => r.length));
+    const peak = qByWeek.findIndex((r) => r.length === qMax);
+    $("ld-queue-finding").textContent += ` Four weeks ago: ${qThen}; the most in a week this year: ${qMax} (${weekLabel(peak)}).`;
+
+    // 2. new Enterprise accounts with no CSM, each week
+    const nc = HIST.flags.filter((r) => r[3] === "No CSM assigned" && histIn(r[1]));
+    const ncByWeek = HIST.weeks.map((_, i) => nc.filter((r) => r[0] === i));
+    const NCATS = [{ k: "n", name: "Enterprise accounts with no CSM", color: "var(--warning)" }];
+    const NC_COLS = [
+      { label: "Account", get: (a) => nameOf(a.account_id) },
+      { label: "Region", get: (a) => esc((byId[a.account_id] || offBook[a.account_id] || {}).region || "") },
+      { label: "Signed", r: true, get: (a) => byId[a.account_id] ? `${fmt(byId[a.account_id].contract_start)}<small><br>${a.days} days before</small>` : "–" },
+    ];
+    stackChart($("ld-nocsm-trend"), { W: tw("ld-nocsm-trend"), H: 140, cats: NCATS, unit: "account", totals: "last",
+      aria: "Enterprise accounts with no CSM, week by week",
+      bars: ncByWeek.map((rs, i) => ({ label: weekLabel(i), tip: `Week ending ${fmtFull(HIST.weeks[i])}`, counts: { n: rs.length },
+        onClick: () => accountList($("ld-nocsm-week"), $("ld-nocsm-week-title"), `No CSM, week ending ${fmtFull(HIST.weeks[i])}`,
+          rs.map((r) => ({ account_id: r[1], days: byId[r[1]] ? day(HIST.weeks[i]) - day(byId[r[1]].contract_start) : null })), NC_COLS, false) })) });
+    stackLegend($("ld-nocsm-legend"), NCATS);
+    $("ld-nocsm-week-title").textContent = "Click a week to list the accounts"; $("ld-nocsm-week").innerHTML = "";
+    const everNc = new Set(nc.map((r) => r[1])).size;
+    $("ld-nocsm-finding").textContent += everNc ? ` Since ${fmtFull(HIST.weeks[0])}, ${plural(everNc, "new Enterprise account")} waited for one.` : "";
+  }
   function drawLeadership() {
     if (!$("view-lead")) return;                     // not on this person's page
     const accs = D.accounts.filter(inSeg), person = (a) => a.tier !== "Self-service";
@@ -2190,6 +2267,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       { label: "Signed", get: (a) => `${fmt(a.contract_start)}<small><br>${a.waitDays} days ago</small>` },
       { label: "ARR", r: true, get: (a) => money(a.arr) },
     ], "Every Enterprise account in this segment has a CSM.", 5);
+    drawLeadTrends(STALE, who);
     // the trail: four stages, each a cairn whose colour and height say how urgent it is
     const pct = (n, d) => d ? `${n} of ${d} (${Math.round(100 * n / d)}%)` : `${n}`;
     const notCalled = act.filter((a) => !called(a)), noPlan = act.filter((a) => !planned(a));
@@ -2292,7 +2370,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // segment's count inside it only when it fits, recessive gridlines, every week labelled when
   // there's room, and a tooltip with the full breakdown in the same colours. bars: [{label,
   // tip, counts:{k:n}, onClick?}]. Returns nothing; draws into host.
-  const stackChart = (host, { bars, cats, W, H = 170, aria, unit }) => {
+  const stackChart = (host, { bars, cats, W, H = 170, aria, unit, totals = "all" }) => {
     host.innerHTML = "";
     W = fitW(W);                                                         // a phone draws at its own width
     const L = 30, T = 18, B = 24, plotH = H - T - B, n = bars.length, bw = (W - L) / n, gap = Math.min(10, bw * 0.18);
@@ -2306,7 +2384,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       el("text", { x: L - 6, y: yOf(v) + 4, "text-anchor": "end" }, svg).textContent = v;
     }
     el("line", { x1: L, x2: W, y1: yOf(0), y2: yOf(0), class: "base" }, svg);
-    const every = bw >= 46 ? 1 : bw >= 26 ? 2 : bw >= 14 ? 3 : 4;
+    const ticks = [];
+    const every = bw >= 46 ? 1 : bw >= 26 ? 2 : bw >= 14 ? 3 : Math.ceil(48 / bw);   // a year of weeks: a label every ~48px
     bars.forEach((b, i) => {
       const g = el("g", { class: "bar", style: b.onClick ? "cursor:pointer" : "" }, svg), x = L + i * bw + gap / 2, w = bw - gap;
       let y = yOf(0);
@@ -2319,14 +2398,19 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         y -= h;
       }
       const t = total(b);
-      if (t) el("text", { x: x + w / 2, y: y - 4, "text-anchor": "middle", class: "tot" }, g).textContent = t;
+      if (t && totals === "all") el("text", { x: x + w / 2, y: y - 4, "text-anchor": "middle", class: "tot" }, g).textContent = t;
+      if (t && totals === "last" && i === n - 1) el("text", { x: x + w, y: y - 4, "text-anchor": "end", class: "tot" }, g).textContent = t;   // a long trend: today's total only
       el("rect", { x: L + i * bw, y: T - 14, width: bw, height: plotH + 14, fill: "transparent" }, g);    // hit target: the whole column
-      if (i % every === 0) { const lastOne = i >= n - every;                 // near the right edge: end-anchored so it isn't cut
-        el("text", { x: lastOne ? Math.min(W, L + i * bw + bw / 2 + 20) : L + i * bw + bw / 2, y: H - 6, "text-anchor": lastOne ? "end" : "middle" }, svg).textContent = b.label; }
+      if ((n - 1 - i) % every === 0) { const lastOne = i === n - 1;     // counted from today, so the latest week always has its label (end-anchored, never cut)
+        const tk = el("text", { x: lastOne ? Math.min(W, L + i * bw + bw / 2 + 20) : L + i * bw + bw / 2, y: H - 6, "text-anchor": lastOne ? "end" : "middle" }, svg);
+        tk.textContent = b.label; ticks.push(tk); }
       hover(g, `<b>${b.tip}</b>` + [...cats].reverse().map((c) => `<div class="row"><span class="sw" style="background:${c.color}"></span><span>${c.name}</span><b>${b.counts[c.k] || 0}</b></div>`).join("") +
         `<div class="row tot"><span></span><span>Total</span><b>${plural(t, unit)}</b></div>` + (b.onClick ? '<div class="muted">Click to list them</div>' : ""));
       if (b.onClick) g.addEventListener("click", b.onClick);
     });
+    // the latest week's label is end-anchored at the edge: if it would touch the one before, that one goes
+    if (ticks.length > 1) { const a = ticks[ticks.length - 2].getBBox(), z = ticks[ticks.length - 1].getBBox();
+      if (a.width && a.x + a.width + 4 > z.x) ticks[ticks.length - 2].remove(); }
   };
   const stackLegend = (host, cats, aside) => {
     host.innerHTML = "";

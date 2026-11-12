@@ -93,7 +93,7 @@ state_prefix = "state/"        # state carried between runs: upload.py puts the 
 # asks (request_briefs.py sends {"briefs": true}; nothing else can). export_views.py runs again
 # after it, so the cockpit shows the briefs and whether they're current.
 engine_steps = ["flags.py", "journeys.py", "team_report.py", "backtest.py",
-                "onboarding_report.py", "export_views.py", "handover.py --dry-run", "export_views.py",
+                "onboarding_report.py", "history.py", "export_views.py", "handover.py --dry-run", "export_views.py",
                 "roles.py --site", "to_parquet.py"]
 briefs_step = "handover.py"
 # Steps whose failure is a warning, not a failed run: the briefs call an outside API, and if
@@ -174,6 +174,11 @@ site_price_class = "PriceClass_100"   # edge locations in Europe and North Ameri
 # certificate is issued and prints its ARN for the line below. Then cdk deploy. Neither is a secret.
 site_domain = "cairnpath.nikodem-laskowski.com"
 site_certificate_arn = "arn:aws:acm:us-east-1:809071263914:certificate/fd64b2a2-8b18-45e5-8255-b7fd8e36c489"
+
+[history]
+# history.py: the flags and the task queue replayed week by week, for the trends
+step_days = 7      # one snapshot every this many days, back from the as-of date
+min_days = 90      # ...as long as this many days of data lie behind it (the churn window)
 
 [cockpit]
 # Decisions saved in the published cockpit (cockpit_sync.py checks every one again: never trust the page).
@@ -263,6 +268,7 @@ scope_days = 45           # only contracts from the last 45 days are checked
 window_days = 14          # activation must happen within 14 days of contract start
 min_users = 2             # "activated" needs at least this many active users
 silent_after_days = 10    # no events at all after this many days = Silent
+renewal_seen_days = 30     # events this long before a term began = a customer renewing, not onboarding
 
 [churn]
 util_below = 40           # 30-day utilisation under this (%) counts as low

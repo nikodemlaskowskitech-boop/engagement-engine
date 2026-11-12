@@ -81,6 +81,8 @@ One row per account, CSV with a header.
 | next_qbr_date | date | No | QBR coming up, and QBR first |
 | arr | number | No | Annual recurring revenue (some CRMs call it annual order value). Missing = estimated from contracted volume x the list price in settings.toml [money], marked as an estimate. Name the column in [money] arr_column |
 | status | text | No | `active` (or empty) or `churned`: a customer that left at its renewal (its `renewal_date` is the day it left). Churned accounts are on no page and raise no flag, but their events stay in the history, so they aren't mistaken for a handoff gap. Missing column = everyone active |
+| customer_since | date | No | When the account first signed (a renewal keeps it). The trends (history.py) count an account in the book from this day. Missing = from the current term's `contract_start`, so a renewed account counts only from its latest renewal |
+| csm_since | date | No | When the current CSM took the account (a CRM's owner-field history). The trends count an Enterprise account as "no CSM" before this day. Missing = it always had one |
 
 Example:
 ```csv

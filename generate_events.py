@@ -29,6 +29,8 @@ from pathlib import Path
 
 # --- Settings -------------------------------------------------------------
 
+SLOW_HANDOFF_SHARE = 0.3       # new Enterprise logos whose CSM came weeks late...
+SLOW_HANDOFF_DAYS = (18, 40)   # ...this many days after the contract started (else 1-6)
 SEED = 42                      # same seed = same data every run
 END_DATE = date(2026, 10, 18)  # last day of data ("today" for the flags = the day after)
 DAYS = 365                     # a year of history, so trends and "as of" views have something to show
@@ -392,7 +394,27 @@ def build_accounts():
     for acc in accounts:
         acc["contract"] = round(CONTRACT_SIZE[acc["tier"]] * 2 ** size_rng.uniform(-1, 1), -6)
     plan_episodes(accounts, names)
+    set_csm_since(accounts)
     return accounts
+
+
+def set_csm_since(accounts):
+    """When the account's CSM took it (CRM column csm_since: a real CRM keeps the
+    owner field's history). A new Enterprise logo waits a few days for its CSM, and
+    now and then a few weeks (a slow handoff): the gap the leader's "no CSM" trend
+    shows. Everyone else has had theirs since they became a customer. Own random
+    generator, so nothing else moves."""
+    rng = random.Random(SEED + 13)
+    for acc in accounts:
+        acc["csm_since"] = None
+        if not acc["csm"]:
+            continue
+        new = PERSONALITIES[acc["personality"]]["lifecycle"] == "new" or acc.get("first_year")
+        if new:
+            lag = rng.randint(*SLOW_HANDOFF_DAYS) if rng.random() < SLOW_HANDOFF_SHARE else rng.randint(1, 6)
+            acc["csm_since"] = acc["contract_start"] + timedelta(days=lag)
+        else:
+            acc["csm_since"] = acc["since"]
 
 
 def set_customer_since(accounts):
@@ -565,7 +587,7 @@ def write_crm(accounts):
     path = OUT_DIR / "crm_accounts.csv"
     columns = ["account_id", "account_name", "tier", "region", "contract_start", "renewal_date",
                "contracted_events", "add_ons", "csm_owner", "cs_pool", "pool_owner", "last_qbr_date",
-               "next_qbr_date", "arr", "status"]
+               "next_qbr_date", "arr", "status", "customer_since", "csm_since"]
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
@@ -589,6 +611,8 @@ def write_crm(accounts):
                 "next_qbr_date": acc["next_qbr"].isoformat() if acc["next_qbr"] else "",
                 "arr": arr_of(acc),
                 "status": "churned" if acc["lost"] else "active",   # churned: left at its renewal
+                "customer_since": acc["since"].isoformat(),         # first signed (renewals keep it)
+                "csm_since": acc["csm_since"].isoformat() if acc["csm_since"] else "",
             })
     return path
 
@@ -783,7 +807,8 @@ def engagement_for_account(rng, acc):
                 meeting(day, "qbr")
                 day += timedelta(days=91 + rng.randint(-7, 7))
         if is_new:
-            meeting(start + timedelta(days=rng.randint(*style["act_days"])), "kickoff")
+            kickoff = start + timedelta(days=rng.randint(*style["act_days"]))
+            meeting(max(kickoff, acc["csm_since"] + timedelta(days=2)), "kickoff")   # once the CSM has it
         elif acc["personality"] in ("healthy", "power_user", "declining", "shelfware", "slipping"):
             day = START_DATE + timedelta(days=rng.randint(0, style["check_in_days"]))
             while day <= END_DATE:

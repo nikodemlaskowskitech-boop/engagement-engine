@@ -673,6 +673,71 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // --- Trends from the weekly history (history.py), 12 Nov 2026 ---
+  {
+    const H = D.history, W = H.weeks.length, last = W - 1;
+    const byIdT = Object.fromEntries(D.accounts.map((a) => [a.account_id, a]));
+    const offT = Object.fromEntries(H.off_book.map((a) => [a.account_id, a]));
+    const accOf = (id) => byIdT[id] || offT[id] || {};
+    check(W >= 20, `history: ${W} weekly snapshots`);
+    check(H.weeks[last] === D.as_of, "history: the last week is the as-of date", H.weeks[last]);
+    check(!JSON.stringify(H).match(/acc_\d+/g)?.some((id) => !byIdT[id]), "history: no account id outside today's book (those travel as ob_ keys)");
+    const openNow = D.tasks.filter((t) => t.action_status === "Open").length;
+    const openLast = H.tasks.filter((r) => r[0] === last && r[5] === "Open").length;
+    check(openLast === openNow, `history: the last week's queue = today's (${openNow} not picked up)`, `${openLast}`);
+    const ncNow = D.accounts.filter((a) => a.tier === "Enterprise" && a.flags.some((f) => f.status === "No CSM assigned")).length;
+    const ncLast = H.flags.filter((r) => r[0] === last && r[3] === "No CSM assigned").length;
+    check(ncLast === ncNow, `history: the last week's Enterprise accounts with no CSM = today's (${ncNow})`, `${ncLast}`);
+    for (const width of [1300, 390]) {
+      const { page, errors } = await open(browser, { width, scheme: "dark" });
+      await tab(page, "lead");
+      const bars = await page.$$eval("#ld-queue-trend g.bar", (gs) => gs.length);
+      check(bars === W, `${width}px: the queue trend has one bar per week (${W})`, `${bars}`);
+      const tot = await page.$$eval("#ld-queue-trend text.tot", (ts) => ts.map((t) => t.textContent));
+      check(tot.length === 1 && +tot[0] === openNow, `${width}px: only today's bar carries its total (${openNow})`, JSON.stringify(tot));
+      for (const id of ["ld-queue-trend", "ld-nocsm-trend"]) {
+        const labels = await page.$$eval(`#${id} svg > text`, (ts) => ts.filter((t) => !/^\d+$/.test(t.textContent)).map((t) => { const b = t.getBoundingClientRect(); return { x: b.left, r: b.right, t: t.textContent, px: parseFloat(getComputedStyle(t).fontSize) * t.ownerSVGElement.getBoundingClientRect().width / t.ownerSVGElement.viewBox.baseVal.width }; }));
+        const clash = labels.slice(1).filter((l, i) => l.x < labels[i].r + 2).map((l) => l.t);
+        check(labels.length >= 3 && !clash.length, `${width}px ${id}: week labels don't touch (${labels.length})`, clash.join(", "));
+        check(labels.length && labels[labels.length - 1].t === new Date(D.as_of + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }), `${width}px ${id}: the last label is today's week`, labels.map((l) => l.t).slice(-2).join(" | "));
+        check(labels.every((l) => l.px >= 9.5), `${width}px ${id}: labels 10px or larger on screen`, labels.map((l) => l.px.toFixed(1)).slice(0, 3).join(", "));
+      }
+      // a click on today's bar lists every task not picked up
+      await page.$eval(`#ld-queue-trend g.bar:nth-of-type(${W})`, (g) => g.dispatchEvent(new MouseEvent("click", { bubbles: true }))); await page.waitForTimeout(100);
+      const listed = await page.$$eval("#ld-queue-week tbody tr", (r) => r.length);
+      check(listed === openNow, `${width}px: today's bar lists the ${openNow} tasks`, `${listed}`);
+      check(!errors.length, `${width}px: no script errors on the trends`, errors.join("; "));
+      await page.close();
+    }
+    // a week with an account that has since left: counted, named only as such, opens nothing
+    const goneWeek = H.tasks.find((r) => r[5] === "Open" && offT[r[1]]) || H.flags.find((r) => r[3] === "No CSM assigned" && offT[r[1]]);
+    if (goneWeek) {
+      const { page } = await open(browser);
+      await tab(page, "lead");
+      const isTask = goneWeek.length > 4, host = isTask ? "ld-queue" : "ld-nocsm";
+      await page.$eval(`#${host}-trend g.bar:nth-of-type(${goneWeek[0] + 1})`, (g) => g.dispatchEvent(new MouseEvent("click", { bubbles: true }))); await page.waitForTimeout(100);
+      const rows = await page.$$eval(`#${host}-week tbody tr`, (rs) => rs.map((r) => ({ t: r.textContent, click: r.classList.contains("click") })));
+      const gone = rows.filter((r) => /since left|No CRM record/.test(r.t));
+      check(gone.length && gone.every((r) => !r.click), "an account that has since left is listed as such and opens nothing", JSON.stringify(rows.slice(0, 3)));
+      await page.close();
+    }
+    // the segment applies: Sophie's team, the week with most of its tasks waiting
+    {
+      const mine = (id) => accOf(id).manager === "mgr_sophie";
+      const per = H.weeks.map((_, i) => H.tasks.filter((r) => r[0] === i && r[5] === "Open" && mine(r[1])).length);
+      const wk = per.indexOf(Math.max(...per));
+      const { page } = await open(browser);
+      await tab(page, "lead"); await segment(page, { manager: "mgr_sophie" });
+      await page.$eval(`#ld-queue-trend g.bar:nth-of-type(${wk + 1})`, (g) => g.dispatchEvent(new MouseEvent("click", { bubbles: true }))); await page.waitForTimeout(100);
+      const listed = await page.$$eval("#ld-queue-week tbody tr", (r) => r.length);
+      check(listed === per[wk], `Sophie's team: the week of ${H.weeks[wk]} lists her team's ${per[wk]} waiting tasks`, `${listed}`);
+      const ncTeam = new Set(H.flags.filter((r) => r[3] === "No CSM assigned" && mine(r[1])).map((r) => r[1])).size;
+      const nf = await page.textContent("#ld-nocsm-finding");
+      check(ncTeam ? nf.includes(`${ncTeam} new Enterprise account`) : !/waited for one/.test(nf), `Sophie's team: ${ncTeam} new Enterprise accounts waited for a CSM this year`, nf);
+      await page.close();
+    }
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
