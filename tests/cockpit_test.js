@@ -54,6 +54,12 @@ async function open(browser, opts = {}) {
   await page.waitForTimeout(700);
   return { page, errors };
 }
+// a clicked list shows its first 10 rows: open it in full before counting
+const listAll = async (page, host) => {
+  const b = await page.$(`#${host} [data-all]`);
+  if (b && /Show all/.test(await b.textContent())) { await b.click(); await page.waitForTimeout(60); }
+  return page.$$eval(`#${host} tbody tr`, (r) => r.length);
+};
 const tab = async (page, t) => { await page.click("#tab-" + t); await page.waitForTimeout(150); };
 const segment = async (page, values) => {
   await page.click("#seg-reset").catch(() => {});
@@ -704,7 +710,7 @@ const segment = async (page, values) => {
       }
       // a click on today's bar lists every task not picked up
       await page.$eval(`#ld-queue-trend g.bar:nth-of-type(${W})`, (g) => g.dispatchEvent(new MouseEvent("click", { bubbles: true }))); await page.waitForTimeout(100);
-      const listed = await page.$$eval("#ld-queue-week tbody tr", (r) => r.length);
+      const listed = await listAll(page, "ld-queue-week");
       check(listed === openNow, `${width}px: today's bar lists the ${openNow} tasks`, `${listed}`);
       check(!errors.length, `${width}px: no script errors on the trends`, errors.join("; "));
       await page.close();
@@ -729,7 +735,7 @@ const segment = async (page, values) => {
       const { page } = await open(browser);
       await tab(page, "lead"); await segment(page, { manager: "mgr_sophie" });
       await page.$eval(`#ld-queue-trend g.bar:nth-of-type(${wk + 1})`, (g) => g.dispatchEvent(new MouseEvent("click", { bubbles: true }))); await page.waitForTimeout(100);
-      const listed = await page.$$eval("#ld-queue-week tbody tr", (r) => r.length);
+      const listed = await listAll(page, "ld-queue-week");
       check(listed === per[wk], `Sophie's team: the week of ${H.weeks[wk]} lists her team's ${per[wk]} waiting tasks`, `${listed}`);
       const ncTeam = new Set(H.flags.filter((r) => r[3] === "No CSM assigned" && mine(r[1])).map((r) => r[1])).size;
       const nf = await page.textContent("#ld-nocsm-finding");
@@ -762,11 +768,21 @@ const segment = async (page, values) => {
     const labels = await page.$$eval("#cs-bridge .hbar.click .lbl", (ls) => ls.map((l) => l.textContent));
     for (const [i, l] of labels.entries()) {
       await page.$$eval("#cs-bridge .hbar.click", (rs, k) => rs[k].click(), i); await page.waitForTimeout(80);
-      const n = await page.$$eval("#cs-list tbody tr", (r) => r.length);
+      const n = await listAll(page, "cs-list");
       const want = /Churn/.test(l) ? counts.churned : /Downsell/.test(l) ? counts.contraction : counts.expansion;
       check(n === want && l.includes(`(${want})`), `business case: "${l}" lists ${want} accounts`, `${n}`);
     }
     await page.$$eval("#cs-bridge .hbar.click", (rs) => rs[0].click()); await page.waitForTimeout(80);
+    // a long list shows 10 rows and "Show all (n)", opens in full, and folds back (Nikodem, 12 Nov 2026)
+    await page.$$eval("#cs-bridge .hbar.click", (rs) => rs[0].click()); await page.waitForTimeout(80);
+    const fold = async () => page.$eval("#cs-list", (h) => ({ rows: h.querySelectorAll("tbody tr").length, btn: (h.querySelector("[data-all]") || {}).textContent }));
+    const f1 = await fold();
+    await page.click("#cs-list [data-all]"); await page.waitForTimeout(60);
+    const f2 = await fold();
+    await page.click("#cs-list [data-all]"); await page.waitForTimeout(60);
+    const f3 = await fold();
+    check(Y.churned_n > 11 ? (f1.rows === 10 && f1.btn === `Show all (${Y.churned_n})` && f2.rows === Y.churned_n && f2.btn === "Show fewer" && f3.rows === 10) : true,
+      `a long list shows 10 of ${Y.churned_n}, opens in full and folds back`, JSON.stringify([f1, f2, f3]));
     const churnRows = await page.$$eval("#cs-list tbody tr", (rs) => rs.map((r) => [/since left/.test(r.textContent), r.classList.contains("click")]));
     check(churnRows.length && churnRows.every(([gone, click]) => !gone || !click), "business case: an account that left is listed as such and opens nothing");
     // the forecast: the data's rule and what happened match the export, and a click lists its accounts
@@ -774,14 +790,14 @@ const segment = async (page, values) => {
     const money = (v) => Math.abs(v) >= 1e6 ? "€" + (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : "€" + Math.round(v / 1000) + "k";
     check(fc.includes(money(F.data_loss)) && fc.includes(money(F.actual_loss)), `business case: forecast ${money(F.data_loss)} against ${money(F.actual_loss)} that happened`, fc.slice(0, 120));
     await page.$$eval("#cs-fc .hbar.click", (rs) => rs[0].click()); await page.waitForTimeout(80);
-    const fcRows = await page.$$eval("#cs-list tbody tr", (r) => r.length);
+    const fcRows = await listAll(page, "cs-list");
     check(fcRows === R.renewals_ahead.filter((r) => r[3] > 0).length, `business case: "Data's rule" lists its ${fcRows} renewals`);
     // what a call is worth: the export's groups, and today's accounts not called
     const cw = await page.innerText("#cs-call");
     const g = Object.fromEntries(R.calls.map((c) => [c.grp, c]));
     check(cw.includes(p1(g.in_time.kept_share)) && cw.includes(p1(g.late_or_never.kept_share)), "business case: kept shares match the export", cw.slice(0, 120));
     await page.click("#cs-call-waiting"); await page.waitForTimeout(80);
-    const wn = await page.$$eval("#cs-list tbody tr", (r) => r.length);
+    const wn = await listAll(page, "cs-list");
     check(wn === R.call_waiting.length, `business case: ${R.call_waiting.length} Act accounts not called yet are listed`, `${wn}`);
     // the segment applies: Enterprise only
     await segment(page, { tier: "Enterprise" });
