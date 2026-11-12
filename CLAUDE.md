@@ -257,8 +257,22 @@ One JSON event per line, one file per day in `data/events/`.
   handoff_gap) mixed by weight (new customers sign all through the window
   and ramp their volume up over the first month; shelfware is flat at about
   a quarter of the contract;
-  stalled and silent ones are recent), 90 days of events, the CRM table and the
-  CS team table. Three Enterprise accounts are covered from
+  stalled and silent ones are recent), 365 days of events (12 Nov 2026: was 90),
+  the CRM table and the CS team table. Each personality's story plays out over the
+  last ARC_DAYS (90); before that the account sits at its normal level, so today's
+  flags read as before. The year before: new logos (FIRST_YEAR_SHARE of the existing
+  accounts whose term started during the year signed then, onboarding and ramping
+  up, with the welcome email or the control group), and EPISODES (70) dips: the
+  owner's style decides whether and when they call; called within 14 days the
+  account recovers 45% of the time, otherwise 20% (a planted effect, like the
+  welcome email's). Recovered: the dip sits on one of today's healthy accounts. Not
+  recovered: a lost account (same tier, owner and region) that churns at its
+  renewal and leaves the book: CRM status = churned, renewal_date = the day it left,
+  no events after. Quarterly QBRs across the year. Writes data/renewal_history.csv
+  (the renewals inside the year: renewed, or churned for the lost accounts). Tasks
+  and growth calls for a personality's story only look at the last 90 days
+  (visible_day story_only), so a power user above 80% all year didn't become a
+  growth task in November. Three Enterprise accounts are covered from
   another region (CROSS_REGION_COVER), so team and region differ. About 4 in 10 accounts have a champion (one user far more
   active than the rest). Product use follows a working week (quiet
   weekends); event volume doesn't (the customer's end users never stop).
@@ -279,16 +293,26 @@ One JSON event per line, one file per day in `data/events/`.
   welcome group): for testing only, the flags must never read it.
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
   with the views events (schema declared explicitly), engagement (the CS
-  history, same schema), crm, cs_team, as_of
-  and utilisation, monthly_usage (utilisation and users per 30-day month),
+  history, same schema), crm (today's book: churned accounts left out), crm_all
+  (with them, so their old events aren't a handoff gap), cs_team, as_of
+  and utilisation, monthly_usage (utilisation and users per 30-day month; month 1
+  has a start, as_of - 90), weekly_users (active users this week vs. the average of
+  the last 13 weeks; the churn flag's breadth signal),
   qbr_schedule (QBR coming up / overdue), qbr_slips (flags handed to a
   QBR that didn't happen, from the action log), action_status (every task
   sent to a person: Open, Claimed, Done or Resolved, and its age; routed_to
-  is whoever has it now, after a manager's reassignment),
+  is whoever has it now, after a manager's reassignment; today's book only),
   daily_util_30d (30-day
   utilisation on every day, rounded like the flags), last_touch (last CS touch,
   last meeting, getting-started email opened or not, per account).
   Every script uses it; define views here, once.
+- `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
+  2026: two windows had no start, so a year of data made every account look like
+  it had lost most of its users, and "month 1" summed ten months). A perfectly flat
+  account over 365 days in a temporary folder: months 1 to 3 equal, weekly users
+  10 against an average of 10; crm leaves out a churned account and crm_all keeps
+  it. Fails on the old code. Run it on any PR that touches cairnpath_db.py or a
+  window in the flags.
 - `explore.py`: DuckDB summaries by tier, region and CSM, plus CS
   engagement week by week and meetings by owner.
 - `flags.py`: the activation, churn and expansion flags. One row per
@@ -310,8 +334,8 @@ One JSON event per line, one file per day in `data/events/`.
   180 days after the data: renewed, expanded, downsized, churned; written by
   the generator with its own random generator, including surprise churn no
   flag can see, and better odds for declining accounts that got a churn
-  call): recall, precision, warning time (first day under the churn line to
-  renewal; under [backtest] too_late_days = too late), misses by name, and
+  call): recall, precision, warning time (the first day of the current run
+  under the churn line to renewal; under [backtest] too_late_days = too late), misses by name, and
   churn with vs. without a churn call (Act accounts only: mixing flag types
   confounds it), and the sieve read like a funnel (churn signals -> to
   automation or a person -> Act -> called -> called within 14 days ->
@@ -334,8 +358,9 @@ One JSON event per line, one file per day in `data/events/`.
   still Open after 5 days -> back to that manager. Saved
   to `data/flags_journey.csv`, same columns as the flags.
 - `team_report.py`: time to action by owner and manager (run `flags.py`
-  and `journeys.py` first). Signal date = first day the account's 30-day
-  utilisation crossed the flag's line (rebuilt from usage); call date =
+  and `journeys.py` first). Signal date = the first day of the account's
+  current run over the flag's line (30-day utilisation, rebuilt from usage; an
+  earlier dip it recovered from doesn't count; the lines come from settings); call date =
   first churn, growth or activation call (check-ins don't count; a QBR
   counts when the signal came in the 30 days before it, column via);
   a call up to 14 days before the signal counts as 0 days ("called
