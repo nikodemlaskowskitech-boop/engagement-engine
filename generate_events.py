@@ -31,6 +31,11 @@ from pathlib import Path
 
 SLOW_HANDOFF_SHARE = 0.3       # new Enterprise logos whose CSM came weeks late...
 SLOW_HANDOFF_DAYS = (18, 40)   # ...this many days after the contract started (else 1-6)
+# The three hand-written stories (stories/) are about these accounts, so their
+# personality is fixed whatever the weights draw: Yarrow Studio declining,
+# Nettle Foods growing, Driftwood Labs shelfware.
+STORY_ACCOUNTS = {"acc_024": "declining", "acc_012": "power_user", "acc_156": "shelfware"}
+STORY_RENEWALS = {"acc_024": date(2027, 1, 31), "acc_012": date(2026, 12, 15), "acc_156": date(2026, 11, 13)}
 SEED = 42                      # same seed = same data every run
 END_DATE = date(2026, 10, 18)  # last day of data ("today" for the flags = the day after)
 DAYS = 365                     # a year of history, so trends and "as of" views have something to show
@@ -114,7 +119,7 @@ TRAILING_LAG_DAYS = 15     # a 30-day average crosses a line about 15 days after
 # --- The year before the current story --------------------------------------------
 # New logos: of the existing accounts whose current term started during the year,
 # this share signed then (a new customer); the rest renewed that day.
-FIRST_YEAR_SHARE = 0.25     # a book growing about 20% a year in new logos
+FIRST_YEAR_SHARE = 0.12     # new logos: with the new customers of today's story, about 25% ARR growth a year
 # Episodes: accounts that hit a dip during the year. The owner gets a task when it
 # shows and calls (or doesn't) in their own style. The planted effect, like the
 # onboarding email's: called within CALL_IN_TIME_DAYS, the account recovers more
@@ -123,7 +128,7 @@ FIRST_YEAR_SHARE = 0.25     # a book growing about 20% a year in new logos
 # CRM, no events after). Fake data: it shows the method, not that calls work.
 # Tuned (12 Nov 2026) so the year reads like a healthy B2B book: about 89% GRR.
 EPISODES = 110
-EPISODE_LAST_START = 175   # the last day a dip may start: recovered by the time today's story begins
+EPISODE_LAST_START = 195   # the last day a dip may start: recovered by the time today's story begins
 CALL_IN_TIME_DAYS = 14
 RECOVERY_ODDS = {"called_in_time": 0.80, "not_in_time": 0.55}
 # In-year renewals of accounts that stayed: most renew flat, some grow, some shrink
@@ -191,48 +196,50 @@ CS_TEAM = [
 #                   this many days after go-live (instead of across the 90 days)
 #   weight        = share of accounts with this personality
 
+# Weights tuned 12 Nov 2026 so today reads like a real book (about 5% at churn Act,
+# not 20%): people trust a demo that looks like their own business.
 PERSONALITIES = {
     "healthy": dict(
-        weight=0.41, lifecycle="existing",
+        weight=0.69, lifecycle="existing",
         activity=(0.6, 0.6), util=(0.65, 0.70), user_growth=1.1, errors=(0.02, 0.02),
         features=["chart_created", "dashboard_shared", "cohort_created", "data_export"],
     ),
     "declining": dict(
-        weight=0.13, lifecycle="existing",
+        weight=0.05, lifecycle="existing",
         activity=(0.6, 0.05), util=(0.55, 0.22), user_growth=1.0, errors=(0.02, 0.35),
         features=["chart_created", "dashboard_shared"],
     ),
     "slipping": dict(          # volume sliding under the line, but the same people still use it:
-        weight=0.05, lifecycle="existing",       # one churn signal only, so churn Watch
+        weight=0.03, lifecycle="existing",       # one churn signal only, so churn Watch
         activity=(0.6, 0.6), util=(0.58, 0.31), user_growth=1.0, errors=(0.02, 0.02),
         features=["chart_created", "dashboard_shared", "cohort_created"],
     ),
     "power_user": dict(
-        weight=0.10, lifecycle="existing",
+        weight=0.05, lifecycle="existing",
         activity=(0.75, 0.9), util=(0.80, 0.97), user_growth=1.5, errors=(0.01, 0.01),
         features=["chart_created", "dashboard_shared", "cohort_created",
                   "experiment_launched", "data_export"],
     ),
     "new_customer": dict(      # signs during the window, installs the SDK, the team gets going
-        weight=0.14, lifecycle="new", ramp_days=30,   # volume ramps up over the first month
+        weight=0.08, lifecycle="new", ramp_days=30,   # volume ramps up over the first month
         activity=(0.5, 0.5), util=(0.20, 0.70), user_growth=1.4, errors=(0.03, 0.03),
         features=["chart_created", "dashboard_shared"],
     ),
     "shelfware": dict(         # live for months, people use it, but the rollout never came:
-        weight=0.05, lifecycle="existing",       # flat volume far below what they bought
+        weight=0.04, lifecycle="existing",       # flat volume far below what they bought
         activity=(0.45, 0.45), util=(0.22, 0.24), user_growth=1.0, errors=(0.02, 0.02),
         features=["chart_created", "dashboard_shared"],
     ),
     "stalled": dict(           # signs recently, installs the SDK, but only one person uses it
-        weight=0.04, lifecycle="new", single_user=True,
+        weight=0.02, lifecycle="new", single_user=True,
         activity=(0.4, 0.3), util=(0.08, 0.05), user_growth=1.0, errors=(0.05, 0.05),
         features=["chart_created"],
     ),
     "never_onboarded": dict(   # contract signed, no events at all
-        weight=0.04, lifecycle="new", silent=True,
+        weight=0.02, lifecycle="new", silent=True,
     ),
     "handoff_gap": dict(       # active in the product, but missing from the CRM
-        weight=0.04, lifecycle="existing", in_crm=False,
+        weight=0.02, lifecycle="existing", in_crm=False,
         activity=(0.5, 0.55), util=(0.40, 0.45), user_growth=1.1, errors=(0.02, 0.02),
         features=["chart_created", "dashboard_shared", "cohort_created"],
     ),
@@ -339,6 +346,7 @@ def build_accounts():
         for i, region in enumerate(regions):
             n += 1
             personality = pick_personality(tier)
+            personality = STORY_ACCOUNTS.get(f"acc_{n:03d}", personality)   # the handover stories' accounts
             p = PERSONALITIES[personality]
             lo, hi = USERS_BY_TIER[tier]
             users_start = 1 if p.get("single_user") else random.randint(lo, hi)
@@ -348,7 +356,7 @@ def build_accounts():
                 tier=tier,
                 region=region,
                 personality=personality,
-                contract_start=contract_start_for(personality),
+                contract_start=contract_start_for(personality),     # (a story account's is set just below)
                 in_crm=p.get("in_crm", True),
                 users_start=users_start,
                 users_end=max(users_start, round(users_start * p.get("user_growth", 1.0))),
@@ -359,6 +367,8 @@ def build_accounts():
                 next_qbr="",
                 last_qbr="",
             )
+            if acc["id"] in STORY_RENEWALS:       # the renewal date the story's emails and calls talk about
+                acc["contract_start"] = STORY_RENEWALS[acc["id"]] - timedelta(days=365)
             if tier == "Enterprise":
                 # Round-robin the region's CSMs so each carries the same book
                 region_csms = csms_by_region[region]
@@ -447,7 +457,8 @@ def set_csm_since(accounts):
         new = PERSONALITIES[acc["personality"]]["lifecycle"] == "new" or acc.get("first_year")
         if new:
             lag = rng.randint(*SLOW_HANDOFF_DAYS) if rng.random() < SLOW_HANDOFF_SHARE else rng.randint(1, 6)
-            acc["csm_since"] = acc["contract_start"] + timedelta(days=lag)
+            # the CRM already names the CSM, so they came by today at the latest
+            acc["csm_since"] = min(END_DATE, acc["contract_start"] + timedelta(days=lag))
         else:
             acc["csm_since"] = acc["since"]
 

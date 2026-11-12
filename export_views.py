@@ -321,6 +321,7 @@ export = {
                  "churn_line": SETTINGS["churn"]["util_below"],
                  "follow_up_days": SETTINGS["follow_ups"]["after_days"],
                  "currency": SETTINGS["money"]["currency"],
+                 "cs_cost_per_head": SETTINGS["money"].get("cs_cost_per_head", 0),
                  "forecast_gap_share": SETTINGS["money"]["forecast_gap_share"],
                  "open_no_flags_up_to": SETTINGS["cockpit"].get("open_no_flags_up_to", 15)},
 }
