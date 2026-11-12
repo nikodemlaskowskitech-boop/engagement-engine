@@ -566,6 +566,14 @@ One JSON event per line, one file per day in `data/events/`.
   draws the bars (phone: label and value over a full-width bar). The segment bar
   applies (the cohort per account); the year before is whole-book only, and says
   so. Every bar lists its accounts; one that left shows as such and opens nothing.
+  Sortable tables (12 Nov 2026, Nikodem): a click on a heading sorts the table by it;
+  numbers and money biggest first, then smallest, then the table's own order again;
+  dates soonest first; short text A to Z. Columns of long text or forms, and the
+  fixed-order tables (class nosort, the 2x2), don't sort. markSortable() works on any
+  table (a MutationObserver marks each one as it's drawn); rows stay in their group
+  (tr.group) and median rows (tr.pinned) at the end; a folded table folds again
+  (table._refold); shortList and accountList sort their whole list, not the rows on
+  screen (sortedItems). The choice is kept per place on the page across redraws.
   Trends under both (12 Nov 2026): the year week by week from the history (export
   key history: weeks, flags [week, id, flag, status] without Activated/Activating,
   tasks [week, id, flag, status, routed_to, action_status, age]); tasks not picked
