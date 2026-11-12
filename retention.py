@@ -34,7 +34,7 @@ Run after backtest.py (export_views.py also calls add_views):  python retention.
 import sys
 
 from cairnpath_db import connect
-from settings import SETTINGS
+from settings import SETTINGS, input_path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -45,7 +45,7 @@ FAST = SETTINGS["journeys"]["act_for_days"]
 def add_views(con):
     """arr_segments, retention_year, arr_bridge_this, arr_bridge_prior, retention_forecast,
     call_effect. Needs connect() (crm_all, renewal_history, arr_bridge) and, for the
-    forecast, backtest.add_views and the flags' account_value."""
+    forecast, backtest.add_views and flags.py's data/account_value.csv."""
     # ARR on any day, per account: one row per stretch of time at one ARR.
     # Before a renewal the account paid that renewal's arr_before; after the last
     # renewal, today's ARR (or nothing, once it left).
@@ -95,26 +95,28 @@ def add_views(con):
                sum(end_arr) / sum(start_arr)                                    AS nrr
         FROM cohort
     """)
-    # This year: from the first day of data to the as-of date
+    # This year: from the first day of data to the as-of date. Read once and written
+    # into the views as dates: scanning a year of events in every query is slow.
+    d0, d1 = con.sql("SELECT min(event_date), max(event_date) FROM events").fetchone()
+    period = f"(SELECT DATE '{d0}' AS d0, DATE '{d1}' AS d1)"
     con.sql("""
         CREATE VIEW retention_year AS
-        SELECT r.* FROM (SELECT min(event_date) AS d0, max(event_date) AS d1 FROM events) p,
-                        retention_between(p.d0, p.d1) r
-    """)
+        SELECT r.* FROM PERIOD p, retention_between(p.d0, p.d1) r
+    """.replace("PERIOD", period))
     # Each account's part in this year's numbers (for the click-through lists)
     con.sql("""
         CREATE VIEW retention_accounts AS
-        WITH p AS (SELECT min(event_date) AS d0, max(event_date) AS d1 FROM events)
+        WITH p AS PERIOD
         SELECT s.account_id, s.arr AS start_arr, coalesce(e.arr, 0) AS end_arr,
                CASE WHEN coalesce(e.arr, 0) = 0 THEN 'churned'
                     WHEN e.arr < s.arr THEN 'contraction'
                     WHEN e.arr > s.arr THEN 'expansion' ELSE 'flat' END AS movement
         FROM p, arr_on(p.d0) s LEFT JOIN arr_on(p.d1) e USING (account_id)
-    """)
+    """.replace("PERIOD", period))
     # This year's quarterly ARR bridge, the same shape as finance's for the year before
     con.sql("""
         CREATE VIEW arr_bridge_this AS
-        WITH p AS (SELECT min(event_date) AS d0, max(event_date) AS d1 FROM events),
+        WITH p AS PERIOD,
         q AS (
             SELECT i AS quarter, p.d0 + CAST(round(i * 365 / 4.0) AS INTEGER) AS qs,
                    least(p.d1, p.d0 + CAST(round((i + 1) * 365 / 4.0) AS INTEGER) - 1) AS qe
@@ -130,7 +132,7 @@ def add_views(con):
                (SELECT sum(arr) FROM arr_on(q.qe)) AS ending_arr
         FROM q, retention_between(q.qs, q.qe) r
         ORDER BY q.quarter
-    """)
+    """.replace("PERIOD", period))
     con.sql("""
         CREATE VIEW arr_bridge_prior AS
         SELECT row_number() OVER (ORDER BY period_start) - 1 AS quarter, * FROM arr_bridge ORDER BY period_start
@@ -150,15 +152,22 @@ def add_views(con):
         """)
     # Forecast: the renewals in the next forecast_days, in GRR points of today's book.
     # actual_*: what happened (the demo's renewal outcomes) for forecast against actual.
+    out_file = input_path("outcomes_file")
+    OUTCOMES_SQL = (f"SELECT account_id, renewal_arr::DOUBLE AS renewal_arr FROM read_csv('{str(out_file).replace(chr(92), '/')}', all_varchar = true)"
+                    if out_file.exists() else "SELECT NULL::VARCHAR AS account_id, NULL::DOUBLE AS renewal_arr WHERE false")
     con.sql(f"""
         CREATE VIEW retention_forecast_accounts AS
         WITH up AS (
             SELECT c.account_id, c.arr, c.renewal_date
-            FROM crm c, as_of a
-            WHERE c.renewal_date > a.as_of_date AND c.renewal_date <= a.as_of_date + {FORECAST_DAYS}
+            FROM crm c
+            WHERE c.renewal_date > DATE '{d1}' AND c.renewal_date <= DATE '{d1}' + {FORECAST_DAYS}
         ),
-        risk AS (SELECT account_id, amount::DOUBLE AS at_risk FROM account_value WHERE flag = 'churn'),
-        gain AS (SELECT account_id, amount::DOUBLE AS upside FROM account_value WHERE flag = 'expansion'),
+        -- what happened at these renewals (the demo's outcomes: renewal_outcomes.csv)
+        outcomes AS ({OUTCOMES_SQL}),
+        -- flags.py's saved values (the view would recompute every flag from the events)
+        value AS (SELECT account_id, flag, amount::DOUBLE AS amount FROM read_csv('data/account_value.csv', all_varchar = true)),
+        risk AS (SELECT account_id, amount AS at_risk FROM value WHERE flag = 'churn'),
+        gain AS (SELECT account_id, amount AS upside FROM value WHERE flag = 'expansion'),
         owner AS (
             SELECT account_id, arg_max(properties.status, "timestamp") AS call,
                    arg_max(properties.amount, "timestamp") AS amount
@@ -171,14 +180,14 @@ def add_views(con):
                                WHEN 'renew' THEN 0 ELSE coalesce(r.at_risk, 0) END AS owner_loss,
                    o.call IS NOT NULL AS has_owner_call,
                    coalesce(g.upside, 0) AS upside,
-                   b.lost_arr AS actual_loss,
+                   CASE WHEN b.account_id IS NOT NULL THEN greatest(0, u.arr - b.renewal_arr) END AS actual_loss,
                    CASE WHEN b.renewal_arr > u.arr THEN b.renewal_arr - u.arr ELSE 0 END AS actual_gain,
                    b.account_id IS NOT NULL AS has_outcome
             FROM up u
             LEFT JOIN risk r USING (account_id)
             LEFT JOIN gain g USING (account_id)
             LEFT JOIN owner o USING (account_id)
-            LEFT JOIN backtest b USING (account_id)
+            LEFT JOIN outcomes b USING (account_id)
         )
         SELECT * FROM rows
     """)
@@ -263,10 +272,8 @@ def add_views(con):
 
 def main():
     import backtest
-    import flags
     import team_report
     con = connect()
-    flags.add_views(con)           # account_value, for the forecast
     team_report.add_views(con)     # time_to_action, for the value of calling in time
     backtest.add_views(con)
     add_views(con)
