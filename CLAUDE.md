@@ -257,7 +257,9 @@ One JSON event per line, one file per day in `data/events/`.
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
   declining, slipping (volume sliding, users steady: one signal, churn Watch),
   power_user, new_customer, shelfware, stalled, never_onboarded,
-  handoff_gap) mixed by weight (new customers sign all through the window
+  handoff_gap) mixed by weight (tuned 12 Nov 2026 so today reads like a real book:
+  about 5% at churn Act, 69% healthy; STORY_ACCOUNTS and STORY_RENEWALS pin the three
+  handover stories' accounts to their personality and renewal date) (new customers sign all through the window
   and ramp their volume up over the first month; shelfware is flat at about
   a quarter of the contract;
   stalled and silent ones are recent), 365 days of events (12 Nov 2026: was 90),
@@ -551,7 +553,8 @@ One JSON event per line, one file per day in `data/events/`.
   "case"; roles.py drops "retention" from every other page): the CFO's page,
   Leadership stays operational. Headline GRR and NRR against the year before,
   tiles (GRR, NRR, one point of GRR = 1% of today's ARR, at risk in the next two
-  quarters in GRR points), where the year's ARR went (a horizontal waterfall: day
+  quarters in GRR points, ARR per CS person = coverage; with [money]
+  cs_cost_per_head set, a GRR point in headcount; 0 = not shown), where the year's ARR went (a horizontal waterfall: day
   one, churn, downsell, GRR, expansion, NRR, then the year before; red = lost,
   green = growth, stone = totals), the next two quarters (data's rule, owners,
   what happened), what calling in time is worth (kept share in time vs. late, and

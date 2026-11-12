@@ -2319,6 +2319,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const fData = sum(ahead, (r) => r[3]), fOwner = sum(ahead, (r) => r[4]), fUp = sum(ahead, (r) => r[5]);
     const withOutcome = ahead.filter((r) => r[6] != null), fActual = sum(withOutcome, (r) => r[6]);
     const ownerCalls = fc.owner_calls || 0;
+    // coverage: the ARR that people own (CSMs and pool members; Self-service has no owner)
+    const owned = D.accounts.filter(inSeg).filter((a) => ["csm", "member"].includes((teamById[a.owner_id] || {}).owner_type));
+    const people = [...new Set(owned.map((a) => a.owner_id))], covered = sum(owned, (a) => a.arr);
+    const COST = D.settings.cs_cost_per_head || 0;
     const who = segd ? segName() + ": " : "";
     $("cs-finding").textContent = start
       ? `${who}GRR ${pct1(grr)} this year${!segd && prior ? `, up from ${pct1(prior.grr)} the year before` : ""}; NRR ${pct1(nrr)}${!segd && prior ? ` (${pct1(prior.nrr)})` : ""}. The next two quarters put ${money(fData)} at risk: ${(fData / Math.max(1, point)).toFixed(1)} points of GRR.`
@@ -2328,7 +2332,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       tile("Gross revenue retention", pct1(grr), !segd && prior ? `year before ${pct1(prior.grr)} (${pts(grr - prior.grr)})` : "this year, standard cohort", false) +
       tile("Net revenue retention", pct1(nrr), !segd && prior ? `year before ${pct1(prior.nrr)} (${pts(nrr - prior.nrr)})` : "this year, standard cohort", false) +
       tile("One point of GRR", money(point), `1% of today's ${money(book)} ARR`, false) +
-      tile("At risk, next two quarters", money(fData), `${(fData / Math.max(1, point)).toFixed(1)} pts of GRR · ${plural(ahead.length, "renewal")}`, fData > 0);
+      tile("At risk, next two quarters", money(fData), `${(fData / Math.max(1, point)).toFixed(1)} pts of GRR · ${plural(ahead.length, "renewal")}`, fData > 0) +
+      tile("ARR per CS person", people.length ? money(covered / people.length) : "–", COST
+        ? `one GRR point = ${(point / COST).toFixed(1)} people at ${money(COST)} a year`
+        : `${money(covered)} owned by ${people.length} ${people.length === 1 ? "CSM or pool member" : "CSMs and pool members"}`, false);
 
     // 1. where the year's ARR went: a horizontal waterfall, this year (and the year before, whole book only)
     const MOVER_COLS = [
@@ -2409,7 +2416,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("cs-call-finding").textContent = value != null
       ? `Accounts called within ${D.settings.fast_days} days kept ${pct1(kIn)} of their ARR at renewal, against ${pct1(kLate)}. Today ${plural(waiting.length, "account")} at Act (${money(waitArr)}) ${waiting.length === 1 ? "hasn't" : "haven't"} had a call: at those rates, calling them in time keeps about ${money(value)} more, ${(value / Math.max(1, point)).toFixed(1)} points of GRR.`
       : "Not enough renewals after a churn task in this segment to compare.";
-    $("cs-call-note").textContent = `Like for like: every account that got a churn task this year and has renewed since, ${inT.length} against ${late.length}. Small groups and a planted effect in the demo data: this shows the method a CFO can check, never "we saved X". Not here yet: the cost side (CS hours per account) to set against it.`;
+    $("cs-call-note").textContent = `Like for like: every account that got a churn task this year and has renewed since, ${inT.length} against ${late.length}. Small groups and a planted effect in the demo data: this shows the method a CFO can check, never "we saved X".${D.settings.cs_cost_per_head ? "" : " The cost side shows once a cost per CS person is set (settings.toml [money] cs_cost_per_head)."}`;
     const wl = $("cs-call-waiting");
     wl.hidden = !waiting.length; wl.textContent = `List the ${plural(waiting.length, "account")} not called yet`;
     wl.onclick = () => caseList("At Act, no call yet", waiting.map((id) => byId[id]).filter(Boolean).sort((a, b) => b.arr - a.arr),
@@ -2420,6 +2427,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       "<b>NRR</b>: the same with expansion counted. New logos are in neither: they weren't customers on day one.",
       "<b>This year</b> is worked out account by account from the CRM and its closed renewals (the ARR before and after each one). <b>The year before</b> is finance's quarterly ARR bridge, top line only.",
       "<b>One point of GRR</b> is 1% of today's ARR in this segment: the yardstick for any investment in retention.",
+      "<b>ARR per CS person</b> (coverage): the ARR the CSMs and pool members own, over how many of them own it. It varies a lot by company, segment and level, so set your own cost per person (settings.toml [money] cs_cost_per_head) to read a GRR point in headcount.",
       "<b>All licence revenue</b>: committed volume and paid add-ons. Services would be reported apart, as licence is what retention protects.",
     ].map((t) => `<li>${t}</li>`).join("");
   }

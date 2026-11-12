@@ -50,6 +50,10 @@ arr_bridge_file = "arr_bridge_history.csv"     # optional: the year before as fi
 # contracted volume x the list price per 1,000 events, by tier.
 currency = "EUR"
 arr_column = "arr"
+# The business case's yardstick: what one CS person costs a year, fully loaded
+# (salary, tax, tools). 0 = not shown. Coverage (ARR per CS person) varies by
+# company, segment and level, so set your own; the demo leaves it out.
+cs_cost_per_head = 0
 price_per_1k = { "Self-service" = 0.65, "Scale" = 0.55, "Enterprise" = 0.45 }
 # Opportunity: forecast usage at renewal above 100% x ARR (straight line from
 # the last two months, capped at max_forecast_pct). Expansion Watch counts at

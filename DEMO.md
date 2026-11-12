@@ -1,4 +1,4 @@
-# Demo walkthrough (about 3 minutes)
+# Demo walkthrough (about 3½ minutes)
 
 A script to say out loud, with the clicks in brackets. The numbers are from the
 demo data as of 18 Oct 2026, a year of history; after a regenerate, check them on the pages first.
@@ -16,22 +16,31 @@ we doing about it, and is the team in front of customers. The CRM couldn't
 answer either, because it was built for sales. This is the tool I wished I'd
 had."
 
-## 2. The leader's view (40 s)
+## 2. The leader's view (60 s)
 
 [Leadership tab]
 
-"€3.6M of €12M ARR is at risk, across 35 accounts at Act. 24 of those 35 have
-had a call, but only 11 have a next step planned. That gap is the conversation
+"€1.5M of €12.3M ARR is at risk, across 12 accounts at Act. 8 of those 12 have
+had a call, but only 3 have a next step planned. That gap is the conversation
 I'd have with my managers this week. Everything is sorted by value, and value
 guides the work. It's never anyone's credit."
+
+[Business case tab]
+
+"And this is the page for the CFO, in their words. GRR 88.6%, up from 87% the
+year before; NRR 103%. One point of GRR is worth €147k here, so that's the
+yardstick for any budget request. The next two quarters put €1.1M at risk,
+about 7 points, and accounts we called within 14 days kept far more of their
+ARR at renewal. Small numbers and generated data, so it's the method, not a
+claim."
 
 ## 3. Did it work? (30 s)
 
 [Did it work? tab]
 
 "Flags are only worth something if they predict. Against what happened at
-renewal, the churn flags caught 44 of the 59 accounts we lost or that shrank,
-75%, with a median of 144 days' warning. The outcomes are generated, so this
+renewal, the churn flags caught 34 of the 50 accounts we lost or that shrank,
+68%, with a median of 198 days' warning. The outcomes are generated, so this
 shows the method, not proof. On your own history, it's the first thing I'd
 run."
 
@@ -39,8 +48,8 @@ run."
 
 [Leadership: click Yarrow Studio]
 
-"Yarrow Studio, Mia's account. Utilisation went from 37% to 28% to 20%, and
-weekly users are down 45%. Both signals, so it's Act and the whole €234k ARR is
+"Yarrow Studio, Mia's account. Utilisation went from 48% to 36% to 26%, and
+weekly users are down 55%. Both signals, so it's Act and the whole €234k ARR is
 at risk. Mia has forecast a downsize to €134k, and the cockpit flags that gap
 for the forecast call. There's also an AI handover brief, built from support
 cases, emails and calls. Names are removed before the model sees anything, and
