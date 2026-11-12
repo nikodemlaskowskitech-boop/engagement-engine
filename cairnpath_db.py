@@ -137,8 +137,13 @@ def connect():
                tier                                 AS crm_tier,
                {u['contract_column']}::BIGINT       AS contracted_events
                {'' if 'pool_owner' in crm_cols else ', NULL::VARCHAR AS pool_owner'}  -- optional: a Scale account's named owner
+               {'' if 'status' in crm_cols else ", 'active' AS status"}  -- optional: churned = left at its renewal
         FROM raw
     """)
+    # crm = today's book (what the flags and the cockpit work on); crm_all keeps the
+    # accounts that churned too, so their old events aren't mistaken for a handoff gap
+    con.sql("ALTER VIEW crm RENAME TO crm_all")
+    con.sql("CREATE VIEW crm AS SELECT * FROM crm_all WHERE coalesce(status, 'active') <> 'churned'")
     # the pool column is optional (a pool member's pool); without it, no members
     team_raw = f"SELECT *{_renames('team')} FROM read_csv_auto('{team_file}')"
     team_cols = {r[0] for r in con.sql(f"DESCRIBE {team_raw}").fetchall()}
@@ -203,13 +208,16 @@ def connect():
         ),
         sums AS (
             SELECT l.account_id, l.contracted_events,
+                   -- month 1 has a start too: with more than 90 days of data, "older than
+                   -- 60 days" was the whole history, not one month (found 12 Nov 2026)
                    sum(e.properties.event_count) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
-                       AND e.event_date <= l.as_of_date - 60) AS vol_m1,
+                       AND e.event_date > l.as_of_date - 90 AND e.event_date <= l.as_of_date - 60) AS vol_m1,
                    sum(e.properties.event_count) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
                        AND e.event_date > l.as_of_date - 60 AND e.event_date <= l.as_of_date - 30) AS vol_m2,
                    sum(e.properties.event_count) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
                        AND e.event_date > l.as_of_date - 30) AS vol_m3,
-                   count(DISTINCT e.user_id) FILTER (WHERE e.event_date <= l.as_of_date - 60) AS users_m1,
+                   count(DISTINCT e.user_id) FILTER (WHERE e.event_date > l.as_of_date - 90
+                                                       AND e.event_date <= l.as_of_date - 60) AS users_m1,
                    count(DISTINCT e.user_id) FILTER (WHERE e.event_date > l.as_of_date - 30) AS users_m3
             FROM live l
             JOIN events e ON e.account_id = l.account_id
@@ -222,6 +230,20 @@ def connect():
                users_m1,
                users_m3
         FROM sums
+    """)
+
+    # Active users this week vs. the average week of the last 13 (the churn flag's breadth
+    # signal). The 13 weeks have a start: with a longer export, all of it divided by 13
+    # made every account look like it had lost most of its users (found 12 Nov 2026,
+    # tests/long_history_test.py).
+    con.sql("""
+        CREATE VIEW weekly_users AS
+        SELECT e.account_id,
+               count(DISTINCT e.user_id) FILTER (WHERE e.event_date > a.as_of_date - 7) AS wau_now,
+               count(DISTINCT e.user_id || '|' || CAST((a.as_of_date - e.event_date) // 7 AS VARCHAR)) / 13.0 AS wau_avg
+        FROM events e CROSS JOIN as_of a
+        WHERE e.user_id IS NOT NULL AND e.event_date > a.as_of_date - 91
+        GROUP BY e.account_id
     """)
 
     # QBR timing comes from settings.toml
@@ -343,6 +365,7 @@ def connect():
                 FROM (SELECT *, row_number() OVER () AS line
                       FROM read_csv('data/action_log.csv', all_varchar = true))
                 WHERE channel IN ('card', 'queue')
+                  AND account_id IN (SELECT account_id FROM crm)   -- not accounts that left the book
                 GROUP BY account_id, flag, status
             ),
             open_flags AS ({flag_files}),

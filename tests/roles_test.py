@@ -83,7 +83,8 @@ def engine_tier(crm_tier):
 with open(ROOT / "data" / "cs_team.csv", newline="", encoding="utf-8") as f:
     TEAM_ROWS = list(csv.DictReader(f))
 with open(ROOT / "data" / "crm_accounts.csv", newline="", encoding="utf-8") as f:
-    CRM = list(csv.DictReader(f))
+    # today's book only: a churned account left at its renewal (ROLES.md, The rule)
+    CRM = [r for r in csv.DictReader(f) if (r.get("status") or "active") != "churned"]
 
 PEOPLE = {r["owner_id"]: r for r in TEAM_ROWS}
 POOLS = {o for o, r in PEOPLE.items() if r["owner_type"] == "pool"}

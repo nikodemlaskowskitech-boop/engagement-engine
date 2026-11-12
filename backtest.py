@@ -83,9 +83,12 @@ def add_views(con):
         FROM read_csv('data/flags_churn.csv', all_varchar = true)
     ),
     signal AS (
-        -- the first day the account's 30-day utilisation was under the churn line
-        SELECT account_id, min(event_date) FILTER (WHERE util < {LINE}) AS signal_date
-        FROM daily_util_30d
+        -- the first day of the account's current run under the churn line (30-day
+        -- utilisation): with a year of history, an earlier dip it recovered from doesn't count
+        SELECT account_id,
+               min(event_date) FILTER (WHERE util < {LINE} AND event_date > coalesce(last_above, DATE '1900-01-01')) AS signal_date
+        FROM (SELECT *, max(event_date) FILTER (WHERE util >= {LINE}) OVER (PARTITION BY account_id) AS last_above
+              FROM daily_util_30d)
         GROUP BY account_id
     ),
     called AS (

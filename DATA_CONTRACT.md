@@ -80,6 +80,7 @@ One row per account, CSV with a header.
 | last_qbr_date | date | No | QBR overdue |
 | next_qbr_date | date | No | QBR coming up, and QBR first |
 | arr | number | No | Annual recurring revenue (some CRMs call it annual order value). Missing = estimated from contracted volume x the list price in settings.toml [money], marked as an estimate. Name the column in [money] arr_column |
+| status | text | No | `active` (or empty) or `churned`: a customer that left at its renewal (its `renewal_date` is the day it left). Churned accounts are on no page and raise no flag, but their events stay in the history, so they aren't mistaken for a handoff gap. Missing column = everyone active |
 
 Example:
 ```csv

@@ -22,6 +22,10 @@ A team's accounts are the accounts owned by anyone in it: the CSM (`csm_owner`),
 the pool (`cs_pool`) or the named pool member (`pool_owner`). An account covered
 from another region belongs to its owner's team, not to its customer's region.
 
+Only today's book counts: an account the CRM marks `status = churned` left at its
+renewal and is on no page, not even the leader's (decided 12 Nov 2026, with the
+12-month demo data). Its history stays in the engine's trends, not in anyone's book.
+
 ## The matrix
 
 | | Leader | Manager | CSM | Pool member |
