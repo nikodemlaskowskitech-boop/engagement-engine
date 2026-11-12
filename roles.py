@@ -171,6 +171,17 @@ def slice_export(export, person_id, person):
     for key in ACCOUNT_ROWS:
         page[key] = [r for r in export.get(key, []) if r.get("account_id") in ids]
     page["handovers"] = {k: v for k, v in export.get("handovers", {}).items() if k in ids}
+    # the weekly history: today's accounts in scope, plus the accounts no longer in the
+    # book (left, or no CRM row) that the same rule puts in scope; those carry a key
+    # of their own (ob_1, ...), never their id or name
+    hist = export.get("history") or {}
+    off = hist.get("off_book", [])
+    off_ids, _ = scope(person_id, person, off, team) if off else (set(), set())
+    keep = ids | off_ids
+    page["history"] = {"weeks": hist.get("weeks", []),
+                       "off_book": [o for o in off if o["account_id"] in off_ids],
+                       "flags": [r for r in hist.get("flags", []) if r[1] in keep],
+                       "tasks": [r for r in hist.get("tasks", []) if r[1] in keep]}
     # "against the median": the whole book's people of the same kind, or only the team's ([roles] peer_median)
     everyone = [t["owner_id"] for t in export["team"]]
     peers = everyone if cfg["scope"] == "book" or ROLES.get("peer_median", "book") == "book" \

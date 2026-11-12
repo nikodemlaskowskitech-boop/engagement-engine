@@ -24,7 +24,12 @@ from another region belongs to its owner's team, not to its customer's region.
 
 Only today's book counts: an account the CRM marks `status = churned` left at its
 renewal and is on no page, not even the leader's (decided 12 Nov 2026, with the
-12-month demo data). Its history stays in the engine's trends, not in anyone's book.
+12-month demo data). Its history stays in the engine's trends, not in anyone's book:
+the weekly history counts it under a key of its own (`ob_1`, ...) with only its
+tier, region, owner and manager, never its id or name, so a page's trend includes
+it exactly when the same rule above would have put the account on that page. An
+account with no CRM row (a handoff gap) has no team, so only the leader's trends
+count it.
 
 ## The matrix
 

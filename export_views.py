@@ -100,6 +100,44 @@ def rows(con, sql):
             for r in rel.fetchall()]
 
 
+def history(con, on_book):
+    """The weekly history (history.py) for the trends: the flags that ask for action
+    and the queue (tasks Open or Claimed), one row per week and account. An account
+    no longer in today's book (it left, or never had a CRM row) is on no page, so it
+    travels under a key of its own (ob_1, ...) with only what the segment bar needs:
+    its tier, region, owner and manager, never its id or name. Empty without
+    history.py's files."""
+    if not (DATA / "history_flags.csv").exists() or not (DATA / "history_tasks.csv").exists():
+        return {"weeks": [], "off_book": [], "flags": [], "tasks": []}
+    with (DATA / "history_flags.csv").open(encoding="utf-8") as f:
+        hf = [r for r in csv.DictReader(f) if r["status"] not in ("Activated", "Activating")]
+    with (DATA / "history_tasks.csv").open(encoding="utf-8") as f:
+        ht = list(csv.DictReader(f))
+    weeks = sorted({r["week"] for r in hf} | {r["week"] for r in ht})
+    wi = {w: i for i, w in enumerate(weeks)}
+    gone = sorted({r["account_id"] for r in hf + ht} - on_book)
+    key = {a: f"ob_{i + 1}" for i, a in enumerate(gone)}
+    seen = {r[0]: r for r in con.sql("""
+        SELECT c.account_id, c.tier, c.region, coalesce(c.csm_owner, c.pool_owner, c.cs_pool) AS owner_id,
+               c.cs_pool AS pool, t.manager
+        FROM crm_all c LEFT JOIN cs_team t ON t.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)
+        WHERE coalesce(c.status, 'active') = 'churned'""").fetchall()}
+    off_book = []
+    for a in gone:
+        r = seen.get(a)
+        off_book.append({"account_id": key[a], "why": "left" if r else "not in the CRM",
+                         "tier": r[1] if r else None, "region": r[2] if r else None,
+                         "owner_id": r[3] if r else None, "pool": r[4] if r else None,
+                         "manager": r[5] if r else None})
+    ref = lambda a: key.get(a, a)
+    return {"weeks": weeks, "off_book": off_book,
+            # [week, account, flag, status]
+            "flags": [[wi[r["week"]], ref(r["account_id"]), r["flag"], r["status"]] for r in hf],
+            # [week, account, flag, status, routed_to, action_status, age_days]
+            "tasks": [[wi[r["week"]], ref(r["account_id"]), r["flag"], r["status"], r["routed_to"],
+                       r["action_status"], int(r["age_days"])] for r in ht]}
+
+
 con = connect()
 team_report.add_views(con)          # time_to_action, meetings_90d
 onboarding_report.add_views(con)    # onboarding
@@ -226,6 +264,7 @@ export = {
         LEFT JOIN cs_team ao ON ao.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)
         ORDER BY s.age_days DESC, s.account_id, s.flag, s.status"""),
     "handovers": handovers(),
+    "history": history(con, {a["account_id"] for a in accounts}),
     "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
                  "stale_task_days": SETTINGS["cockpit"]["stale_task_days"],
                  "below_median_points": SETTINGS["cockpit"]["below_median_points"],

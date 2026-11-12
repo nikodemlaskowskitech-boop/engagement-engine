@@ -42,7 +42,7 @@ with short comments, and work in small steps (one PR per change).
   cost), `python tests/check_lambda_test.py`, `python
   tests/engine_lambda_test.py` and `python tests/slack_lambda_test.py` (the Lambdas' handlers against a stand-in S3); so does
   any PR that changes what an engine step imports (engine_lambda_test checks the
-  bundle has it: #120 added roles.py to export_views.py and only #127 bundled it); one that touches upload.py runs `python tests/upload_test.py`; one that touches site_cert.py runs `python tests/site_cert_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one that touches llm.py, brief.py or handover.py runs `python tests/ai_spend_test.py`; one that touches cockpit_sync.py runs `python tests/cockpit_sync_test.py`; one
+  bundle has it: #120 added roles.py to export_views.py and only #127 bundled it); one that touches upload.py runs `python tests/upload_test.py`; one that touches site_cert.py runs `python tests/site_cert_test.py`; one that touches slack_loop.py or listener.py runs `python tests/slack_lambda_test.py`; one that touches pull_clicks.py runs `python tests/pull_clicks_test.py`; one that touches llm.py, brief.py or handover.py runs `python tests/ai_spend_test.py`; one that touches cockpit_sync.py runs `python tests/cockpit_sync_test.py`; one that touches history.py, flags.py or cairnpath_db.py runs `python tests/history_test.py` and `python tests/long_history_test.py`; one
   that touches roles or policies also runs `python tests/security_check_test.py`
   and, after the deploy, Nikodem runs `python security_check.py` (live). Docs-only PRs need none. Nothing merges with a FAIL. A bug
   found by hand gets a test that would have caught it.
@@ -92,8 +92,10 @@ contract_start, renewal_date, contracted_events, add_ons, csm_owner
 (Enterprise), cs_pool (Scale: the queue tasks go to), pool_owner (Scale:
 the named pool member who owns it, optional), last_qbr_date and next_qbr_date
 (Enterprise, roughly quarterly; some overdue and not rebooked), arr (optional;
-missing = estimated from contracted_events x the list price in [money]).
-Contract sizes vary per account (half to double the tier's middle size).
+missing = estimated from contracted_events x the list price in [money]),
+status (churned = left at its renewal), customer_since (first signed; renewals
+keep it) and csm_since (when the CSM took it), the last three optional, for the
+year's history. Contract sizes vary per account (half to double the tier's middle size).
 Pipeline-written facts
 (e.g. "welcome sent") go in an action log, not the CRM.
 
@@ -137,7 +139,8 @@ One JSON event per line, one file per day in `data/events/`.
 
 ## The four flags
 
-1. Activation (contracts from the last 45 days only). Statuses:
+1. Activation (first contracts from the last 45 days only: a renewal isn't
+   onboarding, found by customer_since or events from before the term). Statuses:
    - Activated: SDK installed and 2+ active users within 14 days of
      contract start
    - Activating: under 14 days, not all signals yet (no action)
@@ -268,7 +271,10 @@ One JSON event per line, one file per day in `data/events/`.
   welcome email's). Recovered: the dip sits on one of today's healthy accounts. Not
   recovered: a lost account (same tier, owner and region) that churns at its
   renewal and leaves the book: CRM status = churned, renewal_date = the day it left,
-  no events after. Quarterly QBRs across the year. Writes data/renewal_history.csv
+  no events after. Quarterly QBRs across the year. CRM customer_since (first signed)
+  and csm_since: a new Enterprise logo's CSM comes 1-6 days after signing, now and
+  then [SLOW_HANDOFF] 18-40 days (its kickoff waits for the CSM; own generator,
+  SEED + 13). Writes data/renewal_history.csv
   (the renewals inside the year: renewed, or churned for the lost accounts). Tasks
   and growth calls for a personality's story only look at the last 90 days
   (visible_day story_only), so a power user above 80% all year didn't become a
@@ -313,6 +319,25 @@ One JSON event per line, one file per day in `data/events/`.
   10 against an average of 10; crm leaves out a churned account and crm_all keeps
   it. Fails on the old code. Run it on any PR that touches cairnpath_db.py or a
   window in the flags.
+- `history.py`: the flags and the task queue week by week across the data (12 Nov
+  2026; run after flags.py, before export_views.py; in run_all and engine_steps).
+  It replays them: each week [history] step_days back from the as-of date (while
+  [history] min_days of data lie behind), the inputs are cut back to that day
+  (events, engagement and the action log up to it; the CRM as it stood: signed by
+  then via customer_since, a churned account still in until its renewal_date, a
+  term renewed later put back a year, no CSM before csm_since, QBRs from the
+  meetings held) and the same SQL runs (flags.add_views, action_status). It stops
+  if the replay of the last day differs from today's flag files. Writes
+  data/history_flags.csv and data/history_tasks.csv (Open and Claimed only).
+  Contract size, ARR, tier and owners are today's. Real use would store each run's
+  snapshot instead (a CRM change can't be replayed); the replay is the demo's
+  backfill. cairnpath_db.py reads the action log and today's flags through views
+  (action_log, open_flags) so history.py can swap them.
+- `tests/history_test.py`: three made-up accounts over a year (a renewal, one that
+  left, a new Enterprise logo whose CSM came late): the renewal gets no activation
+  status (it was "Activated"/"Stalled" before the fix), the one that left is never
+  a handoff gap, the new logo is absent before it signed and "No CSM assigned"
+  with an Open CS ops task (and its age) only until its CSM came.
 - `explore.py`: DuckDB summaries by tier, region and CSM, plus CS
   engagement week by week and meetings by owner.
 - `flags.py`: the activation, churn and expansion flags. One row per
@@ -493,6 +518,15 @@ One JSON event per line, one file per day in `data/events/`.
   days since signing, ARR). An unowned account sits in no team, so only the leader's
   page lists it. Long tables fold to 6 rows with "Show all (n)" (foldRows(): the
   Leadership team table, CS team capacity); shortList() takes how many rows to show.
+  Trends under both (12 Nov 2026): the year week by week from the history (export
+  key history: weeks, flags [week, id, flag, status] without Activated/Activating,
+  tasks [week, id, flag, status, routed_to, action_status, age]); tasks not picked
+  up split under/over stale_task_days (stone, amber), Enterprise with no CSM
+  (amber); only today's bar carries its total; the latest week always labelled;
+  a click lists that week. An account no longer in the book travels as ob_N
+  (off_book: tier, region, owner, manager; never its id or name): counted in its
+  segment, listed as "An account that has since left", opens nothing. roles.py
+  keeps the off-book rows the same scope rule would put on the page.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;

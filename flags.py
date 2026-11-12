@@ -82,6 +82,7 @@ SCOPE_DAYS = SETTINGS["activation"]["scope_days"]               # only recent co
 WINDOW_DAYS = SETTINGS["activation"]["window_days"]             # activation window after contract start
 MIN_USERS = SETTINGS["activation"]["min_users"]                 # "activated" needs this many active users
 SILENT_AFTER_DAYS = SETTINGS["activation"]["silent_after_days"] # no events after this many days = silent
+RENEWAL_SEEN_DAYS = SETTINGS["activation"]["renewal_seen_days"] # events before the term = renewing, not onboarding
 
 CHURN_UTIL_BELOW = SETTINGS["churn"]["util_below"]
 CHURN_BREADTH_DROP = SETTINGS["churn"]["breadth_drop"]
@@ -133,10 +134,15 @@ def add_views(con):
     con.sql(f"""
         CREATE VIEW activation AS
         WITH in_scope AS (
-            -- CRM accounts that signed in the last {SCOPE_DAYS} days
+            -- CRM accounts that signed in the last {SCOPE_DAYS} days: their first contract,
+            -- not a renewal (a customer since earlier, or one already sending events a
+            -- month before this term began, onboarded long ago; found by the year of data)
             SELECT c.*, a.as_of_date, a.as_of_date - c.contract_start AS days_since_contract
             FROM crm c, as_of a
             WHERE a.as_of_date - c.contract_start <= {SCOPE_DAYS}
+              AND coalesce(c.customer_since, c.contract_start) >= c.contract_start
+              AND NOT EXISTS (SELECT 1 FROM events e WHERE e.account_id = c.account_id
+                              AND e.event_date < c.contract_start - {RENEWAL_SEEN_DAYS})
         ),
         signals AS (
             -- what each in-scope account did in its first {WINDOW_DAYS} days
