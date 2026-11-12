@@ -265,10 +265,18 @@ One JSON event per line, one file per day in `data/events/`.
   last ARC_DAYS (90); before that the account sits at its normal level, so today's
   flags read as before. The year before: new logos (FIRST_YEAR_SHARE of the existing
   accounts whose term started during the year signed then, onboarding and ramping
-  up, with the welcome email or the control group), and EPISODES (70) dips: the
-  owner's style decides whether and when they call; called within 14 days the
-  account recovers 45% of the time, otherwise 20% (a planted effect, like the
-  welcome email's). Recovered: the dip sits on one of today's healthy accounts. Not
+  up, with the welcome email or the control group), and EPISODES (110) dips (start
+  by EPISODE_LAST_START; a dip thins the team out faster than the volume, so it
+  reaches Act): the owner's style decides whether and when they call; called within
+  14 days the account recovers 80% of the time, otherwise 55% (a planted effect,
+  like the welcome email's). Tuned 12 Nov 2026 to a believable top line: GRR about
+  89% and NRR about 102% on the customers of day one (the generator prints both).
+  In-year renewals of accounts that stayed renew flat, expand or downsize
+  (RENEWAL_CHANGE_ODDS by tier; a dip makes a downsize likelier; renewal_history.csv
+  has renewal_arr and arr_before). The year before the data: data/arr_bridge_history.csv,
+  a quarterly ARR bridge, top line only (starting ARR, new logo, expansion,
+  contraction, churn, ending ARR; [PRIOR_YEAR] GRR 87%, NRR 99%), ending on day
+  one's ARR. Recovered: the dip sits on one of today's healthy accounts. Not
   recovered: a lost account (same tier, owner and region) that churns at its
   renewal and leaves the book: CRM status = churned, renewal_date = the day it left,
   no events after. Quarterly QBRs across the year. CRM customer_since (first signed)

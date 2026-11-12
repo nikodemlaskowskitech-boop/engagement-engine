@@ -20,8 +20,8 @@ had."
 
 [Leadership tab]
 
-"€3.6M of €12M ARR is at risk, across 35 accounts at Act. 22 of those 35 have
-had a call, but only 9 have a next step planned. That gap is the conversation
+"€3.6M of €12M ARR is at risk, across 35 accounts at Act. 24 of those 35 have
+had a call, but only 11 have a next step planned. That gap is the conversation
 I'd have with my managers this week. Everything is sorted by value, and value
 guides the work. It's never anyone's credit."
 
@@ -30,8 +30,8 @@ guides the work. It's never anyone's credit."
 [Did it work? tab]
 
 "Flags are only worth something if they predict. Against what happened at
-renewal, the churn flags caught 45 of the 60 accounts we lost or that shrank,
-75%, with a median of 141 days' warning. The outcomes are generated, so this
+renewal, the churn flags caught 44 of the 59 accounts we lost or that shrank,
+75%, with a median of 144 days' warning. The outcomes are generated, so this
 shows the method, not proof. On your own history, it's the first thing I'd
 run."
 
@@ -39,8 +39,8 @@ run."
 
 [Leadership: click Yarrow Studio]
 
-"Yarrow Studio, Mia's account. Utilisation went from 35% to 29% to 21%, and
-weekly users are down 51%. Both signals, so it's Act and the whole €234k ARR is
+"Yarrow Studio, Mia's account. Utilisation went from 37% to 28% to 20%, and
+weekly users are down 45%. Both signals, so it's Act and the whole €234k ARR is
 at risk. Mia has forecast a downsize to €134k, and the cockpit flags that gap
 for the forecast call. There's also an AI handover brief, built from support
 cases, emails and calls. Names are removed before the model sees anything, and
