@@ -1777,21 +1777,27 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   document.addEventListener("pointerover", (e) => { const tr = e.target.closest && e.target.closest("tr.click"); if (tr && !tr.title) tr.title = "Open this account's timeline"; });
   // short = true for the list a view opens with: two example rows and "View all (n)"
   // (a summary, not a dump); a click on a bar or cell asks for the list, so it gets all of it
+  const LIST_ROWS = 10;     // a clicked list shows this many rows first (Nikodem, 12 Nov 2026)
   function accountList(host, titleEl, title, items, cols, short, noun = "account") {
     titleEl.textContent = `${title}: ${items.length} ${noun}${items.length === 1 ? "" : "s"}`;
     if (!items.length) { host.innerHTML = '<p class="note">No accounts here.</p>'; return; }
-    if (host._listTitle !== title) { delete SORTS[sortKey(host)]; host._listTitle = title; }   // a new list starts in its own order
+    // a new list starts in its own order, folded: the first LIST_ROWS (2 for an example list)
+    // and "Show all (n)", which turns into "Show fewer" once open
+    if (host._listTitle !== title) { delete SORTS[sortKey(host)]; host._listTitle = title; host._open = false; }
+    const n = short ? 2 : LIST_ROWS;
     host.classList.add("managed-sort");
     const base = items;
     items = sortedItems(host, base, cols);
     const head = cols.map((c) => `<th${c.r ? ' class="r"' : ""}>${c.label}</th>`).join("");
     // an account that's no longer in the book has no timeline: its row opens nothing
-    const body = (short ? items.slice(0, 2) : items).map((it) => (byId[it.account_id] ? `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` : "<tr>") +
+    const shown = host._open || items.length <= n + 1 ? items : items.slice(0, n);   // one hidden row isn't worth a click
+    const body = shown.map((it) => (byId[it.account_id] ? `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` : "<tr>") +
       cols.map((c) => `<td${c.r ? ' class="r num"' : ""}>${c.get(it)}</td>`).join("") + "</tr>").join("");
     host.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` +
-      (short && items.length > 2 ? `<button class="link" data-all>View all (${items.length})</button>` : "");
+      (items.length > n + 1 ? `<button class="link" data-all aria-expanded="${!!host._open}">${host._open ? "Show fewer" : `Show all (${items.length})`}</button>` : "");
     const all = host.querySelector("[data-all]");
-    if (all) all.addEventListener("click", () => accountList(host, titleEl, title, base, cols, false, noun));
+    if (all) all.addEventListener("click", () => { host._open = !host._open; accountList(host, titleEl, title, base, cols, short, noun);
+      if (!host._open) titleEl.scrollIntoView({ block: "nearest" }); });   // folding back: keep the list's title in sight
     markSortable(host.querySelector("table"), () => accountList(host, titleEl, title, base, cols, short, noun));
     host.querySelectorAll("tr.click").forEach((tr) => {
       tr.addEventListener("click", () => openAccount(tr.dataset.id));

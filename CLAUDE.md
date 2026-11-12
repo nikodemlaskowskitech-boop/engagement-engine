@@ -574,6 +574,9 @@ One JSON event per line, one file per day in `data/events/`.
   (tr.group) and median rows (tr.pinned) at the end; a folded table folds again
   (table._refold); shortList and accountList sort their whole list, not the rows on
   screen (sortedItems). The choice is kept per place on the page across redraws.
+  Long lists fold (12 Nov 2026, Nikodem): a clicked list (accountList) shows its first
+  LIST_ROWS (10) and "Show all (n)", which becomes "Show fewer" (back to 10, the title
+  kept in sight); example lists show 2. Every fold in the page works both ways.
   Trends under both (12 Nov 2026): the year week by week from the history (export
   key history: weeks, flags [week, id, flag, status] without Activated/Activating,
   tasks [week, id, flag, status, routed_to, action_status, age]); tasks not picked
