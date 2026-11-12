@@ -41,7 +41,7 @@ $steps = @()
 if ($Regenerate) { $steps += "generate_events.py" }
 $steps += "pull_clicks.py", "check_inputs.py", "cockpit_sync.py", "flags.py", "check_flags.py", "journeys.py"
 if ($Actions) { $steps += "actions.py" }
-$steps += "team_report.py", "backtest.py", "onboarding_report.py", "history.py", "export_views.py"
+$steps += "team_report.py", "backtest.py", "onboarding_report.py", "history.py", "retention.py", "export_views.py"
 
 $python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"   # the project's own Python
 $ok = 0

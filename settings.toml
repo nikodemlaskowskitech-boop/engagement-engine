@@ -34,6 +34,8 @@ events_glob = "events/*.jsonl"            # product and system events, one JSON 
 engagement_glob = "engagement/*.jsonl"    # CS history (optional)
 holdout_file = "onboarding_holdout.csv"   # optional
 outcomes_file = "renewal_outcomes.csv"    # optional
+renewal_history_file = "renewal_history.csv"   # optional: closed renewals with ARR before and after (GRR, NRR)
+arr_bridge_file = "arr_bridge_history.csv"     # optional: the year before as finance's quarterly ARR bridge
 
 # Your column names -> the engine's (see DATA_CONTRACT.md). Only list the ones
 # that differ, e.g. "Account ID" = "account_id". Empty = your files already
@@ -175,6 +177,10 @@ site_price_class = "PriceClass_100"   # edge locations in Europe and North Ameri
 site_domain = "cairnpath.nikodem-laskowski.com"
 site_certificate_arn = "arn:aws:acm:us-east-1:809071263914:certificate/fd64b2a2-8b18-45e5-8255-b7fd8e36c489"
 
+[retention]
+# retention.py: GRR and NRR (standard definitions), the ARR bridge and the forecast
+forecast_days = 180   # the forecast covers the renewals in this many days (two quarters)
+
 [history]
 # history.py: the flags and the task queue replayed week by week, for the trends
 step_days = 7      # one snapshot every this many days, back from the as-of date
@@ -204,7 +210,7 @@ peer_median = "book"                 # "against the median" compares with: "book
 # edit: what the person may change, and on which accounts ("own" or "team"); missing = can't
 # outcomes: "Did it work?" by owner (names) or as a team total (no names)
 [roles.leader]
-tabs = ["lead", "overview", "outcomes", "team", "book", "tasks", "timeline", "onboarding"]
+tabs = ["lead", "case", "overview", "outcomes", "team", "book", "tasks", "timeline", "onboarding"]
 scope = "book"
 self_service = true
 outcomes = "by_owner"

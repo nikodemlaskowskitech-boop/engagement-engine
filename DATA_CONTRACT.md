@@ -23,6 +23,8 @@ and ends with what the engine can and can't do with that data.
 | Engagement history | `data/engagement/*.jsonl` | No | No journeys, no time to action, no "last touch"; flags still work |
 | Onboarding holdout | `data/onboarding_holdout.csv` | No | Everyone gets onboarding emails; no welcomed vs. control report |
 | Renewal outcomes | `data/renewal_outcomes.csv` | No | No backtest (recall, precision, warning time) |
+| Renewal history | `data/renewal_history.csv` | No | GRR and NRR count churn only: no downsell or expansion before today's ARR |
+| ARR bridge, the year before | `data/arr_bridge_history.csv` | No | No year-before comparison on the business case |
 | Cockpit decisions | `data/cockpit_decisions.json` | No | Managers can't reassign tasks or approve hand-backs from the cockpit (Slack still can); renewal forecasts stay in the cockpit only |
 
 ## 1. Product events
@@ -164,6 +166,34 @@ acc_003,2027-02-10,downsized
 ```
 
 `outcome` is one of `renewed`, `expanded`, `downsized`, `churned`.
+
+## 6b. Renewal history (optional, for GRR and NRR)
+
+The closed renewals inside the data window, with the ARR before and after: the
+same CRM export as the outcomes, for the past. retention.py works out each
+account's ARR on any day from it (before a renewal: its `arr_before`; after the
+last one: today's ARR in the CRM).
+
+```csv
+account_id,renewal_date,outcome,renewal_arr,arr_before
+acc_154,2025-10-26,expanded,48000,34100
+acc_514,2026-02-12,churned,0,22000
+```
+
+`outcome` is one of `renewed`, `expanded`, `downsized`, `churned`. A churned
+account's `renewal_date` is the day it left (the CRM row has `status = churned`).
+
+## 6c. The year before: finance's ARR bridge (optional)
+
+The year before the data, top line only, as finance reports it: one row per
+period (quarters in the demo), no accounts. The business case shows its GRR and
+NRR next to this year's (1 - (churn + downsell) / starting ARR; NRR adds
+expansion). It should end on the book's ARR on the first day of the data.
+
+```csv
+period_start,period_end,starting_arr,new_logo_arr,expansion_arr,contraction_arr,churned_arr,ending_arr
+2024-10-19,2025-01-17,7524706,312000,219600,73500,208400,7774406
+```
 
 ## 7. Cockpit decisions (optional)
 

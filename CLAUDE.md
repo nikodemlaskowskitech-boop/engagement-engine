@@ -202,7 +202,7 @@ One JSON event per line, one file per day in `data/events/`.
 
 ## Files
 
-- `DATA_CONTRACT.md`: the five inputs, their columns and meaning, which
+- `DATA_CONTRACT.md`: the inputs, their columns and meaning, which
   are required, what stops working without each, and what is still
   hard-coded. Update it whenever an input or a column changes.
 - `PRIVACY.md`: how the handover briefs keep people's details from the model,
@@ -341,6 +341,27 @@ One JSON event per line, one file per day in `data/events/`.
   snapshot instead (a CRM change can't be replayed); the replay is the demo's
   backfill. cairnpath_db.py reads the action log and today's flags through views
   (action_log, open_flags) so history.py can swap them.
+- `retention.py`: GRR and NRR by the standard definitions (12 Nov 2026, from a
+  senior CS leader's feedback: tie the work to the top line). Cohort = the
+  customers of day one at their ARR that day; GRR = what they pay now, each capped
+  at day one's ARR, over day one's ARR; NRR counts expansion; new logos in
+  neither. ARR on any day from the renewal history (arr_before) and today's CRM
+  (views arr_segments, macros arr_on(t) and retention_between(t0, t1),
+  retention_year, retention_accounts). The year before from finance's ARR bridge
+  (input arr_bridge_history.csv, top line only; bridge_rates_prior), this year's
+  own bridge too (arr_bridge_this, bridge_rates_this) for a fair comparison. The
+  forecast: renewals in the next [retention] forecast_days, the data's loss rule
+  (account_value), the owners' forecasts and the upside, in GRR points of today's
+  book, against what happened (backtest: the demo's outcomes)
+  (retention_forecast, retention_forecast_accounts). What a call is worth: every
+  account with a churn Act task this year that has renewed since, called within
+  [journeys] act_for_days or not, ARR kept at renewal (call_effect_accounts,
+  call_effect), and today's Act accounts with no call at those rates (call_waiting,
+  call_value; needs team_report.add_views). export_views.py calls add_views and
+  exports "retention" (the cohort per account, so the page can work out any
+  segment); run_all prints it. Licence revenue only (no services in the book).
+  `tests/retention_test.py`: five made-up accounts with a known answer (GRR 65%,
+  NRR 77.5%), the bridge rates, empty-safe views.
 - `tests/history_test.py`: three made-up accounts over a year (a renewal, one that
   left, a new Enterprise logo whose CSM came late): the renewal gets no activation
   status (it was "Activated"/"Stalled" before the fix), the one that left is never
@@ -526,6 +547,18 @@ One JSON event per line, one file per day in `data/events/`.
   days since signing, ARR). An unowned account sits in no team, so only the leader's
   page lists it. Long tables fold to 6 rows with "Show all (n)" (foldRows(): the
   Leadership team table, CS team capacity); shortList() takes how many rows to show.
+  Business case tab (12 Nov 2026, the leader's only: settings [roles.leader] tabs
+  "case"; roles.py drops "retention" from every other page): the CFO's page,
+  Leadership stays operational. Headline GRR and NRR against the year before,
+  tiles (GRR, NRR, one point of GRR = 1% of today's ARR, at risk in the next two
+  quarters in GRR points), where the year's ARR went (a horizontal waterfall: day
+  one, churn, downsell, GRR, expansion, NRR, then the year before; red = lost,
+  green = growth, stone = totals), the next two quarters (data's rule, owners,
+  what happened), what calling in time is worth (kept share in time vs. late, and
+  today's Act accounts not called, as GRR points), and the definitions. hbars()
+  draws the bars (phone: label and value over a full-width bar). The segment bar
+  applies (the cohort per account); the year before is whole-book only, and says
+  so. Every bar lists its accounts; one that left shows as such and opens nothing.
   Trends under both (12 Nov 2026): the year week by week from the history (export
   key history: weeks, flags [week, id, flag, status] without Activated/Activating,
   tasks [week, id, flag, status, routed_to, action_status, age]); tasks not picked

@@ -24,7 +24,7 @@ BUILD = INFRA / "build"
 CHECK_FILES = ["check_inputs.py", "settings.py", "settings.toml"]
 SLACK_FILES = ["slack_loop.py", "settings.py", "settings.toml"]   # the Slack listener: plain Python, no libraries
 ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "flags.py", "journeys.py",
-                "team_report.py", "backtest.py", "onboarding_report.py", "history.py", "export_views.py",
+                "team_report.py", "backtest.py", "onboarding_report.py", "history.py", "retention.py", "export_views.py",
                 "to_parquet.py", "views_template.html", "handover.py", "llm.py", "stories",
                 "pull_clicks.py",                       # its combine() merges the Slack clicks
                 "roles.py"]                             # export_views.py builds the role pages with it

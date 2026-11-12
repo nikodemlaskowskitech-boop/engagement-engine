@@ -15,7 +15,7 @@ const { chromium } = require("playwright");
 const ROOT = path.resolve(__dirname, "..");
 const PAGE = "file://" + path.join(ROOT, "data", "views.html");
 const D = JSON.parse(fs.readFileSync(path.join(ROOT, "data", "views_data.json"), "utf8"));
-const TABS = ["overview", "lead", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
+const TABS = ["overview", "lead", "case", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
 
 let passed = 0, failed = 0;
 const check = (ok, name, detail = "") => {
@@ -353,7 +353,7 @@ const segment = async (page, values) => {
     const { page, errors } = await open(browser);
     // colour groups: no chart mark uses the brand accent or the retired --s1..--s4 colours
     const bad = [];
-    for (const t of ["overview", "lead", "mybook", "outcomes", "timeline", "onboarding", "team", "book"]) {
+    for (const t of ["overview", "lead", "case", "mybook", "outcomes", "timeline", "onboarding", "team", "book"]) {
       if (t === "mybook") await segment(page, { owner: "csm_mia" }); else await segment(page, {});
       await tab(page, t);
       bad.push(...await page.$$eval("main svg [fill], main svg [stroke]", (els) => els.flatMap((e) =>
@@ -736,6 +736,62 @@ const segment = async (page, values) => {
       check(ncTeam ? nf.includes(`${ncTeam} new Enterprise account`) : !/waited for one/.test(nf), `Sophie's team: ${ncTeam} new Enterprise accounts waited for a CSM this year`, nf);
       await page.close();
     }
+  }
+
+  // --- Business case: GRR and NRR, standard definitions, 12 Nov 2026 ---
+  {
+    const R = D.retention, Y = R.year, P = R.prior, F = R.forecast;
+    const p1 = (x) => (100 * x).toFixed(1) + "%";
+    const sumC = (xs, i) => xs.reduce((t, r) => t + r[i], 0);
+    const start = sumC(R.cohort, 2), end = sumC(R.cohort, 3);
+    const capped = R.cohort.reduce((t, r) => t + Math.min(r[2], r[3]), 0);
+    check(Math.abs(start - Y.start_arr) < 1 && Math.abs(capped / start - Y.grr) < 1e-9 && Math.abs(end / start - Y.nrr) < 1e-9,
+      `retention: the cohort rows add up to SQL's GRR ${p1(Y.grr)} and NRR ${p1(Y.nrr)}`);
+    check(Y.grr <= 1 && Y.grr > 0.8 && Y.nrr > Y.grr, `retention: GRR under 100% and NRR above it (${p1(Y.grr)}, ${p1(Y.nrr)})`);
+    check(!R.cohort.some((r) => /^acc_/.test(r[0]) && r[3] === 0), "retention: a churned account travels as an ob_ key, never its id");
+    const { page, errors } = await open(browser);
+    await tab(page, "case");
+    const fnd = await page.textContent("#cs-finding");
+    check(fnd.includes(`GRR ${p1(Y.grr)}`) && fnd.includes(`NRR ${p1(Y.nrr)}`) && (!P || fnd.includes(p1(P.grr))),
+      "business case: the headline says this year's GRR and NRR and the year before's", fnd);
+    const tiles = await page.innerText("#cs-tiles");
+    const book = D.accounts.reduce((t, a) => t + a.arr, 0);
+    check(tiles.includes(p1(Y.grr)) && tiles.includes(p1(Y.nrr)), "business case: the tiles match the export");
+    // every clickable bar lists that many accounts
+    const counts = { churned: Y.churned_n, contraction: Y.contraction_n, expansion: Y.expansion_n };
+    const labels = await page.$$eval("#cs-bridge .hbar.click .lbl", (ls) => ls.map((l) => l.textContent));
+    for (const [i, l] of labels.entries()) {
+      await page.$$eval("#cs-bridge .hbar.click", (rs, k) => rs[k].click(), i); await page.waitForTimeout(80);
+      const n = await page.$$eval("#cs-list tbody tr", (r) => r.length);
+      const want = /Churn/.test(l) ? counts.churned : /Downsell/.test(l) ? counts.contraction : counts.expansion;
+      check(n === want && l.includes(`(${want})`), `business case: "${l}" lists ${want} accounts`, `${n}`);
+    }
+    await page.$$eval("#cs-bridge .hbar.click", (rs) => rs[0].click()); await page.waitForTimeout(80);
+    const churnRows = await page.$$eval("#cs-list tbody tr", (rs) => rs.map((r) => [/since left/.test(r.textContent), r.classList.contains("click")]));
+    check(churnRows.length && churnRows.every(([gone, click]) => !gone || !click), "business case: an account that left is listed as such and opens nothing");
+    // the forecast: the data's rule and what happened match the export, and a click lists its accounts
+    const fc = await page.innerText("#cs-fc");
+    const money = (v) => Math.abs(v) >= 1e6 ? "€" + (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : "€" + Math.round(v / 1000) + "k";
+    check(fc.includes(money(F.data_loss)) && fc.includes(money(F.actual_loss)), `business case: forecast ${money(F.data_loss)} against ${money(F.actual_loss)} that happened`, fc.slice(0, 120));
+    await page.$$eval("#cs-fc .hbar.click", (rs) => rs[0].click()); await page.waitForTimeout(80);
+    const fcRows = await page.$$eval("#cs-list tbody tr", (r) => r.length);
+    check(fcRows === R.renewals_ahead.filter((r) => r[3] > 0).length, `business case: "Data's rule" lists its ${fcRows} renewals`);
+    // what a call is worth: the export's groups, and today's accounts not called
+    const cw = await page.innerText("#cs-call");
+    const g = Object.fromEntries(R.calls.map((c) => [c.grp, c]));
+    check(cw.includes(p1(g.in_time.kept_share)) && cw.includes(p1(g.late_or_never.kept_share)), "business case: kept shares match the export", cw.slice(0, 120));
+    await page.click("#cs-call-waiting"); await page.waitForTimeout(80);
+    const wn = await page.$$eval("#cs-list tbody tr", (r) => r.length);
+    check(wn === R.call_waiting.length, `business case: ${R.call_waiting.length} Act accounts not called yet are listed`, `${wn}`);
+    // the segment applies: Enterprise only
+    await segment(page, { tier: "Enterprise" });
+    const ent = R.cohort.filter((r) => { const a = D.accounts.find((x) => x.account_id === r[0]) || (D.history.off_book.find((x) => x.account_id === r[0])); return a && a.tier === "Enterprise"; });
+    const eg = ent.reduce((t, r) => t + Math.min(r[2], r[3]), 0) / sumC(ent, 2);
+    const et = await page.innerText("#cs-tiles");
+    check(et.includes(p1(eg)), `business case, Enterprise: GRR ${p1(eg)} from the Enterprise cohort`, et.slice(0, 80));
+    check(/isn't split by segment/.test(await page.textContent("#cs-bridge-note")), "business case: the year before isn't split by segment, and says so");
+    check(!errors.length, "no script errors on the business case", errors.join("; "));
+    await page.close();
   }
 
   await browser.close();
