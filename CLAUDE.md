@@ -462,6 +462,12 @@ One JSON event per line, one file per day in `data/events/`.
   column. Groups labelled (CSMs about 8 accounts, pools about 40); each row ends with
   "median N d · n waiting, n late". Marks take the first free lane (middle, above, below),
   so none touch or cross a row line; a 4th in one spot is "+n".
+  Leadership, after the trail (12 Nov 2026, Nikodem): "Not picked up" (every task
+  still Open, oldest first, amber from [cockpit] stale_task_days, 5 rows then View all)
+  and "New Enterprise accounts with no CSM" (the activation flag's No CSM assigned,
+  days since signing, ARR). An unowned account sits in no team, so only the leader's
+  page lists it. Long tables fold to 6 rows with "Show all (n)" (foldRows(): the
+  Leadership team table, CS team capacity); shortList() takes how many rows to show.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;
