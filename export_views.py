@@ -42,7 +42,6 @@ import sys
 from pathlib import Path
 
 import backtest
-import flags as flags_views
 import onboarding_report
 import retention
 import roles
@@ -186,7 +185,6 @@ con = connect()
 team_report.add_views(con)          # time_to_action, meetings_90d
 onboarding_report.add_views(con)    # onboarding
 backtest.add_views(con)             # backtest (empty without renewal outcomes)
-flags_views.add_views(con)          # account_value, for the retention forecast
 retention.add_views(con)            # GRR, NRR, the forecast, what a call is worth
 
 as_of = str(con.sql("SELECT as_of_date FROM as_of").fetchone()[0])

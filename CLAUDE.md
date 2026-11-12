@@ -362,6 +362,10 @@ One JSON event per line, one file per day in `data/events/`.
   call_value; needs team_report.add_views). export_views.py calls add_views and
   exports "retention" (the cohort per account, so the page can work out any
   segment); run_all prints it. Licence revenue only (no services in the book).
+  Speed (12 Nov 2026: the AWS run went from 330 to 600 of its 900 seconds): the
+  period's dates are read once and written into the views, and the forecast reads
+  flags.py's account_value.csv and the outcomes file, not the views that rebuild
+  every flag from a year of events.
   `tests/retention_test.py`: five made-up accounts with a known answer (GRR 65%,
   NRR 77.5%), the bridge rates, empty-safe views.
 - `tests/history_test.py`: three made-up accounts over a year (a renewal, one that
