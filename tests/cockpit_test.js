@@ -63,6 +63,7 @@ const listAll = async (page, host) => {
 const tab = async (page, t) => { await page.click("#tab-" + t); await page.waitForTimeout(150); };
 const segment = async (page, values) => {
   await page.click("#seg-reset").catch(() => {});
+  if (await page.isVisible("#seg-toggle") && !(await page.$eval("#segbar", (b) => b.classList.contains("open")))) await page.click("#seg-toggle");
   for (const [k, v] of Object.entries(values)) { await page.selectOption("#seg-" + k, v); await page.waitForTimeout(120); }
 };
 
@@ -323,6 +324,8 @@ const segment = async (page, values) => {
         leaks.push(...(seen.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []), ...(seen.match(/\+\d[\d ()-]{7,}\d/g) || []));
         check(!leaks.length, `${id}: 'What the model saw' shows no real name, email or phone`, leaks.join(", "));
       }
+      check(!(await page.$eval("#ho-fold", (d) => d.open)), `${id}: the brief starts folded ("Read the brief")`);
+      await page.click("#ho-fold summary"); await page.waitForTimeout(100);
       const c = cites.find((x) => x !== "DATA") || cites[0];
       await page.click(`#tl-handover .cite[data-src=${c}]`); await page.waitForTimeout(300);
       check(await page.evaluate((c) => document.getElementById("ho-sent").open && document.getElementById("ho-src-" + c).classList.contains("hit"), c),
@@ -810,6 +813,84 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+
+  // --- UX review, batch 1 (12 Nov 2026): each finding gets a check ---------------------------
+  console.log("\nUX batch 1: one 'called' rule, book ARR, a member's pool tasks, the timeline, phone, keyboard");
+  {
+    let { page, errors } = await open(browser, { width: 1300 });
+    // one rule for "called": Leadership's trail = time_to_action (no 'any meeting' fallback)
+    const actIds = D.accounts.filter((a) => a.flags.some((f) => f.flag === "churn" && f.status === "Act") && a.owner_id && D.team.some((t) => t.owner_id === a.owner_id)).map((a) => a.account_id);
+    const calledN = actIds.filter((id) => D.time_to_action.some((r) => r.account_id === id && r.flag === "churn" && r.call_date)).length;
+    await tab(page, "lead");
+    const trail = await page.innerText("#ld-tiles .trail").catch(() => "");
+    check(new RegExp(`\\b${calledN}\\b`).test(trail), `Leadership's "called" = the team report's rule (${calledN} of ${actIds.length} Act accounts)`, trail.replace(/\n/g, " | "));
+    await tab(page, "team");
+    const sub = await page.textContent("#view-team .sub");
+    check(/QBR held in the 30 days after/.test(sub) && !/QBRs don't count/.test(sub), "CS team says a QBR after the signal counts, like every other tab", sub);
+    // book ARR: CSM and pool books, of the whole book
+    await tab(page, "lead");
+    const lf = await page.textContent("#ld-finding");
+    const whole = D.accounts.reduce((t, a) => t + (a.arr || 0), 0);
+    check(/on CSM and pool books/.test(lf) && lf.includes(`whole book ${money(whole)}`), `Leadership names CSM and pool books and the whole book (${money(whole)})`, lf);
+    if (D.retention) {
+      await tab(page, "case");
+      const rec = await page.textContent("#cs-recon");
+      check(rec.startsWith(`Book ${money(whole)} =`) && /with a named CSM or pool member/.test(rec), "Business case reconciles the book: owned + Self-service", rec);
+    }
+    // a pool member sees pool-queue tasks on their own accounts, tagged
+    const member = D.team.find((t) => t.owner_type === "member" && D.tasks.some((k) => {
+      const a = D.accounts.find((x) => x.account_id === k.account_id), q = D.team.find((x) => x.owner_id === k.routed_to);
+      return a && a.owner_id === t.owner_id && q && q.owner_type === "pool" && (k.action_status === "Open" || k.action_status === "Claimed"); }));
+    if (member) {
+      const poolTasks = D.tasks.filter((k) => { const a = D.accounts.find((x) => x.account_id === k.account_id), q = D.team.find((x) => x.owner_id === k.routed_to);
+        return a && a.owner_id === member.owner_id && q && q.owner_type === "pool" && (k.action_status === "Open" || k.action_status === "Claimed"); });
+      await segment(page, { owner: member.owner_id });
+      await tab(page, "tasks");
+      const shown = await page.$$eval("#tk-list [data-open]", (bs) => bs.map((b) => b.dataset.open));
+      check(poolTasks.every((k) => shown.includes(k.account_id)), `${member.owner_name}: the ${poolTasks.length} pool-queue task(s) on their accounts are in Tasks`, `${shown.length} shown`);
+      check(/Pool queue · your account/.test(await page.textContent("#tk-list")), `${member.owner_name}: pool-queue tasks are tagged "Pool queue · your account"`);
+      await segment(page, {});
+    } else console.log("  SKIP  no pool member with a pool-queue task on their accounts");
+    // the timeline: the account at a glance at the top, plans above the brief
+    const acc = D.accounts.find((a) => a.flags.some((f) => f.flag === "churn" && f.status === "Act") && a.tier !== "Self-service");
+    await page.close();
+    ({ page } = await open(browser, { width: 1300, hash: "#" + acc.account_id }));
+    page.on("pageerror", (e) => errors.push(e.message));
+    const headTxt = await page.textContent("#tl-head");
+    check(headTxt.includes(acc.account_name) && headTxt.includes(money(acc.arr)) && /Renews/.test(headTxt) && /churn · Act/.test(headTxt),
+      "Timeline opens with the account: name, ARR, renewal, its top flag", headTxt);
+    const order = await page.evaluate(() => ["tl-head", "tl-next", "tl-handover", "tl-chart"].map((i) => document.getElementById(i))
+      .filter((n) => !n.closest("[hidden]")).map((n) => n.getBoundingClientRect().top));
+    check(order.every((t, i) => i === 0 || order[i - 1] < t), "Timeline order: account, plan and forecast, (the brief,) then the chart", JSON.stringify(order));
+    // keyboard: tabs move with the arrow keys; a chart mark opens with Enter
+    await tab(page, "overview");
+    await page.focus("#tab-overview"); await page.keyboard.press("ArrowRight"); await page.waitForTimeout(150);
+    const sel = await page.$eval("nav [aria-selected=true]", (b) => b.id);
+    check(sel === "tab-lead" && (await page.evaluate(() => document.activeElement.id)) === "tab-lead", "Arrow Right moves to the next tab", sel);
+    await tab(page, "overview");
+    const stage = await page.$("#ov-sieve g.stage");
+    const reach = stage && await stage.evaluate((g) => g.getAttribute("tabindex") === "0" && g.getAttribute("role") === "button" && !!g.getAttribute("aria-label"));
+    check(!!reach, "A sieve stage can be reached with Tab, with a role and a label");
+    if (stage) { const before = await page.textContent("#ov-list-title");
+      await stage.focus(); await page.keyboard.press("Enter"); await page.waitForTimeout(200);
+      const after = await page.textContent("#ov-list-title");
+      check(after !== before && (await page.$$("#ov-list tbody tr")).length > 0, "Enter on a stage lists its accounts", `${before} -> ${after}`); }
+    check(await page.evaluate(() => document.documentElement.lang === "en"), "the page declares its language (en)");
+    check(!errors.length, "no script errors in batch 1 checks", errors.join("; "));
+    await page.close();
+    // phone: tabs wrap, filters fold, tables become cards
+    const { page: ph, errors: pe } = await open(browser, { width: 390 });
+    check(await ph.isVisible("#seg-toggle") && await ph.isHidden("#seg-manager"), "Phone: the filters fold behind one button");
+    await ph.click("#seg-toggle"); await ph.waitForTimeout(80);
+    check(await ph.isVisible("#seg-manager"), "Phone: the button opens them");
+    const navH = await ph.$eval("nav[role=tablist]", (n) => [n.scrollWidth <= n.clientWidth + 1, n.getBoundingClientRect().height]);
+    check(navH[0] && navH[1] > 40, "Phone: every tab is in sight (they wrap, no hidden scroll)", JSON.stringify(navH));
+    await tab(ph, "lead");
+    const card = await ph.$eval("#ld-team", (t) => t.classList.contains("cards") && !!t.querySelector("td[data-label]") && getComputedStyle(t.querySelector("tr.headrow, thead")).display === "none");
+    check(card, "Phone: a table reads as cards, each value labelled with its column");
+    check(!pe.length, "no script errors on the phone checks", pe.join("; "));
+    await ph.close();
+  }
   // --- Sortable tables (12 Nov 2026, Nikodem): click a heading to sort ---
   {
     const parse = (t) => { const m = t.match(/([−-])?€?(\d[\d,]*(?:\.\d+)?)\s?([kM])?/); return m ? parseFloat(m[2].replace(/,/g, "")) * (m[3] === "M" ? 1e6 : m[3] === "k" ? 1e3 : 1) : null; };

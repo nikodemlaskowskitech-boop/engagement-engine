@@ -90,6 +90,10 @@ a["next_qbr_date"] = "2099-02-01"                            # a QBR newly booke
 save_views(v)
 step("a QBR was booked", True)
 
+a["renewal_date"], a["arr"] = "2100-01-01", (a.get("arr") or 0) * 0.8   # renewed, downsized: new contract
+save_views(v)
+step("the contract changed (a renewal, a new ARR)", True)
+
 # a new email arrives, deliberately with the same subject and date as an old one
 # (a same-day reply): it must still count as new
 eml = next((handover.STORIES / handover.CONF["email_folder"]).glob("*driftwood*"))

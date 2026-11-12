@@ -74,6 +74,15 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     check(btn === want, `${f}: ${acc} handover ${want ? "can" : "can't"} be confirmed here`, `button ${btn}`);
     await p.close();
   }
+  console.log("\nA teammate's account: read only, and it says who can act (UX review 12 Nov 2026: no dead-end 'act as' buttons)");
+  {
+    const { p } = await open("csm_lukas.html", "acc_024", true);
+    const next = await p.textContent("#tl-next"), fc = await p.textContent("#tl-forecast");
+    const actAs = await p.$$eval("[data-actas]", (x) => x.length);
+    check(!actAs && /Read only: Mia/.test(next) && /Read only: Mia/.test(fc) && !(await p.$("#fc-save")),
+      "csm_lukas.html: Mia's acc_024 shows 'Read only: Mia … can …', no act-as buttons, no form", `${actAs} buttons; ${next.slice(0, 120)}`);
+    await p.close();
+  }
   console.log("\nMy book on a CSM's page: the same medians as the full cockpit, a small book in full sight");
   {
     const full = path.join(DIR, "..", "views.html");

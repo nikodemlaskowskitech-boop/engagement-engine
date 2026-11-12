@@ -586,6 +586,23 @@ One JSON event per line, one file per day in `data/events/`.
   (off_book: tier, region, owner, manager; never its id or name): counted in its
   segment, listed as "An account that has since left", opens nothing. roles.py
   keeps the off-book rows the same scope rule would put on the page.
+  UX review, batch 1 (12 Nov 2026, agreed with Nikodem): "called" is one rule on
+  every tab (time_to_action: a churn, growth or activation call from 14 days before
+  the signal, or a QBR held in the 30 days after it; Leadership lost its "any meeting
+  in 30 days" fallback). Book ARR: Leadership says "€X of €Y on CSM and pool books
+  (whole book €Z)", the Business case reconciles the book (named owner + Self-service).
+  A pool member's Tasks include pool-queue tasks on their own accounts, tagged "Pool
+  queue · your account" (poolTaskOf). A person's page never offers "act as": it says
+  who can act ("Read only: Mia Hofer can …, or Sophie (their manager)"). The timeline
+  opens with the account (name, tier, owner, ARR, renewal, top flag), then the summary,
+  then plan and forecast, then the handover brief (folded: "Read the brief"). Phone:
+  tabs wrap, the filters fold behind a "Filters" button, every data table reads as
+  cards (labelCells: data-label from the heading row; not the 2x2 or matrices).
+  Keyboard: clickable chart marks and rows take Tab, Enter and Space (role button,
+  aria-label from the tooltip), arrow keys move between tabs, lang="en", save errors
+  role="alert". run_all runs "handover.py --dry-run" then export_views.py again, so a
+  brief whose context moved on shows "Out of date" on the laptop too (a warning if it
+  fails, like in AWS).
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;
@@ -756,7 +773,8 @@ One JSON event per line, one file per day in `data/events/`.
   or empty writes no brief, just the reason in `_check.json` (brief.py too).
   Cache: a brief is rewritten only when its context changed since the last one
   ([handover] rewrite_on: documents new, edited or removed, by their own IDs;
-  a flag's status; a newly booked QBR; the owner), or the prompt or model
+  a flag's status; a newly booked QBR; the owner; the contract: renewal date and
+  ARR, 12 Nov 2026), or the prompt or model
   changed. Daily number moves and scheduled calls don't count. The fingerprint
   and the reason for the last rewrite sit in `<acc>_meta.json`; `--force`
   rewrites anyway, `--dry-run` says what would happen.

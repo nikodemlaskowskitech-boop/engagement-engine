@@ -48,7 +48,10 @@ async function open(browser, opts = {}) {
   page.errors = errors; return page;
 }
 const tab = async (p, t) => { await p.click("#tab-" + t); await p.waitForTimeout(150); };
-const seg = async (p, values) => { await p.click("#seg-reset").catch(() => {}); for (const [k, v] of Object.entries(values)) { await p.selectOption("#seg-" + k, v); await p.waitForTimeout(120); } };
+const seg = async (p, values) => { await p.click("#seg-reset").catch(() => {});
+  // on a phone the filters fold behind one button: a person taps it first
+  if (await p.isVisible("#seg-toggle") && !(await p.$eval("#segbar", (b) => b.classList.contains("open")))) await p.click("#seg-toggle");
+  for (const [k, v] of Object.entries(values)) { await p.selectOption("#seg-" + k, v); await p.waitForTimeout(120); } };
 const text = (p, s) => p.textContent(s);
 const goTo = async (p, id) => { await tab(p, "timeline"); await p.fill("#tl-find", id); await p.keyboard.press("Enter"); await p.waitForTimeout(250); };
 const due = (days) => new Date(Date.parse(D.as_of) + days * 864e5).toISOString().slice(0, 10);

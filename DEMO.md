@@ -20,8 +20,10 @@ had."
 
 [Leadership tab]
 
-"€1.5M of €12.3M ARR is at risk, across 12 accounts at Act. 8 of those 12 have
-had a call, but only 3 have a next step planned. That gap is the conversation
+"€1.5M of the €12.3M on CSM and pool books is at risk (the whole book is €14.7M),
+across 12 accounts at Act. 8 of those 12 have had a call (a churn call, or a QBR
+held in the 30 days after the signal: the same rule on every tab), but only 3
+have a next step planned. That gap is the conversation
 I'd have with my managers this week. Everything is sorted by value, and value
 guides the work. It's never anyone's credit."
 
