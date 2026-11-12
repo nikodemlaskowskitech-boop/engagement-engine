@@ -431,6 +431,8 @@ def fingerprint(account_id, entry, docs):
         "flag_status": sorted(f"{f['flag']} {f['status']}" for f in a["flags"]),
         "qbr_booked": a.get("next_qbr_date") or "",
         "owner": f"{entry['handover_from']} -> {entry['handover_to']}",
+        # the contract: a renewal, an upsell or a downsize changes what the new owner inherits
+        "contract": f"renews {a.get('renewal_date') or '?'}, ARR {round(a.get('arr') or 0)}",
     }
     parts = {k: v for k, v in parts.items() if k in CONF["rewrite_on"]}
     parts["prompt"] = _h(SYSTEM_PROMPT + llm.MODEL + str(CONF["max_output_tokens"]))   # always: new prompt = new brief

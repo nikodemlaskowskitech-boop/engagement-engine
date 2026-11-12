@@ -227,6 +227,14 @@ h3.mini { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase;
 .sum-list li:first-child { border-top: 0; }
 .sum-list .when { font-family: var(--font-data); font-size: 0.8rem; color: var(--ink-2); }
 .sum-list small { color: var(--ink-3); }
+.acc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin: 4px 0 14px; }
+.acc-head h2 { margin: 0; font-size: 1.35rem; }
+.acc-head .fact { color: var(--ink-2); font-size: 0.9rem; }
+.acc-head .fact b { color: var(--ink); font-weight: 600; }
+.flag.inline { border-left: 0; padding: 0; }
+.tl-plan { gap: 0 28px; }
+.tl-plan .forecast { margin-top: 0; border-top: 0; padding-top: 0; }
+.ho-fold > summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; margin: 8px 0; }
 .forecast { margin-top: 16px; border-top: 1px solid var(--rule); padding-top: 12px; font-size: 0.88rem; }
 .forecast h3 { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
 .forecast p { margin: 4px 0; }
@@ -310,6 +318,22 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   .method { margin: 0; padding-left: 1.1rem; color: var(--ink-2); font-size: 0.88rem; line-height: 1.5; }
   .trend-chart svg { width: 100%; max-width: 440px; display: block; }   /* never blown up past its own size */
   .trend-block h3 { font-size: 13px; font-weight: 600; margin: 8px 0 6px; color: var(--ink-2); }
+
+/* phone: tabs wrap, filters fold behind one button, tables read as cards */
+.seg-toggle { display: none; }
+@media (max-width: 640px) {
+  nav { flex-wrap: wrap; overflow-x: visible; }
+  .seg-toggle { display: inline-block; }
+  .segbar:not(.open) > label, .segbar:not(.open) > .grp, .segbar:not(.open) > .acc-find { display: none; }
+  table.cards, table.cards tbody, table.cards tr, table.cards td { display: block; width: auto; }
+  table.cards thead, table.cards tr.headrow { display: none; }
+  table.cards tr { border-top: 1px solid var(--rule); padding: 6px 0; }
+  table.cards td { border: 0; padding: 2px 0; text-align: right; overflow-wrap: anywhere; }
+  table.cards td::after { content: ""; display: block; clear: both; }
+  table.cards td[data-label]::before { content: attr(data-label); float: left; margin-right: 12px; color: var(--ink-3); font-size: 0.8rem; text-align: left; }
+  table.cards td:first-child { text-align: left; font-weight: 600; }
+  table.cards td:first-child::before { display: none; }
+}
 </style>
 
 <header>
@@ -396,6 +420,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     <p class="banner" id="sandbox-note" hidden>Demo sandbox: what you save here stays in this browser only. Nobody else sees it, and nothing reaches the engine. Managers and CSMs can save; pick one under "Viewing as". <button type="button" class="linkish" id="sandbox-clear">Clear my changes</button></p>
     <p class="banner" id="carry-note" hidden></p>
     <div class="segbar" id="segbar" role="group" aria-label="Segment">
+      <button type="button" class="small seg-toggle" id="seg-toggle" aria-expanded="false" aria-controls="segbar">Filters</button>
       <span class="grp">People</span>
       <label>Manager <select id="seg-manager"></select></label>
       <label>Team <select id="seg-team"></select></label>
@@ -420,7 +445,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <div class="panel">
         <h2>The engagement sieve: churn signals, stage by stage</h2>
         <div id="ov-sieve"></div>
-        <p class="note">Each bar is a share of all churn signals; the figure on the right is its share of the stage above. "Called" counts a churn call, or a QBR in the 30 days after the signal.</p>
+        <p class="note">Each bar is a share of all churn signals; the figure on the right is its share of the stage above. "Called": a churn, growth or activation call from 14 days before the signal on (counted as 0 days), or a QBR held in the 30 days after it. Check-ins don't count.</p>
       </div>
       <div class="panel">
         <h2>Renewals at churn risk in the next 180 days</h2>
@@ -494,6 +519,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <p class="finding" id="cs-finding"></p>
       <p class="sub" id="cs-sub"></p>
       <div class="tiles" id="cs-tiles"></div>
+      <p class="note" id="cs-recon"></p>
       <div class="grid2 even">
         <div class="panel">
           <h2>Where the year's ARR went</h2>
@@ -623,6 +649,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <select id="tl-account" aria-label="Account" hidden></select>
         <div class="chips" id="tl-picks" aria-label="Accounts worth a look"></div>
       </div>
+      <div class="acc-head" id="tl-head" aria-live="polite"></div>
       <div class="panel">
         <h2>Summary: what was done, what's next</h2>
         <p class="finding small" id="tl-sum-line"></p>
@@ -630,6 +657,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <div><h3 class="mini">Done, newest first</h3><ul class="sum-list" id="tl-done"></ul></div>
           <div><h3 class="mini">Coming up</h3><ul class="sum-list" id="tl-coming"></ul></div>
         </div>
+      </div>
+      <div class="panel grid2 tl-plan">
+        <div class="forecast" id="tl-next"></div>
+        <div class="forecast" id="tl-forecast"></div>
       </div>
       <div class="panel" id="tl-handover" hidden></div>
       <div class="grid2">
@@ -643,8 +674,6 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <h2>Account</h2>
           <dl class="facts" id="tl-facts"></dl>
           <div class="flags" id="tl-flags"></div>
-          <div class="forecast" id="tl-next"></div>
-          <div class="forecast" id="tl-forecast"></div>
         </div>
       </div>
     </section>
@@ -679,7 +708,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
     <section class="view" id="view-team" role="tabpanel" aria-labelledby="tab-team" hidden>
       <p class="finding" id="tm-finding"></p>
-      <p class="sub">Every account at churn or expansion Act with a CSM or a pool. The clock starts when its 30-day utilisation crossed the flag's line and stops at the first churn, growth or activation call. Check-ins and QBRs don't count. A call up to 14 days before the signal counts as 0 days.</p>
+      <p class="sub">Every account at churn or expansion Act with a CSM or a pool. The clock starts when its 30-day utilisation crossed the flag's line and stops at the first call. A call counts when it is a churn, growth or activation call from 14 days before the signal on (counted as 0 days), or a QBR held in the 30 days after it. Check-ins don't count.</p>
       <div class="panel">
         <h2>Days from signal to first call, one dot per account</h2>
         <div id="tm-dots"></div>
@@ -923,6 +952,31 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } }   // who may plan or forecast depends on the segment
   for (const k of Object.keys(FACET)) $("seg-" + k).addEventListener("change", (e) => { seg[k] = e.target.value; saveSeg(); redraw(); });
   $("seg-reset").addEventListener("click", () => { for (const k in seg) seg[k] = ""; saveSeg(); redraw(); });
+  // phone: the filters fold behind one button
+  $("seg-toggle").addEventListener("click", () => {
+    const open = $("segbar").classList.toggle("open"); $("seg-toggle").setAttribute("aria-expanded", String(open));
+  });
+  document.documentElement.lang = document.documentElement.lang || "en";
+  // keyboard and screen readers: every clickable chart mark and row can be reached with Tab
+  // and opened with Enter or Space, like a button (a pass after each redraw)
+  const CLICKABLE = 'svg [style*="cursor:pointer"], svg [style*="cursor: pointer"], tr.click';
+  const reachable = () => document.querySelectorAll(CLICKABLE).forEach((n) => {
+    if (n.hasAttribute("tabindex")) return;
+    n.setAttribute("tabindex", "0");
+    if (n.tagName.toLowerCase() !== "tr") n.setAttribute("role", "button");
+    if (!n.getAttribute("aria-label")) { const t = n.querySelector && n.querySelector("title, text"); if (t) n.setAttribute("aria-label", t.textContent.trim()); }
+  });
+  let reachQueued = false;
+  new MutationObserver(() => { if (!reachQueued) { reachQueued = true; setTimeout(() => { reachQueued = false; reachable(); }, 0); } })
+    .observe(document.body, { childList: true, subtree: true });
+  document.addEventListener("keydown", (e) => {
+    const n = e.target;
+    if ((e.key === "Enter" || e.key === " ") && n instanceof Element && n.matches(CLICKABLE)) {
+      e.preventDefault();
+      if (n.tagName.toLowerCase() === "tr" && n.dataset.id && e.key === "Enter") return;   // account rows already open on Enter
+      n.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }
+  });
 
   // tooltip
   const tip = $("tip");
@@ -936,6 +990,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
   const hideTip = () => { tip.hidden = true; };
   const hover = (node, html) => {
+    // the same words for a screen reader (the tooltip is pointer-only)
+    if (!node.getAttribute("aria-label")) { const t = document.createElement("div"); t.innerHTML = String(html).replace(/<br\s*\/?>/gi, " · "); node.setAttribute("aria-label", t.textContent.trim()); }
     node.addEventListener("pointerenter", (e) => showTip(e, html));
     node.addEventListener("pointermove", moveTip);
     node.addEventListener("pointerleave", hideTip);
@@ -975,12 +1031,22 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     for (const w of views) {
       $("view-" + w).hidden = w !== v;
       $("tab-" + w).setAttribute("aria-selected", String(w === v));
+      $("tab-" + w).tabIndex = w === v ? 0 : -1;               // one Tab stop; arrows move between tabs
     }
     try { history.replaceState(null, "", "#" + v); } catch (e) { /* not allowed in some frames */ }
     hideTip();
     if (v === "lead" && typeof drawLeadership === "function") drawLeadership();   // its trends draw at the panel's real width
   };
   document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => { $("tl-back").hidden = true; show(b.dataset.view); }));
+  // arrow keys move between tabs (the tablist pattern): Left/Right, Home/End
+  document.querySelector("nav[role=tablist]").addEventListener("keydown", (e) => {
+    const tabs = [...document.querySelectorAll("nav [role=tab]")].filter((b) => !b.hidden && b.isConnected);
+    const i = tabs.indexOf(document.activeElement); if (i < 0) return;
+    const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+    if (j == null) return;
+    e.preventDefault();
+    const t = tabs[(j + tabs.length) % tabs.length]; t.focus(); t.click();
+  });
 
   // ---------------------------------------------------------------- timeline
   const TOUCH = {
@@ -1173,6 +1239,16 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       ? a.flags.map((f) => `<div class="flag ${severity(f)}"><span class="pill">${esc(f.flag)} · ${esc(f.status)}</span><p>${esc(f.reasons)}</p>` +
           (valueOf(f) != null ? `<p><b>${money(valueOf(f))} ${f.flag === "churn" ? "ARR at risk" : "upside"}</b> · ${esc(f.value_basis)}</p>` : "") + `</div>`).join("")
       : '<p class="note">No open flags.</p>';
+    // the account at a glance, above everything else
+    const RANK = { critical: 4, serious: 3, warning: 2, good: 1 };
+    const topFlag = a.flags.slice().sort((x, y) => (RANK[severity(y)] || 0) - (RANK[severity(x)] || 0))[0];
+    const days = day(a.renewal_date) - (day(D.as_of) + 1);
+    $("tl-head").innerHTML = `<h2>${esc(a.account_name)}</h2>` +
+      `<span class="fact">${esc(a.tier)} · ${esc(a.region)}</span>` +
+      `<span class="fact">Owner <b>${esc(a.owner || (a.tier === "Self-service" ? "none (Self-service)" : "not assigned"))}</b></span>` +
+      `<span class="fact">ARR <b>${money(a.arr)}</b></span>` +
+      `<span class="fact">Renews <b>${fmt(a.renewal_date)} ${a.renewal_date.slice(0, 4)}</b> (${days >= 0 ? "in " + days + " days" : days + " days ago"})</span>` +
+      (topFlag ? `<span class="flag ${severity(topFlag)} inline"><span class="pill">${esc(topFlag.flag)} · ${esc(topFlag.status)}</span></span>` : `<span class="fact">No open flags</span>`);
     const tc = (touchesBy[id] || []).length;
     drawNext(id);
     drawForecast(id);
@@ -1241,6 +1317,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   function actAsHtml(a, what) {
     const o = teamById[a.owner_id];
     if (!o) return `<p class="note">No owner assigned yet: CS ops assigns one before anyone can ${what}.</p>`;
+    // a person's page: no acting as someone else; say who can
+    if (PAGE) return `<p class="note">Read only: ${esc(o.owner_name)}${o.owner_type === "pool" ? " (pool)" : ""} can ${what} here${o.manager ? `, or ${esc(managerName(o.manager))} (their manager)` : ""}.</p>`;
     return `<p class="note">To ${what}, act as:</p><div class="fc-form">` +
       `<button class="small" data-actas="owner" data-acc="${esc(a.account_id)}">${esc(o.owner_name)}${o.owner_type === "pool" ? " (pool)" : ""}</button>` +
       (o.manager ? `<button class="small" data-actas="manager" data-acc="${esc(a.account_id)}">${esc(managerName(o.manager))} (manager)</button>` : "") +
@@ -1271,7 +1349,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     else h += `<div class="fc-form"><select id="ns-type" aria-label="Next step">${Object.entries(STEP_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>` +
       `<input id="ns-due" type="date" min="${new Date(TODAY * 864e5).toISOString().slice(0, 10)}" aria-label="Due date">` +
       `<input id="ns-note" type="text" maxlength="200" placeholder="What and with whom (optional)" aria-label="Note">` +
-      `<button class="small primary" id="ns-save">Plan it</button></div><p class="note" id="ns-msg"></p>`;
+      `<button class="small primary" id="ns-save">Plan it</button></div><p class="note" id="ns-msg" role="alert"></p>`;
     if (hist.length > 1) h += `<ul class="fc-hist">` + hist.slice(0, -1).reverse().slice(0, 3).map((s) =>
       `<li>${whenText(s.decided_at)} · ${esc(STEP_TYPES[s.type] || s.type)}, ${fmt(s.due)}${s.note ? " · " + esc(s.note) : ""}</li>`).join("") + "</ul>";
     host.innerHTML = h;
@@ -1324,7 +1402,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     else h += `<div class="fc-form"><select id="fc-call" aria-label="Forecast">${Object.entries(CALLS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>` +
       `<label id="fc-amt" hidden>to ${esc(CUR.trim())} <input id="fc-amount" type="number" min="0" step="1000" inputmode="numeric"></label>` +
       `<input id="fc-reason" type="text" maxlength="200" placeholder="Reason (required)" aria-label="Reason">` +
-      `<button class="small primary" id="fc-save">Save${who.role === "manager" ? " as manager" : ""}</button></div><p class="note" id="fc-msg"></p>`;
+      `<button class="small primary" id="fc-save">Save${who.role === "manager" ? " as manager" : ""}</button></div><p class="note" id="fc-msg" role="alert"></p>`;
     if (hist.length > 1) h += `<ul class="fc-hist">` + hist.slice(0, -1).reverse().slice(0, 4).map((f) =>
       `<li>${whenText(f.decided_at)} · ${esc(f.role === "manager" ? managerName(f.by) + " (manager)" : ownerName[f.by] || f.by)}: ${esc(callText(f))}${f.reason ? " · " + esc(f.reason) : ""}</li>`).join("") +
       (hist.length > 5 ? `<li>and ${hist.length - 5} earlier</li>` : "") + "</ul>";
@@ -1388,7 +1466,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     if (h.stale && h.stale.length) x += `<div class="ho-check ho-stale"><b>Out of date</b>: since it was written, ` +
       `${esc(h.stale.join("; "))}. Briefs are rewritten only when the admin asks for it.</div>`;
     if (conf) x += `<p class="note">${current ? "Confirmed" : "Last confirmed"} by ${esc(conf.role === "manager" ? managerName(conf.by) + " (manager)" : ownerName[conf.by] || conf.by)}, ${whenText(conf.decided_at)}${conf.note ? ` · “${esc(conf.note)}”` : ""}</p>`;
-    x += `<div class="ho-brief">${briefHtml(h.brief, ids)}</div>`;
+    // the brief itself is long: folded until asked for (the checks stay in sight)
+    x += `<details class="ho-fold" id="ho-fold"><summary>Read the brief</summary><div class="ho-brief">${briefHtml(h.brief, ids)}</div></details>`;
     x += h.unverified.length ? `<div class="ho-check"><b>Check before confirming</b><ul>${h.unverified.map((u) => `<li>${esc(u)}</li>`).join("")}</ul></div>`
       : `<p class="note">Every sentence cites a source and every number traces back to one.</p>`;
     // the confirm: the outgoing owner, or their manager
@@ -1397,7 +1476,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     else if (dbState !== "ready") x += `<p class="note">The outgoing owner confirms the brief in the published cockpit.</p>`;
     else if (!who) x += actAsHtml(a, "confirm the brief");
     else x += `<div class="fc-form"><input id="ho-note" type="text" maxlength="200" placeholder="A note for ${esc(ownerName[h.to] || "the new owner")} (optional)" aria-label="Note for the new owner">` +
-      `<button class="small primary" id="ho-confirm">Confirm${who.role === "manager" ? " as manager" : ""}</button></div><p class="note" id="ho-msg"></p>`;
+      `<button class="small primary" id="ho-confirm">Confirm${who.role === "manager" ? " as manager" : ""}</button></div><p class="note" id="ho-msg" role="alert"></p>`;
     x += `</div>`;
     // what the model saw: redacted, source by source
     const parts = h.sent.split(/\n\s*---\s*\n/).map((p) => { const m = p.trim().match(/^\[([A-Z]+\d*)\]\s*([^\n]*)\n?([\s\S]*)$/); return m ? { id: m[1], title: m[2], text: m[3] } : null; }).filter(Boolean);
@@ -2082,9 +2161,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const a = byId[t.account_id];
     // CS ops items with no account in the CRM (handoff gaps) belong to no team: every manager sees them
     if (seg.acc) return pinned().includes(t.account_id);       // pinned accounts win, as in inSeg
-    return (!seg.manager || t.manager === seg.manager || (t.manager == null && !seg.owner && !seg.team)) && (!seg.owner || t.routed_to === seg.owner)
+    return (!seg.manager || t.manager === seg.manager || (t.manager == null && !seg.owner && !seg.team)) && (!seg.owner || t.routed_to === seg.owner || poolTaskOf(t, seg.owner))
       && (!seg.team || (teamById[t.routed_to] && teamById[t.routed_to].region === seg.team))
       && (!seg.region || (a && a.region === seg.region)) && (!seg.tier || (a && a.tier === seg.tier));
+  };
+  // a pool member's work: tasks routed to them, plus pool-queue tasks on their own accounts
+  const poolTaskOf = (t, owner) => {
+    const o = teamById[owner], q = teamById[t.routed_to], a = byId[t.account_id];
+    return !!(o && o.owner_type === "member" && q && q.owner_type === "pool" && a && a.owner_id === owner);
   };
   const docId = (kind, t) => [kind, t.account_id, t.flag, t.status].join("~").replace(/[^A-Za-z0-9_.~:@+-]/g, "-");
   const canAssign = (t) => !!teamById[t.routed_to] && (t.action_status === "Open" || t.action_status === "Claimed");
@@ -2124,6 +2208,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       : dbState === "none" ? "This copy is read-only: decisions are saved in the published cockpit."
       : dbState === "loading" ? "Loading saved decisions…"
       : !seg.manager ? "Pick your name under Manager (top of the page) to give tasks to someone else or approve hand-backs." : "";
+    banner.setAttribute("role", saveError ? "alert" : "status");   // a failed save is announced at once
     banner.textContent = msg; banner.hidden = !msg;
     // status chips, with counts
     $("tk-status").innerHTML = TASK_STATES.map((s) => `<button class="chip" data-s="${s}" aria-pressed="${tkShow.has(s)}">${s} <span class="num">${n[s]}</span></button>`).join("");
@@ -2135,6 +2220,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const host = $("tk-list");
     if (!items.length) { host.innerHTML = '<p class="note">No tasks here.</p>'; return; }
     const ownerCell = (t) => esc(ownerName[t.routed_to] || t.routed_to) +
+      (teamById[t.routed_to] && teamById[t.routed_to].owner_type === "pool" && byId[t.account_id] && teamById[byId[t.account_id].owner_id]
+        && teamById[byId[t.account_id].owner_id].owner_type === "member"
+        ? `<small class="pooltag"><br>Pool queue · ${seg.owner === byId[t.account_id].owner_id ? "your" : esc(ownerName[byId[t.account_id].owner_id]) + "'s"} account</small>` : "") +
       (t.assigned_from ? `<small><br>given by ${esc(managerName(t.assigned_by))}, was with ${esc(ownerName[t.assigned_from] || t.assigned_from)}</small>` : "");
     host.innerHTML = `<table><thead><tr><th>Account</th><th>Region</th><th>Task</th><th>Owner</th><th class="r">Age</th><th>Status</th><th>Decision</th></tr></thead><tbody>` +
       items.map((t) => `<tr><td><button class="link" data-open="${esc(t.account_id)}">${nameOf(t.account_id)}</button><small><br>${esc(byId[t.account_id] ? byId[t.account_id].tier : "not in the CRM")}</small></td>` +
@@ -2351,7 +2439,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       tile("At risk, next two quarters", money(fData), `${(fData / Math.max(1, point)).toFixed(1)} pts of GRR · ${plural(ahead.length, "renewal")}`, fData > 0) +
       tile("ARR per CS person", people.length ? money(covered / people.length) : "–", COST
         ? `one GRR point = ${(point / COST).toFixed(1)} people at ${money(COST)} a year`
-        : `${money(covered)} owned by ${people.length} ${people.length === 1 ? "CSM or pool member" : "CSMs and pool members"}`, false);
+        : `${money(covered)} with a named CSM or pool member, ${people.length} ${people.length === 1 ? "person" : "people"}`, false);
+    $("cs-recon").textContent = `Book ${money(book)} = ${money(covered)} with a named CSM or pool member + ${money(book - covered)} Self-service and not yet owned.`;
 
     // 1. where the year's ARR went: a horizontal waterfall, this year (and the year before, whole book only)
     const MOVER_COLS = [
@@ -2455,16 +2544,16 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const growth = accs.filter((a) => flagOf(a, "expansion") && person(a)).sort((a, b) => (valueOf(flagOf(b, "expansion")) || 0) - (valueOf(flagOf(a, "expansion")) || 0));
     const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
     const atRisk = sum(churn, (a) => valueOf(flagOf(a, "churn"))), upside = sum(growth, (a) => valueOf(flagOf(a, "expansion")));
-    const bookArr = sum(accs.filter(person), (a) => a.arr);
+    const bookArr = sum(accs.filter(person), (a) => a.arr), wholeArr = sum(accs, (a) => a.arr);
     const act = churn.filter((a) => flagOf(a, "churn").status === "Act");
     // action taken: a churn call or QBR since the signal (team report), or any customer meeting in 30 days
-    const called = (a) => { const t = D.time_to_action.find((r) => r.account_id === a.account_id && r.flag === "churn"); return t ? !!t.call_date : met30(a.account_id); };
+    const called = (a) => { const t = D.time_to_action.find((r) => r.account_id === a.account_id && r.flag === "churn"); return !!(t && t.call_date); };   // the same rule as every tab: time_to_action
     const planned = (a) => !!planOf(a);
     const overdue = churn.filter((a) => { const p = planOf(a); return p && (planStatus(a, p) || {}).overdue; });
     const gaps = accs.filter((a) => { const f = (forecasts[a.account_id] || []).slice(-1)[0]; return f && forecastGap(a, f); });
     const actCalled = act.filter(called).length, actPlanned = act.filter(planned).length;
     $("ld-finding").textContent = churn.length
-      ? `${segOn() ? segName() + ": " : ""}${money(atRisk)} of ${money(bookArr)} ARR is at risk; ${!act.length ? "no account is at Act." : act.length === actPlanned ? `all ${act.length} Act accounts have a next step planned.` : `${act.length - actPlanned} of ${act.length} Act accounts have no next step planned.`}`
+      ? `${segOn() ? segName() + ": " : ""}${money(atRisk)} of ${money(bookArr)} on CSM and pool books is at risk (whole book ${money(wholeArr)}); ${!act.length ? "no account is at Act." : act.length === actPlanned ? `all ${act.length} Act accounts have a next step planned.` : `${act.length - actPlanned} of ${act.length} Act accounts have no next step planned.`}`
       : `${segName()}: no CSM or pool account at churn risk.`;
     // not picked up: every task still Open, oldest first (amber past the stale line, like Tasks)
     const STALE = D.settings.stale_task_days || 14;
@@ -2774,13 +2863,28 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     if (table._refold) table._refold();
     if (!quiet) markSortable(table);
   }
+  // phone: every data table reads as a list of cards, each cell with its column's name
+  // (data-label from the heading row; the 2x2 and the matrices keep their grid)
+  function labelCells(table) {
+    if (!table.isConnected || table.classList.contains("nosort") || table.classList.contains("matrix")) return;
+    const head = headRow(table); if (!head) return;
+    const names = [...head.cells].map((th) => (th.firstChild && th.firstChild.nodeType === 3 ? th.firstChild.textContent : th.textContent).replace(/[▲▼↕]/g, "").trim());
+    head.classList.add("headrow");
+    for (const tr of table.rows) {
+      if (tr === head) continue;
+      let col = 0;
+      for (const td of tr.cells) { const span = td.colSpan || 1; if (span === 1 && td.tagName === "TD" && names[col]) td.dataset.label = names[col]; col += span; }
+    }
+    table.classList.add("cards");
+  }
   // any table drawn anywhere (and drawn again on a redraw) gets sortable headings,
   // keeping the order chosen for its place on the page
   new MutationObserver((muts) => {
     for (const m of muts) for (const n of m.addedNodes) {
       if (n.nodeType !== 1) continue;
       const tables = n.tagName === "TABLE" ? [n] : [...n.querySelectorAll("table")];
-      for (const t of tables) if (!t.closest(".managed-sort")) setTimeout(() => markSortable(t), 0);
+      for (const t of tables) { if (!t.closest(".managed-sort")) setTimeout(() => markSortable(t), 0); setTimeout(() => labelCells(t), 0); }
+      if (["TR", "TBODY", "THEAD"].includes(n.tagName)) { const t = n.closest("table"); if (t) setTimeout(() => labelCells(t), 0); }
       // a table filled in place (not the rows a sort moves)
       if (n.tagName === "TBODY" || n.tagName === "THEAD") { const t = n.closest("table"); if (t && !t.closest(".managed-sort")) setTimeout(() => markSortable(t), 0); }
     }

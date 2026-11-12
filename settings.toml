@@ -256,7 +256,7 @@ contacts_file = "contacts.csv"       # the CRM's contact export (optional): each
 #   qbr_booked   a QBR newly booked or moved
 #   owner        the account changes owner
 # Daily number moves (utilisation, users, the date) never trigger one, nor does a scheduled call.
-rewrite_on = ["documents", "flag_status", "qbr_booked", "owner"]
+rewrite_on = ["documents", "flag_status", "qbr_booked", "owner", "contract"]
 max_output_tokens = 4000     # room to write; a brief cut short is refused, never saved
 # The leak check (handover.py) stops the model call when the text about to be sent still holds
 # something shaped like a person ("First Last"). Capitalised pairs that aren't people (brands,
