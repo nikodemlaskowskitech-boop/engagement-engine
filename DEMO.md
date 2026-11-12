@@ -30,9 +30,9 @@ guides the work. It's never anyone's credit."
 "And this is the page for the CFO, in their words. GRR 88.6%, up from 87% the
 year before; NRR 103%. One point of GRR is worth €147k here, so that's the
 yardstick for any budget request. The next two quarters put €1.1M at risk,
-about 7 points, and accounts we called within 14 days kept far more of their
-ARR at renewal. Small numbers and generated data, so it's the method, not a
-claim."
+about 7 points. Accounts we called within 14 days kept 53% of their ARR at
+renewal, against 47%: a small gap on 16 against 13 accounts. That's why this page
+shows the method and never claims we saved anything; a CFO trusts that more."
 
 ## 3. Did it work? (30 s)
 
