@@ -1502,10 +1502,15 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const placed = [], extra = {};
       for (const a of [...r.rs].sort((x, z) => val(x) - val(z))) {
         const v = val(a), x0 = X(v);
-        const lane = [0, -9, 9].find((o) => !placed.some((q) => q.o === o && Math.abs(q.x - x0) < 10));
-        if (lane === undefined) { const near = placed.find((q) => q.o === 0 && Math.abs(q.x - x0) < 10); extra[near.x] = (extra[near.x] || 0) + 1; continue; }
-        placed.push({ x: x0, o: lane });
-        const cyo = lane, col = 0;
+        // on a desktop a crowded day opens more columns to the right; a phone has no room, so "+n"
+        let spot = null;
+        for (let col = 0; col < (ph ? 1 : 4) && !spot; col++) {
+          const x = x0 + col * 10, lane = [0, -9, 9].find((o) => !placed.some((q) => q.o === o && Math.abs(q.x - x) < 10));
+          if (lane !== undefined) spot = { x, o: lane };
+        }
+        if (!spot) { const near = placed.find((q) => q.o === 0 && Math.abs(q.x - x0) < 10) || placed[placed.length - 1]; extra[near.x] = (extra[near.x] || 0) + 1; continue; }
+        placed.push(spot);
+        const cyo = spot.o, col = (spot.x - x0) / 10;
         const cx = X(v) + col * 10, cy = cyRow + cyo;
         const isGrowth = a.flag === "expansion", isLate = !a.call_date && v >= TARGET;
         const m = a.call_date

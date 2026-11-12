@@ -56,13 +56,23 @@ def add_views(con):
             SELECT account_id, routed_to, 'expansion' AS flag
             FROM read_csv_auto('data/flags_expansion.csv') WHERE status = 'Act'
         ),
-        signals AS (
-            SELECT a.account_id, a.routed_to, a.flag,
-                   min(u.event_date) FILTER (WHERE (a.flag = 'churn' AND u.util < 40)
-                                                OR (a.flag = 'expansion' AND u.util >= 80)) AS signal_date
+        crossed AS (
+            SELECT a.account_id, a.routed_to, a.flag, u.event_date,
+                   (a.flag = 'churn' AND u.util < {SETTINGS['churn']['util_below']})
+                   OR (a.flag = 'expansion' AND u.util >= {SETTINGS['expansion']['high']}) AS over_line
             FROM act a
             JOIN daily_util_30d u USING (account_id)    -- 30-day utilisation per day (cairnpath_db.py)
-            GROUP BY a.account_id, a.routed_to, a.flag
+        ),
+        signals AS (
+            -- the start of the current run over the line: with a year of history, an
+            -- account that dipped in spring and dips again now signals now, not in spring
+            SELECT account_id, routed_to, flag,
+                   min(event_date) FILTER (WHERE over_line AND event_date >
+                       coalesce((SELECT max(c2.event_date) FROM crossed c2
+                                 WHERE c2.account_id = c.account_id AND c2.flag = c.flag AND NOT c2.over_line),
+                                DATE '1900-01-01')) AS signal_date
+            FROM crossed c
+            GROUP BY account_id, routed_to, flag
         ),
         calls AS (
             SELECT account_id, event_date AS call_date, 'call' AS via

@@ -31,7 +31,9 @@ from pathlib import Path
 
 SEED = 42                      # same seed = same data every run
 END_DATE = date(2026, 10, 18)  # last day of data ("today" for the flags = the day after)
-DAYS = 90                      # 90, not 30: the churn rules look at 2+ months of trend
+DAYS = 365                     # a year of history, so trends and "as of" views have something to show
+ARC_DAYS = 90                  # each account's current story (declining, power user...) plays out
+                               # over the last 90 days; before that it sits at its normal level
 START_DATE = END_DATE - timedelta(days=DAYS - 1)
 OUT_DIR = Path("data")
 
@@ -106,6 +108,24 @@ ONBOARDING_WORKSHOP_RATE = {"new_customer": 0.65, "stalled": 0.15, "never_onboar
 ADVANCED_WORKSHOP_RATE = {"healthy": 0.08, "power_user": 0.20, "declining": 0.10, "shelfware": 0.03,
                           "slipping": 0.06}
 TRAILING_LAG_DAYS = 15     # a 30-day average crosses a line about 15 days after daily usage does
+
+# --- The year before the current story --------------------------------------------
+# New logos: of the existing accounts whose current term started during the year,
+# this share signed then (a new customer); the rest renewed that day.
+FIRST_YEAR_SHARE = 0.5
+# Episodes: accounts that hit a dip during the year. The owner gets a task when it
+# shows and calls (or doesn't) in their own style. The planted effect, like the
+# onboarding email's: called within CALL_IN_TIME_DAYS, the account recovers more
+# often. A recovered account carries on as one of today's healthy accounts; one
+# that doesn't churns at its renewal and leaves the book (status "churned" in the
+# CRM, no events after). Fake data: it shows the method, not that calls work.
+EPISODES = 70
+CALL_IN_TIME_DAYS = 14
+RECOVERY_ODDS = {"called_in_time": 0.45, "not_in_time": 0.20}
+EPISODE_TIER_WEIGHTS = {"Enterprise": 0.12, "Scale": 0.33, "Self-service": 0.55}
+DIP_BOTTOM = 0.35          # usage and activity fall to this share of normal...
+DIP_DAYS = 50              # ...over this many days
+RECOVER_DAYS = 40          # and climb back over this many, once recovery starts
 
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
 # An Enterprise deal is never missing from the CRM, and a silent Enterprise
@@ -218,10 +238,16 @@ NAME_SECOND = ["Retail", "Media", "Logistics", "Health", "Apps", "Fintech", "Stu
 
 # --- Helpers -----------------------------------------------------------------
 
+def arc(day_index):
+    """How far into the current story (0..1): 0 until the last ARC_DAYS, then a straight line."""
+    return max(0, day_index - (DAYS - ARC_DAYS)) / (ARC_DAYS - 1)
+
+
 def lerp(pair, day_index):
-    """Straight line from start to end value across the data window."""
+    """The personality's value on a day: its start value until the current story
+    begins, then a straight line to its end value on the last day."""
     start, end = pair
-    return start + (end - start) * day_index / (DAYS - 1)
+    return start + (end - start) * arc(day_index)
 
 
 def new_id():
@@ -261,8 +287,9 @@ def contract_start_for(personality):
     """When the contract started, depending on the account's lifecycle."""
     p = PERSONALITIES[personality]
     if p["lifecycle"] == "existing":
-        # Signed before the data window, renewal still ahead (offset < 275 days)
-        return START_DATE - timedelta(days=random.randint(10, 270))
+        # The current term started 99 to 359 days ago, so the renewal is 6 to 266 days ahead
+        # (the same spread as before the data grew to a year)
+        return END_DATE - timedelta(days=ARC_DAYS - 1) - timedelta(days=random.randint(10, 270))
     # Silent and stalled accounts are recent: older ones would have been
     # rescued or lost by now, so they stay inside the activation window.
     if personality == "never_onboarded":
@@ -271,7 +298,7 @@ def contract_start_for(personality):
         return END_DATE - timedelta(days=random.randint(16, 40))
     # Healthy new customers sign all through the window, like a real sales
     # pipeline, so onboarding shows up every week (not just in the last six).
-    return END_DATE - timedelta(days=random.randint(3, DAYS - 2))      # new_customer
+    return END_DATE - timedelta(days=random.randint(3, ARC_DAYS - 2))  # new_customer
 
 
 # --- Build the book of business ----------------------------------------------
@@ -356,6 +383,7 @@ def build_accounts():
                       and PERSONALITIES[a["personality"]]["lifecycle"] == "new" and a["in_crm"]]
     for acc in new_enterprise[:2]:
         acc["csm"] = ""
+    set_customer_since(accounts)
     set_qbr_dates(accounts)
     set_champions(accounts)
     set_welcome_group(accounts)
@@ -363,7 +391,101 @@ def build_accounts():
     size_rng = random.Random(SEED + 10)
     for acc in accounts:
         acc["contract"] = round(CONTRACT_SIZE[acc["tier"]] * 2 ** size_rng.uniform(-1, 1), -6)
+    plan_episodes(accounts, names)
     return accounts
+
+
+def set_customer_since(accounts):
+    """When each account first signed. An existing account whose current term
+    started during the year is, half the time, a new logo that signed then (it
+    onboards and ramps up like a new customer); otherwise it renewed that day and
+    has been a customer for one to three years. Own random generator."""
+    rng = random.Random(SEED + 11)
+    for acc in accounts:
+        acc["lost"], acc["ends"], acc["dip"] = False, None, None
+        start = acc["contract_start"]
+        new = PERSONALITIES[acc["personality"]]["lifecycle"] == "new"
+        acc["first_year"] = (not new and start > START_DATE + timedelta(days=7)
+                             and rng.random() < FIRST_YEAR_SHARE)
+        acc["since"] = start if (new or acc["first_year"]) else start - timedelta(days=365 * rng.randint(1, 3))
+
+
+def dip_level(dip, i):
+    """Share of normal usage on day i of a dip: falls to DIP_BOTTOM over DIP_DAYS,
+    then (if it recovers) climbs back over RECOVER_DAYS from wherever it was."""
+    if not dip or i < dip["start"]:
+        return 1.0
+    fall = lambda j: 1 - (1 - DIP_BOTTOM) * min(1.0, (j - dip["start"]) / DIP_DAYS)
+    rs = dip.get("recover_from")
+    if rs is None or i < rs:
+        return fall(i)
+    low = fall(rs)
+    return low + (1 - low) * min(1.0, (i - rs) / RECOVER_DAYS)
+
+
+def onboard_day_of(acc):
+    """The SDK goes in 2 days after signing, or 5 for the control group (no email)."""
+    return acc["since"] + timedelta(days=SDK_DELAY_DAYS["control" if acc["control"] else "welcomed"])
+
+
+def util_plan(acc, day_index):
+    """Share of the contract the account sends on a day, before daily noise: the
+    personality's story, a new account's ramp-up and any dip during the year."""
+    p = PERSONALITIES[acc["personality"]]
+    day = START_DATE + timedelta(days=day_index)
+    ramp_days = p.get("ramp_days") or (30 if acc.get("first_year") else None)
+    if ramp_days:
+        # new customers ramp up: more data sources and teams come on over the first month
+        ramp = min(1.0, max(0, (day - onboard_day_of(acc)).days) / ramp_days)
+        lo, hi = (p["util"] if p.get("ramp_days") else (0.2 * p["util"][0], lerp(p["util"], day_index)))
+        planned = lo + (hi - lo) * ramp
+    else:
+        planned = lerp(p["util"], day_index)
+    return min(1.2, planned * acc["util_factor"] * dip_level(acc.get("dip"), day_index))   # cap at 120% (overage)
+
+
+def plan_episodes(accounts, names):
+    """The year's dips (see EPISODES). For each, the owner's style decides whether
+    and when they call; the call decides the odds of recovery. Recovered: the dip
+    goes on one of today's healthy accounts. Not recovered: a lost account, the
+    same tier, owner and region, that churns at its renewal and leaves the book.
+    Own random generator, so the rest of the data doesn't move."""
+    rng = random.Random(SEED + 12)
+    hosts = {t: [a for a in accounts if a["tier"] == t and a["personality"] in ("healthy", "power_user")
+                 and a["in_crm"] and a["since"] < START_DATE] for t in TIER_COUNTS}
+    for t in hosts:
+        rng.shuffle(hosts[t])
+    next_id, used_names = len(accounts), {a["name"] for a in accounts}
+    spare_names = [n for n in names if n not in used_names]
+    for _ in range(EPISODES):
+        tier = rng.choices(list(EPISODE_TIER_WEIGHTS), weights=list(EPISODE_TIER_WEIGHTS.values()))[0]
+        if not hosts[tier]:
+            continue
+        host = hosts[tier].pop()
+        owner = host["csm"] or host["pool"]
+        style = OWNER_STYLE["pool" if host["pool"] else host["csm"]] if owner else None
+        start = rng.randint(15, 160)              # early enough to recover before today's story begins
+        probe = dict(host, dip=dict(start=start))
+        seen = visible_day(probe, below=0.40)
+        if not seen:
+            continue
+        called = bool(style) and rng.random() < style["acts"]
+        call_day = nearest_weekday(seen + timedelta(days=rng.randint(*style["act_days"]))) if called else None
+        in_time = called and (call_day - seen).days <= CALL_IN_TIME_DAYS
+        recovered = rng.random() < RECOVERY_ODDS["called_in_time" if in_time else "not_in_time"]
+        bottom = start + DIP_DAYS
+        if recovered:
+            rs = ((call_day - START_DATE).days + 7) if called else bottom + 20
+            host["dip"] = dict(start=start, recover_from=rs, seen=seen, call_day=call_day, in_time=in_time, outcome="recovered")
+            continue
+        # not recovered: a lost account like the host, churning at its renewal after the dip
+        next_id += 1
+        churn = START_DATE + timedelta(days=min(DAYS - 20, bottom + rng.randint(30, 90)))
+        lost = dict(host, id=f"acc_{next_id:03d}", name=spare_names.pop() if spare_names else f"Former {next_id}",
+                    lost=True, ends=churn, first_year=False, last_qbr="", next_qbr="",
+                    contract_start=churn - timedelta(days=365), since=churn - timedelta(days=365 * rng.randint(1, 3)),
+                    dip=dict(start=start, recover_from=None, seen=seen, call_day=call_day, in_time=in_time, outcome="lost"))
+        accounts.append(lost)
 
 
 CHAMPION_SHARE_OF_ACCOUNTS = 0.4   # roughly 4 in 10 accounts have one power user
@@ -386,7 +508,7 @@ def set_welcome_group(accounts):
     email and which are the control group. Own random generator, like the others."""
     rng = random.Random(SEED + 3)
     for acc in accounts:
-        new = PERSONALITIES[acc["personality"]]["lifecycle"] == "new"
+        new = PERSONALITIES[acc["personality"]]["lifecycle"] == "new" or acc["first_year"]
         acc["welcomed"] = (new and acc["in_crm"] and acc["tier"] != "Enterprise"
                            and rng.random() >= CONTROL_SHARE)
         acc["control"] = new and acc["in_crm"] and acc["tier"] != "Enterprise" and not acc["welcomed"]
@@ -443,7 +565,7 @@ def write_crm(accounts):
     path = OUT_DIR / "crm_accounts.csv"
     columns = ["account_id", "account_name", "tier", "region", "contract_start", "renewal_date",
                "contracted_events", "add_ons", "csm_owner", "cs_pool", "pool_owner", "last_qbr_date",
-               "next_qbr_date", "arr"]
+               "next_qbr_date", "arr", "status"]
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
@@ -457,7 +579,7 @@ def write_crm(accounts):
                 "tier": acc["tier"],
                 "region": acc["region"],
                 "contract_start": start.isoformat(),
-                "renewal_date": (start + timedelta(days=365)).isoformat(),
+                "renewal_date": (acc["ends"] or start + timedelta(days=365)).isoformat(),
                 "contracted_events": int(acc["contract"]),
                 "add_ons": acc["add_ons"],
                 "csm_owner": acc["csm"],
@@ -466,6 +588,7 @@ def write_crm(accounts):
                 "last_qbr_date": acc["last_qbr"].isoformat() if acc["last_qbr"] else "",
                 "next_qbr_date": acc["next_qbr"].isoformat() if acc["next_qbr"] else "",
                 "arr": arr_of(acc),
+                "status": "churned" if acc["lost"] else "active",   # churned: left at its renewal
             })
     return path
 
@@ -476,9 +599,9 @@ def events_for_day(acc, day_index, day, pool):
     if p.get("silent"):
         return []                                   # never onboarded: silence
 
-    # The SDK goes in 2 days after signing, or 5 for the control group (no email)
-    onboard_day = acc["contract_start"] + timedelta(
-        days=SDK_DELAY_DAYS["control" if acc["control"] else "welcomed"])
+    if acc["ends"] and day >= acc["ends"]:
+        return []                                   # churned at its renewal: gone from the book
+    onboard_day = onboard_day_of(acc)               # 2 days after signing, 5 for the control group
     if day < onboard_day:
         return []
 
@@ -488,11 +611,13 @@ def events_for_day(acc, day_index, day, pool):
 
     # New accounts start with one user and grow to the full team over two weeks;
     # existing accounts grow (or not) across the 90 days
+    days_live = (day - onboard_day).days
     if p["lifecycle"] == "new":
-        days_live = (day - onboard_day).days
         target = min(acc["users_end"], 1 + round((acc["users_start"] - 1) * days_live / 10))
     else:
-        target = round(acc["users_start"] + (acc["users_end"] - acc["users_start"]) * day_index / (DAYS - 1))
+        target = round(acc["users_start"] + (acc["users_end"] - acc["users_start"]) * arc(day_index))
+        if acc["first_year"]:                       # a new logo's team joins over its first ten days
+            target = min(target, 1 + round((acc["users_start"] - 1) * days_live / 10))
     invited_today = set()
     while len(pool) < target:
         new_user = f"{acc['id']}_usr_{len(pool) + 1:02d}"
@@ -502,7 +627,7 @@ def events_for_day(acc, day_index, day, pool):
         pool.append(new_user)
 
     # Product activity: each user is active with today's probability
-    activity = lerp(p["activity"], day_index)
+    activity = lerp(p["activity"], day_index) * dip_level(acc["dip"], day_index)
     for user in pool:
         champion = acc["has_champion"] and user == pool[0]
         # the champion turns up almost daily (if the account is active at all)
@@ -517,13 +642,7 @@ def events_for_day(acc, day_index, day, pool):
 
     # System: how many events the customer sent us today (this is what they pay for)
     daily_contract = acc["contract"] / 365
-    if p.get("ramp_days"):
-        # new customers ramp up: more data sources and teams come on over the first month
-        ramp = min(1.0, (day - onboard_day).days / p["ramp_days"])
-        planned = p["util"][0] + (p["util"][1] - p["util"][0]) * ramp
-    else:
-        planned = lerp(p["util"], day_index)
-    utilisation = min(1.2, planned * acc["util_factor"])   # cap at 120% (overage)
+    utilisation = util_plan(acc, day_index)
     volume = int(daily_contract * utilisation * random.uniform(0.85, 1.15))
     out.append(event("daily_event_volume", "system", day, acc["id"],
                      properties={"event_count": volume}))
@@ -573,13 +692,16 @@ def workshop_days(region, first_allowed):
         day += timedelta(days=14)
 
 
-def visible_day(acc, below=None, above=None):
+def visible_day(acc, below=None, above=None, story_only=False):
     """The day an account's problem (or growth) shows in its numbers: when its
     30-day utilisation would cross the line the flags use. Owners react to
     this, so "time to action" in the reports measures something real."""
-    p = PERSONALITIES[acc["personality"]]
-    for i in range(DAYS):
-        util = min(1.2, lerp(p["util"], i) * acc["util_factor"])
+    # story_only: the personality's own story (declining, power user...) starts with the
+    # last ARC_DAYS; an account that sat above 80% all year didn't become a growth case in November
+    for i in range(DAYS - ARC_DAYS if story_only else 0, DAYS):
+        util = util_plan(acc, i)
+        if i < (onboard_day_of(acc) - START_DATE).days + 30:
+            continue                              # a ramp-up isn't a problem: 30 days live first
         if (below is not None and util < below) or (above is not None and util >= above):
             return START_DATE + timedelta(days=i + TRAILING_LAG_DAYS)
     return None                                   # never crosses inside the window
@@ -594,12 +716,12 @@ def engagement_for_account(rng, acc):
     contact = f"{acc['id']}_usr_01"
     out = []
 
-    def follow_ups(after):
+    def follow_ups(after, until=END_DATE):
         """Owners who follow up keep meeting every few weeks; others don't."""
         if not style["follow_up_days"]:
             return
         day = after + timedelta(days=style["follow_up_days"] + rng.randint(-3, 3))
-        while day <= END_DATE:
+        while day <= until:
             meeting(day, "follow_up")
             day += timedelta(days=style["follow_up_days"] + rng.randint(-3, 3))
 
@@ -613,7 +735,7 @@ def engagement_for_account(rng, acc):
         sent = local_time(rng, start + timedelta(days=1 if start.weekday() < 4 else 7 - start.weekday()),
                           region, 9)                       # next working day
         out.append(cs_event(rng, "email_sent", sent, acc, "automated", "getting_started"))
-        if rng.random() < OPEN_RATE[acc["personality"]]:
+        if rng.random() < OPEN_RATE.get(acc["personality"], OPEN_RATE["new_customer"]):
             opened = sent + timedelta(hours=min(120, rng.expovariate(1 / 18)))
             local = opened + timedelta(hours=UTC_OFFSET_HOURS[region])
             if local.weekday() >= 5 or not 7 <= local.hour <= 21:
@@ -626,9 +748,10 @@ def engagement_for_account(rng, acc):
 
     # Scale: fortnightly workshops. New accounts are invited (in the email) to
     # their first onboarding workshop; live accounts sometimes join an advanced one.
-    if tier == "Scale" and p["lifecycle"] == "new" and acc["welcomed"]:
+    is_new = p["lifecycle"] == "new" or acc["first_year"]
+    if tier == "Scale" and is_new and acc["welcomed"]:
         first = next(workshop_days(region, start + timedelta(days=4)), None)
-        if first and rng.random() < ONBOARDING_WORKSHOP_RATE[acc["personality"]]:
+        if first and rng.random() < ONBOARDING_WORKSHOP_RATE.get(acc["personality"], ONBOARDING_WORKSHOP_RATE["new_customer"]):
             for n in range(1, min(3, acc["users_end"]) + 1):
                 out.append(cs_event(rng, "workshop_attended", local_time(rng, first, region, 14),
                                     acc, host, "onboarding_workshop", f"{acc['id']}_usr_{n:02d}"))
@@ -636,20 +759,30 @@ def engagement_for_account(rng, acc):
         for day in workshop_days(region, START_DATE):
             rate = ADVANCED_WORKSHOP_RATE[acc["personality"]]
             if acc["personality"] == "declining":
-                rate *= 1 - (day - START_DATE).days / DAYS      # interest fades as usage falls
+                rate *= 1 - arc((day - START_DATE).days)       # interest fades as usage falls
             if rng.random() < rate:
                 for n in range(1, rng.randint(1, 2) + 1):
                     out.append(cs_event(rng, "workshop_attended", local_time(rng, day, region, 14),
                                         acc, host, "advanced_workshop", f"{acc['id']}_usr_{n:02d}"))
 
     if not owner:            # Self-service: no human coverage, so no meetings
-        return in_window(out)
+        return in_window(out, acc)
 
-    # Enterprise: QBRs on the CRM dates, a kickoff for new accounts, regular check-ins
+    # Enterprise: QBRs on the CRM dates (and every quarter before), a kickoff for new
+    # accounts, regular check-ins
     if tier == "Enterprise":
-        if acc["last_qbr"] and START_DATE <= acc["last_qbr"] <= END_DATE:
-            meeting(acc["last_qbr"], "qbr")
-        if p["lifecycle"] == "new":
+        first_qbr = max(START_DATE, acc["since"] + timedelta(days=60))
+        if acc["last_qbr"]:
+            day = acc["last_qbr"]
+            while day >= first_qbr:
+                meeting(day, "qbr")
+                day -= timedelta(days=91 + rng.randint(-7, 7))
+        elif acc["lost"]:                          # a lost account's QBRs, while it was still a customer
+            day = first_qbr + timedelta(days=rng.randint(0, 80))
+            while day < acc["ends"]:
+                meeting(day, "qbr")
+                day += timedelta(days=91 + rng.randint(-7, 7))
+        if is_new:
             meeting(start + timedelta(days=rng.randint(*style["act_days"])), "kickoff")
         elif acc["personality"] in ("healthy", "power_user", "declining", "shelfware", "slipping"):
             day = START_DATE + timedelta(days=rng.randint(0, style["check_in_days"]))
@@ -659,14 +792,22 @@ def engagement_for_account(rng, acc):
                     meeting(day, "check_in")
                 day += timedelta(days=style["check_in_days"] + rng.randint(-5, 5))
 
+    # A dip during the year: the call (if any) was decided with the episode, since it
+    # changed the odds of recovery; follow-ups stop once the account recovers or leaves
+    dip = acc["dip"]
+    if dip and dip.get("call_day"):
+        meeting(dip["call_day"], "churn_call")
+        stop = acc["ends"] or (START_DATE + timedelta(days=dip["recover_from"] + RECOVER_DAYS) if dip.get("recover_from") else END_DATE)
+        follow_ups(dip["call_day"], min(END_DATE, stop))
+
     # Declining accounts: a churn call once it shows, if the owner gets to it
-    seen = visible_day(acc, below=0.40) if acc["personality"] == "declining" else None
+    seen = visible_day(acc, below=0.40, story_only=True) if acc["personality"] == "declining" else None
     if seen and rng.random() < style["acts"]:
         first = seen + timedelta(days=rng.randint(*style["act_days"]))
         meeting(first, "churn_call")
         follow_ups(first)
     # Growing accounts: a growth call once the growth shows, if the owner gets to it
-    seen = visible_day(acc, above=0.80) if acc["personality"] == "power_user" else None
+    seen = visible_day(acc, above=0.80, story_only=True) if acc["personality"] == "power_user" else None
     if seen and rng.random() < style["acts"]:
         first = seen + timedelta(days=rng.randint(*style["act_days"]))
         meeting(first, "growth_call")
@@ -675,13 +816,14 @@ def engagement_for_account(rng, acc):
     if tier == "Scale" and acc["personality"] == "stalled" and rng.random() < style["acts"]:
         meeting(start + timedelta(days=14 + rng.randint(*style["act_days"])), "activation_call")
 
-    return in_window(out)
+    return in_window(out, acc)
 
 
-def in_window(rows):
+def in_window(rows, acc=None):
     """Keep only what falls inside the data window (a churn call planned for
-    next week hasn't happened yet)."""
-    return [e for e in rows if START_DATE.isoformat() <= e["timestamp"][:10] <= END_DATE.isoformat()]
+    next week hasn't happened yet), and nothing after a lost account left."""
+    last = (acc["ends"] - timedelta(days=1)) if acc and acc["ends"] else END_DATE
+    return [e for e in rows if START_DATE.isoformat() <= e["timestamp"][:10] <= last.isoformat()]
 
 
 def write_engagement(accounts):
@@ -746,9 +888,22 @@ def write_task_history(accounts):
         if not (acc["in_crm"] and owner):
             continue                       # Self-service: emails, not tasks for people
         kind = acc["personality"]
+        dip = acc["dip"]
+        if dip:                            # a dip during the year: a churn task when it showed
+            sent = nearest_weekday(dip["seen"] + timedelta(days=1))
+            log(sent, acc, "churn", "Act", owner, "queue", TASK_HISTORY["declining"][3], "posted to Slack (history)")
+            if acc["pool"] and rng.random() < HISTORY_CLAIM_RATE:
+                when = local_time(rng, nearest_weekday(sent + timedelta(days=rng.randint(1, 3))), acc["region"], 10)
+                claims.append({"event_id": str(uuid.UUID(int=rng.getrandbits(128), version=4)),
+                               "event_name": "task_claimed", "event_type": "engagement",
+                               "timestamp": when.strftime("%Y-%m-%dT%H:%M:%SZ"), "account_id": acc["id"],
+                               "user_id": None, "properties": {"owner_id": owner, "topic": "churn"},
+                               "context": {"source": "slack"}})
+        if acc["lost"]:
+            continue                       # gone from the book: no later tasks
         if kind in TASK_HISTORY:
             flag, status, line, action = TASK_HISTORY[kind]
-            seen = visible_day(acc, **line)
+            seen = visible_day(acc, **line, story_only=True)
             if not seen or seen > END_DATE - timedelta(days=2):
                 continue                   # too recent: the next run sends it
             sent = nearest_weekday(seen + timedelta(days=1))
@@ -853,6 +1008,26 @@ def write_renewal_outcomes(accounts, called):
     return path
 
 
+def write_renewal_history(accounts):
+    """The renewals inside the data window, as a CRM's closed renewals would show
+    them: accounts that renewed (their current term started that day) and the
+    lost accounts (churned at their renewal). For history and trends."""
+    path = OUT_DIR / "renewal_history.csv"
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["account_id", "renewal_date", "outcome", "renewal_arr"])
+        rows = []
+        for acc in accounts:
+            if not acc["in_crm"]:
+                continue
+            if acc["lost"]:
+                rows.append([acc["id"], acc["ends"].isoformat(), "churned", 0])
+            elif not acc["first_year"] and START_DATE < acc["contract_start"] <= END_DATE and acc["since"] < acc["contract_start"]:
+                rows.append([acc["id"], acc["contract_start"].isoformat(), "renewed", arr_of(acc)])
+        writer.writerows(sorted(rows, key=lambda r: r[1]))
+    return path, len(rows)
+
+
 def write_holdout(accounts):
     """The onboarding programme's own list of held-out accounts. Unlike the
     answer key, this is a real-world fact: whoever sends onboarding emails
@@ -877,10 +1052,14 @@ def write_answer_key(accounts):
     path = OUT_DIR / "answer_key.csv"
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["account_id", "tier", "personality", "has_champion", "welcome_group"])
+        writer.writerow(["account_id", "tier", "personality", "has_champion", "welcome_group", "history", "called_in_time"])
         for acc in accounts:
             group = "welcomed" if acc["welcomed"] else "control" if acc["control"] else ""
-            writer.writerow([acc["id"], acc["tier"], acc["personality"], acc["has_champion"], group])
+            dip = acc["dip"]
+            history = ("dip, recovered" if dip and dip["outcome"] == "recovered" else "dip, churned" if dip else
+                       "new logo this year" if acc["first_year"] else "")
+            writer.writerow([acc["id"], acc["tier"], "churned" if acc["lost"] else acc["personality"],
+                             acc["has_champion"], group, history, bool(dip and dip["in_time"]) if dip else ""])
     return path
 
 
@@ -918,6 +1097,7 @@ if __name__ == "__main__":
     # New data is a new world: the old action log is replaced by this data's own
     # history (tasks of every age), and the old email events went with data/engagement/
     tasks, claimed, slipped = write_task_history(accounts)
+    history_path, renewals_in_year = write_renewal_history(accounts)
     print(f"Accounts:   {len(accounts)} ({sum(a['in_crm'] for a in accounts)} in the CRM)")
     print(f"CS team:    {team_path}")
     print(f"CRM table:  {crm_path}")
@@ -927,4 +1107,10 @@ if __name__ == "__main__":
     print(f"Engagement: {cs_total:,} CS touches and responses in data/engagement/")
     print(f"Task history: {tasks} earlier tasks in data/action_log.csv, {claimed} taken in Slack, "
           f"{slipped} QBRs that slipped")
+    dips = [a["dip"] for a in accounts if a["dip"]]
+    for label, group in (("called in time", [d for d in dips if d["in_time"]]), ("not in time", [d for d in dips if not d["in_time"]])):
+        kept = sum(d["outcome"] == "recovered" for d in group)
+        print(f"Dips this year, {label}: {len(group)}, recovered {kept} ({round(100 * kept / max(1, len(group)))}%)")
+    print(f"New logos this year: {sum(a['first_year'] for a in accounts)}; lost at renewal: {sum(a['lost'] for a in accounts)}")
+    print(f"Renewals in the year: {history_path} ({renewals_in_year})")
     print(f"Outcomes:   {outcomes_path} (renewals in the {OUTCOME_HORIZON_DAYS} days after the data, for backtest.py)")

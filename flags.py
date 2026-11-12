@@ -191,7 +191,7 @@ con.sql(f"""
                'cs_ops' AS routed_to,
                'Create or fix the CRM record (tier, contract, owner); no customer email until then' AS action
         FROM events e
-        WHERE e.account_id NOT IN (SELECT account_id FROM crm)
+        WHERE e.account_id NOT IN (SELECT account_id FROM crm_all)   -- a churned account isn't a gap
         GROUP BY e.account_id
     ),
     missing_csm AS (
@@ -251,13 +251,8 @@ con.sql(f"""
         CROSS JOIN as_of a
     ),
     weekly AS (
-        -- active users this week vs. the average week (13 weeks in 90 days)
-        SELECT b.account_id,
-               count(DISTINCT e.user_id) FILTER (WHERE e.event_date > b.as_of_date - 7) AS wau_now,
-               count(DISTINCT e.user_id || '|' || CAST((b.as_of_date - e.event_date) // 7 AS VARCHAR)) / 13.0 AS wau_avg
-        FROM base b
-        JOIN events e ON e.account_id = b.account_id AND e.user_id IS NOT NULL
-        GROUP BY b.account_id
+        -- active users this week vs. the average week (view weekly_users, cairnpath_db.py)
+        SELECT w.* FROM weekly_users w JOIN base b USING (account_id)
     ),
     errors AS (
         SELECT b.account_id,

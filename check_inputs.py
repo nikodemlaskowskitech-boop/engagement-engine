@@ -108,6 +108,13 @@ if crm:
         say("WARN", "CRM: tier names not in settings.toml [tiers], so they get no routing: "
                     + ", ".join(f"{t!r} ({n})" for t, n in odd.items()))
     print("         tiers: " + ", ".join(f"{t} {n}" for t, n in tiers.most_common()))
+    if "status" in crm[0]:                    # optional: churned = left at its renewal
+        states = Counter((r["status"] or "active").strip().lower() for r in crm)
+        if odd := {k: n for k, n in states.items() if k not in ("active", "churned")}:
+            say("WARN", "CRM: status values the engine doesn't know (it reads active or churned; anything "
+                        "else counts as active): " + ", ".join(f"{k!r} ({n})" for k, n in odd.items()))
+        print(f"         status: {states.get('active', 0)} active, {states.get('churned', 0)} churned "
+              f"(churned accounts are history only: no flags, on no page)")
     if odd := {r["region"] for r in crm} - REGIONS:
         say("WARN", f"CRM: regions without a time zone in settings.toml [regions] "
                     f"(emails go out on UTC): {', '.join(sorted(odd))}")
