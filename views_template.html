@@ -157,6 +157,11 @@ svg .lbl { fill: var(--ink-2); font-size: 12px; }
 /* tables */
 .tablewrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover, th.sortable:focus-visible { color: var(--ink); }
+th .sortmark { font-size: 0.85em; color: var(--ink-3); }
+th[aria-sort="ascending"] .sortmark, th[aria-sort="descending"] .sortmark { color: var(--accent); }
+th[aria-sort="ascending"], th[aria-sort="descending"] { color: var(--ink); }
 th { text-align: left; font: 600 0.74rem var(--font-body); text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); padding: 6px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
 td { padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
 td.r, th.r { text-align: right; }
@@ -1613,7 +1618,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const line = (r) => `<tr><td>${esc(r.o.owner_name)}</td><td class="r num">${r.n}</td><td class="r num">${r.called} (${pct(r.called, r.n)}%)</td><td class="r num">${r.med == null ? "–" : r.med}</td><td class="r num">${r.esc || "–"}</td></tr>`;
     // each group ends with its median, so every owner's number has a reference
     const medRow = (rs) => { if (rs.length < 2) return ""; const m = (f) => { const v = median(rs.map(f).filter((x) => x != null)); return v == null ? "–" : Math.round(v * 10) / 10; };
-      return `<tr><td><small>Median</small></td><td class="r num"><small>${m((r) => r.n)}</small></td><td class="r num"><small>${m((r) => pct(r.called, r.n))}%</small></td><td class="r num"><small>${m((r) => r.med)}</small></td><td class="r num"><small>${m((r) => r.esc)}</small></td></tr>`; };
+      return `<tr class="pinned"><td><small>Median</small></td><td class="r num"><small>${m((r) => r.n)}</small></td><td class="r num"><small>${m((r) => pct(r.called, r.n))}%</small></td><td class="r num"><small>${m((r) => r.med)}</small></td><td class="r num"><small>${m((r) => r.esc)}</small></td></tr>`; };
     if (PAGE && PAGE.outcomes === "team_total") {          // below manager level: no owner-by-owner comparison
       $("tm-table").innerHTML = `<tr><td class="muted">Call speed by owner is for managers (ROLES.md). The dots above show your team's accounts.</td></tr>`;
     } else $("tm-table").innerHTML = head + `<tr class="group"><td colspan="5">Named CSMs</td></tr>` + csm.map(line).join("") + medRow(csm) + `<tr class="group"><td colspan="5">Scale pools</td></tr>` + pool.map(line).join("") + medRow(pool);
@@ -1775,6 +1780,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   function accountList(host, titleEl, title, items, cols, short, noun = "account") {
     titleEl.textContent = `${title}: ${items.length} ${noun}${items.length === 1 ? "" : "s"}`;
     if (!items.length) { host.innerHTML = '<p class="note">No accounts here.</p>'; return; }
+    if (host._listTitle !== title) { delete SORTS[sortKey(host)]; host._listTitle = title; }   // a new list starts in its own order
+    host.classList.add("managed-sort");
+    const base = items;
+    items = sortedItems(host, base, cols);
     const head = cols.map((c) => `<th${c.r ? ' class="r"' : ""}>${c.label}</th>`).join("");
     // an account that's no longer in the book has no timeline: its row opens nothing
     const body = (short ? items.slice(0, 2) : items).map((it) => (byId[it.account_id] ? `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` : "<tr>") +
@@ -1782,7 +1791,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     host.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` +
       (short && items.length > 2 ? `<button class="link" data-all>View all (${items.length})</button>` : "");
     const all = host.querySelector("[data-all]");
-    if (all) all.addEventListener("click", () => accountList(host, titleEl, title, items, cols, false, noun));
+    if (all) all.addEventListener("click", () => accountList(host, titleEl, title, base, cols, false, noun));
+    markSortable(host.querySelector("table"), () => accountList(host, titleEl, title, base, cols, short, noun));
     host.querySelectorAll("tr.click").forEach((tr) => {
       tr.addEventListener("click", () => openAccount(tr.dataset.id));
       tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); });
@@ -1954,14 +1964,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("oc-matrix").innerHTML = `<table class="matrix"><thead><tr><th></th><th>Lost at renewal</th><th>Kept or grew</th></tr></thead><tbody>
       <tr><th>Flagged</th>${cell(T.tp, "Caught", "good")}${cell(T.fp, "False alarm", "warning")}</tr>
       <tr><th>Not flagged</th>${cell(T.fn, "Missed", "critical")}${cell(T.tn, "Quiet, kept", "neutral")}</tr></tbody></table>`;
-    $("oc-warning").innerHTML = `<table><thead><tr><th>Days of warning</th><th class="r">Caught</th></tr></thead><tbody>` +
+    $("oc-warning").innerHTML = `<table class="nosort"><thead><tr><th>Days of warning</th><th class="r">Caught</th></tr></thead><tbody>` +
       T.warning_bins.map((b) => `<tr><td>${b.to == null ? b.from + "+" : b.from + "–" + b.to}</td><td class="r num">${b.n}</td></tr>`).join("") + "</tbody></table>";
-    $("oc-calls").innerHTML = `<table><thead><tr><th>Act accounts</th><th class="r">Accounts</th><th class="r">Churned</th><th class="r">Kept whole</th></tr></thead><tbody>` +
+    $("oc-calls").innerHTML = `<table class="nosort"><thead><tr><th>Act accounts</th><th class="r">Accounts</th><th class="r">Churned</th><th class="r">Kept whole</th></tr></thead><tbody>` +
       T.calls.map((r) => r.small ? `<tr><td>${esc(r.group)}</td><td class="r num">${r.n}</td><td class="r muted" colspan="2">${r.n < T.min_group ? `fewer than ${T.min_group}: not shown` : "not shown: it would give away the other row"}</td></tr>`
         : `<tr><td>${esc(r.group)}</td><td class="r num">${r.n}</td><td class="r num">${r.churned} (${pct(r.churned, r.n)}%)</td><td class="r num">${r.kept} (${pct(r.kept, r.n)}%)</td></tr>`).join("") + "</tbody></table>";
     if (!T.value.length) { $("oc-value").innerHTML = ""; $("oc-value-finding").textContent = "The renewal outcomes have no renewal_arr column, so the value comparison is off."; return; }
     $("oc-value-finding").textContent = "";
-    $("oc-value").innerHTML = `<table><thead><tr><th>Status today</th><th class="r">Renewals</th><th class="r">ARR</th><th class="r">At risk (rule)</th><th class="r">Really lost</th><th class="r">Lost / at risk</th></tr></thead><tbody>` +
+    $("oc-value").innerHTML = `<table class="nosort"><thead><tr><th>Status today</th><th class="r">Renewals</th><th class="r">ARR</th><th class="r">At risk (rule)</th><th class="r">Really lost</th><th class="r">Lost / at risk</th></tr></thead><tbody>` +
       T.value.map((g) => g.small ? `<tr><td>${g.group === "All renewals" ? "<b>All renewals</b>" : esc(g.group)}</td><td class="r num">${g.n}</td><td class="r muted" colspan="4">${g.n < T.min_group ? `fewer than ${T.min_group}: not shown` : "not shown: it would give away a small group"}</td></tr>` : `<tr><td>${g.group === "All renewals" ? "<b>All renewals</b>" : esc(g.group)}</td><td class="r num">${g.n}</td><td class="r num">${money(g.arr)}</td><td class="r num">${g.at_risk ? money(g.at_risk) : "–"}</td><td class="r num">${money(g.lost)}</td><td class="r num">${g.at_risk ? pct(g.lost, g.at_risk) + "%" : "–"}</td></tr>`).join("") + "</tbody></table>";
   }
   function drawOutcomes() {
@@ -2030,7 +2040,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // calls: Act accounts with a person, churn with and without a churn call
     const act = R.filter((r) => r.flag_status === "Act" && r.tier !== "Self-service");
     const rowsC = [["Churn call held", act.filter((r) => r.had_churn_call)], ["No churn call", act.filter((r) => !r.had_churn_call)]];
-    $("oc-calls").innerHTML = `<table><thead><tr><th>Act accounts</th><th class="r">Accounts</th><th class="r">Churned</th><th class="r">Kept whole</th></tr></thead><tbody>` +
+    $("oc-calls").innerHTML = `<table class="nosort"><thead><tr><th>Act accounts</th><th class="r">Accounts</th><th class="r">Churned</th><th class="r">Kept whole</th></tr></thead><tbody>` +
       rowsC.map(([k, xs]) => `<tr class="click" data-k="${k}"><td>${k}</td><td class="r num">${xs.length}</td><td class="r num">${xs.filter((r) => r.outcome === "churned").length} (${pct(xs.filter((r) => r.outcome === "churned").length, xs.length)}%)</td><td class="r num">${xs.filter((r) => !r.lost_revenue).length} (${pct(xs.filter((r) => !r.lost_revenue).length, xs.length)}%)</td></tr>`).join("") + "</tbody></table>";
     document.querySelectorAll("#oc-calls tr.click").forEach((tr) => tr.addEventListener("click", () => listOutcomes(tr.dataset.k, rowsC.find(([k]) => k === tr.dataset.k)[1])));
 
@@ -2043,7 +2053,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       groups.push(["All renewals", V]);
       const fl = V.filter((r) => r.flagged), lostF = sumV(fl, "lost_arr"), ruleF = sumV(fl, "data_at_risk"), wholeF = sumV(fl, "arr");
       $("oc-value-finding").textContent = fl.length ? `Flagged accounts lost ${money(lostF)}; the rule said ${money(ruleF)} at risk, and counting their whole ARR would have said ${money(wholeF)}.` : "No flagged account renewed in the period.";
-      $("oc-value").innerHTML = `<table><thead><tr><th>Status today</th><th class="r">Renewals</th><th class="r">ARR</th><th class="r">At risk (rule)</th><th class="r">Really lost</th><th class="r">Lost / at risk</th></tr></thead><tbody>` +
+      $("oc-value").innerHTML = `<table class="nosort"><thead><tr><th>Status today</th><th class="r">Renewals</th><th class="r">ARR</th><th class="r">At risk (rule)</th><th class="r">Really lost</th><th class="r">Lost / at risk</th></tr></thead><tbody>` +
         groups.map(([g, xs]) => { const ar = sumV(xs, "data_at_risk"), lo = sumV(xs, "lost_arr");
           return `<tr class="click" tabindex="0" data-k="${g}"><td>${g === "All renewals" ? "<b>All renewals</b>" : esc(g)}</td><td class="r num">${xs.length}</td><td class="r num">${money(sumV(xs, "arr"))}</td><td class="r num">${ar ? money(ar) : "–"}</td><td class="r num">${money(lo)}</td><td class="r num">${ar ? pct(lo, ar) + "%" : "–"}</td></tr>`; }).join("") + "</tbody></table>";
       document.querySelectorAll("#oc-value tr.click").forEach((tr) => tr.addEventListener("click", () => listOutcomes(tr.dataset.k, groups.find(([k]) => k === tr.dataset.k)[1])));
@@ -2659,30 +2669,148 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     return `<span class="sparkcell"><svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true">${line40}<polyline points="${pts}" fill="none" stroke="var(--ink-2)" stroke-width="1.5" stroke-linejoin="round"/><circle cx="${((last[0] / n) * (W - 4)).toFixed(1)}" cy="${Y(last[1]).toFixed(1)}" r="2.5" fill="var(--ink)"/></svg><span class="num">${last[1]}%</span> ${trendMarker(util)}</span>`;
   }
   const tile = (k, v, ref, alert) => `<div class="tile${alert ? " alert" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="ref">${ref}</div></div>`;
+  // Sortable tables (12 Nov 2026, Nikodem): click a column heading to sort by it. Numbers
+  // and money: biggest first, then smallest first, then back to the table's own order.
+  // Dates: soonest first, then latest. Short text (names, regions, statuses): A to Z, then
+  // Z to A. Columns of long text (reasons, actions) or form controls aren't sortable. Rows
+  // stay inside their group (My book's Churn / Growth / No flags); a folded table folds
+  // again after the sort; a list showing its first rows sorts the whole list, not just
+  // what's on screen. The choice is kept while the page redraws (until it's reloaded).
+  const SORTS = {};
+  const sortKey = (el) => (el.closest("[id]") || {}).id || "";
+  const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11 };
+  function cellValue(text) {
+    const t = (text || "").replace(/\s+/g, " ").trim();
+    const share = t.match(/\((-?\d+(?:\.\d+)?)%\)/);                       // "8 of 8 (100%)": the share
+    if (share) return { kind: "num", v: +share[1] };
+    const d = t.match(/^(\d{1,2}) ([A-Z][a-z]{2,3})(?![a-z])\.?(?: ?(\d{4})(?!\d))?/);  // "15 Nov 2026", "15 Sept"
+    if (d && MONTHS[d[2].toLowerCase()] != null) return { kind: "date", v: Date.UTC(+(d[3] || new Date(RUN * 864e5).getUTCFullYear()), MONTHS[d[2].toLowerCase()], +d[1]) };
+    const m = t.match(/^([−+-])?€?\s?(\d[\d,]*(?:\.\d+)?)\s?([kM])?/);     // "€1.5M", "−€627k", "13", "74 days", "65%"
+    if (m) { const v = parseFloat(m[2].replace(/,/g, "")) * (m[3] === "M" ? 1e6 : m[3] === "k" ? 1e3 : 1); return { kind: "num", v: m[1] && m[1] !== "+" ? -v : v }; }
+    if (t === "–" || t === "—" || t === "") return { kind: "none" };
+    return { kind: "text", v: t.toLowerCase() };
+  }
+  // what kind of column it is, from its cells: numbers, dates, short text, or not sortable
+  function columnKind(cells) {
+    if (cells.some((c) => c.querySelector("select, input, textarea"))) return null;
+    const vals = cells.map((c) => cellValue(c.textContent)).filter((v) => v.kind !== "none");
+    if (!vals.length) return null;
+    for (const k of ["num", "date"]) if (vals.filter((v) => v.kind === k).length >= 0.6 * vals.length) return k;
+    const avg = cells.reduce((t, c) => t + c.textContent.trim().length, 0) / cells.length;
+    return avg <= 28 ? "text" : null;
+  }
+  const compare = (kind, dir) => (a, b) => {
+    if (a.kind !== kind && b.kind !== kind) return 0;
+    if (a.kind !== kind) return 1;                                     // blanks last, either way
+    if (b.kind !== kind) return -1;
+    const c = kind === "text" ? a.v.localeCompare(b.v) : a.v - b.v;
+    return dir === "desc" ? -c : c;
+  };
+  const firstDir = (kind) => kind === "num" ? "desc" : "asc";
+  // a list's items in the order chosen on its heading (shortList, accountList)
+  function sortedItems(host, items, cols) {
+    const st = SORTS[sortKey(host)];
+    if (!st || !cols[st.col]) return items;
+    const tmp = document.createElement("div");
+    const keyed = items.map((it, i) => { tmp.innerHTML = cols[st.col].get(it); return { it, i, v: cellValue(tmp.textContent) }; });
+    return keyed.sort((a, b) => compare(st.kind, st.dir)(a.v, b.v) || a.i - b.i).map((x) => x.it);
+  }
+  // headings become buttons; managed lists redraw themselves, other tables sort their rows in place
+  function markSortable(table, redraw) {
+    if (!table || table.classList.contains("nosort") || table.classList.contains("matrix")) return;
+    const head = headRow(table);
+    if (!head) return;
+    const ths = [...head.cells];
+    const body = [...table.querySelectorAll("tbody tr")].filter((tr) => tr !== head && !tr.classList.contains("group") && !tr.classList.contains("pinned"));
+    if (body.length < 2) return;
+    const key = sortKey(table), st = SORTS[key];
+    ths.forEach((th, col) => {
+      const kind = columnKind(body.map((tr) => tr.cells[col]).filter(Boolean));
+      if (!kind || !th.textContent.trim()) return;
+      th.classList.add("sortable"); th.tabIndex = 0; th.dataset.kind = kind;
+      const on = st && st.col === col;
+      th.setAttribute("aria-sort", on ? (st.dir === "desc" ? "descending" : "ascending") : "none");
+      th.querySelector(".sortmark")?.remove();
+      const mark = document.createElement("span"); mark.className = "sortmark"; mark.setAttribute("aria-hidden", "true");
+      mark.textContent = on ? (st.dir === "desc" ? " ▼" : " ▲") : " ↕"; th.append(mark);
+      const go = () => {
+        const cur = SORTS[key];
+        const first = firstDir(kind), second = first === "desc" ? "asc" : "desc";
+        if (!cur || cur.col !== col) SORTS[key] = { col, kind, dir: first };
+        else if (cur.dir === first) SORTS[key] = { col, kind, dir: second };
+        else delete SORTS[key];                                          // third click: the table's own order
+        if (redraw) redraw(); else sortRows(table);
+      };
+      th.onclick = go;
+      th.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+    });
+    if (!redraw && st) sortRows(table, true);
+  }
+  // the heading row: the table's thead, or a first row of th cells (tables filled row by row)
+  const headRow = (table) => table.tHead ? table.tHead.rows[0]
+    : [...table.rows].find((tr) => tr.cells.length && [...tr.cells].every((c) => c.tagName === "TH")) || null;
+  function sortRows(table, quiet) {
+    const st = SORTS[sortKey(table)], tb = table.tBodies[0], head = headRow(table);
+    const rows = [...tb.rows].filter((tr) => tr !== head);
+    rows.forEach((tr, i) => { if (tr.dataset.ord == null) tr.dataset.ord = i; });
+    // blocks between group rows ("Churn risk (5)") sort on their own
+    const blocks = [[]];
+    for (const tr of rows) { if (tr.classList.contains("group")) blocks.push([tr], []); else blocks[blocks.length - 1].push(tr); }
+    const out = [];
+    for (const b of blocks) {
+      if (b.length === 1 && b[0].classList.contains("group")) { out.push(b[0]); continue; }
+      const pinned = b.filter((tr) => tr.classList.contains("pinned"));       // a median row stays at its block's end
+      const keyed = b.filter((tr) => !pinned.includes(tr)).map((tr) => ({ tr, v: st ? cellValue(tr.cells[st.col] ? tr.cells[st.col].textContent : "") : null }));
+      keyed.sort((x, y) => (st ? compare(st.kind, st.dir)(x.v, y.v) : 0) || x.tr.dataset.ord - y.tr.dataset.ord);
+      out.push(...keyed.map((k) => k.tr), ...pinned);
+    }
+    out.forEach((tr) => tb.append(tr));
+    if (table._refold) table._refold();
+    if (!quiet) markSortable(table);
+  }
+  // any table drawn anywhere (and drawn again on a redraw) gets sortable headings,
+  // keeping the order chosen for its place on the page
+  new MutationObserver((muts) => {
+    for (const m of muts) for (const n of m.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      const tables = n.tagName === "TABLE" ? [n] : [...n.querySelectorAll("table")];
+      for (const t of tables) if (!t.closest(".managed-sort")) setTimeout(() => markSortable(t), 0);
+      // a table filled in place (not the rows a sort moves)
+      if (n.tagName === "TBODY" || n.tagName === "THEAD") { const t = n.closest("table"); if (t && !t.closest(".managed-sort")) setTimeout(() => markSortable(t), 0); }
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+
   // a list that shows two rows and a "View all (n)" that opens the rest in place
   function foldRows(table, n = 6) {
     const wrap = table.closest(".tablewrap") || table, old = wrap.nextElementSibling;
     if (old && old.dataset.foldFor === table.id) old.remove();
-    const rows = [...table.querySelectorAll("tr")].filter((tr) => !tr.querySelector("th"));
+    const bodyRows = () => [...table.querySelectorAll("tr")].filter((tr) => !tr.querySelector("th"));
+    const rows = bodyRows();
     if (rows.length <= n + 1) return;                       // one hidden row isn't worth a click
     let open = false;
     const btn = document.createElement("button");
     btn.className = "link"; btn.dataset.foldFor = table.id;
-    const set = () => { rows.forEach((tr, i) => { tr.hidden = !open && i >= n; }); btn.textContent = open ? "Show fewer" : `Show all (${rows.length})`; btn.setAttribute("aria-expanded", String(open)); };
+    // rows read again each time: a sort may have reordered them (the first n after the sort show)
+    const set = () => { bodyRows().forEach((tr, i) => { tr.hidden = !open && i >= n; }); btn.textContent = open ? "Show fewer" : `Show all (${rows.length})`; btn.setAttribute("aria-expanded", String(open)); };
+    table._refold = set;
     btn.addEventListener("click", () => { open = !open; set(); });
     wrap.after(btn); set();
   }
 
   function shortList(host, items, cols, empty, n = 2) {
     let all = false;
+    host.classList.add("managed-sort");
+    const base = items;
     const draw = () => {
       if (!items.length) { host.innerHTML = `<p class="note">${empty}</p>`; return; }
+      items = sortedItems(host, base, cols);
       const rows = all ? items : items.slice(0, n);
       host.innerHTML = `<table><thead><tr>${cols.map((c) => `<th${c.r ? ' class="r"' : ""}>${c.label}</th>`).join("")}</tr></thead><tbody>` +
         rows.map((it) => `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` + cols.map((c) => `<td${c.r ? ' class="r num"' : ""}>${c.get(it)}</td>`).join("") + "</tr>").join("") + "</tbody></table>" +
         (items.length > n ? `<button class="link" data-more>${all ? "Show fewer" : `View all (${items.length})`}</button>` : "");
       host.querySelectorAll("tr.click").forEach((tr) => { tr.addEventListener("click", () => openAccount(tr.dataset.id)); tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); }); });
       const more = host.querySelector("[data-more]"); if (more) more.addEventListener("click", () => { all = !all; draw(); });
+      markSortable(host.querySelector("table"), () => draw());
     };
     draw();
   }

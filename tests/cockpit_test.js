@@ -794,6 +794,58 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // --- Sortable tables (12 Nov 2026, Nikodem): click a heading to sort ---
+  {
+    const parse = (t) => { const m = t.match(/([−-])?€?(\d[\d,]*(?:\.\d+)?)\s?([kM])?/); return m ? parseFloat(m[2].replace(/,/g, "")) * (m[3] === "M" ? 1e6 : m[3] === "k" ? 1e3 : 1) : null; };
+    const { page, errors } = await open(browser, { width: 1300 });
+    await tab(page, "lead");
+    const col = (sel, i) => page.$$eval(sel, (rs, i) => rs.filter((r) => !r.querySelector("th") && !r.classList.contains("group") && !r.classList.contains("pinned")).map((r) => r.cells[i] ? r.cells[i].textContent.trim() : ""), i);
+    const head = (n) => `#ld-team tr:first-child th:nth-child(${n})`;
+    const orig = await col("#ld-team tr", 1);
+    await page.click(head(2)); await page.waitForTimeout(120);
+    const desc = (await col("#ld-team tr", 1)).map(parse);
+    check(desc.every((v, i) => i === 0 || desc[i - 1] >= v), "Leadership team table: Book ARR, first click = biggest first", desc.slice(0, 4).join(", "));
+    const vis = await page.$$eval("#ld-team tr", (rs) => rs.filter((r) => !r.querySelector("th") && !r.hidden).length);
+    check(vis === Math.min(6, desc.length), "a folded table shows the top 6 after the sort", `${vis}`);
+    check(/▼/.test(await page.textContent(head(2))) && (await page.getAttribute(head(2), "aria-sort")) === "descending", "the heading shows ▼ and aria-sort descending");
+    await page.click(head(2)); await page.waitForTimeout(120);
+    const asc = (await col("#ld-team tr", 1)).map(parse);
+    check(asc.every((v, i) => i === 0 || asc[i - 1] <= v), "second click = smallest first");
+    await page.click(head(2)); await page.waitForTimeout(120);
+    check(JSON.stringify(await col("#ld-team tr", 1)) === JSON.stringify(orig), "third click = the table's own order again");
+    // a short list sorts the whole list, not just the rows on screen
+    await page.click("#ld-queue th:nth-child(4)"); await page.waitForTimeout(80);   // Waiting: biggest first
+    await page.click("#ld-queue th:nth-child(4)"); await page.waitForTimeout(80);   // then smallest first
+    const youngest = Math.min(...D.tasks.filter((t) => t.action_status === "Open").map((t) => t.age_days));
+    const first = await page.$eval("#ld-queue tbody tr td:last-child", (td) => td.textContent.trim());
+    check(first === `${youngest} days`, `"Not picked up": smallest first finds the youngest of all ${D.tasks.filter((t) => t.action_status === "Open").length} tasks, not just the 5 shown`, first);
+    // the choice survives a redraw (a segment change)
+    await page.click(head(2)); await page.waitForTimeout(80);
+    await segment(page, { region: "UK&I" }); await page.waitForTimeout(150);
+    const after = (await col("#ld-team tr", 1)).map(parse);
+    check(/▼/.test(await page.textContent(head(2))) && after.every((v, i) => i === 0 || after[i - 1] >= v), "a sort is kept when the segment changes");
+    // what isn't sortable: form columns, long text, fixed-order tables
+    await segment(page, {});
+    await tab(page, "tasks");
+    const dec = await page.$$eval("#tk-list th", (ths) => ths.filter((t) => /Decision/.test(t.textContent)).map((t) => t.classList.contains("sortable")));
+    check(dec.length && !dec[0], "Tasks: the Decision column (forms) isn't sortable");
+    await tab(page, "outcomes");
+    check(!(await page.$$eval("#oc-value th.sortable, #oc-matrix th.sortable", (t) => t.length)), "Did it work?: fixed-order tables aren't sortable");
+    check(!errors.length, "no script errors while sorting", errors.join("; "));
+    await page.close();
+    // My book: rows stay inside their group (Churn risk / Growth / No flags)
+    const { page: p2, errors: e2 } = await open(browser, { width: 1300 });
+    await tab(p2, "mybook"); await segment(p2, { owner: "csm_mia" });
+    const groups = () => p2.$$eval("#mb-port tbody tr", (rs) => { const out = []; let g = null; for (const r of rs) { if (r.classList.contains("group")) g = r.textContent.trim().split(" (")[0]; else out.push([g, r.dataset.id]); } return out; });
+    const before = await groups();
+    await p2.click("#mb-port th:nth-child(1)"); await p2.waitForTimeout(100);
+    const after2 = await groups();
+    const byGroup = (xs) => JSON.stringify(Object.entries(xs.reduce((m, [g, id]) => ((m[g] = m[g] || []).push(id), m), {})).map(([g, ids]) => [g, ids.sort()]));
+    check(before.length > 1 && byGroup(before) === byGroup(after2), "My book: a sort keeps every account inside its group", `${before.length} rows`);
+    check(!e2.length, "no script errors sorting My book", e2.join("; "));
+    await p2.close();
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
