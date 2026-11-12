@@ -286,6 +286,23 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 .pickers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 @media (prefers-reduced-motion: no-preference) { .fade { animation: fade 0.25s ease-out; } @keyframes fade { from { opacity: 0.4; } to { opacity: 1; } } }
   .trend-block { margin-top: 14px; border-top: 1px solid var(--rule); padding-top: 10px; }
+  .grid2.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  @media (max-width: 860px) { .grid2.even { grid-template-columns: minmax(0, 1fr); } }
+  .hbars { display: grid; gap: 8px; }
+  .hbar { display: grid; grid-template-columns: minmax(96px, 9rem) minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 0.86rem; }
+  .hbar .track { position: relative; height: 18px; }
+  .hbar .fill { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+  .hbar .val { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+  .hbar .val small { color: var(--ink-3); }
+  .hbar.total .lbl { font-weight: 600; }
+  .hbar.click { cursor: pointer; }
+  .hbar.click:hover .lbl, .hbar.click:focus-visible .lbl { text-decoration: underline; }
+  @media (max-width: 640px) {        /* phone: label and value on one line, the bar full width under them */
+    .hbar { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+    .hbar .track { grid-column: 1 / -1; grid-row: 2; }
+  }
+  .hbar-sep { border-top: 1px dashed var(--rule); margin: 2px 0; }
+  .method { margin: 0; padding-left: 1.1rem; color: var(--ink-2); font-size: 0.88rem; line-height: 1.5; }
   .trend-chart svg { width: 100%; max-width: 440px; display: block; }   /* never blown up past its own size */
   .trend-block h3 { font-size: 13px; font-weight: 600; margin: 8px 0 6px; color: var(--ink-2); }
 </style>
@@ -356,10 +373,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <span class="asof" id="asof"></span>
       <label class="page-switch" id="page-switch-wrap" hidden>Viewing as <select id="page-switch">__PAGE_OPTIONS__</select></label>
     </div>
-    <p class="lede">Nine views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
+    <p class="lede">Ten views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
     <nav role="tablist" aria-label="Views">
       <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
       <button role="tab" id="tab-lead" data-view="lead" aria-selected="false">Leadership</button>
+      <button role="tab" id="tab-case" data-view="case" aria-selected="false">Business case</button>
       <button role="tab" id="tab-mybook" data-view="mybook" aria-selected="false">My book</button>
       <button role="tab" id="tab-tasks" data-view="tasks" aria-selected="false">Tasks</button>
       <button role="tab" id="tab-outcomes" data-view="outcomes" aria-selected="false">Did it work?</button>
@@ -466,6 +484,41 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       </div>
     </section>
 
+    <section class="view" id="view-case" role="tabpanel" aria-labelledby="tab-case" hidden>
+      <p class="voice">A CFO asks one thing first: are we keeping the revenue we already have? This page answers in GRR and NRR, this year against the one before, then what the next two quarters hold and what calling in time is worth.</p>
+      <p class="finding" id="cs-finding"></p>
+      <p class="sub" id="cs-sub"></p>
+      <div class="tiles" id="cs-tiles"></div>
+      <div class="grid2 even">
+        <div class="panel">
+          <h2>Where the year's ARR went</h2>
+          <p class="finding small" id="cs-bridge-finding"></p>
+          <div id="cs-bridge"></div>
+          <p class="note" id="cs-bridge-note"></p>
+        </div>
+        <div class="panel">
+          <h2>The next two quarters</h2>
+          <p class="finding small" id="cs-fc-finding"></p>
+          <div id="cs-fc"></div>
+          <p class="note" id="cs-fc-note"></p>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>What calling in time is worth</h2>
+        <p class="finding small" id="cs-call-finding"></p>
+        <div id="cs-call"></div>
+        <button class="link" id="cs-call-waiting" hidden></button>
+        <p class="note" id="cs-call-note"></p>
+      </div>
+      <div class="panel" id="cs-list-panel" hidden>
+        <h2 id="cs-list-title"></h2>
+        <div class="tablewrap" id="cs-list"></div>
+      </div>
+      <div class="panel">
+        <h2>How these numbers are worked out</h2>
+        <ul class="method" id="cs-method"></ul>
+      </div>
+    </section>
     <section class="view" id="view-mybook" role="tabpanel" aria-labelledby="tab-mybook" hidden>
       <p class="finding" id="mb-finding"></p>
       <p class="sub" id="mb-sub">One owner's morning page: what's on their plate, whether they're in front of their customers, where the risk and growth sit in their book, and what's coming in the next 8 weeks. Pick an owner at the top of the page.</p>
@@ -856,7 +909,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       c.append(x); pins.append(c);
     }
   }
-  function redraw() { drawSegbar(); drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes(); drawTasks(); drawMyBook(); drawLeadership();
+  function redraw() { drawSegbar(); drawOnboarding(); drawTeam(); drawBook(); drawSieve(); drawRenewals(); drawOutcomes(); drawTasks(); drawMyBook(); drawLeadership(); drawCase();
     if (typeof drawPicks === "function") {
       drawPicks();
       // the segment changed and the open account isn't in it: open one that is
@@ -884,7 +937,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
 
   // tabs, with a bookmarkable #token per view
-  const views = PAGE ? PAGE.tabs.slice() : ["overview", "lead", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
+  const views = PAGE ? PAGE.tabs.slice() : ["overview", "lead", "case", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
   if (PAGE) {                                    // tabs this role doesn't have aren't in the file at all (roles.py)
     const nav = document.querySelector("nav[role=tablist]");
     for (const v of views) nav.append($("tab-" + v));
@@ -2221,6 +2274,154 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("ld-nocsm-week-title").textContent = "Click a week to list the accounts"; $("ld-nocsm-week").innerHTML = "";
     const everNc = new Set(nc.map((r) => r[1])).size;
     $("ld-nocsm-finding").textContent += everNc ? ` Since ${fmtFull(HIST.weeks[0])}, ${plural(everNc, "new Enterprise account")} waited for one.` : "";
+  }
+  // Business case (the CFO's page, leader only): GRR and NRR in the industry's words.
+  // retention.py computes every account's part; the page sums the segment's accounts.
+  const RET = D.retention || null;
+  const pct1 = (x) => x == null || isNaN(x) ? "–" : (100 * x).toFixed(1) + "%";
+  const pts = (x) => (x >= 0 ? "+" : "−") + Math.abs(100 * x).toFixed(1) + " pts";
+  const accOfAny = (id) => byId[id] || offBook[id] || null;
+  const inSegAny = (id) => byId[id] ? inSeg(byId[id]) : (!seg.acc && !!offBook[id] && inSegBase(offBook[id]));
+  function caseList(title, items, cols, noun = "account") {
+    $("cs-list-panel").hidden = false;
+    accountList($("cs-list"), $("cs-list-title"), title, items, cols, false, noun);
+    $("cs-list-panel").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  // a row of horizontal bars: [{label, from, to, color, value, onClick, tip, total}] on a 0..max scale
+  function hbars(host, rowsIn, max) {
+    host.innerHTML = "";
+    const wrap = document.createElement("div"); wrap.className = "hbars"; host.append(wrap);
+    for (const r of rowsIn) {
+      if (r.sep) { const d = document.createElement("div"); d.className = "hbar-sep"; wrap.append(d); continue; }
+      const row = document.createElement("div");
+      row.className = "hbar" + (r.total ? " total" : "") + (r.onClick ? " click" : "");
+      const left = 100 * Math.min(r.from, r.to) / max, width = Math.max(0.6, 100 * Math.abs(r.to - r.from) / max);
+      const bar = r.noBar ? '<span class="track"></span>' : `<span class="track"><span class="fill" style="left:${left}%;width:${width}%;background:${r.color}"></span></span>`;
+      row.innerHTML = `<span class="lbl">${r.label}</span>${bar}<span class="val">${r.value}</span>`;
+      if (r.onClick) { row.tabIndex = 0; row.setAttribute("role", "button"); row.addEventListener("click", r.onClick); row.addEventListener("keydown", (e) => { if (e.key === "Enter") r.onClick(); }); }
+      if (r.tip) hover(row, r.tip);
+      wrap.append(row);
+    }
+  }
+  function drawCase() {
+    if (!$("view-case") || !RET) return;
+    const y = RET.year || {}, prior = RET.prior, fc = RET.forecast || {}, segd = segOn();
+    // this year, for the segment: the cohort's accounts that are in it
+    const cohort = (RET.cohort || []).filter((r) => inSegAny(r[0]));
+    const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
+    const start = sum(cohort, (r) => r[2]), end = sum(cohort, (r) => r[3]);
+    const byMove = (m) => cohort.filter((r) => r[1] === m);
+    const churned = sum(byMove("churned"), (r) => r[2]), down = sum(byMove("contraction"), (r) => r[2] - r[3]), up = sum(byMove("expansion"), (r) => r[3] - r[2]);
+    const grr = start ? (start - churned - down) / start : null, nrr = start ? end / start : null;
+    const book = sum(D.accounts.filter(inSeg), (a) => a.arr);
+    const point = book / 100;
+    const ahead = (RET.renewals_ahead || []).filter((r) => inSegId(r[0]));
+    const fData = sum(ahead, (r) => r[3]), fOwner = sum(ahead, (r) => r[4]), fUp = sum(ahead, (r) => r[5]);
+    const withOutcome = ahead.filter((r) => r[6] != null), fActual = sum(withOutcome, (r) => r[6]);
+    const ownerCalls = fc.owner_calls || 0;
+    const who = segd ? segName() + ": " : "";
+    $("cs-finding").textContent = start
+      ? `${who}GRR ${pct1(grr)} this year${!segd && prior ? `, up from ${pct1(prior.grr)} the year before` : ""}; NRR ${pct1(nrr)}${!segd && prior ? ` (${pct1(prior.nrr)})` : ""}. The next two quarters put ${money(fData)} at risk: ${(fData / Math.max(1, point)).toFixed(1)} points of GRR.`
+      : `${segName()}: no customers in this segment on the first day of the year.`;
+    $("cs-sub").textContent = `${cohort.length} customers on ${fmtFull(y.period_start || D.as_of)}, ${money(start)} ARR between them; new logos count in neither number. All of it licence revenue (committed volume and add-ons): no services in this book.`;
+    $("cs-tiles").innerHTML =
+      tile("Gross revenue retention", pct1(grr), !segd && prior ? `year before ${pct1(prior.grr)} (${pts(grr - prior.grr)})` : "this year, standard cohort", false) +
+      tile("Net revenue retention", pct1(nrr), !segd && prior ? `year before ${pct1(prior.nrr)} (${pts(nrr - prior.nrr)})` : "this year, standard cohort", false) +
+      tile("One point of GRR", money(point), `1% of today's ${money(book)} ARR`, false) +
+      tile("At risk, next two quarters", money(fData), `${(fData / Math.max(1, point)).toFixed(1)} pts of GRR · ${plural(ahead.length, "renewal")}`, fData > 0);
+
+    // 1. where the year's ARR went: a horizontal waterfall, this year (and the year before, whole book only)
+    const MOVER_COLS = [
+      { label: "Account", get: (r) => nameOf(r.account_id) },
+      { label: "Tier", get: (r) => esc((accOfAny(r.account_id) || {}).tier || "") },
+      { label: "ARR on day one", r: true, get: (r) => money(r.s0) },
+      { label: "Now", r: true, get: (r) => money(r.s1) },
+    ];
+    const listMove = (m, title) => () => caseList(title, byMove(m).map((r) => ({ account_id: r[0], s0: r[2], s1: r[3] })).sort((a, b) => Math.abs(b.s1 - b.s0) - Math.abs(a.s1 - a.s0)), MOVER_COLS);
+    const max = Math.max(1, nrr || 1, prior && !segd ? prior.nrr : 0) * 1.04;
+    const LOST = "var(--critical)", GROW = "var(--good)", BASE = "var(--viz-other)", KEPT = "var(--ink-2)";
+    const share = (v) => start ? v / start : 0;
+    const rows = [
+      { label: "Day one", from: 0, to: 1, color: BASE, value: `${money(start)} <small>100%</small>`, tip: `<b>The cohort's ARR on ${fmtFull(y.period_start || D.as_of)}</b><div class="muted">${plural(cohort.length, "customer")}</div>` },
+      { label: `Churn (${byMove("churned").length})`, from: 1 - share(churned), to: 1, color: LOST, value: `−${money(churned)} <small>${(100 * share(churned)).toFixed(1)}%</small>`, onClick: listMove("churned", "Churned this year") },
+      { label: `Downsell (${byMove("contraction").length})`, from: 1 - share(churned + down), to: 1 - share(churned), color: LOST, value: `−${money(down)} <small>${(100 * share(down)).toFixed(1)}%</small>`, onClick: listMove("contraction", "Renewed smaller this year") },
+      { label: "GRR", from: 0, to: grr || 0, color: KEPT, value: `<b>${pct1(grr)}</b>`, total: true },
+      { label: `Expansion (${byMove("expansion").length})`, from: grr || 0, to: (grr || 0) + share(up), color: GROW, value: `+${money(up)} <small>${(100 * share(up)).toFixed(1)}%</small>`, onClick: listMove("expansion", "Grew this year") },
+      { label: "NRR", from: 0, to: nrr || 0, color: KEPT, value: `<b>${pct1(nrr)}</b>`, total: true },
+    ];
+    if (prior && !segd) {
+      rows.push({ sep: true },
+        { label: "Year before: GRR", from: 0, to: prior.grr, color: BASE, value: pct1(prior.grr), total: true, tip: `<b>The year before</b><div>Finance's quarterly ARR bridge: churn ${money(prior.churned_arr)}, downsell ${money(prior.contraction_arr)}, expansion ${money(prior.expansion_arr)} on ${money(prior.start_arr)}</div><div class="muted">Top line only: no accounts to list</div>` },
+        { label: "Year before: NRR", from: 0, to: prior.nrr, color: BASE, value: pct1(prior.nrr), total: true });
+    }
+    hbars($("cs-bridge"), rows, max);
+    $("cs-bridge-finding").textContent = start
+      ? `Churn took ${(100 * share(churned)).toFixed(1)}% and downsell ${(100 * share(down)).toFixed(1)}%; expansion added ${(100 * share(up)).toFixed(1)}%.`
+      : "No customers here on day one.";
+    $("cs-bridge-note").textContent = segd
+      ? "The year before is known only as finance's top line for the whole book, so it isn't split by segment."
+      : `The year before comes from finance's quarterly ARR bridge, top line only. Worked out the same way, this year reads GRR ${pct1((RET.this_bridge || {}).grr)} and NRR ${pct1((RET.this_bridge || {}).nrr)}, so the comparison is fair. Click a bar to list its accounts.`;
+
+    // 2. the next two quarters: the data's rule, the owners' forecasts and (demo) what happened
+    const FC_COLS = [
+      { label: "Account", get: (r) => `${nameOf(r.account_id)}<small><br>renews ${fmt(r.d)}</small>` },
+      { label: "ARR", r: true, get: (r) => money(r.arr) },
+      { label: "Data's rule", r: true, get: (r) => r.dl ? money(r.dl) : "–" },
+      { label: "Owner", r: true, get: (r) => r.ol !== r.dl ? money(r.ol) : "–" },
+      { label: "What happened", r: true, get: (r) => r.al == null ? "–" : r.al ? `−${money(r.al)}` : r.ag ? `+${money(r.ag)}` : "kept" },
+    ];
+    const asRow = (r) => ({ account_id: r[0], arr: r[1], d: r[2], dl: r[3], ol: r[4], up: r[5], al: r[6], ag: r[7] });
+    const fmax = Math.max(1, fData, fOwner, fActual) * 1.08;
+    hbars($("cs-fc"), [
+      { label: "Up for renewal", noBar: true, from: 0, to: 0, color: BASE, value: `${money(sum(ahead, (r) => r[1]))} <small>${plural(ahead.length, "renewal")}</small>` },
+      { label: "Data's rule", from: 0, to: fData, color: "var(--viz-renewal)", value: `${money(fData)} <small>${(fData / Math.max(1, point)).toFixed(1)} pts</small>`,
+        onClick: () => caseList("At risk by the data's rule", ahead.filter((r) => r[3] > 0).map(asRow).sort((a, b) => b.dl - a.dl), FC_COLS) },
+      { label: `Owners (${ownerCalls})`, from: 0, to: fOwner, color: "var(--accent)", value: `${money(fOwner)} <small>${(fOwner / Math.max(1, point)).toFixed(1)} pts</small>`,
+        onClick: () => caseList("At risk with the owners' forecasts", ahead.filter((r) => r[4] > 0).map(asRow).sort((a, b) => b.ol - a.ol), FC_COLS) },
+      { sep: true },
+      { label: "What happened", from: 0, to: fActual, color: "var(--ink-2)", value: `${money(fActual)} <small>${(fActual / Math.max(1, point)).toFixed(1)} pts</small>`,
+        onClick: () => caseList("What happened at these renewals", withOutcome.filter((r) => r[6] > 0 || r[7] > 0).map(asRow).sort((a, b) => (b.al || 0) - (a.al || 0)), FC_COLS) },
+    ], fmax);
+    const gap = fData - fActual;
+    $("cs-fc-finding").textContent = ahead.length
+      ? `${money(fData)} at risk by the data's rule; ${money(fActual)} was really lost, so the rule ${Math.abs(gap) < 0.1 * Math.max(1, fActual) ? "was close" : gap > 0 ? `overstated it by ${money(gap)}` : `understated it by ${money(-gap)}`}.`
+      : "No renewals in the next two quarters in this segment.";
+    $("cs-fc-note").textContent = `The data's rule counts the whole ARR at Act and the unused part at Watch and Shelfware. Owners' forecasts replace it where they set one (${ownerCalls} so far). "What happened" is the demo's own future (renewal outcomes generated with the data): it shows how predictable the number is, the point of a forecast. Upside at these renewals: ${money(fUp)}.`;
+
+    // 3. what calling in time is worth: like for like, then on today's book
+    const calls = (RET.call_accounts || []).filter((r) => inSegAny(r[0]));
+    const grp = (g) => calls.filter((r) => r[1] === g);
+    const kept = (xs) => { const b = sum(xs, (r) => r[3]); return b ? sum(xs, (r) => r[4]) / b : null; };
+    const inT = grp("in_time"), late = grp("late_or_never"), kIn = kept(inT), kLate = kept(late);
+    const waiting = (RET.call_waiting || []).filter((id) => inSegId(id)), waitArr = sum(waiting, (id) => (byId[id] || {}).arr);
+    const value = kIn != null && kLate != null ? waitArr * Math.max(0, kIn - kLate) : null;
+    const CALL_COLS = [
+      { label: "Account", get: (r) => nameOf(r.account_id) },
+      { label: "At renewal", get: (r) => esc(r.o) },
+      { label: "ARR before", r: true, get: (r) => money(r.b) },
+      { label: "After", r: true, get: (r) => money(r.a) },
+    ];
+    const listCalls = (xs, t) => () => caseList(t, xs.map((r) => ({ account_id: r[0], o: r[2], b: r[3], a: r[4] })).sort((p, q) => q.b - p.b), CALL_COLS);
+    hbars($("cs-call"), [
+      { label: `Called within ${D.settings.fast_days} days (${inT.length})`, from: 0, to: kIn || 0, color: "var(--viz-call)", value: `${pct1(kIn)} <small>kept · ${grp("in_time").filter((r) => r[2] === "churned").length} churned</small>`, onClick: listCalls(inT, `Called within ${D.settings.fast_days} days, at their next renewal`) },
+      { label: `Later or never (${late.length})`, from: 0, to: kLate || 0, color: BASE, value: `${pct1(kLate)} <small>kept · ${late.filter((r) => r[2] === "churned").length} churned</small>`, onClick: listCalls(late, "Called later or never, at their next renewal") },
+    ], 1.04);
+    $("cs-call-finding").textContent = value != null
+      ? `Accounts called within ${D.settings.fast_days} days kept ${pct1(kIn)} of their ARR at renewal, against ${pct1(kLate)}. Today ${plural(waiting.length, "account")} at Act (${money(waitArr)}) ${waiting.length === 1 ? "hasn't" : "haven't"} had a call: at those rates, calling them in time keeps about ${money(value)} more, ${(value / Math.max(1, point)).toFixed(1)} points of GRR.`
+      : "Not enough renewals after a churn task in this segment to compare.";
+    $("cs-call-note").textContent = `Like for like: every account that got a churn task this year and has renewed since, ${inT.length} against ${late.length}. Small groups and a planted effect in the demo data: this shows the method a CFO can check, never "we saved X". Not here yet: the cost side (CS hours per account) to set against it.`;
+    const wl = $("cs-call-waiting");
+    wl.hidden = !waiting.length; wl.textContent = `List the ${plural(waiting.length, "account")} not called yet`;
+    wl.onclick = () => caseList("At Act, no call yet", waiting.map((id) => byId[id]).filter(Boolean).sort((a, b) => b.arr - a.arr),
+      [{ label: "Account", get: (a) => esc(a.account_name) }, { label: "Owner", get: (a) => esc(a.owner || "") }, { label: "ARR", r: true, get: (a) => money(a.arr) }]);
+
+    $("cs-method").innerHTML = [
+      "<b>GRR</b>: the ARR the customers of day one pay a year later, each capped at what they paid on day one, over what they paid on day one. Churn and downsell come off; expansion doesn't count. Never above 100%.",
+      "<b>NRR</b>: the same with expansion counted. New logos are in neither: they weren't customers on day one.",
+      "<b>This year</b> is worked out account by account from the CRM and its closed renewals (the ARR before and after each one). <b>The year before</b> is finance's quarterly ARR bridge, top line only.",
+      "<b>One point of GRR</b> is 1% of today's ARR in this segment: the yardstick for any investment in retention.",
+      "<b>All licence revenue</b>: committed volume and paid add-ons. Services would be reported apart, as licence is what retention protects.",
+    ].map((t) => `<li>${t}</li>`).join("");
   }
   function drawLeadership() {
     if (!$("view-lead")) return;                     // not on this person's page

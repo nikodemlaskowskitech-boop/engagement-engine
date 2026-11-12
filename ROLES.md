@@ -44,6 +44,7 @@ count it.
 | Confirm a handover brief | No | Team's accounts | Own accounts (outgoing owner) | Own accounts |
 | "Did it work?" | By owner | By owner, their team | Team total, no names | Team total, no names |
 | Leadership tab | Yes (opens here) | Yes | No | No |
+| Business case tab (GRR, NRR, the forecast) | Yes | No | No | No |
 | Opens on | Leadership | Tasks | My book | My book |
 
 Every change is checked twice: the page offers only what the role allows, and
@@ -65,6 +66,10 @@ page).
 - **Outcomes by owner only for managers and the leader** (6 Nov 2026). Where
   account assignment drives commission, per-owner results next to colleagues'
   invite comparison on luck of the draw. Below manager level, the team total.
+- **The business case is the leader's** (12 Nov 2026, from a senior CS leader's
+  feedback: tie the work to GRR and NRR). It's the page for the CFO and the board,
+  on the whole book; Leadership stays the operational page. Its data (the whole
+  book's cohort and renewals) is only on pages with its tab.
 - **No Leadership tab below manager** (confirmed 6 Nov 2026). It compares owners
   against the median: a management view.
 - **Self-service only for managers and the leader** (confirmed 6 Nov 2026). Those

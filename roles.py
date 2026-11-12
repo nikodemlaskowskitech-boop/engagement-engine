@@ -187,6 +187,9 @@ def slice_export(export, person_id, person):
     peers = everyone if cfg["scope"] == "book" or ROLES.get("peer_median", "book") == "book" \
         else [t["owner_id"] for t in export["team"] if t["manager"] == person["manager"]]
     page["peer_medians"] = {"scope": "book" if peers == everyone else "team", **peer_medians(export, peers)}
+    # the business case (GRR, NRR, the whole book's renewals): only on pages with its tab
+    if "case" not in cfg["tabs"]:
+        page["retention"] = None
     if cfg["outcomes"] == "team_total":                   # totals only: no row per account
         page["outcomes_total"] = outcomes_total(page["renewals"], export["settings"]["too_late_days"])
         page["renewals"] = []

@@ -42,7 +42,9 @@ import sys
 from pathlib import Path
 
 import backtest
+import flags as flags_views
 import onboarding_report
+import retention
 import roles
 import team_report
 from settings import SETTINGS
@@ -100,48 +102,92 @@ def rows(con, sql):
             for r in rel.fetchall()]
 
 
-def history(con, on_book):
+class OffBook:
+    """Accounts no longer in today's book (they left, or never had a CRM row) are on
+    no page, so they travel under a key of their own (ob_1, ...) with only what the
+    segment bar needs: tier, region, owner and manager, never their id or name.
+    The trends and the retention numbers share one set of keys (history.off_book)."""
+
+    def __init__(self, con, on_book):
+        self.on_book, self.key, self.rows = on_book, {}, []
+        self.churned = {r[0]: r for r in con.sql("""
+            SELECT c.account_id, c.tier, c.region, coalesce(c.csm_owner, c.pool_owner, c.cs_pool) AS owner_id,
+                   c.cs_pool AS pool, t.manager
+            FROM crm_all c LEFT JOIN cs_team t ON t.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)
+            WHERE coalesce(c.status, 'active') = 'churned'""").fetchall()}
+
+    def ref(self, a):
+        if a in self.on_book:
+            return a
+        if a not in self.key:
+            self.key[a] = f"ob_{len(self.key) + 1}"
+            r = self.churned.get(a)
+            self.rows.append({"account_id": self.key[a], "why": "left" if r else "not in the CRM",
+                              "tier": r[1] if r else None, "region": r[2] if r else None,
+                              "owner_id": r[3] if r else None, "pool": r[4] if r else None,
+                              "manager": r[5] if r else None})
+        return self.key[a]
+
+
+def history(off):
     """The weekly history (history.py) for the trends: the flags that ask for action
-    and the queue (tasks Open or Claimed), one row per week and account. An account
-    no longer in today's book (it left, or never had a CRM row) is on no page, so it
-    travels under a key of its own (ob_1, ...) with only what the segment bar needs:
-    its tier, region, owner and manager, never its id or name. Empty without
-    history.py's files."""
+    and the queue (tasks Open or Claimed), one row per week and account. Empty
+    without history.py's files."""
     if not (DATA / "history_flags.csv").exists() or not (DATA / "history_tasks.csv").exists():
-        return {"weeks": [], "off_book": [], "flags": [], "tasks": []}
+        return {"weeks": [], "off_book": off.rows, "flags": [], "tasks": []}
     with (DATA / "history_flags.csv").open(encoding="utf-8") as f:
         hf = [r for r in csv.DictReader(f) if r["status"] not in ("Activated", "Activating")]
     with (DATA / "history_tasks.csv").open(encoding="utf-8") as f:
         ht = list(csv.DictReader(f))
     weeks = sorted({r["week"] for r in hf} | {r["week"] for r in ht})
     wi = {w: i for i, w in enumerate(weeks)}
-    gone = sorted({r["account_id"] for r in hf + ht} - on_book)
-    key = {a: f"ob_{i + 1}" for i, a in enumerate(gone)}
-    seen = {r[0]: r for r in con.sql("""
-        SELECT c.account_id, c.tier, c.region, coalesce(c.csm_owner, c.pool_owner, c.cs_pool) AS owner_id,
-               c.cs_pool AS pool, t.manager
-        FROM crm_all c LEFT JOIN cs_team t ON t.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)
-        WHERE coalesce(c.status, 'active') = 'churned'""").fetchall()}
-    off_book = []
-    for a in gone:
-        r = seen.get(a)
-        off_book.append({"account_id": key[a], "why": "left" if r else "not in the CRM",
-                         "tier": r[1] if r else None, "region": r[2] if r else None,
-                         "owner_id": r[3] if r else None, "pool": r[4] if r else None,
-                         "manager": r[5] if r else None})
-    ref = lambda a: key.get(a, a)
-    return {"weeks": weeks, "off_book": off_book,
+    for a in sorted({r["account_id"] for r in hf + ht}):
+        off.ref(a)                                   # keys in id order, so they don't move between runs
+    return {"weeks": weeks, "off_book": off.rows,
             # [week, account, flag, status]
-            "flags": [[wi[r["week"]], ref(r["account_id"]), r["flag"], r["status"]] for r in hf],
+            "flags": [[wi[r["week"]], off.ref(r["account_id"]), r["flag"], r["status"]] for r in hf],
             # [week, account, flag, status, routed_to, action_status, age_days]
-            "tasks": [[wi[r["week"]], ref(r["account_id"]), r["flag"], r["status"], r["routed_to"],
+            "tasks": [[wi[r["week"]], off.ref(r["account_id"]), r["flag"], r["status"], r["routed_to"],
                        r["action_status"], int(r["age_days"])] for r in ht]}
+
+
+def retention_export(con, off):
+    """GRR and NRR (retention.py's views) for the business case page: this year
+    against the year before, the forecast and what a call is worth, with the
+    accounts behind each number (in-book ids, or off-book keys)."""
+    def one(sql):
+        rel = con.sql(sql)
+        row = rel.fetchone()
+        return {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in zip(rel.columns, row)} if row else {}
+    return {
+        "year": one("SELECT * FROM retention_year"),
+        "prior": one("SELECT * FROM bridge_rates_prior") if con.sql("SELECT count(*) FROM arr_bridge").fetchone()[0] else None,
+        "this_bridge": one("SELECT grr, nrr FROM bridge_rates_this"),
+        "forecast": one("SELECT * FROM retention_forecast"),
+        "calls": rows(con, "SELECT * FROM call_effect ORDER BY grp"),
+        "call_value": one("SELECT * FROM call_value"),
+        "licence_only": True,     # all ARR here is licence (volume and add-ons); no services in the book
+        # the year's cohort, so the page can work out GRR and NRR for any segment:
+        # [account, movement (churned/contraction/expansion/flat), ARR at the start, ARR now]
+        "cohort": [[off.ref(a), m, s0, s1] for a, m, s0, s1 in con.sql(
+            "SELECT account_id, movement, start_arr, end_arr FROM retention_accounts ORDER BY account_id").fetchall()],
+        # [account, ARR, renewal date, the data's loss, the owner's, upside, actual loss, actual gain]
+        "renewals_ahead": [[a, arr, str(d), dl, ol, up, al, ag] for a, arr, d, dl, ol, up, al, ag in con.sql(
+            "SELECT account_id, arr, renewal_date, data_loss, owner_loss, upside, actual_loss, actual_gain "
+            "FROM retention_forecast_accounts ORDER BY renewal_date, account_id").fetchall()],
+        # [account, group, outcome, ARR before, ARR after]
+        "call_accounts": [[off.ref(a), g, o, b, r] for a, g, o, b, r in con.sql(
+            "SELECT account_id, grp, outcome, arr_before, renewal_arr FROM call_effect_accounts ORDER BY account_id").fetchall()],
+        "call_waiting": [a for (a,) in con.sql("SELECT account_id FROM call_waiting ORDER BY account_id").fetchall()],
+    }
 
 
 con = connect()
 team_report.add_views(con)          # time_to_action, meetings_90d
 onboarding_report.add_views(con)    # onboarding
 backtest.add_views(con)             # backtest (empty without renewal outcomes)
+flags_views.add_views(con)          # account_value, for the retention forecast
+retention.add_views(con)            # GRR, NRR, the forecast, what a call is worth
 
 as_of = str(con.sql("SELECT as_of_date FROM as_of").fetchone()[0])
 
@@ -212,6 +258,7 @@ touches = rows(con, """
     -- exports in the same order, so two runs can be compared file to file
     ORDER BY "timestamp", account_id, event_name, event_id""")
 
+off = OffBook(con, {a["account_id"] for a in accounts})
 export = {
     "as_of": as_of,
     "util_dates": util_dates,
@@ -264,7 +311,8 @@ export = {
         LEFT JOIN cs_team ao ON ao.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)
         ORDER BY s.age_days DESC, s.account_id, s.flag, s.status"""),
     "handovers": handovers(),
-    "history": history(con, {a["account_id"] for a in accounts}),
+    "history": history(off),
+    "retention": retention_export(con, off),
     "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
                  "stale_task_days": SETTINGS["cockpit"]["stale_task_days"],
                  "below_median_points": SETTINGS["cockpit"]["below_median_points"],

@@ -52,7 +52,7 @@ SHOW = 10                    # file names printed per run; the rest is a count
 def local_inputs():
     """Every input file that exists: {path in the bucket: file on disk}."""
     files = {}
-    for key in ("crm_file", "team_file", "holdout_file", "outcomes_file"):
+    for key in ("crm_file", "team_file", "holdout_file", "outcomes_file", "renewal_history_file", "arr_bridge_file"):
         path = INPUTS / DATA[key]
         if path.is_file():
             files[path] = True

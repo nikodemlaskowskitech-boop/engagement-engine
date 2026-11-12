@@ -445,6 +445,10 @@ def test_views_data(label, parser, meta, cfg, scope):
         return
     if not check(f"{label}: views-data is an object", isinstance(data, dict), type(data).__name__):
         return
+    # the business case (whole book: GRR, NRR, every renewal ahead) only with its tab (12 Nov 2026)
+    if "case" not in cfg["tabs"]:
+        check(f"{label}: no business case data (no Business case tab)", not data.get("retention"),
+              "retention is on the page")
     renewals = data.get("renewals")
     if cfg["outcomes"] == "team_total":
         check(f"{label}: renewals list is empty (no row per account)",

@@ -153,6 +153,28 @@ def connect():
     team_cols = {r[0] for r in con.sql(f"DESCRIBE {team_raw}").fetchall()}
     con.sql(f"CREATE VIEW cs_team AS SELECT *{'' if 'pool' in team_cols else ', NULL::VARCHAR AS pool'} FROM ({team_raw})")
 
+    # Closed renewals with the ARR before and after (optional), and the year before
+    # the data as finance's quarterly ARR bridge (optional): retention.py's inputs.
+    # Missing = empty views with the same columns.
+    hist_file, bridge_file = input_path("renewal_history_file"), input_path("arr_bridge_file")
+    if hist_file.exists():
+        con.sql(f"""CREATE VIEW renewal_history AS
+                   SELECT account_id, renewal_date::DATE AS renewal_date, outcome,
+                          renewal_arr::DOUBLE AS renewal_arr, arr_before::DOUBLE AS arr_before
+                   FROM read_csv('{_sql_path(hist_file)}', all_varchar = true)""")
+    else:
+        con.sql("""CREATE VIEW renewal_history AS SELECT NULL::VARCHAR AS account_id, NULL::DATE AS renewal_date,
+                   NULL::VARCHAR AS outcome, NULL::DOUBLE AS renewal_arr, NULL::DOUBLE AS arr_before WHERE false""")
+    cols = "period_start, period_end, starting_arr, new_logo_arr, expansion_arr, contraction_arr, churned_arr, ending_arr"
+    if bridge_file.exists():
+        con.sql(f"""CREATE VIEW arr_bridge AS
+                   SELECT period_start::DATE AS period_start, period_end::DATE AS period_end,
+                          {', '.join(f'{c}::DOUBLE AS {c}' for c in cols.split(', ')[2:])}
+                   FROM read_csv('{_sql_path(bridge_file)}', all_varchar = true)""")
+    else:
+        con.sql("CREATE VIEW arr_bridge AS SELECT NULL::DATE AS period_start, NULL::DATE AS period_end, "
+                + ", ".join(f"NULL::DOUBLE AS {c}" for c in cols.split(", ")[2:]) + " WHERE false")
+
     # Utilisation per account, kept as a view so later queries (and the flags)
     # can reuse it instead of copying the logic.
     con.sql(f"""

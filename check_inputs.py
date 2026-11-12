@@ -267,6 +267,21 @@ if outcomes:
 elif not (FOLDER / FILES["outcomes_file"]).exists():
     say("WARN", "Outcomes: none. No backtest (recall, precision, warning time)")
 
+print("\n7. Renewal history and the year before (optional)")
+history_rows = read_csv(FILES.get("renewal_history_file", "renewal_history.csv"),
+                        ["account_id", "renewal_date", "outcome", "renewal_arr", "arr_before"], "Renewal history")
+if history_rows is None and not (FOLDER / FILES.get("renewal_history_file", "renewal_history.csv")).exists():
+    say("WARN", "Renewal history: none. GRR and NRR count churn only (no ARR before a renewal, so no downsell or expansion)")
+elif history_rows:
+    bad = [r["account_id"] for r in history_rows if not to_date(r["renewal_date"])]
+    if bad:
+        say("WARN", f"Renewal history: {count(len(bad), 'row')} with an unreadable renewal_date: {examples(bad)}")
+bridge = read_csv(FILES.get("arr_bridge_file", "arr_bridge_history.csv"),
+                  ["period_start", "period_end", "starting_arr", "new_logo_arr", "expansion_arr",
+                   "contraction_arr", "churned_arr", "ending_arr"], "ARR bridge")
+if bridge is None and not (FOLDER / FILES.get("arr_bridge_file", "arr_bridge_history.csv")).exists():
+    say("WARN", "ARR bridge: none. No year-before comparison on the business case")
+
 # --- What works with this data ----------------------------------------------------
 usage_ok = bool(by_name[USAGE_EVENT])
 long_enough = bool(first) and (last - first).days + 1 >= CHURN_DAYS
@@ -286,6 +301,8 @@ works = [
      "needs engagement history"),
     ("Welcomed vs. control report", bool(holdout), "needs the onboarding holdout"),
     ("Backtest (did the flags see it coming?)", bool(outcomes), "needs renewal outcomes"),
+    ("GRR and NRR with downsell and expansion", bool(history_rows), "needs the renewal history"),
+    ("The year before (business case)", bool(bridge), "needs finance's ARR bridge"),
 ]
 print("\nWhat the engine can do with this data")
 for feature, on, why in works:
