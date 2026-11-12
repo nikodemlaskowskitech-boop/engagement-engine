@@ -643,6 +643,36 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // --- Leadership, 12 Nov 2026: work not picked up, Enterprise accounts with no CSM, folded tables ---
+  {
+    const { page, errors } = await open(browser);
+    await tab(page, "lead");
+    const STALE = D.settings.stale_task_days || 14;
+    const open_ = D.tasks.filter((t) => t.action_status === "Open").sort((a, b) => b.age_days - a.age_days);
+    const qf = await page.textContent("#ld-queue-finding");
+    check(qf.startsWith(`${open_.length} task`) && qf.includes(`the oldest ${open_[0].age_days} days`), `Leadership: ${open_.length} tasks not picked up, the oldest ${open_[0].age_days} days`, qf);
+    const firstAge = await page.$eval("#ld-queue tbody tr td:last-child", (td) => td.textContent.trim());
+    check(firstAge === `${open_[0].age_days} days`, "Leadership: the queue starts with the longest wait", firstAge);
+    const badges = await page.$$eval("#ld-queue .badge", (bs) => bs.map((b) => [+b.textContent.split(" ")[0], b.classList.contains("stale")]));
+    check(badges.length && badges.every(([d, st]) => st === (d >= STALE)), `Leadership: a wait turns amber at ${STALE} days, not before`, JSON.stringify(badges));
+    await page.click("#ld-queue [data-more]"); await page.waitForTimeout(80);
+    const all = await page.$$eval("#ld-queue tbody tr", (r) => r.length);
+    check(all === open_.length, `Leadership: "View all" lists all ${open_.length} waiting tasks`, `${all}`);
+    const noCsm = D.accounts.filter((a) => a.tier === "Enterprise" && a.flags.some((f) => f.status === "No CSM assigned"));
+    const nf = await page.textContent("#ld-nocsm-finding");
+    check(noCsm.length ? nf.startsWith(`${noCsm.length} Enterprise account`) : /Every Enterprise account/.test(nf), `Leadership: ${noCsm.length} Enterprise account(s) with no CSM`, nf);
+    // long tables fold to six rows, with a way to see the rest
+    for (const [t, id] of [["lead", "ld-team"], ["team", "tm-cap"]]) {
+      await tab(page, t);
+      const st = await page.$eval("#" + id, (tb) => { const rows = [...tb.querySelectorAll("tr")].filter((r) => !r.querySelector("th")); const btn = document.querySelector(`[data-fold-for="${tb.id}"]`); return { n: rows.length, shown: rows.filter((r) => !r.hidden).length, btn: btn && btn.textContent }; });
+      const okFold = st.n <= 7 ? st.shown === st.n : st.shown === 6 && st.btn === `Show all (${st.n})`;
+      check(okFold, `${id}: a long table shows 6 rows and "Show all (${st.n})"`, JSON.stringify(st));
+      if (st.n > 7) { await page.click(`[data-fold-for="${id}"]`); const shown = await page.$$eval(`#${id} tr`, (r) => r.filter((x) => !x.hidden && !x.querySelector("th")).length); check(shown === st.n, `${id}: "Show all" opens every row`, `${shown}`); }
+    }
+    check(!errors.length, "no script errors on the new Leadership panels", errors.join("; "));
+    await page.close();
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

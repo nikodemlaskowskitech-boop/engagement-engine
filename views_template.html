@@ -417,6 +417,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <h2 id="ld-trail-title"></h2>
         <div class="tablewrap" id="ld-trail-list"></div>
       </div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>Not picked up: work waiting for someone</h2>
+          <p class="finding small" id="ld-queue-finding"></p>
+          <div class="examples tablewrap" id="ld-queue"></div>
+          <p class="note">Tasks sent to a CSM or a pool that nobody has claimed in Slack or acted on yet, oldest first. Amber once a task has waited <span id="ld-queue-stale"></span> days.</p>
+        </div>
+        <div class="panel">
+          <h2>New Enterprise accounts with no CSM</h2>
+          <p class="finding small" id="ld-nocsm-finding"></p>
+          <div class="examples tablewrap" id="ld-nocsm"></div>
+          <p class="note">Enterprise accounts are meant to have a named CSM from day one. CS ops gets an alert for each; this is how long it has been waiting.</p>
+        </div>
+      </div>
         <div class="panel">
           <h2>Churn: biggest ARR at risk first</h2>
           <p class="finding small" id="ld-churn-finding"></p>
@@ -1575,6 +1589,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const rows = all.filter((r) => people.includes(r.t)).sort((x, y) => KIND_ORDER[x.t.owner_type] - KIND_ORDER[y.t.owner_type] || x.open - y.open);
     const room = (r) => r.t.owner_type !== "pool" && r.open < med[r.t.owner_type].open;   // a queue has no room; people do
     const cell = (v, m) => `${v} <small>(median ${m})</small>`;
+    queueMicrotask(() => foldRows($("tm-cap")));
     $("tm-cap").innerHTML = `<tr><th>Owner</th><th>Team</th><th class="r">Accounts</th><th class="r">Open tasks</th><th class="r">Other region</th><th></th></tr>` + rows.map((r) =>
       `<tr><td>${esc(r.t.owner_name)}</td><td>${esc(r.t.region)}</td><td class="r num">${cell(r.accs, med[r.t.owner_type].accs)}</td><td class="r num">${cell(r.open, med[r.t.owner_type].open)}</td><td class="r num">${r.away || "–"}</td><td>${room(r) ? "room" : ""}</td></tr>`).join("");
     const withRoom = rows.filter(room);
@@ -2144,6 +2159,32 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("ld-finding").textContent = churn.length
       ? `${segOn() ? segName() + ": " : ""}${money(atRisk)} of ${money(bookArr)} ARR is at risk; ${!act.length ? "no account is at Act." : act.length === actPlanned ? `all ${act.length} Act accounts have a next step planned.` : `${act.length - actPlanned} of ${act.length} Act accounts have no next step planned.`}`
       : `${segName()}: no CSM or pool account at churn risk.`;
+    // not picked up: every task still Open, oldest first (amber past the stale line, like Tasks)
+    const STALE = D.settings.stale_task_days || 14;
+    $("ld-queue-stale").textContent = STALE;
+    const waiting = D.tasks.filter((t) => t.action_status === "Open" && inSegId(t.account_id)).sort((a, b) => b.age_days - a.age_days);
+    const stale = waiting.filter((t) => t.age_days >= STALE);
+    const who = (id) => ownerName[id] || id;
+    $("ld-queue-finding").textContent = waiting.length
+      ? `${waiting.length} task${waiting.length === 1 ? "" : "s"} not picked up; ${stale.length} ${stale.length === 1 ? "has" : "have"} waited ${STALE}+ days, the oldest ${waiting[0].age_days} days (${who(waiting[0].routed_to)}).`
+      : "Every task sent to a person has been picked up.";
+    shortList($("ld-queue"), waiting, [
+      { label: "Account", get: (t) => `${nameOf(t.account_id)}<small><br>${esc(byId[t.account_id]?.tier || "")}</small>` },
+      { label: "Task", get: (t) => `${esc(t.flag)} ${esc(t.status)}` },
+      { label: "With", get: (t) => esc(who(t.routed_to)) + (t.assigned_by ? `<small><br>given by ${esc(who(t.assigned_by))}</small>` : "") },
+      { label: "Waiting", r: true, get: (t) => `<span class="badge Open${t.age_days >= STALE ? " stale" : ""}">${t.age_days} days</span>` },
+    ], "Nothing waiting: every task sent to a person has been picked up.", 5);
+    // new Enterprise accounts with no CSM: the activation flag's "No CSM assigned"
+    const noCsm = accs.filter((a) => a.tier === "Enterprise" && a.flags.some((f) => f.status === "No CSM assigned"))
+      .map((a) => ({ ...a, waitDays: day(D.as_of) - day(a.contract_start) })).sort((a, b) => b.waitDays - a.waitDays);
+    $("ld-nocsm-finding").textContent = noCsm.length
+      ? `${noCsm.length} Enterprise account${noCsm.length === 1 ? "" : "s"} with no CSM: ${money(sum(noCsm, (a) => a.arr))} ARR, the longest ${noCsm[0].waitDays} days since signing.`
+      : "Every Enterprise account in this segment has a CSM.";
+    shortList($("ld-nocsm"), noCsm, [
+      { label: "Account", get: (a) => `${esc(a.account_name)}<small><br>${esc(a.region)}</small>` },
+      { label: "Signed", get: (a) => `${fmt(a.contract_start)}<small><br>${a.waitDays} days ago</small>` },
+      { label: "ARR", r: true, get: (a) => money(a.arr) },
+    ], "Every Enterprise account in this segment has a CSM.", 5);
     // the trail: four stages, each a cairn whose colour and height say how urgent it is
     const pct = (n, d) => d ? `${n} of ${d} (${Math.round(100 * n / d)}%)` : `${n}`;
     const notCalled = act.filter((a) => !called(a)), noPlan = act.filter((a) => !planned(a));
@@ -2213,6 +2254,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const GAP = D.settings.below_median_points ?? 10;      // a point or two under the median is noise on a small book
     const low = rows.filter((r) => r.book && pc(r.met / r.book) <= pc(med[r.t.owner_type].s) - GAP);
     $("ld-team-finding").textContent = rows.length ? `${low.length} of ${rows.length} owners met a share of their book in 30 days ${GAP}+ points below the median for their kind.` : "Nobody on the CS team in this segment.";
+    queueMicrotask(() => foldRows($("ld-team")));
     $("ld-team").innerHTML = `<tr><th>Owner</th><th class="r">Book ARR</th><th class="r">At risk</th><th class="r">Meetings, 30 d</th><th class="r">Book met, 30 d</th></tr>` + rows.map((r) => {
       const share = r.book ? r.met / r.book : 0, m = med[r.t.owner_type];
       return `<tr><td>${esc(r.t.owner_name)}<small><br>${esc(r.t.region)}</small></td><td class="r num">${money(r.arr)}</td><td class="r num">${money(r.risk)}</td>` +
@@ -2320,14 +2362,27 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   }
   const tile = (k, v, ref, alert) => `<div class="tile${alert ? " alert" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="ref">${ref}</div></div>`;
   // a list that shows two rows and a "View all (n)" that opens the rest in place
-  function shortList(host, items, cols, empty) {
+  function foldRows(table, n = 6) {
+    const wrap = table.closest(".tablewrap") || table, old = wrap.nextElementSibling;
+    if (old && old.dataset.foldFor === table.id) old.remove();
+    const rows = [...table.querySelectorAll("tr")].filter((tr) => !tr.querySelector("th"));
+    if (rows.length <= n + 1) return;                       // one hidden row isn't worth a click
+    let open = false;
+    const btn = document.createElement("button");
+    btn.className = "link"; btn.dataset.foldFor = table.id;
+    const set = () => { rows.forEach((tr, i) => { tr.hidden = !open && i >= n; }); btn.textContent = open ? "Show fewer" : `Show all (${rows.length})`; btn.setAttribute("aria-expanded", String(open)); };
+    btn.addEventListener("click", () => { open = !open; set(); });
+    wrap.after(btn); set();
+  }
+
+  function shortList(host, items, cols, empty, n = 2) {
     let all = false;
     const draw = () => {
       if (!items.length) { host.innerHTML = `<p class="note">${empty}</p>`; return; }
-      const rows = all ? items : items.slice(0, 2);
+      const rows = all ? items : items.slice(0, n);
       host.innerHTML = `<table><thead><tr>${cols.map((c) => `<th${c.r ? ' class="r"' : ""}>${c.label}</th>`).join("")}</tr></thead><tbody>` +
         rows.map((it) => `<tr class="click" tabindex="0" data-id="${esc(it.account_id)}">` + cols.map((c) => `<td${c.r ? ' class="r num"' : ""}>${c.get(it)}</td>`).join("") + "</tr>").join("") + "</tbody></table>" +
-        (items.length > 2 ? `<button class="link" data-more>${all ? "Show fewer" : `View all (${items.length})`}</button>` : "");
+        (items.length > n ? `<button class="link" data-more>${all ? "Show fewer" : `View all (${items.length})`}</button>` : "");
       host.querySelectorAll("tr.click").forEach((tr) => { tr.addEventListener("click", () => openAccount(tr.dataset.id)); tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); }); });
       const more = host.querySelector("[data-more]"); if (more) more.addEventListener("click", () => { all = !all; draw(); });
     };
