@@ -114,19 +114,31 @@ TRAILING_LAG_DAYS = 15     # a 30-day average crosses a line about 15 days after
 # --- The year before the current story --------------------------------------------
 # New logos: of the existing accounts whose current term started during the year,
 # this share signed then (a new customer); the rest renewed that day.
-FIRST_YEAR_SHARE = 0.5
+FIRST_YEAR_SHARE = 0.25     # a book growing about 20% a year in new logos
 # Episodes: accounts that hit a dip during the year. The owner gets a task when it
 # shows and calls (or doesn't) in their own style. The planted effect, like the
 # onboarding email's: called within CALL_IN_TIME_DAYS, the account recovers more
 # often. A recovered account carries on as one of today's healthy accounts; one
 # that doesn't churns at its renewal and leaves the book (status "churned" in the
 # CRM, no events after). Fake data: it shows the method, not that calls work.
-EPISODES = 70
+# Tuned (12 Nov 2026) so the year reads like a healthy B2B book: about 89% GRR.
+EPISODES = 110
+EPISODE_LAST_START = 175   # the last day a dip may start: recovered by the time today's story begins
 CALL_IN_TIME_DAYS = 14
-RECOVERY_ODDS = {"called_in_time": 0.45, "not_in_time": 0.20}
+RECOVERY_ODDS = {"called_in_time": 0.80, "not_in_time": 0.55}
+# In-year renewals of accounts that stayed: most renew flat, some grow, some shrink
+# (an account that had a dip shrinks more often); the bigger the tier, the more
+# room to grow (more teams, add-ons). Fake numbers, own generator.
+RENEWAL_CHANGE_ODDS = {                   # renewed, expanded, downsized
+    "Enterprise": (0.36, 0.58, 0.06), "Scale": (0.53, 0.40, 0.07), "Self-service": (0.80, 0.14, 0.06),
+    "had_a_dip": (0.65, 0.05, 0.30)}
+EXPAND_BY = (1.25, 1.90)     # the new ARR over the old one
+DOWNSIZE_TO = (0.70, 0.90)
+# The year before the data, as finance reports it: quarterly ARR bridge, top line only
+PRIOR_YEAR = {"grr": 0.87, "nrr": 0.99, "new_logo_share": 0.20}
 EPISODE_TIER_WEIGHTS = {"Enterprise": 0.12, "Scale": 0.33, "Self-service": 0.55}
-DIP_BOTTOM = 0.35          # usage and activity fall to this share of normal...
-DIP_DAYS = 50              # ...over this many days
+DIP_BOTTOM = 0.30          # usage and activity fall to this share of normal...
+DIP_DAYS = 30              # ...over this many days
 RECOVER_DAYS = 40          # and climb back over this many, once recovery starts
 
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
@@ -395,7 +407,30 @@ def build_accounts():
         acc["contract"] = round(CONTRACT_SIZE[acc["tier"]] * 2 ** size_rng.uniform(-1, 1), -6)
     plan_episodes(accounts, names)
     set_csm_since(accounts)
+    set_renewal_changes(accounts)
     return accounts
+
+
+def renewed_in_year(acc):
+    """An account that stayed and renewed during the data window (its current term began then)."""
+    return (acc["in_crm"] and not acc["lost"] and not acc["first_year"]
+            and START_DATE < acc["contract_start"] <= END_DATE and acc["since"] < acc["contract_start"])
+
+
+def set_renewal_changes(accounts):
+    """What each in-year renewal did to the ARR: renewed flat, expanded or downsized.
+    Today's ARR is the new term's; arr_before is the old one. Own random generator."""
+    rng = random.Random(SEED + 14)
+    for acc in accounts:
+        acc["renewal_change"] = None
+        if not renewed_in_year(acc):
+            continue
+        odds = RENEWAL_CHANGE_ODDS["had_a_dip" if acc["dip"] else acc["tier"]]
+        outcome = rng.choices(("renewed", "expanded", "downsized"), weights=odds)[0]
+        arr = arr_of(acc)
+        before = (arr if outcome == "renewed" else
+                  arr / rng.uniform(*EXPAND_BY) if outcome == "expanded" else arr / rng.uniform(*DOWNSIZE_TO))
+        acc["renewal_change"] = (outcome, int(round(before, -2)))
 
 
 def set_csm_since(accounts):
@@ -486,7 +521,7 @@ def plan_episodes(accounts, names):
         host = hosts[tier].pop()
         owner = host["csm"] or host["pool"]
         style = OWNER_STYLE["pool" if host["pool"] else host["csm"]] if owner else None
-        start = rng.randint(15, 160)              # early enough to recover before today's story begins
+        start = rng.randint(15, EPISODE_LAST_START)   # early enough to recover before today's story begins
         probe = dict(host, dip=dict(start=start))
         seen = visible_day(probe, below=0.40)
         if not seen:
@@ -651,7 +686,8 @@ def events_for_day(acc, day_index, day, pool):
         pool.append(new_user)
 
     # Product activity: each user is active with today's probability
-    activity = lerp(p["activity"], day_index) * dip_level(acc["dip"], day_index)
+    # (a dip thins the team out faster than the volume: people stop logging in first)
+    activity = lerp(p["activity"], day_index) * dip_level(acc["dip"], day_index) ** 2
     for user in pool:
         champion = acc["has_champion"] and user == pool[0]
         # the champion turns up almost daily (if the account is active at all)
@@ -1035,22 +1071,66 @@ def write_renewal_outcomes(accounts, called):
 
 def write_renewal_history(accounts):
     """The renewals inside the data window, as a CRM's closed renewals would show
-    them: accounts that renewed (their current term started that day) and the
-    lost accounts (churned at their renewal). For history and trends."""
+    them, with the ARR before and after: accounts that renewed (flat, expanded or
+    downsized; their current term started that day) and the lost accounts
+    (churned at their renewal). For the retention numbers and trends."""
     path = OUT_DIR / "renewal_history.csv"
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["account_id", "renewal_date", "outcome", "renewal_arr"])
+        writer.writerow(["account_id", "renewal_date", "outcome", "renewal_arr", "arr_before"])
         rows = []
         for acc in accounts:
             if not acc["in_crm"]:
                 continue
             if acc["lost"]:
-                rows.append([acc["id"], acc["ends"].isoformat(), "churned", 0])
-            elif not acc["first_year"] and START_DATE < acc["contract_start"] <= END_DATE and acc["since"] < acc["contract_start"]:
-                rows.append([acc["id"], acc["contract_start"].isoformat(), "renewed", arr_of(acc)])
+                rows.append([acc["id"], acc["ends"].isoformat(), "churned", 0, arr_of(acc)])
+            elif acc["renewal_change"]:
+                outcome, before = acc["renewal_change"]
+                rows.append([acc["id"], acc["contract_start"].isoformat(), outcome, arr_of(acc), before])
         writer.writerows(sorted(rows, key=lambda r: r[1]))
     return path, len(rows)
+
+
+def arr_at_start(acc):
+    """What a customer paid on the first day of the data (None: not a customer yet)."""
+    if not acc["in_crm"] or acc["since"] > START_DATE:
+        return None
+    return acc["renewal_change"][1] if acc.get("renewal_change") else arr_of(acc)
+
+
+def write_arr_bridge_history(accounts):
+    """The year before the data, as finance would report it: a quarterly ARR bridge
+    (starting ARR, new logos, expansion, contraction, churn, ending ARR), top line
+    only, no accounts. It ends where the data begins: the book's ARR on day one.
+    Own random generator."""
+    rng = random.Random(SEED + 15)
+    end_arr = sum(a for a in map(arr_at_start, accounts) if a)
+    py = PRIOR_YEAR
+    start_arr = end_arr / (py["nrr"] + py["new_logo_share"])
+    totals = {"new_logo_arr": start_arr * py["new_logo_share"],
+              "churned_arr": start_arr * (1 - py["grr"]) * 0.75,      # three quarters of the loss is churn...
+              "contraction_arr": start_arr * (1 - py["grr"]) * 0.25,  # ...a quarter downsizing
+              "expansion_arr": start_arr * (py["nrr"] - py["grr"])}
+    shares = {k: [rng.uniform(0.7, 1.3) for _ in range(4)] for k in totals}
+    path = OUT_DIR / "arr_bridge_history.csv"
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["period_start", "period_end", "starting_arr", "new_logo_arr", "expansion_arr",
+                         "contraction_arr", "churned_arr", "ending_arr"])
+        arr = start_arr
+        for q in range(4):
+            q_start = START_DATE - timedelta(days=365) + timedelta(days=round(q * 365 / 4))
+            q_end = START_DATE - timedelta(days=365) + timedelta(days=round((q + 1) * 365 / 4) - 1)
+            move = {k: round(totals[k] * shares[k][q] / sum(shares[k]), -2) for k in totals}
+            ending = arr + move["new_logo_arr"] + move["expansion_arr"] - move["contraction_arr"] - move["churned_arr"]
+            if q == 3:                                    # the bridge lands exactly on day one's ARR
+                move["new_logo_arr"] += round(end_arr - ending)
+                ending = end_arr
+            writer.writerow([q_start.isoformat(), q_end.isoformat(), round(arr), round(move["new_logo_arr"]),
+                             round(move["expansion_arr"]), round(move["contraction_arr"]),
+                             round(move["churned_arr"]), round(ending)])
+            arr = ending
+    return path
 
 
 def write_holdout(accounts):
@@ -1123,6 +1203,7 @@ if __name__ == "__main__":
     # history (tasks of every age), and the old email events went with data/engagement/
     tasks, claimed, slipped = write_task_history(accounts)
     history_path, renewals_in_year = write_renewal_history(accounts)
+    bridge_path = write_arr_bridge_history(accounts)
     print(f"Accounts:   {len(accounts)} ({sum(a['in_crm'] for a in accounts)} in the CRM)")
     print(f"CS team:    {team_path}")
     print(f"CRM table:  {crm_path}")
@@ -1138,4 +1219,11 @@ if __name__ == "__main__":
         print(f"Dips this year, {label}: {len(group)}, recovered {kept} ({round(100 * kept / max(1, len(group)))}%)")
     print(f"New logos this year: {sum(a['first_year'] for a in accounts)}; lost at renewal: {sum(a['lost'] for a in accounts)}")
     print(f"Renewals in the year: {history_path} ({renewals_in_year})")
+    cohort = [a for a in accounts if arr_at_start(a)]
+    s0 = sum(map(arr_at_start, cohort))
+    now = lambda a: 0 if a["lost"] else arr_of(a)
+    print(f"This year (accounts that were customers on day one): GRR "
+          f"{100 * sum(min(now(a), arr_at_start(a)) for a in cohort) / s0:.1f}%, "
+          f"NRR {100 * sum(now(a) for a in cohort) / s0:.1f}% on {s0 / 1e6:.1f}M starting ARR")
+    print(f"Year before (top line): {bridge_path}")
     print(f"Outcomes:   {outcomes_path} (renewals in the {OUTCOME_HORIZON_DAYS} days after the data, for backtest.py)")
