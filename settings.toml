@@ -403,7 +403,7 @@ stop_words = ["the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "wit
               "would", "could", "should", "about", "under", "there", "here", "hi", "thanks", "really",
               "account", "accounts", "customer", "customers"]
 
-min_heldout_recall = 0.0           # the same on tests/heldout/ (written apart from the vocabulary): set once measured
+min_heldout_recall = 0.85          # the same on tests/heldout/, written apart from the vocabulary (13 Nov 2026: keywords 72%, synonyms 90%)
 synonym_weight = 0.6               # a synonym counts this much of the question's own word
 
 [search.synonyms]

@@ -1,0 +1,10 @@
+Title: Hartwell & Finch Publishing - check-in
+Date: 2026-09-23 11:00 BST
+CRM account: acc_h15
+Participants: Owain Pryce (Cairnpath, Scale team), Poppy Calder (Hartwell & Finch Publishing, Audience Insights Manager), Jonah Whitlock (Hartwell & Finch Publishing, Engineering Manager)
+
+[00:00:25] Owain Pryce: Usage is up again this quarter. What's driving it?
+[00:00:47] Poppy Calder: The editors. Every desk now has its own dashboard, and the morning meeting starts with the reading-time chart.
+[00:01:24] Jonah Whitlock: On our side the podcast player is fully tracked since August.
+[00:01:49] Owain Pryce: Great. Anything you'd like next?
+[00:02:07] Poppy Calder: A workshop on cohorts for the newsletter team, if you have one.

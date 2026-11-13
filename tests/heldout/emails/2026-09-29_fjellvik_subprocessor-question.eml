@@ -1,0 +1,22 @@
+From: Aino Lehtonen <aino.lehtonen@fjellvik.example>
+To: Signe Halvorsen <signe.halvorsen@cairnpath.example>
+Cc: Mikko Rantanen <mikko.rantanen@fjellvik.example>
+Date: Tue, 29 Sep 2026 13:40:00 +0300
+Subject: Subprocessor in the US
+Message-ID: <2026-09-29_fjellvik_subprocessor-question.eml@demo.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+Hi Signe,
+
+Our CISO went through your subprocessor list and found that error monitorin=
+g runs through a provider in the United States, and it may see event payloa=
+ds. For an energy company that is a blocker for us right now.
+
+We need a written commitment that no customer event data leaves the EU, or =
+a way to switch that provider off for our projects, before the end of Octob=
+er.
+
+Best regards,
+Aino

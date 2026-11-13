@@ -1,0 +1,12 @@
+Title: Kestrelbrook Freight - check-in
+Date: 2026-07-14 14:00 BST
+CRM account: acc_h01
+Participants: Harriet Okafor (Cairnpath, CSM), Duncan Ferrier (Kestrelbrook Freight, Head of Product Analytics)
+
+[00:00:25] Harriet Okafor: How's the summer looking on your side?
+[00:00:44] Duncan Ferrier: Busy, and a bit tense. We have a new CFO since June and she's going through every software contract line by line.
+[00:01:22] Harriet Okafor: Is that affecting your team?
+[00:01:39] Duncan Ferrier: There's a hiring freeze until at least January, so the second analyst I was promised isn't coming. And anything up for renewal has to justify itself again.
+[00:02:27] Harriet Okafor: Understood. What would help you make that case for Cairnpath?
+[00:02:52] Duncan Ferrier: Hard numbers. Hours saved, decisions we made from the dashboards. She doesn't care about features.
+[00:03:26] Harriet Okafor: Let's build that together before October. I'll pull the usage by team.

@@ -1,0 +1,11 @@
+Title: Lumiere Billetterie - check-in
+Date: 2026-09-15 10:30 CEST
+CRM account: acc_h05
+Participants: Camille Roux (Cairnpath, CSM), Bastien Morel (Lumiere Billetterie, Product Director)
+
+[00:00:25] Camille Roux: How was the festival season?
+[00:00:42] Bastien Morel: Shorter than planned. Two of our biggest festivals were cancelled, so ticket sales are well down on last year.
+[00:01:19] Camille Roux: I'm sorry to hear that. What does it mean for the team?
+[00:01:42] Bastien Morel: Leadership has frozen everything that isn't essential. I have to cut 15% of our tooling costs by January, and Cairnpath is one of the bigger lines.
+[00:02:28] Camille Roux: Then let's look at what you actually use. There may be room in the volume without losing anything you need.
+[00:03:04] Bastien Morel: That would help. And please get the Q2 overage question settled, it doesn't make my conversations with finance easier.

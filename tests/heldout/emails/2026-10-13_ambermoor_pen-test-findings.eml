@@ -1,0 +1,22 @@
+From: Callum Reid <callum.reid@ambermoorhealth.example>
+To: Nadia Fairbairn <nadia.fairbairn@cairnpath.example>
+Cc: Esther Mallory <esther.mallory@ambermoorhealth.example>
+Date: Tue, 13 Oct 2026 15:50:00 +0100
+Subject: Two findings from our assurance team
+Message-ID: <2026-10-13_ambermoor_pen-test-findings.eml@demo.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+Hi Nadia,
+
+Our assurance team finished their review of Cairnpath. Two items need a wri=
+tten response from you before the board signs off the patient app rollout:
+
+1. Session tokens for the web app don't expire for 30 days. They want 12 ho=
+urs or less.
+2. There's no way to restrict login to our IP ranges.
+
+The board meets on 5 November. Anything you can send before then helps.
+
+Callum

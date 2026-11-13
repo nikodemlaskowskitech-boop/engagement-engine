@@ -1,0 +1,12 @@
+Title: Ostenfeld Mobilitet - check-in
+Date: 2026-06-18 10:00 CEST
+CRM account: acc_h02
+Participants: Signe Halvorsen (Cairnpath, Scale team), Kaja Brekke (Ostenfeld Mobilitet, Analytics Lead)
+
+[00:00:25] Signe Halvorsen: Last time we spoke the regional operations teams were going to get their own dashboards. How did that go?
+[00:01:01] Kaja Brekke: It didn't, honestly. It's still me and one colleague who log in. The regional managers get a PDF from me once a month.
+[00:01:40] Signe Halvorsen: What stopped it?
+[00:01:54] Kaja Brekke: Nobody had time to train them, and IT never set up the logins with our single sign-on. So it sat.
+[00:02:28] Signe Halvorsen: And the experiments add-on?
+[00:02:44] Kaja Brekke: Untouched. We paid for it because the app team wanted to test the booking flow, and then they were moved to another project.
+[00:03:25] Signe Halvorsen: Then let's pick one region and get them going in July. I can run the session.

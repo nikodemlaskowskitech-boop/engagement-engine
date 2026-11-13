@@ -1,0 +1,10 @@
+Title: Ambermoor Health - growth call
+Date: 2026-07-16 11:30 BST
+CRM account: acc_h11
+Participants: Nadia Fairbairn (Cairnpath, CSM), Callum Reid (Ambermoor Health, Head of Digital)
+
+[00:00:25] Nadia Fairbairn: You said the patient app is spreading. What's the plan?
+[00:00:48] Callum Reid: Three more NHS trusts from October. That's about two and a half times today's users.
+[00:01:19] Nadia Fairbairn: At that point your yearly event commitment won't last until March.
+[00:01:45] Callum Reid: I assumed as much. I'd like a proposal to grow it, but it all depends on Esther's sign-off on the data protection side.
+[00:02:24] Nadia Fairbairn: Then we work both tracks in parallel. I'll chase the answers for Esther this week.

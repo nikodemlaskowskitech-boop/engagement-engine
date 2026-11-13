@@ -1,0 +1,139 @@
+{
+  "note": "Held-out set written apart from the search and its vocabulary (13 Nov 2026). Tests only.",
+  "questions": [
+    {
+      "id": "competitor",
+      "question": "Which accounts are evaluating a competitor?",
+      "variants": [
+        "Who is trialling or comparing another analytics vendor?",
+        "Where are we in a tender or bake-off against another tool?"
+      ],
+      "accounts": [
+        "acc_h01",
+        "acc_h07",
+        "acc_h12"
+      ],
+      "traps": [
+        "acc_h15"
+      ]
+    },
+    {
+      "id": "budget_cut",
+      "question": "Which customers are under budget pressure?",
+      "variants": [
+        "Which customers have been told to cut costs or spend less on software?",
+        "Where is finance squeezing spend, freezing hiring or reviewing subscriptions?"
+      ],
+      "accounts": [
+        "acc_h01",
+        "acc_h05",
+        "acc_h06"
+      ],
+      "traps": [
+        "acc_h03"
+      ]
+    },
+    {
+      "id": "champion_leaving",
+      "question": "Where is our main contact leaving the company?",
+      "variants": [
+        "Which accounts are about to lose the person who runs Cairnpath for them?",
+        "Where has our key sponsor resigned or moved on?"
+      ],
+      "accounts": [
+        "acc_h02",
+        "acc_h09",
+        "acc_h13"
+      ],
+      "traps": [
+        "acc_h18"
+      ]
+    },
+    {
+      "id": "data_missing",
+      "question": "Which accounts have data quality problems?",
+      "variants": [
+        "Where are customers saying the numbers look wrong or can't be trusted?",
+        "Which accounts have missing, duplicated or broken tracking?"
+      ],
+      "accounts": [
+        "acc_h06",
+        "acc_h08",
+        "acc_h13"
+      ],
+      "traps": []
+    },
+    {
+      "id": "not_rolled_out",
+      "question": "Which accounts aren't really using what they bought?",
+      "variants": [
+        "Who has paid for an add-on or rollout that never happened?",
+        "Which accounts have far fewer people using it than planned?"
+      ],
+      "accounts": [
+        "acc_h02",
+        "acc_h10",
+        "acc_h12"
+      ],
+      "traps": []
+    },
+    {
+      "id": "more_volume",
+      "question": "Which customers need more capacity?",
+      "variants": [
+        "Which accounts are about to run past their yearly event commitment?",
+        "Who is growing fast enough to need a bigger contract?"
+      ],
+      "accounts": [
+        "acc_h03",
+        "acc_h08",
+        "acc_h11"
+      ],
+      "traps": []
+    },
+    {
+      "id": "billing_dispute",
+      "question": "Which accounts are disputing an invoice?",
+      "variants": [
+        "Which customers are refusing to pay a charge or asking for a credit?",
+        "Where is a bill being contested or held back?"
+      ],
+      "accounts": [
+        "acc_h05",
+        "acc_h10",
+        "acc_h14"
+      ],
+      "traps": [
+        "acc_h16"
+      ]
+    },
+    {
+      "id": "security_review",
+      "question": "Which accounts have open security or compliance requirements?",
+      "variants": [
+        "Which customers are waiting on questionnaires, certificates or data protection answers from us?",
+        "Where is a security or legal sign-off blocking a rollout?"
+      ],
+      "accounts": [
+        "acc_h04",
+        "acc_h07",
+        "acc_h11"
+      ],
+      "traps": []
+    },
+    {
+      "id": "onboarding_stuck",
+      "question": "Which new customers are stuck getting started?",
+      "variants": [
+        "Which recently signed accounts still have no data coming in?",
+        "Where is the first implementation blocked or stalled?"
+      ],
+      "accounts": [
+        "acc_h04",
+        "acc_h09",
+        "acc_h14"
+      ],
+      "traps": []
+    }
+  ]
+}

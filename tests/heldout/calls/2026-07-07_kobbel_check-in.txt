@@ -1,0 +1,11 @@
+Title: Kobbel Betaling - check-in
+Date: 2026-07-07 13:30 CEST
+CRM account: acc_h12
+Participants: Signe Halvorsen (Cairnpath, Scale team), Mads Kjeldsen (Kobbel Betaling, Growth Lead)
+
+[00:00:25] Signe Halvorsen: You bought the experiments add-on in February. Have you launched a first test?
+[00:00:54] Mads Kjeldsen: No. The person who pushed for it left in March, and nobody picked it up.
+[00:01:22] Signe Halvorsen: And the wider product team? The plan was around 30 people.
+[00:01:46] Mads Kjeldsen: Four of us look at it. The others still ask me for numbers on Slack.
+[00:02:13] Signe Halvorsen: Let's run an onboarding session for the product squads and set up one simple test together.
+[00:02:45] Mads Kjeldsen: After the summer, yes.
