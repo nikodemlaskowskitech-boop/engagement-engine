@@ -110,8 +110,10 @@ def all_documents(stories=None):
 
 def add_table(con, stories=None):
     """A DuckDB table "documents" (account_id, id, kind, source, date, title, text) over
-    every document, for search and SQL. Raw text: redact before anything leaves."""
-    rows = all_documents(stories)
+    every document, for search and SQL. stories = one folder or a list of folders (the
+    stories and the search corpus). Raw text: redact before anything leaves."""
+    folders = stories if isinstance(stories, (list, tuple)) else [stories]
+    rows = [r for folder in folders for r in all_documents(folder)]
     with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False, encoding="utf-8") as tmp:
         tmp.write("\n".join(json.dumps(r) for r in rows))
     path = tmp.name.replace("\\", "/")

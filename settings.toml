@@ -389,6 +389,19 @@ qbr_user_key = "qbr_user_key.csv"
 # corpus for about 30 accounts of the demo book here, under data/, in the same shape as stories/.
 corpus_folder = "corpus"
 key_file = "search_key.json"       # the questions and the accounts that answer them: tests only
+top_k = 10                         # results per search
+min_recall = 0.5                   # tests/search_test.py: overall recall may never fall below this (13 Nov 2026, keywords: 51%; raised as search improves)
+bm25_k1 = 1.2                      # BM25: how fast a repeated word stops adding (the usual 1.2)
+bm25_b = 0.75                      # BM25: how much a long document is marked down (the usual 0.75)
+# Words too common to tell documents apart, dropped from documents and questions alike.
+# "account" and "customer" are here because every CS question has them.
+stop_words = ["the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "at", "by", "from",
+              "is", "are", "was", "were", "be", "been", "it", "its", "this", "that", "these", "those",
+              "we", "our", "us", "you", "your", "they", "their", "them", "he", "she", "his", "her", "i",
+              "me", "my", "which", "what", "who", "where", "when", "how", "why", "do", "does", "did",
+              "have", "has", "had", "not", "no", "so", "but", "if", "as", "any", "all", "can", "will",
+              "would", "could", "should", "about", "under", "there", "here", "hi", "thanks", "really",
+              "account", "accounts", "customer", "customers"]
 
 [pipeline]
 # The steps, in the order they depend on each other: the one list run_all.ps1 and the
