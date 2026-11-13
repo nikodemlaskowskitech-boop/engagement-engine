@@ -58,6 +58,7 @@ Docs-only PRs need none.
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
 | `documents.py` | `tests/documents_test.py`, plus the handover row |
 | `generate_documents.py` | `tests/corpus_test.py` |
+| `search.py`, `documents.py`, [search] | `tests/search_test.py` (prints recall per question) |
 | `retention.py` | `tests/retention_test.py` |
 | the cockpit (`views_template.html`, `export_views.py`, `roles.py`, [roles]) | `node tests/cockpit_test.js` (about a minute), `python roles.py --site` then `node tests/site_test.js`, `tests/roles_test.py`, `node tests/role_pages_test.js`, `tests/peer_median_test.py` |
 | roles, routing, money or the segment bar; before a demo, after a regenerate | `node tests/scenarios_test.js` (about two minutes; results go to the acceptance page) |
@@ -277,6 +278,7 @@ Engine:
 - `facts.py`: the facts layer: account, at_risk, timeline, tasks.
 - `documents.py`: tickets, emails and calls in one shape (raw: redact first).
 - `qbr.py`: QBR facts packs, pseudonymised.
+- `search.py`: account search over the documents (BM25 in plain SQL), on the laptop.
 
 Cockpit:
 - `export_views.py`: the export and `views.html` from `views_template.html`.
@@ -307,9 +309,9 @@ Tests: `tests/`, one file per area (see Testing above).
 
 ## Planned next
 
-- Phase 9, AI on unstructured data: account search over `documents.py`'s table
-  (DuckDB full-text search, a generated corpus of about 30 accounts with an
-  answer key and a recall test), then "ask about this account", vectors next
+- Phase 9, AI on unstructured data: account search built 13 Nov 2026 (BM25 in SQL,
+  the corpus, recall 51% on keywords alone); next, synonyms or vectors to beat it,
+  redacted results, then "ask about this account", vectors next
   to keywords, a Cairnpath MCP server over `facts.py` and the search, an AI
   cost demo (AI_COST.md), and last a live Ask box in the cockpit.
 - Waiting on AWS: Bedrock quota (ask again early December 2026), Lambda

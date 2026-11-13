@@ -197,6 +197,25 @@ Read a file's entry before changing that file, and update the entry in the same 
   laptop only. Own seed (7). `tests/corpus_test.py`: seeded, read through documents.py,
   every key account has a document on its topic, routine documents everywhere, no trap
   is an answer, every person named in contacts.csv on the right side.
+- `search.py`: account search (Phase 9, 13 Nov 2026). add_views(con) loads the documents
+  (stories/ and, when generated, the search corpus) through documents.add_table (which
+  now takes a list of folders) and indexes them: doc_terms (each stemmed word's count per
+  document), doc_len, doc_stats. search(con, question, k, account_id) ranks documents by
+  BM25 ([search] bm25_k1 1.2, bm25_b 0.75): rare words count more, a long document is
+  marked down, repeats saturate; each hit has its citation ID, the words matched and the
+  line that matched best. accounts(con, question, k): each account once, by its best
+  document. Plain SQL, not DuckDB's fts extension: the extension downloads on first use,
+  which the sandbox can't and the AWS engine shouldn't (no code fetched at run time).
+  Words: lower case, split on non-letters, [search] stop_words out ("account" and
+  "customer" included: every CS question has them), a Porter-lite stem (-ing, -ed, -ies,
+  -s, then -e). Only letters, digits and spaces reach the SQL; an account ID must be one.
+  Raw text: results stay on the laptop; anything that leaves gets redacted first.
+  Baseline, 13 Nov 2026: recall 19 of 37 accounts (51%) in the top 10 over the nine
+  questions; perfect where people use the question's words (onboarding, security, a
+  champion leaving), 0 of 6 on competitors and on budget pressure, where the documents
+  say "benchmark Lumen Analytics" or "the CFO is going through every subscription", and
+  it fell for the traps there. [search] min_recall (0.5) keeps it from going backwards.
+  `tests/search_test.py`: the recall table, and BM25's mechanics on made-up documents.
 - `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
   2026: two windows had no start, so a year of data made every account look like
   it had lost most of its users, and "month 1" summed ten months). A perfectly flat
