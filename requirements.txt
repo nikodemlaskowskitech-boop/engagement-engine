@@ -6,3 +6,4 @@ botocore==1.43.123   # pinned with boto3: this version reads `aws login` session
 awscrt==0.38.0       # botocore[crt] for 1.43.123: needed to read `aws login` sessions
 aws-cdk-lib==2.275.0 # infrastructure as code (infra/); the cdk CLI itself comes from npm
 constructs==10.8.1   # pinned with aws-cdk-lib
+mcp==2.2.0          # the local MCP server (mcp_server.py), MCPServer API

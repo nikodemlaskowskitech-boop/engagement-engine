@@ -60,6 +60,7 @@ Docs-only PRs need none.
 | `generate_documents.py` | `tests/corpus_test.py` |
 | `search.py`, `documents.py`, [search], `tests/heldout/` | `tests/search_test.py` (recall per question, corpus and held-out; redacted results), plus the handover row if redaction changes |
 | `search_export.py`, its committed file, or anything that changes the redaction or the documents | `tests/search_export_test.py` (stale file = FAIL: run `python search_export.py`) |
+| `mcp_server.py`, [mcp], or what it calls (`facts.py`, `search.py`, `roles.py`) | `tests/mcp_server_test.py` |
 | `retention.py` | `tests/retention_test.py` |
 | the cockpit (`views_template.html`, `export_views.py`, `roles.py`, [roles], `site_search.html`) | `node tests/cockpit_test.js` (about a minute), `python roles.py --site` then `node tests/site_test.js`, `tests/roles_test.py`, `node tests/role_pages_test.js`, `tests/peer_median_test.py` |
 | roles, routing, money or the segment bar; before a demo, after a regenerate | `node tests/scenarios_test.js` (about two minutes; results go to the acceptance page) |
@@ -282,6 +283,7 @@ Engine:
 - `qbr.py`: QBR facts packs, pseudonymised.
 - `search.py`: account search over the documents (BM25 in plain SQL), on the laptop; `redacted()` = what may leave.
 - `search_export.py`: the demo documents redacted into one committed file, all the public search sees.
+- `mcp_server.py`: the engine's facts and the redacted search as read-only MCP tools, local, one person's view ([mcp]).
 
 Cockpit:
 - `export_views.py`: the export and `views.html` from `views_template.html`.
@@ -316,8 +318,9 @@ Tests: `tests/`, one file per area (see Testing above).
 - Phase 9, AI on unstructured data: account search built 13 Nov 2026 (BM25 in SQL,
   the corpus; recall 51% on keywords, 100% with the [search.synonyms] vocabulary,
   optimistic: written knowing the corpus; on a held-out set written apart, 72% -> 90%); redacted
-  results (search.redacted, PRIVACY.md §6) built the same day; next "ask about this account", vectors next
-  to keywords, a Cairnpath MCP server over `facts.py` and the search, an AI
+  results (search.redacted, PRIVACY.md §6) built the same day; the public search on the demo site
+  (#166-169) and the local MCP server (mcp_server.py) the same day; next "ask about this account",
+  vectors next to keywords, a remote MCP server (sign-in first), an AI
   cost demo (AI_COST.md), and last a live Ask box in the cockpit.
 - Waiting on AWS: Bedrock quota (ask again early December 2026), Lambda
   concurrency quota. GuardDuty trial: keep or switch off before about 5 Dec 2026.

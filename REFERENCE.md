@@ -298,6 +298,21 @@ Read a file's entry before changing that file, and update the entry in the same 
   answered by the real handler over the real file: chips, results citing documents in the
   file, highlights, shareable ?q=, empty, 429, no match, phone width, no script error;
   every cockpit page's banner links to it.
+- `mcp_server.py` (13 Nov 2026): the engine as MCP tools (mcp 2.2.0, MCPServer; pinned in
+  requirements.txt). Local: the client (Claude Desktop) starts it and talks over stdio, no
+  network address. Five read-only tools (ToolAnnotations read_only_hint): who_am_i,
+  account (facts.account; utilisation trimmed to the last 30 days, weekly users for 13
+  weeks), at_risk (facts.at_risk with owner/manager/region/tier/status filters), timeline
+  (facts.timeline, limit), search_documents (search.search, then search.redacted; held-back
+  accounts counted, not sent). One person's view: [mcp] person (an owner ID or "leader"),
+  cut by roles.slice_export like their cockpit page; an account outside it is refused with
+  ToolError (the reason reaches the model; any other error's text stays on the server, the
+  SDK's rule). [mcp] max_results caps every list. `--check` prints the tools and a sample.
+  Claude Desktop config: "cairnpath": {"command": "<repo>\\.venv\\Scripts\\python.exe",
+  "args": ["<repo>\\mcp_server.py"]}. `tests/mcp_server_test.py`: tools and annotations;
+  the leader's facts equal the cockpit's; as a CSM, another team's account refused and none
+  in at_risk or search; search results without contact names, emails, phones, companies;
+  a real stdio round trip started from another folder.
 - `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
   2026: two windows had no start, so a year of data made every account look like
   it had lost most of its users, and "month 1" summed ten months). A perfectly flat
