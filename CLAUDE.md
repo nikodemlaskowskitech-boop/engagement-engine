@@ -767,8 +767,11 @@ One JSON event per line, one file per day in `data/events/`.
   calendar month, UTC; at or over it = OverBudget, no call; a feature with no
   budget is refused too), then appends one row to data/ai_spend.csv ([llm]
   ledger_file: time, month, feature, account, provider, model, tokens, cost at
-  the [llm] prices, laptop or aws, stop reason). Our estimate, not Anthropic's
-  bill. `python llm.py --spend`: this month by feature against its budget.
+  the [llm] prices, laptop or aws, stop reason, seconds = how long the call took,
+  13 Nov 2026; an older ledger gets the column, its old rows left empty). Our
+  estimate, not Anthropic's bill. `python llm.py --spend`: this month by feature
+  against its budget, with the median and slowest call. The ledger is the metrics
+  half of LLM observability; no traces or prompt logs (on purpose: privacy).
   Over budget, brief.py and handover.py exit 1 naming the accounts (in AWS: a
   warning in run.json). The engine Lambda brings outputs/ai_spend.csv back
   before its steps and uploads it only when a call added rows; to_parquet.py
