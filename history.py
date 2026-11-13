@@ -28,7 +28,7 @@ Run after flags.py (the action log and today's CRM); it reads the same inputs.
 import time
 
 from cairnpath_db import connect
-from settings import SETTINGS
+from settings import SETTINGS, out_sql
 import flags
 
 STEP_DAYS = SETTINGS["history"]["step_days"]          # one snapshot every this many days
@@ -76,7 +76,7 @@ def main():
     # the replay is wrong, and so would every week before it be.
     if weeks:
         con.sql("CREATE TABLE today_flags AS " + " UNION ALL ".join(
-            f"SELECT account_id, '{f}' AS flag, status FROM read_csv('data/flags_{f}.csv', all_varchar = true)"
+            f"SELECT account_id, '{f}' AS flag, status FROM read_csv('{out_sql('flags_' + f)}', all_varchar = true)"
             for f in FLAGS))
         diff = con.sql(f"""
             SELECT count(*) FROM (
@@ -89,8 +89,8 @@ def main():
         if diff:
             raise SystemExit(f"History: the replay of {weeks[-1]} differs from today's flags in {diff} rows")
 
-    con.sql("COPY (SELECT * FROM hist_flags ORDER BY ALL) TO 'data/history_flags.csv' (HEADER)")
-    con.sql("COPY (SELECT * FROM hist_tasks ORDER BY ALL) TO 'data/history_tasks.csv' (HEADER)")
+    con.sql(f"COPY (SELECT * FROM hist_flags ORDER BY ALL) TO '{out_sql('history_flags')}' (HEADER)")
+    con.sql(f"COPY (SELECT * FROM hist_tasks ORDER BY ALL) TO '{out_sql('history_tasks')}' (HEADER)")
 
     print("\nBy week (every fourth): flags at Act, tasks not picked up, oldest, Enterprise with no CSM")
     con.sql("""

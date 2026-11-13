@@ -34,7 +34,7 @@ Run after backtest.py (export_views.py also calls add_views):  python retention.
 import sys
 
 from cairnpath_db import connect
-from settings import SETTINGS, input_path
+from settings import SETTINGS, input_path, out_sql
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -165,7 +165,7 @@ def add_views(con):
         -- what happened at these renewals (the demo's outcomes: renewal_outcomes.csv)
         outcomes AS ({OUTCOMES_SQL}),
         -- flags.py's saved values (the view would recompute every flag from the events)
-        value AS (SELECT account_id, flag, amount::DOUBLE AS amount FROM read_csv('data/account_value.csv', all_varchar = true)),
+        value AS (SELECT account_id, flag, amount::DOUBLE AS amount FROM read_csv('{out_sql('account_value')}', all_varchar = true)),
         risk AS (SELECT account_id, amount AS at_risk FROM value WHERE flag = 'churn'),
         gain AS (SELECT account_id, amount AS upside FROM value WHERE flag = 'expansion'),
         owner AS (

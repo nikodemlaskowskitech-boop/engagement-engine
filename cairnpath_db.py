@@ -380,11 +380,11 @@ def connect():
     # tasks (never folded into a QBR again) and journeys.py escalates them.
     # The action log as a view (line = the log's own order), so every view below
     # reads it the same way and history.py can replay it as of an earlier day.
-    if os.path.exists("data/action_log.csv"):
-        con.sql("""CREATE VIEW action_log AS
+    if settings.output_file("action_log").exists():
+        con.sql(f"""CREATE VIEW action_log AS
                    SELECT *, row_number() OVER () AS line
-                   FROM read_csv('data/action_log.csv', all_varchar = true)""")
-    if os.path.exists("data/action_log.csv"):
+                   FROM read_csv('{settings.out_sql("action_log")}', all_varchar = true)""")
+    if settings.output_file("action_log").exists():
         con.sql("""
             CREATE VIEW qbr_slips AS
             WITH covered AS (
@@ -419,11 +419,11 @@ def connect():
     #   (a manager's "Follow-up not picked up" task is Done once they approve the hand-back)
     #   Open      sent, nothing since
     flag_names = ("activation", "churn", "expansion", "qbr", "journey")
-    if os.path.exists("data/action_log.csv") and all(
-            os.path.exists(f"data/flags_{f}.csv") for f in flag_names):
+    if settings.output_file("action_log").exists() and all(
+            settings.output_file("flags_" + f).exists() for f in flag_names):
         # the flags standing today (history.py swaps in the flags as of an earlier day)
         con.sql("CREATE VIEW open_flags AS " + " UNION ALL ".join(
-            f"SELECT account_id, '{f}' AS flag, status FROM read_csv('data/flags_{f}.csv', all_varchar = true)"
+            f"SELECT account_id, '{f}' AS flag, status FROM read_csv('{settings.out_sql('flags_' + f)}', all_varchar = true)"
             for f in flag_names))
         con.sql("""
             CREATE VIEW action_status AS

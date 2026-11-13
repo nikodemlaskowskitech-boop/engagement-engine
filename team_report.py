@@ -37,7 +37,7 @@ Run flags.py and journeys.py first, then:  python team_report.py
 import sys
 
 from cairnpath_db import connect
-from settings import SETTINGS
+from settings import SETTINGS, out_sql
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -51,10 +51,10 @@ def add_views(con):
         CREATE VIEW time_to_action AS
         WITH act AS (
             SELECT account_id, routed_to, 'churn' AS flag
-            FROM read_csv_auto('data/flags_churn.csv') WHERE status = 'Act'
+            FROM read_csv_auto('{out_sql('flags_churn')}') WHERE status = 'Act'
             UNION ALL
             SELECT account_id, routed_to, 'expansion' AS flag
-            FROM read_csv_auto('data/flags_expansion.csv') WHERE status = 'Act'
+            FROM read_csv_auto('{out_sql('flags_expansion')}') WHERE status = 'Act'
         ),
         crossed AS (
             SELECT a.account_id, a.routed_to, a.flag, u.event_date,
@@ -91,7 +91,7 @@ def add_views(con):
                CASE WHEN min(c.call_date) IS NOT NULL
                     THEN greatest(min(c.call_date) - s.signal_date, 0) END AS days_to_call,
                min(c.call_date) < s.signal_date AS called_early,
-               s.account_id IN (SELECT account_id FROM read_csv_auto('data/flags_journey.csv')
+               s.account_id IN (SELECT account_id FROM read_csv_auto('{out_sql('flags_journey')}')
                                 WHERE status = 'No meeting in 30 days') AS escalated
         FROM signals s
         LEFT JOIN calls c ON c.account_id = s.account_id

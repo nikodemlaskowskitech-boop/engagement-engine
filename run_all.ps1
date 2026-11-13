@@ -35,18 +35,24 @@ if (-not $Pulled) {
 }
 "Code at: $(git log --oneline -1)" | Out-File $log -Append -Encoding utf8
 
-# 2. The pipeline, in the order the scripts depend on each other
-# (actions.py runs before the reports, so the cockpit shows the tasks it just sent)
-$steps = @()
-if ($Regenerate) { $steps += "generate_events.py" }
-$steps += "pull_clicks.py", "check_inputs.py", "cockpit_sync.py", "ingest.py", "flags.py", "check_flags.py", "journeys.py"
-if ($Actions) { $steps += "actions.py" }
-$steps += "team_report.py", "backtest.py", "onboarding_report.py", "history.py", "retention.py", "export_views.py"
-# then mark handover briefs whose context moved on as "Out of date" (free, no model call), and export again
-$steps += "handover.py --dry-run", "export_views.py"
-$optional = @("handover.py --dry-run")          # a warning, not a stop (like the AWS run)
-
+# 2. The pipeline: one list in settings.toml [pipeline], the same one the AWS engine runs
+# (ARCHITECTURE.md fix B). settings.py prints this laptop's steps, one per line; an
+# optional step (its failure is a warning, not a stop) starts with "?".
 $python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"   # the project's own Python
+$flags = @()
+if ($Regenerate) { $flags += "regenerate" }
+if ($Actions) { $flags += "actions" }
+$steps = @(); $optional = @()
+foreach ($line in (& $python settings.py --steps laptop @flags)) {
+    if ($line.StartsWith("?")) { $line = $line.Substring(1); $optional += $line }
+    if ($line) { $steps += $line }
+}
+if ($LASTEXITCODE -ne 0 -or $steps.Count -eq 0) {
+    Write-Host "Couldn't read the pipeline from settings.toml [pipeline]" -ForegroundColor Red
+    "FAILED: reading the pipeline from settings.toml" | Out-File $log -Append -Encoding utf8
+    exit 1
+}
+
 $ok = 0
 foreach ($step in $steps) {
     "`n===== python $step =====" | Out-File $log -Append -Encoding utf8

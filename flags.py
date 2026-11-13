@@ -73,7 +73,7 @@ Run:  python flags.py
 import sys
 
 from cairnpath_db import connect
-from settings import SETTINGS
+from settings import SETTINGS, out_sql
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -547,7 +547,7 @@ def main():
         ORDER BY routed_to, status, account_id
     """).show(max_rows=100, max_width=320)
 
-    con.sql("COPY (SELECT * FROM activation ORDER BY status, account_id) TO 'data/flags_activation.csv' (HEADER)")
+    con.sql(f"COPY (SELECT * FROM activation ORDER BY status, account_id) TO '{out_sql('flags_activation')}' (HEADER)")
     print("\nSaved every row to data/flags_activation.csv")
 
 
@@ -581,7 +581,7 @@ def main():
         ORDER BY routed_to, status, account_id
     """).show(max_rows=100, max_width=360)
 
-    con.sql("COPY (SELECT * FROM churn ORDER BY status, account_id) TO 'data/flags_churn.csv' (HEADER)")
+    con.sql(f"COPY (SELECT * FROM churn ORDER BY status, account_id) TO '{out_sql('flags_churn')}' (HEADER)")
     print("\nSaved every row to data/flags_churn.csv")
 
 
@@ -610,7 +610,7 @@ def main():
         ORDER BY routed_to, status, account_id
     """).show(max_rows=100, max_width=360)
 
-    con.sql("COPY (SELECT * FROM expansion ORDER BY status, account_id) TO 'data/flags_expansion.csv' (HEADER)")
+    con.sql(f"COPY (SELECT * FROM expansion ORDER BY status, account_id) TO '{out_sql('flags_expansion')}' (HEADER)")
     print("\nSaved every row to data/flags_expansion.csv")
 
 
@@ -619,7 +619,7 @@ def main():
         SELECT flag, status, count(*) AS accounts, sum(amount)::BIGINT AS amount, sum(arr)::BIGINT AS arr
         FROM account_value GROUP BY flag, status ORDER BY flag, status
     """).show()
-    con.sql("COPY (SELECT * FROM account_value ORDER BY flag, amount DESC, account_id) TO 'data/account_value.csv' (HEADER)")
+    con.sql(f"COPY (SELECT * FROM account_value ORDER BY flag, amount DESC, account_id) TO '{out_sql('account_value')}' (HEADER)")
     print("Saved every row to data/account_value.csv")
 
 
@@ -635,7 +635,7 @@ def main():
         ORDER BY routed_to, status, account_id
     """).show(max_rows=100, max_width=300)
 
-    con.sql("COPY (SELECT * FROM qbr ORDER BY status, account_id) TO 'data/flags_qbr.csv' (HEADER)")
+    con.sql(f"COPY (SELECT * FROM qbr ORDER BY status, account_id) TO '{out_sql('flags_qbr')}' (HEADER)")
     print("\nSaved every row to data/flags_qbr.csv")
 
 

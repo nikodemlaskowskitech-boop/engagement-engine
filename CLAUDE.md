@@ -270,7 +270,15 @@ One JSON event per line, one file per day in `data/events/`.
   The crm view (cairnpath_db.py) applies [tiers] and
   [utilisation], so the SQL downstream always speaks the engine's names
   (Self-service, Scale, Enterprise; contracted_events). Scripts read
-  `SETTINGS[...]`; never hard-code a number in a script.
+  `SETTINGS[...]`; never hard-code a number in a script. One pipeline list
+  (13 Nov 2026, ARCHITECTURE.md fix B): [pipeline] steps, each where = both /
+  laptop / aws, when = regenerate / actions, optional; run_all.ps1 reads it
+  (`python settings.py --steps laptop [regenerate] [actions]`, optional steps
+  marked "?") and settings.py derives [aws] engine_steps and
+  engine_optional_steps from it, so the two can't drift. The files one step hands
+  to the next have names in [outputs]: `output_file(name)` / `out_sql(name)`,
+  never a path typed into SQL. `tests/pipeline_test.py`: both lists from one
+  source, every step a real script, no typed hand-off path left.
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
   declining, slipping (volume sliding, users steady: one signal, churn Watch),
   power_user, new_customer, shelfware, stalled, never_onboarded,

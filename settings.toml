@@ -99,13 +99,10 @@ state_prefix = "state/"        # state carried between runs: upload.py puts the 
 # brief is out of date (the cockpit says so). The real briefs_step replaces it only when the admin
 # asks (request_briefs.py sends {"briefs": true}; nothing else can). export_views.py runs again
 # after it, so the cockpit shows the briefs and whether they're current.
-engine_steps = ["ingest.py", "flags.py", "journeys.py", "team_report.py", "backtest.py",
-                "onboarding_report.py", "history.py", "export_views.py", "handover.py --dry-run", "export_views.py",
-                "roles.py --site", "to_parquet.py"]
+# engine_steps and engine_optional_steps come from [pipeline] (where = "both" or "aws").
 briefs_step = "handover.py"
 # Steps whose failure is a warning, not a failed run: the briefs call an outside API, and if
 # that's down (or the leak check stops one) the cockpit should still update.
-engine_optional_steps = ["handover.py --dry-run", "handover.py"]
 briefs_llm_provider = "anthropic"            # who writes the briefs in AWS ("bedrock" once its quota is granted)
 api_key_parameter = "/cairnpath/anthropic-api-key"   # Parameter Store (SecureString): put_key.py fills it
 # Tables for Athena: to_parquet.py writes each to data/tables/<name>/ (outputs/tables/ in AWS),
@@ -371,3 +368,48 @@ handover = 1.50
 [llm.monthly_budget_usd.aws]
 qbr_brief = 1.00
 handover = 1.50
+
+[outputs]
+# The files one step writes for the next ones (settings.output_file / out_sql):
+# rename or move one here, never in a script.
+flags_activation = "flags_activation.csv"
+flags_churn = "flags_churn.csv"
+flags_expansion = "flags_expansion.csv"
+flags_qbr = "flags_qbr.csv"
+flags_journey = "flags_journey.csv"
+account_value = "account_value.csv"
+action_log = "action_log.csv"
+history_flags = "history_flags.csv"
+history_tasks = "history_tasks.csv"
+qbr_facts = "qbr_facts.json"
+qbr_user_key = "qbr_user_key.csv"
+
+[pipeline]
+# The steps, in the order they depend on each other: the one list run_all.ps1 and the
+# engine Lambda both read (ARCHITECTURE.md fix B). where = "both" (default), "laptop"
+# (needs the laptop: Slack, the cockpit's database, the answer key) or "aws". when =
+# "regenerate" / "actions": only with run_all's -Regenerate / -Actions. optional = a
+# failure is a warning, not a stop. actions.py runs before the reports, so the cockpit
+# shows the tasks it just sent; handover.py --dry-run marks briefs whose context moved
+# on (free, no model call), then the export runs again so the cockpit shows it.
+steps = [
+    { step = "generate_events.py", where = "laptop", when = "regenerate" },
+    { step = "pull_clicks.py", where = "laptop" },
+    { step = "check_inputs.py", where = "laptop" },      # AWS: the check Lambda, before the engine wakes
+    { step = "cockpit_sync.py", where = "laptop" },
+    { step = "ingest.py" },
+    { step = "flags.py" },
+    { step = "check_flags.py", where = "laptop" },      # needs the answer key, never uploaded
+    { step = "journeys.py" },
+    { step = "actions.py", where = "laptop", when = "actions" },
+    { step = "team_report.py" },
+    { step = "backtest.py" },
+    { step = "onboarding_report.py" },
+    { step = "history.py" },
+    { step = "retention.py", where = "laptop" },        # prints the numbers; export_views.py computes them in both places
+    { step = "export_views.py" },
+    { step = "handover.py --dry-run", optional = true },
+    { step = "export_views.py" },
+    { step = "roles.py --site", where = "aws" },        # the public site's pages
+    { step = "to_parquet.py", where = "aws" },          # Athena's tables
+]
