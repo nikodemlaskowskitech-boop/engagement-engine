@@ -42,6 +42,7 @@ import sys
 from pathlib import Path
 
 import backtest
+import facts
 import onboarding_report
 import retention
 import roles
@@ -52,7 +53,6 @@ from cairnpath_db import connect
 sys.stdout.reconfigure(encoding="utf-8")
 
 DATA = Path(__file__).resolve().parent / "data"
-FLAGS = ("activation", "churn", "expansion", "qbr", "journey")
 
 
 def handovers():
@@ -187,74 +187,13 @@ onboarding_report.add_views(con)    # onboarding
 backtest.add_views(con)             # backtest (empty without renewal outcomes)
 retention.add_views(con)            # GRR, NRR, the forecast, what a call is worth
 
-as_of = str(con.sql("SELECT as_of_date FROM as_of").fetchone()[0])
-
-# The days a 30-day utilisation exists (the first 29 days of data can't have one)
-util_dates = [str(d) for (d,) in con.sql(
-    "SELECT DISTINCT event_date FROM daily_util_30d ORDER BY 1").fetchall()]
-util = {}
-for account_id, day, value in con.sql(
-        "SELECT account_id, event_date, util FROM daily_util_30d").fetchall():
-    util.setdefault(account_id, {})[str(day)] = int(value)
-
-# Weekly active users: 13 weeks, the last one ending on the as-of date
-wau = {}
-for account_id, weeks_ago, users in con.sql("""
-        SELECT e.account_id, (a.as_of_date - e.event_date) // 7 AS weeks_ago,
-               count(DISTINCT e.user_id) AS users
-        FROM events e, as_of a
-        WHERE e.user_id IS NOT NULL AND (a.as_of_date - e.event_date) // 7 < 13
-        GROUP BY ALL""").fetchall():
-    wau.setdefault(account_id, [0] * 13)[12 - weeks_ago] = users      # oldest week first
-week_ends = [str(d) for (d,) in con.sql(
-    "SELECT as_of_date - (7 * (12 - i))::INTEGER FROM as_of, range(13) t(i) ORDER BY i").fetchall()]
-
-# Open flags per account, straight from the flag files
-flags = {}
-for flag in FLAGS:
-    path = output_file("flags_" + flag)
-    if not path.exists():
-        sys.exit(f"{path} is missing: run python flags.py, then python journeys.py")
-    with path.open(encoding="utf-8") as f:
-        for r in csv.DictReader(f):
-            flags.setdefault(r["account_id"], []).append(
-                {"flag": flag, "status": r["status"], "reasons": r["reasons"],
-                 "routed_to": r["routed_to"]})
-
-# What each churn or expansion row is worth (flags.py: ARR at risk, opportunity)
-value_path = output_file("account_value")
-if not value_path.exists():
-    sys.exit(f"{value_path} is missing: run python flags.py")
-with value_path.open(encoding="utf-8") as f:
-    for r in csv.DictReader(f):
-        for fl in flags.get(r["account_id"], []):
-            if fl["flag"] == r["flag"] and fl["status"] == r["status"]:
-                fl["value"], fl["value_basis"] = round(float(r["amount"])), r["basis"]
-
-accounts = rows(con, """
-    SELECT c.account_id, c.account_name, c.tier, c.region, c.contract_start, c.renewal_date,
-           c.contracted_events, c.add_ons, c.last_qbr_date, c.next_qbr_date,
-           coalesce(c.csm_owner, c.pool_owner, c.cs_pool) AS owner_id,   -- the named owner first
-           c.cs_pool AS pool,
-           c.arr, c.arr_estimated,
-           t.owner_name AS owner, t.manager
-    FROM crm c
-    LEFT JOIN cs_team t ON t.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)
-    ORDER BY c.account_id""")
-for a in accounts:
-    a["util"] = [util.get(a["account_id"], {}).get(d) for d in util_dates]
-    a["wau"] = wau.get(a["account_id"], [0] * 13)
-    a["flags"] = flags.get(a["account_id"], [])
-
-touches = rows(con, """
-    SELECT account_id, event_date AS date, event_name AS event,
-           properties.topic AS topic, properties.owner_id AS owner_id,
-           context.source AS source
-    FROM engagement
-    WHERE event_name NOT IN ('forecast_set', 'next_step_set')   -- internal: exported below
-    -- ties on the same minute broken by account and event: the same data always
-    -- exports in the same order, so two runs can be compared file to file
-    ORDER BY "timestamp", account_id, event_name, event_id""")
+# The book's facts come from the facts layer (facts.py), the same functions the MCP
+# server and the Ask box call, so the cockpit and they can't disagree.
+as_of = facts.as_of(con)
+util_dates = facts.util_dates(con)
+week_ends = facts.week_ends(con)
+accounts = facts.accounts(con)
+touches = facts.touches(con)
 
 off = OffBook(con, {a["account_id"] for a in accounts})
 export = {
@@ -265,24 +204,11 @@ export = {
     "touches": touches,
     # renewal forecasts set in the cockpit (cockpit_sync.py), oldest first: the
     # offline page shows them; the published page reads its own database
-    "forecasts": rows(con, """
-        SELECT account_id, "timestamp" AS decided_at, properties.owner_id AS by,
-               properties.outcome AS role, properties.status AS call,
-               properties.amount AS amount, properties.note AS reason
-        FROM engagement WHERE event_name = 'forecast_set'
-        ORDER BY "timestamp", event_id"""),
+    "forecasts": facts.forecasts(con),
     # next steps planned in the cockpit ("action planned"), oldest first
-    "next_steps": rows(con, """
-        SELECT e.account_id, e."timestamp" AS decided_at, e.properties.owner_id AS by,
-               e.properties.outcome AS role, e.properties.status AS type,
-               e.properties.due AS due, e.properties.note AS note, a.as_of_date AS as_of
-        FROM engagement e, as_of a WHERE e.event_name = 'next_step_set'
-        ORDER BY e."timestamp", e.event_id"""),
+    "next_steps": facts.next_steps(con),
     "onboarding": rows(con, "SELECT * FROM onboarding ORDER BY account_id"),
-    "time_to_action": rows(con, """
-        SELECT t.*, o.owner_name AS owner, o.owner_type, o.manager
-        FROM time_to_action t JOIN cs_team o ON o.owner_id = t.routed_to
-        ORDER BY t.account_id"""),
+    "time_to_action": facts.time_to_action(con),
     "team": rows(con, "SELECT * FROM cs_team ORDER BY owner_type, owner_id"),
     # the overview's sieve: every churn signal with who it went to and whether
     # (and how fast) a person acted on it
@@ -298,16 +224,7 @@ export = {
     # the manager's queue: every task sent to a person and what became of it.
     # Its manager is the owner's manager; a manager's own task (an escalation,
     # a hand-back to approve) is theirs; CS ops items go to the account's manager
-    "tasks": rows(con, """
-        SELECT s.account_id, s.flag, s.status, s.routed_to, s.action, s.sent_on,
-               s.action_status, s.age_days, s.assigned_by, s.assigned_from,
-               coalesce(o.manager, CASE WHEN s.routed_to LIKE 'mgr_%' THEN s.routed_to END,
-                        ao.manager) AS manager
-        FROM action_status s
-        LEFT JOIN cs_team o  ON o.owner_id = s.routed_to
-        LEFT JOIN crm c      USING (account_id)
-        LEFT JOIN cs_team ao ON ao.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)
-        ORDER BY s.age_days DESC, s.account_id, s.flag, s.status"""),
+    "tasks": facts.tasks(con),
     "handovers": handovers(),
     "history": history(off),
     "retention": retention_export(con, off),

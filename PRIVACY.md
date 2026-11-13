@@ -25,7 +25,10 @@ three silos ──> gather ──> identify people ──> label ──> clean t
 ### 1.1 Gather (`gather()`)
 
 For one account, three silos are read, each joined by its own key, the way a
-real company's systems would be:
+real company's systems would be. Since 13 Nov 2026 the reading lives in
+`documents.py` (one home for the unstructured data, shared with search and the
+MCP server); the texts it returns are raw, and every reader redacts them as below
+before anything goes to a model:
 
 | Silo | File | Joined by |
 | --- | --- | --- |

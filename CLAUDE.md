@@ -355,6 +355,23 @@ One JSON event per line, one file per day in `data/events/`.
   cockpit_sync in run_all and first in [aws] engine_steps; the engine Lambda
   never uploads the store. `tests/store_test.py`: same rows and types as the JSON,
   a new, edited or removed file or a missing stamp means the JSON again.
+- `facts.py`: the facts layer (13 Nov 2026, ARCHITECTURE.md fix C): the questions the
+  product answers, asked one way. Building blocks the cockpit export uses for the
+  whole book (accounts with util, weekly users and flags with their value; touches;
+  forecasts; next steps; tasks; time_to_action), and the questions the MCP server and
+  the Ask box will ask: account(id) (the cockpit's facts plus "called"), at_risk(owner /
+  manager / region / tier, biggest ARR at risk first), timeline(id) (newest first),
+  tasks(owner) (a pool member's include pool-queue tasks on their accounts). Plain
+  dicts, dates as text; only IDs reach the SQL (_id). `tests/facts_test.py`: each
+  answer equals the cockpit's for the same accounts.
+- `documents.py`: one home for the unstructured data (13 Nov 2026, fix D): support
+  tickets, emails and call notes, each joined by its own key (helpdesk organisation,
+  email domain, CRM account ID via stories/directory.csv), in one shape (kind, source,
+  date, title, text, citation id S1/E1/C1, oldest first). for_account(id),
+  all_documents(), add_table(con) (a DuckDB table "documents"). Raw text: redact
+  before anything leaves (handover.py does). handover.py reads them only through it.
+  File names in [handover]. `tests/documents_test.py`: the joins, the shape, the
+  citations, one way to read them, the table.
 - `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
   2026: two windows had no start, so a year of data made every account look like
   it had lost most of its users, and "month 1" summed ten months). A perfectly flat
