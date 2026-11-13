@@ -39,7 +39,7 @@ if (-not $Pulled) {
 # (actions.py runs before the reports, so the cockpit shows the tasks it just sent)
 $steps = @()
 if ($Regenerate) { $steps += "generate_events.py" }
-$steps += "pull_clicks.py", "check_inputs.py", "cockpit_sync.py", "flags.py", "check_flags.py", "journeys.py"
+$steps += "pull_clicks.py", "check_inputs.py", "cockpit_sync.py", "ingest.py", "flags.py", "check_flags.py", "journeys.py"
 if ($Actions) { $steps += "actions.py" }
 $steps += "team_report.py", "backtest.py", "onboarding_report.py", "history.py", "retention.py", "export_views.py"
 # then mark handover briefs whose context moved on as "Out of date" (free, no model call), and export again

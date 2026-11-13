@@ -80,6 +80,7 @@ LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "")          # who writes the brie
 LEDGER = os.environ.get("LEDGER_FILE", "ai_spend.csv")      # the AI spend ledger, kept between runs (outputs/)
 CACHE = "handover/"                                        # the briefs and their fingerprints, kept between runs
 NEVER_UPLOAD = ("_key.json",)                              # redaction keys stay inside the Lambda
+STORE = os.environ.get("STORE_FOLDER", "store/")            # ingest.py's events store: rebuilt each run, never uploaded
 STATE_FILES = ["action_log.csv"]                         # state kept between runs (tasks already sent)
 CLICKS = os.environ.get("CLICKS_PREFIX", "state/clicks/")   # the Slack listener's clicks, one file each
 CLICKS_FILE = "engagement/slack_clicks.jsonl"              # ...merged here for the engine (never uploaded)
@@ -311,6 +312,7 @@ def handler(event, context, s3=None, work=None, ssm=None):
             rel = p.relative_to(data).as_posix()
             if (not p.is_file() or rel in set(inputs) | set(state) or rel.endswith(NEVER_UPLOAD)
                     or rel.startswith(SITE)                                   # goes to the site bucket instead
+                    or rel.startswith(STORE)                                  # the events again, as Parquet: work data
                     or (rel.startswith(CACHE) and cache.get(rel[len(CACHE):]) == md5(p))
                     or (rel == LEDGER and ledger == md5(p))):         # no new model call: no new version
                 continue

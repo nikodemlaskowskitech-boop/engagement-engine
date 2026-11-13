@@ -339,6 +339,14 @@ One JSON event per line, one file per day in `data/events/`.
   utilisation on every day, rounded like the flags), last_touch (last CS touch,
   last meeting, getting-started email opened or not, per account).
   Every script uses it; define views here, once.
+- `ingest.py`: the events store (13 Nov 2026, ARCHITECTURE.md fix A): reads the
+  product events once per run, with the agreed schema, into one Parquet file
+  (data/<[data] store_folder>/events.parquet) plus a stamp of the input files it
+  came from (name, size, time changed). connect() reads the store when the stamp
+  matches the event files, otherwise the JSON (slower, never stale). Runs after
+  cockpit_sync in run_all and first in [aws] engine_steps; the engine Lambda
+  never uploads the store. `tests/store_test.py`: same rows and types as the JSON,
+  a new, edited or removed file or a missing stamp means the JSON again.
 - `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
   2026: two windows had no start, so a year of data made every account look like
   it had lost most of its users, and "month 1" summed ten months). A perfectly flat
