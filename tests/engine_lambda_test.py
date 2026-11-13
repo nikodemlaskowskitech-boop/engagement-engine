@@ -178,6 +178,8 @@ else:
                 "Path('data/views_data.json').write_text('{}', encoding='utf-8')\n"
                 "Path('data/tables/flags_churn').mkdir(parents=True)\n"
                 "Path('data/tables/flags_churn/flags_churn.parquet').write_bytes(b'PAR1\\x00\\xff')\n"
+                "Path('data/store').mkdir()\n"               # ingest.py's work store: never uploaded
+                "Path('data/store/events.parquet').write_bytes(b'PAR1')\n"
                 "print('stand-in step ran')\n")
     (bundle / "stand_in.py").write_text(stand_in, encoding="utf-8")
     h.CODE, h.STEPS = ENGINE_FILES + ["stand_in.py"], ["stand_in.py"]
@@ -195,6 +197,8 @@ if not REAL:
 else:
     check(all(OUTPUTS + f"tables/{t}/{t}.parquet" in s3.objects for t in AWS["athena_tables"]),
           "uploads a Parquet table per [aws] athena_tables entry, each in its own folder")
+check(not any(n.startswith("store/") for n in out_names) and not any("/store/" in k for k in s3.objects),
+      "never uploads ingest.py's events store (the inputs again, rebuilt every run)", out_names)
 check(not ({"crm_accounts.csv", "action_log.csv", "cs_team.csv"} & set(out_names)),
       "never re-uploads an input or the action log as an output")
 check("DONE" in s3.objects[OUTPUTS + "last_run.txt"].decode(), "last_run.txt has every step's output, like run_all")

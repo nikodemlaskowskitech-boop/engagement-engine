@@ -149,7 +149,9 @@ class DataStack(Stack):
                          # the key's NAME, not the key: the value is read at run time (never shown here)
                          "API_KEY_PARAMETER": aws["api_key_parameter"],
                          "LLM_PROVIDER": aws["briefs_llm_provider"],
-                         "LEDGER_FILE": SETTINGS["llm"]["ledger_file"]},
+                         "LEDGER_FILE": SETTINGS["llm"]["ledger_file"],
+                         # ingest.py's events store: rebuilt every run, never uploaded
+                         "STORE_FOLDER": SETTINGS["data"]["store_folder"] + "/"},
             retry_attempts=0,                                  # same data, same result: a retry wouldn't help
             # one run at a time: a second trigger waits in Lambda's queue (S3 events and the
             # schedule are asynchronous, so a throttled one is tried again, not lost)

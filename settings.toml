@@ -36,6 +36,7 @@ holdout_file = "onboarding_holdout.csv"   # optional
 outcomes_file = "renewal_outcomes.csv"    # optional
 renewal_history_file = "renewal_history.csv"   # optional: closed renewals with ARR before and after (GRR, NRR)
 arr_bridge_file = "arr_bridge_history.csv"     # optional: the year before as finance's quarterly ARR bridge
+store_folder = "store"                  # ingest.py: the events read once per run (under data/, never uploaded)
 
 # Your column names -> the engine's (see DATA_CONTRACT.md). Only list the ones
 # that differ, e.g. "Account ID" = "account_id". Empty = your files already
@@ -98,7 +99,7 @@ state_prefix = "state/"        # state carried between runs: upload.py puts the 
 # brief is out of date (the cockpit says so). The real briefs_step replaces it only when the admin
 # asks (request_briefs.py sends {"briefs": true}; nothing else can). export_views.py runs again
 # after it, so the cockpit shows the briefs and whether they're current.
-engine_steps = ["flags.py", "journeys.py", "team_report.py", "backtest.py",
+engine_steps = ["ingest.py", "flags.py", "journeys.py", "team_report.py", "backtest.py",
                 "onboarding_report.py", "history.py", "export_views.py", "handover.py --dry-run", "export_views.py",
                 "roles.py --site", "to_parquet.py"]
 briefs_step = "handover.py"

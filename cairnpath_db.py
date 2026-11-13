@@ -32,6 +32,10 @@ import os
 
 import duckdb
 
+import json
+from pathlib import Path
+
+import settings
 from settings import OUTPUTS, SETTINGS, input_path
 
 
@@ -50,24 +54,12 @@ def _renames(section):
     return " RENAME (" + ", ".join(f'"{mine}" AS {theirs}' for mine, theirs in pairs.items()) + ")"
 
 
-def connect():
-    con = duckdb.connect()
-    events_glob = _sql_path(input_path("events_glob"))
-    # CS history: your export (if any) plus what the engine itself wrote to
-    # data/engagement (emails, Slack clicks, cockpit decisions). The same
-    # folder once when you run on the demo data.
-    eng = {_sql_path(input_path("engagement_glob")), _sql_path(OUTPUTS / "engagement" / "*.jsonl")}
-    eng_globs = [g for g in sorted(eng) if glob.glob(g)]
-    eng_list = "[" + ", ".join(f"'{g}'" for g in eng_globs) + "]"
-    crm_file, team_file = _sql_path(input_path("crm_file")), _sql_path(input_path("team_file"))
-
-    # Treat the files as tables.
-    # We spell out the schema instead of letting DuckDB guess it: this is the
-    # schema we agreed, and a file that breaks it fails loudly instead of quietly.
-    con.sql(f"""
-        CREATE VIEW events AS
+# The product events, read with the agreed schema. We spell it out instead of
+# letting DuckDB guess: a file that breaks it fails loudly instead of quietly.
+def events_from_json():
+    return f"""
         SELECT *, "timestamp"::DATE AS event_date
-        FROM read_json('{events_glob}', format = 'newline_delimited', columns = {{
+        FROM read_json('{_sql_path(input_path("events_glob"))}', format = 'newline_delimited', columns = {{
             event_id:   'VARCHAR',
             event_name: 'VARCHAR',
             event_type: 'VARCHAR',
@@ -76,8 +68,56 @@ def connect():
             user_id:    'VARCHAR',
             properties: 'STRUCT(event_count BIGINT, invited_user VARCHAR, error_code VARCHAR)',
             context:    'STRUCT(sdk_version VARCHAR, source VARCHAR)'
-        }})
-    """)
+        }})"""
+
+
+# The events store (ingest.py, ARCHITECTURE.md fix A): the same rows, read once per
+# run into one typed Parquet file, plus the list of input files it was built from.
+def store_paths():
+    store = settings.OUTPUTS / SETTINGS["data"]["store_folder"]
+    return store, store / "events.parquet", store / "events_inputs.json"
+
+
+def event_files():
+    return sorted(glob.glob(str(input_path("events_glob"))))
+
+
+def inputs_fingerprint(files=None):
+    """Each event file's name, size and time changed: any edit, new or missing file shows."""
+    out = []
+    for f in (event_files() if files is None else files):
+        st = os.stat(f)
+        out.append([Path(f).name, st.st_size, st.st_mtime_ns])
+    return out
+
+
+def store_is_fresh():
+    _, parquet, stamp = store_paths()
+    if not (parquet.exists() and stamp.exists()):
+        return False
+    try:
+        return json.loads(stamp.read_text(encoding="utf-8")) == inputs_fingerprint()
+    except (ValueError, OSError):
+        return False
+
+
+def connect():
+    con = duckdb.connect()
+    # CS history: your export (if any) plus what the engine itself wrote to
+    # data/engagement (emails, Slack clicks, cockpit decisions). The same
+    # folder once when you run on the demo data.
+    eng = {_sql_path(input_path("engagement_glob")), _sql_path(OUTPUTS / "engagement" / "*.jsonl")}
+    eng_globs = [g for g in sorted(eng) if glob.glob(g)]
+    eng_list = "[" + ", ".join(f"'{g}'" for g in eng_globs) + "]"
+    crm_file, team_file = _sql_path(input_path("crm_file")), _sql_path(input_path("team_file"))
+
+    # Treat the files as tables. The events come from the store when ingest.py built
+    # it from these very files; otherwise (a script run on its own, inputs changed
+    # since) straight from the JSON: slower, never stale.
+    _, parquet, _ = store_paths()
+    events_src = (f"SELECT * FROM read_parquet('{_sql_path(parquet)}')" if store_is_fresh()
+                  else events_from_json())
+    con.sql(f"CREATE VIEW events AS {events_src}")
     # What CS did and how customers responded. Same schema as the product
     # events, but its own properties: who owns the touch and what it was about.
     if eng_globs:

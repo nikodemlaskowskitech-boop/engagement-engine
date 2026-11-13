@@ -89,8 +89,8 @@ def main():
         if diff:
             raise SystemExit(f"History: the replay of {weeks[-1]} differs from today's flags in {diff} rows")
 
-    con.sql("COPY (SELECT * FROM hist_flags ORDER BY week, flag, account_id) TO 'data/history_flags.csv' (HEADER)")
-    con.sql("COPY (SELECT * FROM hist_tasks ORDER BY week, account_id, flag) TO 'data/history_tasks.csv' (HEADER)")
+    con.sql("COPY (SELECT * FROM hist_flags ORDER BY ALL) TO 'data/history_flags.csv' (HEADER)")
+    con.sql("COPY (SELECT * FROM hist_tasks ORDER BY ALL) TO 'data/history_tasks.csv' (HEADER)")
 
     print("\nBy week (every fourth): flags at Act, tasks not picked up, oldest, Enterprise with no CSM")
     con.sql("""
