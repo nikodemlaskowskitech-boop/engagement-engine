@@ -444,6 +444,13 @@ security = ["sso", "saml", "okta", "infosec", "pen", "audit", "questionnaire", "
 compliance = ["gdpr", "dpa", "legal", "processors", "hosted", "certification", "iso", "soc"]
 stuck = ["blocked", "delay", "delayed", "waiting", "slip", "fails", "failing", "install", "setup", "implementation"]
 
+[mcp]
+# The local MCP server (mcp_server.py): whose book its tools answer for, cut exactly like
+# that person's cockpit page (an owner ID from the CS team, or "leader" for the whole book),
+# and how many rows a tool returns at most. Set your own in settings.local.toml.
+person = "leader"
+max_results = 10
+
 [pipeline]
 # The steps, in the order they depend on each other: the one list run_all.ps1 and the
 # engine Lambda both read (ARCHITECTURE.md fix B). where = "both" (default), "laptop"

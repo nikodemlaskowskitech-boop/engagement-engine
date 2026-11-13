@@ -273,3 +273,11 @@ silently. The redaction keys never leave `search.py`.
   any; every account either returned or held back; a name nobody listed, planted
   in a ticket body, holds its account back.
 
+## 7. The MCP server (`mcp_server.py`, 13 Nov 2026)
+
+Its tools answer an MCP client on the laptop (Claude Desktop), and whatever they return
+goes to the client's model. Documents go out only through `search.redacted()` (§6):
+labels, masks, the leak check. The facts tools (account, at_risk, timeline) return what
+the cockpit shows: account names, owners' names, ARR, flags and reasons, no user IDs and
+no customer people. One person's view at a time ([mcp] person), cut like their page.
+
