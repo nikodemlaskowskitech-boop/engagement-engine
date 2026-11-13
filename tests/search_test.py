@@ -13,7 +13,7 @@ Then the mechanics, on made-up documents with known answers:
   - one account's search returns only that account; same question, same order;
   - only letters and digits reach the SQL.
 
-Needs DuckDB, data/ and the corpus (python generate_documents.py).
+Then the honest number: the same on tests/heldout/, a set written by a separate agent\nthat never saw the synonym list or the corpus, each question asked three ways.\n\nNeeds DuckDB, data/ and the corpus (python generate_documents.py).
 Run: python tests/search_test.py
 """
 import json
@@ -71,6 +71,33 @@ check(all(set(e["right"]) <= set(w["right"]) for e, w in zip(exact, wide)),
       "per question too: every account found by keywords is still found with synonyms")
 check(recall >= float(CONF["min_recall"]),
       f"recall {recall:.0%} at least [search] min_recall ({float(CONF['min_recall']):.0%}): no step backwards")
+
+print("\nThe held-out set: written apart from the vocabulary (the fair number)")
+# tests/heldout/ was written by a separate agent that never saw the synonym list, the
+# corpus or this search. Each question is asked three ways: as written, and two rewordings.
+HELD = ROOT / "tests" / "heldout"
+hkey = json.loads((HELD / "key.json").read_text(encoding="utf-8"))
+con_h = connect()
+search.add_views(con_h, [HELD])
+asks = [(q, text) for q in hkey["questions"] for text in [q["question"], *q.get("variants", [])]]
+found = {False: 0, True: 0}
+wanted_h = 0
+print(f"\n  {'question (as asked)':<70} {'keywords':>9} {'+ synonyms':>11}")
+for q, text in asks:
+    row = []
+    for syn in (False, True):
+        top = [a["account_id"] for a in search.accounts(con_h, text, k, synonyms=syn)]
+        right = len([a for a in top if a in q["accounts"]])
+        found[syn] += right
+        row.append(f"{right}/{len(q['accounts'])}")
+    wanted_h += len(q["accounts"])
+    print(f"  {text[:70]:<70} {row[0]:>9} {row[1]:>11}")
+h_exact, h_wide = found[False] / wanted_h, found[True] / wanted_h
+print(f"\n  Held-out recall, keywords alone: {found[False]} of {wanted_h} ({h_exact:.0%})")
+print(f"  Held-out recall, with synonyms:  {found[True]} of {wanted_h} ({h_wide:.0%})")
+check(h_wide >= h_exact, "on the held-out set too, synonyms find at least what keywords find")
+check(h_wide >= float(CONF["min_heldout_recall"]),
+      f"held-out recall {h_wide:.0%} at least [search] min_heldout_recall ({float(CONF['min_heldout_recall']):.0%})")
 
 print("\nMechanics, on made-up documents")
 tmp = Path(tempfile.mkdtemp())
