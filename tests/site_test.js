@@ -10,6 +10,7 @@ const { chromium } = require("playwright");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const { execFileSync } = require("child_process");
 const ROOT = path.join(__dirname, "..");
 const DIR = path.join(ROOT, "data", "site");
 const CSP = fs.readFileSync(path.join(ROOT, "infra", "data_stack.py"), "utf8")
@@ -20,8 +21,24 @@ const meta = (html) => JSON.parse(html.match(/<script id="page-meta" type="appli
 
 (async () => {
   if (!fs.existsSync(path.join(DIR, "index.html"))) { console.log("  FAIL  data/site/ is missing: run python roles.py --site"); process.exit(1); }
+  // /search runs the real search function (infra/lambdas/search/handler.py) over the real redacted
+  // file, like CloudFront -> API Gateway -> Lambda would; "__busy__" stands in for the rate limit
+  const SEARCH = `import json, sys
+sys.path[:0] = ["infra/lambdas/search", "."]
+import handler
+r = handler.handler({"requestContext": {"http": {"method": "GET"}}, "queryStringParameters": {"q": sys.argv[1]}})
+print(json.dumps(r))`;
+  let searches = 0;
   const server = http.createServer((req, res) => {
     const name = path.basename(decodeURIComponent(req.url.split(/[?#]/)[0])) || "index.html";
+    if (name === "search") {
+      searches++;
+      const q = new URL(req.url, "http://x").searchParams.get("q") || "";
+      if (q === "__busy__") { res.writeHead(429, { "Content-Type": "application/json" }); return res.end('{"message":"Too Many Requests"}'); }
+      const r = JSON.parse(execFileSync("python3", ["-c", SEARCH, q], { cwd: ROOT, encoding: "utf8" }));
+      res.writeHead(r.statusCode, r.headers);
+      return res.end(r.body);
+    }
     const file = path.join(DIR, name);
     if (!fs.existsSync(file)) { res.writeHead(404); return res.end(); }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP });
@@ -37,7 +54,7 @@ const meta = (html) => JSON.parse(html.match(/<script id="page-meta" type="appli
   };
 
   console.log("\nEvery page opens under the site's content policy, in sandbox mode");
-  const files = fs.readdirSync(DIR).filter((f) => f.endsWith(".html")).sort();
+  const files = fs.readdirSync(DIR).filter((f) => f.endsWith(".html") && f !== "search.html").sort();   // the search page: below
   check(files.length >= 18 && files.includes("index.html") && files.includes("leader.html"), `${files.length} pages, with index.html and leader.html`);
   for (const f of files) {
     const ctx = await b.newContext(), p = await ctx.newPage(), errors = watch(p);
@@ -90,6 +107,44 @@ const meta = (html) => JSON.parse(html.match(/<script id="page-meta" type="appli
   check(!(await r.isVisible("#sandbox-note")) && !(await r.$("#ns-save")) && !e2.length,
     "no banner, no forms, no script error", e2.join(" | "));
   await c2.close();
+
+  console.log("\nThe search page (search.html): /search on the site's own address");
+  {
+    const ctx = await b.newContext(), s = await ctx.newPage(), errors = watch(s);
+    await s.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => console.error("CSP " + e.violatedDirective + " " + e.blockedURI)));
+    await s.goto(base + "search.html"); await s.waitForTimeout(200);
+    const chips = await s.$$eval(".chip", (cs) => cs.map((c) => c.textContent));
+    check(fs.existsSync(path.join(DIR, "search.html")) && chips.length >= 4 && /fictional and generated/.test(await s.textContent(".disclaimer")),
+      "opens with the disclaimer and the example questions", JSON.stringify(chips));
+    const file = fs.readFileSync(path.join(ROOT, "infra", "lambdas", "search", "documents.jsonl"), "utf8")
+      .trim().split("\n").map((l) => JSON.parse(l));
+    const cites = new Set(file.map((d) => d.account_id + "|" + d.id));
+    await s.click(".chip"); await s.waitForSelector("#results li", { timeout: 15000 });
+    const shown = await s.$$eval("#results li", (ls) => ls.map((l) => ({ head: l.querySelector(".head").textContent, marks: l.querySelectorAll("mark").length })));
+    const ok = shown.every((x) => { const m = x.head.match(/^(acc_h?\d+).*\[(\w+)\]/); return m && cites.has(m[1] + "|" + m[2]); });
+    check(shown.length > 0 && shown.length <= 5 && ok, `an example question: ${shown.length} accounts, each citing a document that's in the redacted file`, JSON.stringify(shown));
+    check(shown.some((x) => x.marks > 0), "the matching words are highlighted");
+    check(/[?]q=/.test(s.url()), "the address holds the question, so it can be shared", s.url());
+    await s.fill("#q", "   "); await s.click("button.go"); await s.waitForTimeout(150);
+    check(/Type a question/.test(await s.textContent("#status")) && !(await s.$("#results li")), "an empty question: a hint, no request");
+    await s.fill("#q", "__busy__"); await s.click("button.go"); await s.waitForTimeout(400);
+    check(/try again/i.test(await s.textContent("#status")), "the rate limit (429): a friendly 'try again', not an error");
+    await s.fill("#q", "zzqx vvbn"); await s.click("button.go"); await s.waitForTimeout(2500);
+    check(/No document matches/.test(await s.textContent("#status")), "no match: says so and suggests the examples");
+    const page2 = await ctx.newPage(), e2 = watch(page2);
+    await page2.goto(base + "search.html?q=" + encodeURIComponent("Which customers need more capacity?"));
+    await page2.waitForSelector("#results li", { timeout: 15000 });
+    check((await page2.$$("#results li")).length > 0, "a shared link with ?q= runs the question on opening");
+    await page2.setViewportSize({ width: 375, height: 800 });
+    check(await page2.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "phone width: no sideways scroll");
+    const real = errors.concat(e2).filter((e) => !/status of 429/.test(e));   // the browser's note on our test 429
+    check(!real.length, "no script error or CSP violation", real.slice(0, 3).join(" | "));
+    const c3 = await b.newContext(), m3 = await c3.newPage();
+    await m3.goto(base + "csm_mia.html"); await m3.waitForTimeout(300);
+    check(await m3.isVisible("#sandbox-note a[href='search.html']") && /fictional and generated/.test(await m3.textContent("#sandbox-note")),
+      "every cockpit page's sandbox banner: the disclaimer and a link to the search");
+    await c3.close(); await ctx.close();
+  }
 
   console.log("\nThe laptop's pages stay as they were");
   for (const f of ["views.html", "pages/csm_mia.html"]) {

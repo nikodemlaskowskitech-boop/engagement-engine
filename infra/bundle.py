@@ -29,7 +29,7 @@ SEARCH_FILES = ["search.py", "documents.py", "settings.py", "settings.toml"]
 SEARCH_PACKAGES = ["duckdb"]
 ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "ingest.py", "facts.py", "documents.py", "flags.py", "journeys.py",
                 "team_report.py", "backtest.py", "onboarding_report.py", "history.py", "retention.py", "export_views.py",
-                "to_parquet.py", "views_template.html", "handover.py", "llm.py", "stories",
+                "to_parquet.py", "views_template.html", "site_search.html", "handover.py", "llm.py", "stories",
                 "pull_clicks.py",                       # its combine() merges the Slack clicks
                 "roles.py"]                             # export_views.py builds the role pages with it
 NEVER_BUNDLE = ["answer_key.json", "README.md"]     # stories/: the test's answer key never reaches AWS

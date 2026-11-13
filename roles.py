@@ -25,6 +25,7 @@ from settings import SETTINGS, OUTPUTS
 ROLES = SETTINGS["roles"]
 PAGES = OUTPUTS / "pages"
 TEMPLATE = Path(__file__).resolve().parent / "views_template.html"
+SEARCH_TEMPLATE = Path(__file__).resolve().parent / "site_search.html"   # the public site's search page
 
 # what each part of the export is keyed by: rows with an account_id outside the scope go
 ACCOUNT_ROWS = ["touches", "forecasts", "next_steps", "onboarding", "time_to_action",
@@ -214,6 +215,17 @@ def safe_json(obj):
     return json.dumps(obj, separators=(",", ":")).replace("</", "<\\/")
 
 
+def write_search_page(out):
+    """The public site's search page (13 Nov 2026): site_search.html with the example questions
+    and limits from settings. Site only: it calls /search, which exists only there."""
+    search = SETTINGS["search"]
+    html = (SEARCH_TEMPLATE.read_text(encoding="utf-8")
+            .replace("__EXAMPLES__", safe_json(search["site_examples"]))
+            .replace("__TOP_K__", str(search["site_top_k"]))
+            .replace("__MAX_CHARS__", str(SETTINGS["aws"]["search_max_chars"])))
+    (out / search["site_page"]).write_text(html, encoding="utf-8")
+
+
 def build(export, template=None, out=PAGES, sandbox=False):
     """Write one page per person, leader.html and index.html (the landing page).
     sandbox=True: the public demo site's pages (forms save in the visitor's browser only)."""
@@ -237,6 +249,8 @@ def build(export, template=None, out=PAGES, sandbox=False):
                 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n" + html)
         (out / files[pid]).write_text(text, encoding="utf-8")
         written[pid] = (files[pid], len(meta["accounts"]))
+    if sandbox:
+        write_search_page(out)
     landing = files[ROLES["leader_id"]] if ROLES["landing"] == "leader" else files[ROLES["landing"]]
     (out / "index.html").write_text((out / landing).read_text(encoding="utf-8"), encoding="utf-8")
     return written

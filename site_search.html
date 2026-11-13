@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cairnpath · Ask the documents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap">
+<!--
+  The public demo site's search page (roles.py --site writes it as search.html, 13 Nov 2026).
+  It calls /search?q=... on its own address (CloudFront -> the search function, which holds
+  only redacted demo documents). Nothing typed is stored, here or there.
+-->
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #121815; --surface: #1A211D; --line: #2C352F;
+  --ink: #E9E3D5; --ink-2: #C9C3B6; --ink-3: #A3A99F;
+  --accent: #D9CBA8; --accent-soft: #2B2A21; --warning: #E0A43B;
+  --font-head: "Fraunces", Georgia, serif; --font-body: "Inter", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body); }
+main { max-width: 760px; margin: 0 auto; padding: 28px 16px 64px; }
+a { color: var(--accent); }
+.back { font-size: 0.85rem; text-decoration: none; }
+.back:hover { text-decoration: underline; }
+h1 { font: 600 2rem/1.15 var(--font-head); margin: 14px 0 6px; }
+.lede { color: var(--ink-2); margin: 0 0 10px; }
+.disclaimer { font-size: 0.85rem; color: var(--ink-3); border-left: 3px solid var(--accent); padding: 2px 0 2px 10px; margin: 0 0 22px; }
+form { display: flex; gap: 8px; flex-wrap: wrap; }
+label.sr { position: absolute; left: -9999px; }
+input[type=search] { flex: 1 1 320px; min-width: 0; font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+input[type=search]:focus, button:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font: 600 0.95rem var(--font-body); }
+.go { color: #1E2320; background: var(--accent); border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; }
+.examples { margin: 14px 0 26px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.examples span { font-size: 0.82rem; color: var(--ink-3); margin-right: 2px; }
+.chip { font: 400 0.85rem var(--font-body); color: var(--ink-2); background: var(--accent-soft); border: 1px solid var(--line);
+  border-radius: 999px; padding: 5px 11px; cursor: pointer; text-align: left; }
+.chip:hover { color: var(--ink); border-color: var(--accent); }
+#status { color: var(--ink-3); font-size: 0.9rem; min-height: 1.4em; }
+#status.warn { color: var(--warning); }
+ol.results { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 10px; }
+ol.results li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.head { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.8rem; color: var(--ink-3); }
+.head b { color: var(--ink-2); font-weight: 600; }
+.title { margin: 4px 0 6px; font-weight: 500; }
+.line { margin: 0; color: var(--ink-2); font-size: 0.92rem; overflow-wrap: anywhere; }
+mark { background: var(--accent-soft); color: var(--ink); border-bottom: 1px solid var(--accent); padding: 0 1px; }
+.more { margin: 6px 0 0; font-size: 0.8rem; color: var(--ink-3); }
+details.about { margin-top: 34px; border-top: 1px solid var(--line); padding-top: 12px; color: var(--ink-2); font-size: 0.9rem; }
+details.about summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+details.about li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="index.html">&larr; Back to the cockpit</a>
+  <h1>Ask the documents</h1>
+  <p class="lede">Search the demo accounts' support tickets, emails and call notes in plain words. You get the accounts that match best, with the line that matched and its source.</p>
+  <p class="disclaimer" role="note">All companies, people and numbers in this demo are fictional and generated.</p>
+
+  <form id="ask" role="search">
+    <label class="sr" for="q">Your question</label>
+    <input id="q" type="search" maxlength="__MAX_CHARS__" placeholder="e.g. who is talking to a competitor?" autocomplete="off">
+    <button class="go" type="submit">Search</button>
+  </form>
+  <div class="examples" id="examples"><span>Try:</span></div>
+
+  <p id="status" role="status" aria-live="polite"></p>
+  <ol class="results" id="results"></ol>
+
+  <details class="about">
+    <summary>What this searches, and what it can't do</summary>
+    <ul>
+      <li>It finds and ranks documents. It doesn't write an answer: read the matching line and judge.</li>
+      <li>It matches words, plus a short CS vocabulary (a "competitor" question also looks for a benchmark, an RFP, a trial). It doesn't understand meaning, so a question in unusual words finds less.</li>
+      <li>It doesn't understand dates, amounts or "not".</li>
+      <li>People appear as labels (Customer A, CS 1) and companies as "the customer": names were removed, and checked for, before the search ever saw the text.</li>
+      <li>It shows the top __TOP_K__ accounts. On a test set written by someone who never saw the search, the first result was right about 6 times in 10, and the top 5 held 3 of every 4 right accounts.</li>
+      <li>What you type isn't stored anywhere.</li>
+    </ul>
+  </details>
+</main>
+<script>
+"use strict";
+const EXAMPLES = __EXAMPLES__;
+const KIND = { S: "Ticket", E: "Email", C: "Call" };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const day = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+// highlight the words that matched (the search stems words: "invoic" matches "invoices")
+function highlight(text, stems) {
+  const safe = esc(text);
+  if (!stems || !stems.length) return safe;
+  return safe.replace(/[A-Za-zÀ-ÿ0-9]+/g, (w) => stems.some((s) => s.length > 1 && w.toLowerCase().startsWith(s)) ? `<mark>${w}</mark>` : w);
+}
+
+function show(results) {
+  const list = $("results");
+  list.innerHTML = results.map((r) => `
+    <li>
+      <div class="head"><b>${esc(r.account_id)}</b><span>${esc(KIND[r.best.kind] || r.best.kind)} [${esc(r.best.id)}]</span><span>${esc(day(r.best.date))}</span></div>
+      <p class="title">${highlight(r.best.title, r.matched)}</p>
+      <p class="line">${highlight(r.best.line, r.matched)}</p>
+      ${r.more.length ? `<p class="more">Also matched on this account: ${r.more.map(esc).join(", ")}</p>` : ""}
+    </li>`).join("");
+}
+
+async function ask(q) {
+  q = q.trim();
+  const status = $("status");
+  $("results").innerHTML = "";
+  status.className = "";
+  if (!q) { status.textContent = "Type a question first."; return; }
+  $("q").value = q;
+  history.replaceState(null, "", "?q=" + encodeURIComponent(q));     // a question you can share
+  status.textContent = "Searching…";
+  let res;
+  try {
+    res = await fetch("search?q=" + encodeURIComponent(q), { headers: { Accept: "application/json" } });
+  } catch (e) {
+    status.className = "warn";
+    status.textContent = location.protocol === "file:" ? "The search runs on the live site, not on a saved copy of the page."
+                                                       : "The search isn't reachable right now. Try again in a minute.";
+    return;
+  }
+  if (res.status === 429) { status.className = "warn"; status.textContent = "Lots of questions right now: try again in a few seconds."; return; }
+  let body = {};
+  try { body = await res.json(); } catch (e) { /* not JSON: handled below */ }
+  if (!res.ok) { status.className = "warn"; status.textContent = body.error || "Something went wrong. Try again in a minute."; return; }
+  const results = body.results || [];
+  status.textContent = results.length
+    ? `${results.length} account${results.length > 1 ? "s" : ""}, best match first.`
+    : "No document matches those words. Try other words, or one of the examples.";
+  show(results);
+}
+
+for (const text of EXAMPLES) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chip"; b.textContent = text;
+  b.addEventListener("click", () => ask(text));
+  $("examples").appendChild(b);
+}
+$("ask").addEventListener("submit", (e) => { e.preventDefault(); ask($("q").value); });
+const first = new URLSearchParams(location.search).get("q");
+if (first) ask(first);
+</script>
+</body>
+</html>

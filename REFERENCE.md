@@ -281,6 +281,23 @@ Read a file's entry before changing that file, and update the entry in the same 
   files; answers, citations from the file, cacheable, same order as the laptop; 400/405/500;
   a planted name never in the logs, even on an error. infra_test.py and security_check.py
   check the rest (THREAT_MODEL.md 20-22).
+- `site_search.html` (13 Nov 2026): the public site's search page, written by
+  `roles.py --site` (write_search_page) as [search] site_page = search.html, beside the
+  cockpit pages, so the engine publishes it with them (ENGINE_FILES has the template).
+  Night trail look, self-contained. The disclaimer ("all companies, people and numbers in
+  this demo are fictional and generated"), a search box, [search] site_examples as chips,
+  results from /search (account, kind, citation, date, title and the matching line with
+  the matched words highlighted, other matches on the account), ?q= in the address so a
+  question can be shared, friendly messages for an empty question, no match, the rate
+  limit (429), an unreachable search and a saved copy (file://). "What this searches, and
+  what it can't do": finds and ranks, not answers; words plus the CS vocabulary, not
+  meaning; no dates, amounts or "not"; labels instead of names; top 5 and the held-out
+  numbers in words (update them when the search changes); nothing typed is stored. The
+  cockpit's sandbox banner now carries the same disclaimer and a link to it.
+  `tests/site_test.js` (search section): served with the real content policy, /search
+  answered by the real handler over the real file: chips, results citing documents in the
+  file, highlights, shareable ?q=, empty, 429, no match, phone width, no script error;
+  every cockpit page's banner links to it.
 - `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
   2026: two windows had no start, so a year of data made every account look like
   it had lost most of its users, and "month 1" summed ten months). A perfectly flat

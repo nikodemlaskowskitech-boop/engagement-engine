@@ -61,7 +61,7 @@ Docs-only PRs need none.
 | `search.py`, `documents.py`, [search], `tests/heldout/` | `tests/search_test.py` (recall per question, corpus and held-out; redacted results), plus the handover row if redaction changes |
 | `search_export.py`, its committed file, or anything that changes the redaction or the documents | `tests/search_export_test.py` (stale file = FAIL: run `python search_export.py`) |
 | `retention.py` | `tests/retention_test.py` |
-| the cockpit (`views_template.html`, `export_views.py`, `roles.py`, [roles]) | `node tests/cockpit_test.js` (about a minute), `python roles.py --site` then `node tests/site_test.js`, `tests/roles_test.py`, `node tests/role_pages_test.js`, `tests/peer_median_test.py` |
+| the cockpit (`views_template.html`, `export_views.py`, `roles.py`, [roles], `site_search.html`) | `node tests/cockpit_test.js` (about a minute), `python roles.py --site` then `node tests/site_test.js`, `tests/roles_test.py`, `node tests/role_pages_test.js`, `tests/peer_median_test.py` |
 | roles, routing, money or the segment bar; before a demo, after a regenerate | `node tests/scenarios_test.js` (about two minutes; results go to the acceptance page) |
 | `handover.py`, `stories/` | `tests/handover_test.py`, `tests/leak_check_test.py`, `tests/contacts_test.py`, `tests/redaction_fixes_test.py`, `tests/handover_cache_test.py` |
 | `llm.py`, `brief.py`, `handover.py` | `tests/ai_spend_test.py` |
@@ -286,7 +286,7 @@ Engine:
 Cockpit:
 - `export_views.py`: the export and `views.html` from `views_template.html`.
 - `views_template.html`: the cockpit page (the look and charts: see REFERENCE.md).
-- `roles.py`: one page per person, plus the sandbox site (`--site`).
+- `roles.py`: one page per person, plus the sandbox site (`--site`, with the search page from `site_search.html`).
 - `cockpit_sync.py`: the page's saved decisions back into events, checked again.
 
 Actions and Slack:
