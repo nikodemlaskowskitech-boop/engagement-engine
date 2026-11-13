@@ -23,7 +23,7 @@ BUILD = INFRA / "build"
 # What each Lambda needs from the repo, and nothing else (never settings.local.toml)
 CHECK_FILES = ["check_inputs.py", "settings.py", "settings.toml"]
 SLACK_FILES = ["slack_loop.py", "settings.py", "settings.toml"]   # the Slack listener: plain Python, no libraries
-ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "ingest.py", "flags.py", "journeys.py",
+ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "ingest.py", "facts.py", "documents.py", "flags.py", "journeys.py",
                 "team_report.py", "backtest.py", "onboarding_report.py", "history.py", "retention.py", "export_views.py",
                 "to_parquet.py", "views_template.html", "handover.py", "llm.py", "stories",
                 "pull_clicks.py",                       # its combine() merges the Slack clicks

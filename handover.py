@@ -43,15 +43,14 @@ anthropic: ANTHROPIC_API_KEY in .env). Nothing needed with --dry-run.
 """
 
 import csv
-import email
 import hashlib
 import json
 import re
 import sys
 from collections import Counter
-from email import policy
 from pathlib import Path
 
+import documents                              # tickets, emails and call notes, one shape (fix D)
 import llm                                    # which provider and model: settings.toml [llm]
 from settings import SETTINGS
 
@@ -88,8 +87,7 @@ Rules:
 # --- 1. Gather ---------------------------------------------------------------------
 
 def directory():
-    with (STORIES / "directory.csv").open(encoding="utf-8") as f:
-        return {r["account_id"]: r for r in csv.DictReader(f)}
+    return documents.directory(STORIES)      # the stories folder is module-level so tests can point elsewhere
 
 
 def contacts(account_id):
@@ -143,37 +141,8 @@ def engine_facts(account_id):
     return a, d["team"], "\n".join(lines)
 
 
-def tickets(entry):
-    with (STORIES / CONF["support_file"]).open(encoding="utf-8") as f:
-        rows = [r for r in csv.DictReader(f) if r["organization"] == entry["helpdesk_org"]]
-    # "source" = each document's own ID in its system: what the cache recognises it by
-    return [{"kind": "S", "source": f"ticket {r['ticket_id']}", "date": r["created_at"], "title": f"Ticket {r['ticket_id']} ({r['priority']}, {r['status']}): {r['subject']}",
-             "text": f"Opened {r['created_at']} by {r['requester_name']} <{r['requester_email']}>, last updated {r['updated_at']}.\n"
-                     f"{r['description']}\nLatest comment: {r['latest_comment']}"} for r in rows]
-
-
-def emails(entry):
-    out = []
-    for p in sorted((STORIES / CONF["email_folder"]).glob("*.eml")):
-        m = email.message_from_bytes(p.read_bytes(), policy=policy.default)
-        people = " ".join(str(m.get(h, "")) for h in ("From", "To", "Cc"))
-        if "@" + entry["email_domain"] not in people:
-            continue                         # joined by email domain, like a mail archive would be
-        body = m.get_body(preferencelist=("plain",)).get_content().strip()
-        out.append({"kind": "E", "source": f"email {m['Message-ID'] or p.name}", "date": m["Date"].datetime.date().isoformat(), "title": f"Email: {m['Subject']}",
-                    "text": f"From: {m['From']}\nTo: {m['To']}\n" + (f"Cc: {m['Cc']}\n" if m["Cc"] else "") + f"\n{body}"})
-    return out
-
-
-def calls(account_id):
-    out = []
-    for p in sorted((STORIES / CONF["calls_folder"]).glob("*.txt")):
-        text = p.read_text(encoding="utf-8")
-        head = dict(re.findall(r"^(\w[\w ]*): (.*)$", text.split("\n\n")[0], re.M))
-        if head.get("CRM account") != account_id:
-            continue                         # joined by the CRM account ID the recorder stores
-        out.append({"kind": "C", "source": f"call {p.name}", "date": head["Date"][:10], "title": f"Call: {head['Title']}", "text": text})
-    return out
+# The documents themselves (tickets, emails, call notes) are read by documents.py:
+# one shape, one way, shared with search and the MCP server (ARCHITECTURE.md fix D).
 
 
 def gather(account_id):
@@ -181,11 +150,7 @@ def gather(account_id):
     if not entry:
         sys.exit(f"{account_id} has no story in {STORIES / 'directory.csv'}")
     account, team, facts = engine_facts(account_id)
-    docs = sorted(tickets(entry) + emails(entry) + calls(account_id), key=lambda x: x["date"])
-    counts = {}
-    for doc in docs:                         # stable IDs per kind, oldest first: S1, E1, C1 ...
-        counts[doc["kind"]] = counts.get(doc["kind"], 0) + 1
-        doc["id"] = f"{doc['kind']}{counts[doc['kind']]}"
+    docs = documents.for_account(account_id, STORIES, entry)   # oldest first, IDs S1, E1, C1 ...
     return entry, account, team, facts, docs
 
 
