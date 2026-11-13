@@ -18,8 +18,8 @@ address, a new secret, a new place data goes).
 
 ## Ways in (trust boundaries)
 
-1. **Internet → API Gateway → Slack listener**: the only public address that
-   accepts input.
+1. **Internet → API Gateway → Slack listener**: a public address that accepts
+   input (signed by Slack). The public search (8) is the other one.
 2. **Laptop → AWS**: `aws login` (admin role), upload.py, cdk deploy.
 3. **AWS / laptop → Anthropic API**: redacted text leaves for the model.
 4. **Text written by outsiders → the model**: customer emails, call
@@ -29,6 +29,9 @@ address, a new secret, a new place data goes).
 7. **Internet → CloudFront → site bucket** (6 Nov 2026): anyone can read the
    demo site; nothing on it accepts input (GET and HEAD only). Its own address,
    if set, is at Cloudflare (registrar and DNS).
+8. **Internet → CloudFront /search → API Gateway → search function** (13 Nov
+   2026): anyone can type a question. The function holds only the demo documents
+   redacted on the laptop and has no access to any data, key or secret.
 
 ## Threats, controls, proof
 
@@ -36,7 +39,7 @@ address, a new secret, a new place data goes).
 | --- | --- | --- | --- | --- |
 | 1 | A forged or replayed Slack click | HMAC signature with the signing secret, 5-minute window either side (old or future-dated), 401 before any work; each click saved under Slack's own click id, so a replay inside the window overwrites it instead of adding one (audit 6 Nov 2026) | `slack_lambda_test.py` (unsigned, wrong, tampered, stale, future, replayed) | A replay re-sends the card update (harmless); anyone in the Slack workspace can click any card they see |
 | 2 | A flood of requests to the public address (cost, noise) | API Gateway throttle 5/s, burst 20; Lambda timeout 10 s | `infra_test.py` | A flood still costs a little until throttled |
-| 3 | A workload role's credentials stolen | One role per job, least privilege; the Slack listener can't read any data; the crawler has its own narrow policy, not AWS's managed Glue role (audit 6 Nov 2026) | `security_check.py` (46 live questions) | The engine role can still read all inputs, by design; the Slack listener's credentials could add forged clicks and read Slack's two secrets |
+| 3 | A workload role's credentials stolen | One role per job, least privilege; the Slack listener can't read any data; the crawler has its own narrow policy, not AWS's managed Glue role (audit 6 Nov 2026) | `security_check.py` (50 live questions) | The engine role can still read all inputs, by design; the Slack listener's credentials could add forged clicks and read Slack's two secrets |
 | 4 | A careless `s3:*` policy elsewhere in the account | Data perimeter: the bucket refuses everyone but 4 roles and the admins | `security_check.py` perimeter cases | Admins are trusted |
 | 5 | Data or a resource reachable from outside | Public access blocks, DenyOutsideThisAccount, HTTPS only | `infra_test.py`, Access Analyzer (`access_report.py`: 0) | None known |
 | 6 | Encrypted data copied out and decrypted | Our own KMS key, usable only through S3 (except admins), every use logged | `security_check.py` key cases | A copy made through S3 by an allowed role |
@@ -52,6 +55,9 @@ address, a new secret, a new place data goes).
 | 17 | The public site defaced, or a visitor's sandbox changes reaching the engine | Its own bucket, never the data bucket; private (public-access blocks on), readable only by this one CloudFront distribution (origin access control); only the engine and the admins may write a page (a Deny in its bucket policy), and the engine can't read or delete there; GET and HEAD only; HSTS, no framing, a content policy that loads nothing but the page and its fonts and lets no form post anywhere; sandbox forms save in the visitor's own browser, never sent | `infra_test.py`, `security_check.py` (site cases), `site_test.js` (every page under the real content policy; a second visitor never sees the first one's changes) | Someone could copy the pages (fake data, by design). A visitor's sandbox state is theirs to tamper with, and only they see it |
 | 19 | The site's own address hijacked: someone with access to the Cloudflare account points it elsewhere (a fake page under Nikodem's name) | The domain and its DNS sit in Cloudflare (option B, 6 Nov 2026): the account needs two-factor sign-in; CloudFront only serves the name with a certificate ACM issued after the DNS proved ownership, and the certificate is in us-east-1, made by `site_cert.py` | `site_cert_test.py`, `infra_test.py` (TLS 1.2+, the certificate from us-east-1) | DNS changes outside AWS aren't in code or in any of our checks: two-factor on Cloudflare is the control |
 | 18 | Someone fetches the site in a loop to run up the bill | CloudFront caches each page for [aws] site_cache_seconds, so the bucket barely sees the traffic; the cheapest edge set (PriceClass_100); the always-free tier (1 TB, 10 million requests a month) is far above any real use; Cost Anomaly Detection emails from $5 | `infra_test.py` | No WAF rate limit (it costs about $6 a month, more than the risk) |
+| 20 | The public search used to reach real data, or to learn about real people | The function carries only `documents.jsonl`: demo documents redacted on the laptop and leak-checked (`search_export.py`), committed and checked apart from the redaction; it has no redaction code, no contacts, no raw text. Its role has no policy beyond its own logs; the data bucket's perimeter refuses it anyway (not exempt) | `search_lambda_test.py` (the bundle), `search_export_test.py` (320 names, emails, companies: none in the file), `infra_test.py` (no policy, not exempt), `security_check.py` (4 live "denied" questions) | Anyone can read every redacted demo document by asking enough questions: fine, they're fake and public by design |
+| 21 | Visitors type real names or personal data into the search, and we keep it | The question is never written: no log line holds it, an error is logged by its type only, the API's access log has the route and status, never the query string; CloudFront has no access logging. Cached answers are keyed by the question for [aws] search_cache_seconds, inside CloudFront only | `search_lambda_test.py` (a planted name never in the logs, even on an error), `infra_test.py` (access log format) | CloudFront's cache holds a question's answer for an hour, keyed by it (not readable by anyone but CloudFront) |
+| 22 | A flood of searches (cost, or starving the other functions of the account's 10 Lambda slots) | One API limit for everyone, [aws] search_rate_per_second 2, burst 5: at that rate the function needs one slot; CloudFront answers a repeated question from its cache; questions over [aws] search_max_chars refused | `infra_test.py`, `search_lambda_test.py` | A flood makes the search say "try again" for real visitors too. The account's 10 slots stay a known limit until the quota increase (asked 6 Nov 2026) |
 | 15 | Someone with edit access writes to the cockpit's database directly, skipping its forms (bad values, someone else's account, a malformed entry to stop the pipeline) | Never trust the page: `cockpit_sync.py` checks every decision again against the CRM and CS team (known account and owner, allowed values, real dates, amounts in range, an owner only on their own accounts, a manager only on their team's); a bad one is skipped and listed, never a crash; free text cut and cleaned | `cockpit_sync_test.py` | Who someone is stays self-declared (next line) |
 
 ## Risks we accept, on purpose

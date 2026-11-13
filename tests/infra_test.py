@@ -85,8 +85,9 @@ check("BucketName" in t.find_outputs("*"), "prints the bucket name after deploy"
 
 aws = SETTINGS["aws"]
 groups = t.find_resources("AWS::Logs::LogGroup")
-check(len(groups) == 4 and all(g["Properties"].get("RetentionInDays") == 30 for g in groups.values()),
-      "every log (three Lambdas, the Slack API's access log) kept 30 days, then deleted (no cost pile-up)",
+check(len(groups) == 4 + 2 * int(bool(SETTINGS["aws"].get("site")))
+      and all(g["Properties"].get("RetentionInDays") == 30 for g in groups.values()),
+      "every log (the Lambdas, the APIs' access logs) kept 30 days, then deleted (no cost pile-up)",
       {k: g["Properties"].get("RetentionInDays") for k, g in groups.items()})
 notes = t.find_resources("Custom::S3BucketNotifications")
 lam = next(iter(notes.values()), {}).get("Properties", {}).get("NotificationConfiguration", {}) \
@@ -283,10 +284,15 @@ check(len(ssm_l) == 1 and actions_of(ssm_l[0]) == ["ssm:GetParameter"]
 check(not any(a not in ("ssm:GetParameter", "kms:GenerateDataKey") and not a.startswith(("s3:", "logs:", "xray:"))
               for st in lstmts for a in actions_of(st)),
       "nothing else in its role", [a for st in lstmts for a in actions_of(st)])
-apis = t.find_resources("AWS::ApiGatewayV2::Api")
-routes = [v["Properties"]["RouteKey"] for v in t.find_resources("AWS::ApiGatewayV2::Route").values()]
-check(len(apis) == 1 and routes == ["POST /slack/actions"], "one HTTP API, one route: POST /slack/actions", routes)
-stages = [v["Properties"] for v in t.find_resources("AWS::ApiGatewayV2::Stage").values()]
+all_apis = t.find_resources("AWS::ApiGatewayV2::Api")
+apis = {k: v for k, v in all_apis.items() if "Slack" in v["Properties"].get("Description", "")}
+slack_api = next(iter(apis), None)
+on_api = lambda kind, api: [v["Properties"] for v in t.find_resources(kind).values()   # noqa: E731
+                            if v["Properties"].get("ApiId") == {"Ref": api}]
+routes = [r["RouteKey"] for r in on_api("AWS::ApiGatewayV2::Route", slack_api)]
+check(len(apis) == 1 and routes == ["POST /slack/actions"], "one Slack API, one route: POST /slack/actions", routes)
+check(len(all_apis) == 1 + int(bool(aws.get("site"))), "no other API but the site's search", sorted(all_apis))
+stages = on_api("AWS::ApiGatewayV2::Stage", slack_api)
 st0 = stages[0] if stages else {}
 thr = st0.get("DefaultRouteSettings", {})
 check(len(stages) == 1 and st0.get("StageName") == "$default" and st0.get("AutoDeploy") is True
@@ -330,12 +336,15 @@ exempt_text = json.dumps(exempt)
 role_ids = {}
 for k, v in ours.items():
     var = v["Properties"]["Environment"]["Variables"]
-    kind = "check" if "REPORTS_PREFIX" in var else "engine" if "ENGINE_STEPS" in var else "slack"
+    kind = ("check" if "REPORTS_PREFIX" in var else "engine" if "ENGINE_STEPS" in var
+            else "search" if "TOP_K" in var else "slack")
     role_ids[kind] = v["Properties"]["Role"]["Fn::GetAtt"][0]
 role_ids["crawler"] = crole
 check(len(exempt) == 4 + len(aws["admin_role_names"]) + len(aws["break_glass_users"])
-      and all(rid in exempt_text for rid in role_ids.values()),
+      and all(rid in exempt_text for k, rid in role_ids.items() if k != "search"),
       "exempt: the check, engine, Slack listener and crawler roles", sorted(role_ids))
+check("search" not in role_ids or role_ids["search"] not in exempt_text,
+      "...never the public search's role: the bucket refuses it everything, whatever its policy says")
 check(all(f"role/*{n}" in exempt_text for n in aws["admin_role_names"])
       and all(f"user/{n}" in exempt_text for n in aws["break_glass_users"])
       and "ScheduleRole" not in exempt_text,
@@ -460,11 +469,11 @@ if aws.get("site"):
     wall_text = json.dumps(walls)
     check(walls and walls[0]["Effect"] == "Deny" and {"s3:PutObject*", "s3:DeleteObject*"} <= set(actions_of(walls[0]))
           and role_ids["engine"] in wall_text and all(f"role/*{n}" in wall_text for n in aws["admin_role_names"])
-          and not any(role_ids[k] in wall_text for k in ("check", "slack", "crawler")),
+          and not any(role_ids[k] in wall_text for k in ("check", "slack", "crawler", "search")),
           "its own perimeter: only the engine and the admins may write or delete a page", walls)
     dist = next(iter(dists.values()), {}).get("Properties", {}).get("DistributionConfig", {})
     beh = dist.get("DefaultCacheBehavior", {})
-    origin = (dist.get("Origins") or [{}])[0]
+    origin = next((o for o in dist.get("Origins", []) if "OriginAccessControlId" in o), {})   # the bucket's
     check(dist.get("DefaultRootObject") == "index.html" and beh.get("ViewerProtocolPolicy") == "redirect-to-https"
           and sorted(beh.get("AllowedMethods", [])) == ["GET", "HEAD"],
           "opens on index.html, HTTPS only (HTTP is redirected), read-only methods", beh)
@@ -502,6 +511,64 @@ if aws.get("site"):
           "the engine is told the site bucket, folder and cache time (from settings)", {k: ev.get(k) for k in ("SITE_BUCKET", "SITE_FOLDER", "SITE_CACHE_SECONDS")})
     check({"SiteUrl", "SiteBucket"} <= set(t.find_outputs("*")), "prints the site's address after deploy")
     check("roles.py --site" in aws["engine_steps"], "the engine builds the sandbox pages each run (roles.py --site)")
+
+    print("\nPublic search: /search on the site's address, a function with no data access")
+    srch = {k: v for k, v in ours.items() if "TOP_K" in v["Properties"]["Environment"]["Variables"]}
+    s_id, s_fn = next(iter(srch.items()), (None, {"Properties": {"Environment": {"Variables": {}}}}))
+    fp = s_fn["Properties"]
+    fv = fp["Environment"]["Variables"]
+    check(len(srch) == 1 and fp.get("Runtime") == "python3.13" and fp.get("Architectures") == ["arm64"]
+          and fp.get("MemorySize") == aws["search_memory_mb"] and fp.get("Timeout") == aws["search_timeout_seconds"],
+          "one function, Python 3.13 on arm64, memory and timeout from settings")
+    check(fv == {"TOP_K": str(SETTINGS["search"]["site_top_k"]), "MAX_CHARS": str(aws["search_max_chars"]),
+                 "CACHE_SECONDS": str(aws["search_cache_seconds"])},
+          "told only how many results, the longest question and the cache time (no bucket, no secret)", fv)
+    s_role = fp.get("Role", {}).get("Fn::GetAtt", [None])[0]
+    s_pols = [v for v in t.find_resources("AWS::IAM::Policy").values()
+              if any(r.get("Ref") == s_role for r in v["Properties"].get("Roles", []))]
+    check(s_role and not s_pols, "its role has no policy of its own: no bucket, no key, no secret", s_pols)
+    managed = json.dumps(t.find_resources("AWS::IAM::Role").get(s_role, {}).get("Properties", {}).get("ManagedPolicyArns"))
+    check("AWSLambdaBasicExecutionRole" in managed and managed.count("arn:") <= 1,
+          "...only AWS's basic one: write its own logs", managed)
+    check(not any(c["LambdaFunctionArn"].get("Fn::GetAtt", [None])[0] == s_id for c in lam),
+          "never woken by the bucket")
+    s_api = next((k for k, v in all_apis.items() if "search" in v["Properties"].get("Description", "").lower()), None)
+    check([r["RouteKey"] for r in on_api("AWS::ApiGatewayV2::Route", s_api)] == ["GET /search"],
+          "its own API, one route: GET /search (no POST, nothing else)")
+    s_stage = (on_api("AWS::ApiGatewayV2::Stage", s_api) or [{}])[0]
+    s_thr = s_stage.get("DefaultRouteSettings", {})
+    check(s_thr.get("ThrottlingRateLimit") == aws["search_rate_per_second"]
+          and s_thr.get("ThrottlingBurstLimit") == aws["search_burst"],
+          f"one rate limit for everyone: {aws['search_rate_per_second']}/s, burst {aws['search_burst']}", s_thr)
+    s_fmt = s_stage.get("AccessLogSettings", {}).get("Format", "")
+    check("DestinationArn" in s_stage.get("AccessLogSettings", {}) and "$context.routeKey" in s_fmt
+          and not any(x in s_fmt.lower() for x in ("querystring", "$context.path", "body", "$request")),
+          "an access log that never holds the question (no query string, no path, no body)", s_fmt)
+    s_perms = [v["Properties"] for v in t.find_resources("AWS::Lambda::Permission").values()
+               if v["Properties"].get("FunctionName", {}).get("Fn::GetAtt", [None])[0] == s_id]
+    check(len(s_perms) == 1 and s_perms[0]["Principal"] == "apigateway.amazonaws.com"
+          and s_api in json.dumps(s_perms[0].get("SourceArn")),
+          "only its own API may call it", s_perms)
+    cbs = dist.get("CacheBehaviors", [])
+    s_beh = next((b for b in cbs if b.get("PathPattern") == "/search"), {})
+    s_origin = next((o for o in dist.get("Origins", []) if o.get("Id") == s_beh.get("TargetOriginId")), {})
+    check(len(cbs) == 1 and s_beh and sorted(s_beh.get("AllowedMethods", [])) == ["GET", "HEAD"]
+          and s_beh.get("ViewerProtocolPolicy") == "redirect-to-https"
+          and s_origin.get("CustomOriginConfig", {}).get("OriginProtocolPolicy") == "https-only"
+          and s_api in json.dumps(s_origin.get("DomainName")),
+          "CloudFront sends /search (and only that) to the search API, HTTPS all the way, GET and HEAD only", s_beh)
+    check(next(iter(rhps)) in json.dumps(s_beh.get("ResponseHeadersPolicyId")),
+          "answers get the same security headers as the pages")
+    cps = {k: v["Properties"]["CachePolicyConfig"] for k, v in t.find_resources("AWS::CloudFront::CachePolicy").items()}
+    cp = cps.get(next((k for k in cps if k in json.dumps(s_beh.get("CachePolicyId"))), None), {})
+    keys = cp.get("ParametersInCacheKeyAndForwardedToOrigin", {})
+    check(keys.get("QueryStringsConfig") == {"QueryStringBehavior": "whitelist", "QueryStrings": ["q"]}
+          and keys.get("CookiesConfig", {}).get("CookieBehavior") == "none"
+          and keys.get("HeadersConfig", {}).get("HeaderBehavior") == "none"
+          and cp.get("MaxTTL") == aws["search_cache_seconds"] and cp.get("DefaultTTL") == 0,
+          "cached by the question only (no cookies, no headers passed on), at most [aws] search_cache_seconds", cp)
+    check("connect-src 'self'" in SITE_CSP, "the page may call its own address only: /search is on it, nothing else is")
+    check({"SearchFunction", "SearchUrl"} <= set(t.find_outputs("*")), "prints the search address after deploy")
     check(not dist.get("Aliases") and "AcmCertificateArn" not in json.dumps(dist.get("ViewerCertificate", {}))
           if not aws.get("site_domain") else True,
           "no [aws] site_domain: the xxxx.cloudfront.net address with CloudFront's own certificate")
@@ -537,8 +604,10 @@ if aws.get("site"):
             account=str(aws["account_id"]), region=aws["region"])))
         check(not t2.find_resources("AWS::CloudFront::Distribution")
               and not [k for k in t2.find_resources("AWS::S3::Bucket") if k.startswith("Site")]
-              and "SITE_BUCKET" not in json.dumps(t2.find_resources("AWS::Lambda::Function")),
-              "[aws] site = false: no distribution, no site bucket, the engine isn't told one")
+              and "SITE_BUCKET" not in json.dumps(t2.find_resources("AWS::Lambda::Function"))
+              and "TOP_K" not in json.dumps(t2.find_resources("AWS::Lambda::Function"))
+              and len(t2.find_resources("AWS::ApiGatewayV2::Api")) == 1,
+              "[aws] site = false: no distribution, no site bucket, no search, the engine isn't told one")
     finally:
         aws["site"] = True
 else:

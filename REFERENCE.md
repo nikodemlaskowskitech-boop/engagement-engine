@@ -263,6 +263,24 @@ Read a file's entry before changing that file, and update the entry in the same 
   company, organisation or domain (320 strings) and no email or phone, checked apart
   from the redaction; every document there; the redacted file finds the same right
   accounts as the raw text.
+- `infra/lambdas/search/` (13 Nov 2026): the public search on the demo site. handler.py: GET
+  ?q= (empty or over [aws] search_max_chars: 400; not GET: 405), BM25 with synonyms over its
+  bundled documents.jsonl (search_export.py's file), top [search] site_top_k accounts with
+  their best document (citation, kind, date, title, matching line), the words matched and
+  the other matching IDs; Cache-Control public for [aws] search_cache_seconds. The question
+  is never logged (errors by type only). bundle.py bundle_search(): handler, search.py,
+  documents.py, settings, the file, DuckDB (SEARCH_PACKAGES); no handover.py (search.py
+  imports it only inside redacted()). data_stack.py, inside the site block: the Search
+  function (no policy of its own: AWS's basic logs role only; not exempt from the data
+  perimeter, so the bucket refuses it), its own HTTP API (GET /search, throttle [aws]
+  search_rate_per_second 2 / search_burst 5, an access log without query string), and a
+  CloudFront behavior /search to that API (HTTPS only, GET/HEAD, cache policy keyed on q
+  only, no cookies or headers forwarded, the site's security headers). Same address as the
+  pages, so the CSP's connect-src 'self' already allows it. Outputs SearchFunction and
+  SearchUrl. `tests/search_lambda_test.py`: the real bundle in its own Python: only those
+  files; answers, citations from the file, cacheable, same order as the laptop; 400/405/500;
+  a planted name never in the logs, even on an error. infra_test.py and security_check.py
+  check the rest (THREAT_MODEL.md 20-22).
 - `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
   2026: two windows had no start, so a year of data made every account look like
   it had lost most of its users, and "month 1" summed ten months). A perfectly flat
@@ -973,7 +991,8 @@ Read a file's entry before changing that file, and update the entry in the same 
 - `security_check.py`: live security checks, read-only (`python
   security_check.py` after `aws login`). Finds the deployed roles and functions
   in the CairnpathData stack and asks the IAM policy simulator, with the
-  bucket's and the KMS key's real policies, 46 questions (7 on the site bucket, with
+  bucket's and the KMS key's real policies, 50 questions (4 on the public search role, 13 Nov 2026: it
+  can't read data, change the site, read the API key or decrypt; 7 on the site bucket, with
   its own policy: only the engine writes, it can't read or delete, the Slack listener
   and an s3:* identity can't change a page): things each role must NOT be able to do
   (the engine writing its inputs or the check's verdict, deleting, reading

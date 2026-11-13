@@ -134,6 +134,15 @@ slack_memory_mb = 512          # small, but more memory = more CPU = a faster fi
 slack_timeout_seconds = 10     # Slack gives up after 3 s anyway; this only stops a stuck call
 slack_rate_per_second = 5      # API Gateway: steady requests per second allowed...
 slack_burst = 20               # ...and a short burst; anything above gets 429 before reaching the Lambda
+# The public search on the demo site (13 Nov 2026): its own function and API, reached through the
+# site's address (CloudFront /search). One rate for the whole internet: at 2 a second it needs one
+# of the account's 10 Lambda slots at most. Answers are cached, so a repeated question is free.
+search_memory_mb = 512
+search_timeout_seconds = 10
+search_rate_per_second = 2
+search_burst = 5
+search_cache_seconds = 3600      # CloudFront keeps an answer an hour (the demo data changes rarely)
+search_max_chars = 200
 # The data perimeter (a bucket policy): besides our four workload roles, only these may read or
 # write the bucket's data. The role you get from `aws login` (any IAM path), and the break-glass
 # IAM user kept for emergencies. Everyone else in the account is refused, whatever their own
@@ -410,9 +419,9 @@ stop_words = ["the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "wit
               "account", "accounts", "customer", "customers"]
 
 min_heldout_recall = 0.85          # the same on tests/heldout/, written apart from the vocabulary (13 Nov 2026: keywords 72%, synonyms 90%)
-synonym_weight = 0.6
+synonym_weight = 0.6   # a synonym counts this much of the question's own word
 site_top_k = 5                     # results the public search shows (13 Nov 2026: first result right 16 of 27 held-out questions, top 5 finds 75%)
-site_documents_file = "infra/lambdas/search/documents.jsonl"   # search_export.py: the redacted documents the public search carries               # a synonym counts this much of the question's own word
+site_documents_file = "infra/lambdas/search/documents.jsonl"   # search_export.py: the redacted documents the public search carries
 
 [search.synonyms]
 # The team's vocabulary: a word in a question also searches for these. Written as a CS

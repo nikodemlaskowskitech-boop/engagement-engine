@@ -68,6 +68,7 @@ Docs-only PRs need none.
 | `cockpit_sync.py` | `tests/cockpit_sync_test.py` |
 | `infra/`, or what an engine step imports | `tests/infra_test.py` (Nikodem: needs aws_cdk), `tests/check_lambda_test.py`, `tests/engine_lambda_test.py`, `tests/slack_lambda_test.py` |
 | `slack_loop.py`, `listener.py` | `tests/slack_lambda_test.py` |
+| `infra/lambdas/search/`, `search.py`, `documents.py` | `tests/search_lambda_test.py` |
 | `upload.py` / `pull_clicks.py` / `site_cert.py` / `put_key.py` / `request_briefs.py` | its own `tests/<name>_test.py` |
 | `guardduty_report.py` / `access_report.py` | its own `tests/<name>_test.py` |
 | IAM roles or policies | `tests/security_check_test.py`; after the deploy Nikodem runs `python security_check.py` (live) |
@@ -306,6 +307,7 @@ AWS (run by Nikodem, signed in with `aws login --profile cairnpath`):
 - `security_check.py`: live IAM checks; `access_report.py`, `guardduty_report.py`: read-only reports.
 - `site_cert.py`: the certificate for the demo site's own address.
 - `to_parquet.py`: the engine's tables for Athena.
+- `infra/lambdas/search/`: the public search on the demo site: its handler and the redacted file it carries.
 
 Tests: `tests/`, one file per area (see Testing above).
 
