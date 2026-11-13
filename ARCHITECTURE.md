@@ -34,9 +34,24 @@ regressions; the AWS side is all code, least privilege, with its own tests.
 ## What the growth costs us
 
 1. **Every step re-reads every event.** The views are views, not tables, so each of
-   about nine steps parses the same 485 MB of JSON again, and history.py does it once
-   for each of 52 weeks. The AWS run takes 500 to 600 of its 900 seconds. One more
-   heavy step (search, extraction) and runs start failing.
+   about nine steps parses the same 485 MB of JSON again. The AWS run takes 500 to
+   600 of its 900 seconds. One more heavy step (search, extraction) and runs start
+   failing. Measured on the run of 13 Nov 2026 (502 s, with the three briefs):
+
+   | Step | Seconds | Share |
+   |---|---|---|
+   | flags.py | 158 | 31% |
+   | backtest.py | 60 | 12% |
+   | export_views.py, twice | 55 | 11% |
+   | handover.py (the model, only on request) | 52 | 10% |
+   | history.py | 46 | 9% |
+   | journeys, team report, onboarding, roles, parquet | 30 | 6% |
+   | Outside the steps: 631 input files in, outputs out | 101 | 20% |
+
+   The heaviest step is flags.py, not history.py as this page first guessed. flags,
+   backtest, history and export all rebuild 30-day utilisation for every day from raw
+   events: about 320 seconds of the same work. The 101 seconds outside the steps are
+   the daily event files, one per day, copied one by one.
 2. **Steps talk through CSV files with hard-coded paths.** `data/flags_churn.csv` is
    written by one step and read by five others, by a path typed into their SQL. The
    order only lives in two lists that must agree: `run_all.ps1` and `[aws] engine_steps`.
@@ -60,7 +75,8 @@ regressions; the AWS side is all code, least privilege, with its own tests.
 
 | # | Fix | Decision | Why |
 |---|---|---|---|
-| A | **One database per run.** A first step loads the inputs into a DuckDB file as tables, with a daily roll-up per account (volume, active users, product events). Every later step reads the file. | **Do now** | Fixes 1, and is the foundation for the rest. First measure the step times in run.json, so the win is a number. Safety net: the flag files and the export must come out identical, byte for byte. |
+| A | **One database per run.** A first step loads the inputs into a DuckDB file as tables, with a daily roll-up per account (volume, active users, product events) and the 30-day utilisation for every day, computed once. Every later step reads the file. | **Do now** | Fixes 1, and is the foundation for the rest. Target: the four heavy steps (about 320 s) under 100 s. Safety net: the flag files and the export must come out identical, byte for byte. |
+| A2 | **Events uploaded as Parquet**, a few files instead of one per day (the planner's Phase 6 item). | **Later**: when the run nears its limit again | The 101 s outside the steps. It changes upload.py and the check Lambda, so it waits until A has shown how much room we gained. |
 | B | **Steps share tables, not hand-typed paths.** Flags, journeys and values become tables in that database; the CSVs stay as exports for people and Athena. One pipeline list in settings, read by run_all and the Lambda. | **Do now**, with A | Fixes 2. Same test: identical outputs. |
 | C | **A facts layer.** One module (`facts.py`) with the questions the product answers: an account, the at-risk list for a segment, a timeline, the task queue. export_views, the MCP server and the Ask box all call it. | **Do now** | Fixes 4. Phase 9 needs it, so building it first avoids building it twice. |
 | D | **One documents table.** Emails, tickets and call notes in one shape: account, source, date, author label, text. Redaction keys stay out of it, local only. handover.py reads it too. | **Do now** | Fixes 5. Search, MCP and the brief share one way to read documents. The privacy tests must pass unchanged. |
@@ -73,7 +89,7 @@ regressions; the AWS side is all code, least privilege, with its own tests.
 
 ## Order
 
-1. Measure: the step times from the next run.json.
+1. Measure: done 13 Nov 2026 (the table above).
 2. A + B in one PR: the database file, tables between steps, one pipeline list.
    Identical outputs, then the new step times.
 3. C + D: the facts layer and the documents table, export_views and handover.py
