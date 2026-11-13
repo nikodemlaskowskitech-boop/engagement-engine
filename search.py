@@ -27,9 +27,12 @@ questions. Keywords only find the words used: "competitor" doesn't find "we're
 benchmarking Lumen Analytics". tests/search_test.py measures how much that costs
 (recall per question) against the corpus's answer key; meaning (vectors) comes next.
 
-The documents are raw text with real names. This module only finds and ranks them, on
-the laptop; anything that leaves (a model, the MCP server) gets redacted text first
-(PRIVACY.md).
+The documents are raw text with real names. search() and accounts() rank them, on the
+laptop. redacted(con, hits) is the only form that may leave (a model, the MCP server):
+each account's results cleaned by the handover brief's own redaction (people to
+Customer A / CS 1, emails and phones masked, the company to "the customer"; labels are
+per account), then the leak check; an account where anything person-shaped survives is
+held back and listed, never sent (PRIVACY.md).
 
     python search.py "which customers are under budget pressure?"
     python search.py "invoice" --account acc_053
@@ -39,6 +42,7 @@ import re
 import sys
 
 import documents
+import handover                    # its redaction and leak check: one way to redact
 from settings import OUTPUTS, SETTINGS
 
 CONF = SETTINGS["search"]
@@ -74,6 +78,11 @@ def add_views(con, folders=None):
     if folders is None:
         folders = [documents.STORIES] + ([CORPUS] if (CORPUS / "directory.csv").exists() else [])
     n = documents.add_table(con, folders)
+    # which folder each account's documents came from: redaction reads that folder's contacts
+    pairs = ", ".join(f"('{acc}', '{str(folder).replace(chr(92), '/')}')" for folder in folders
+                      for acc in documents.directory(folder) if re.fullmatch(r"[\w-]+", acc))
+    pairs = pairs or "(NULL, NULL)"
+    con.sql(f"CREATE OR REPLACE TABLE doc_folders AS SELECT * FROM (VALUES {pairs}) v(account_id, folder)")
     con.sql(STEM_SQL)
     con.sql(f"""CREATE OR REPLACE TABLE doc_terms AS
         WITH words AS (
@@ -163,6 +172,32 @@ def accounts(con, query, k=None, synonyms=True):
     return list(ranked.values())[:k]
 
 
+def redacted(con, hits):
+    """The hits in the only form that may leave the laptop: title, line and the document's
+    text redacted per account, then the leak check. Returns (safe, held_back): safe = the
+    hits without a real name, email, phone or company; held_back = the accounts the leak
+    check stopped, with what it found (for a person on the laptop, never sent on).
+    The redaction keys stay here: nothing returned can turn a label back into a name."""
+    folders = dict(con.sql("SELECT account_id, folder FROM doc_folders").fetchall())
+    team = [{"owner_id": i, "owner_name": n, "owner_type": t}
+            for i, n, t in con.sql("SELECT owner_id, owner_name, owner_type FROM cs_team").fetchall()]
+    safe, held_back = [], []
+    for acc in dict.fromkeys(h["account_id"] for h in hits):        # each account once, in rank order
+        folder = folders[acc]
+        entry = documents.directory(folder)[acc]
+        docs = documents.for_account(acc, folder, entry)            # all of them: people named anywhere
+        clean, key = handover.cleaner(entry, team, "", docs, handover.contacts(acc, folder))
+        text_of = {d["id"]: d["text"] for d in docs}
+        mine = [{**h, "title": clean(h["title"]), "line": clean(h["line"]), "text": clean(text_of[h["id"]])}
+                for h in hits if h["account_id"] == acc]
+        found = handover.leak_check("\n".join(f"{h['title']}\n{h['line']}\n{h['text']}" for h in mine), key)
+        if found:
+            held_back.append({"account_id": acc, "found": found})
+        else:
+            safe += mine
+    return safe, held_back
+
+
 def _best_line(text, matched):
     """The line of the document holding most of the matched words: the context to show."""
     stems = set(matched)
@@ -180,9 +215,15 @@ if __name__ == "__main__":
     ap.add_argument("--account", help="search one account's documents only")
     ap.add_argument("-k", type=int, default=None, help="how many results")
     ap.add_argument("--exact", action="store_true", help="the question's own words only, no synonyms")
+    ap.add_argument("--redacted", action="store_true", help="show the results as they'd leave the laptop")
     args = ap.parse_args()
     from cairnpath_db import connect
     con = connect()
     print(f"{add_views(con)} documents")
-    for h in search(con, args.query, args.k, args.account, synonyms=not args.exact):
+    hits = search(con, args.query, args.k, args.account, synonyms=not args.exact)
+    if args.redacted:
+        hits, held = redacted(con, hits)
+        for b in held:
+            print(f"Held back {b['account_id']}: the leak check found {', '.join(b['found'])}")
+    for h in hits:
         print(f"{h['score']:6.2f}  {h['account_id']} [{h['id']}] {h['date']}  {h['title']}\n        {h['line']}")

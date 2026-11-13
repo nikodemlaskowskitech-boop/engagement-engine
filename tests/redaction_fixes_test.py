@@ -71,6 +71,13 @@ out = handover.restore("The customer wants pricing. Customer A agreed; the custo
 check(out == "Acme Foods wants pricing. Will Turner agreed; Acme Foods pays.",
       "'The customer' and 'the customer' both get the company name back", out)
 
+print("\nG: a surname after a title (found by the search held-out set, 13 Nov 2026)")
+sent, key = redact("Dear Mr Turner, thanks. Dr. Chen and Ms Turner agree. Mr Smith too. Turner Street is fine.")
+check(f"Dear {will}, thanks." in sent and f"{may} and {will} agree" in sent,
+      "Mr/Ms/Dr + a known surname becomes that person's label", sent)
+check("Mr Smith" in sent, "a title before a name nobody knows stays (the leak check's job)", sent)
+check("Turner Street" in sent, "a surname alone, without a title, is left alone (could be a word or a street)", sent)
+
 print("\nThe number check reads numbers written as words (found 5 Nov 2026)")
 check(not handover.check("Users rose over 13 weeks [DATA].", "Weekly active users: 26 thirteen weeks ago, 38 last week.",
                          {"DATA"})["unverified_numbers"],
