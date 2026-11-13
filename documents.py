@@ -108,12 +108,16 @@ def all_documents(stories=None):
     return [{"account_id": acc, **doc} for acc in directory(stories) for doc in for_account(acc, stories)]
 
 
-def add_table(con, stories=None):
+def add_table(con, stories=None, rows=None):
     """A DuckDB table "documents" (account_id, id, kind, source, date, title, text) over
     every document, for search and SQL. stories = one folder or a list of folders (the
-    stories and the search corpus). Raw text: redact before anything leaves."""
-    folders = stories if isinstance(stories, (list, tuple)) else [stories]
-    rows = [r for folder in folders for r in all_documents(folder)]
+    stories and the search corpus). Raw text: redact before anything leaves.
+    rows = documents already in this shape instead (the public search's redacted file,
+    which has no source: the ID stands in)."""
+    if rows is None:
+        folders = stories if isinstance(stories, (list, tuple)) else [stories]
+        rows = [r for folder in folders for r in all_documents(folder)]
+    rows = [{"source": r["id"], **r} for r in rows]
     with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False, encoding="utf-8") as tmp:
         tmp.write("\n".join(json.dumps(r) for r in rows))
     path = tmp.name.replace("\\", "/")

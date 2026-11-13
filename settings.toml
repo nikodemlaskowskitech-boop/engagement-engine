@@ -410,7 +410,9 @@ stop_words = ["the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "wit
               "account", "accounts", "customer", "customers"]
 
 min_heldout_recall = 0.85          # the same on tests/heldout/, written apart from the vocabulary (13 Nov 2026: keywords 72%, synonyms 90%)
-synonym_weight = 0.6               # a synonym counts this much of the question's own word
+synonym_weight = 0.6
+site_top_k = 5                     # results the public search shows (13 Nov 2026: first result right 16 of 27 held-out questions, top 5 finds 75%)
+site_documents_file = "infra/lambdas/search/documents.jsonl"   # search_export.py: the redacted documents the public search carries               # a synonym counts this much of the question's own word
 
 [search.synonyms]
 # The team's vocabulary: a word in a question also searches for these. Written as a CS
