@@ -1,0 +1,10 @@
+Title: Fjellvik Energi - check-in
+Date: 2026-06-30 09:00 EEST
+CRM account: acc_h07
+Participants: Signe Halvorsen (Cairnpath, Scale team), Aino Lehtonen (Fjellvik Energi, Digital Services Manager)
+
+[00:00:25] Signe Halvorsen: How did the summer release of the customer app go?
+[00:00:47] Aino Lehtonen: Well. The new meter reading flow is used a lot more than we expected, and the dashboards made it easy to show.
+[00:01:24] Signe Halvorsen: Great. Anything you need from us?
+[00:01:42] Aino Lehtonen: Maybe a session on cohorts for my new colleague in the autumn.
+[00:02:07] Signe Halvorsen: I'll offer you a date in September.

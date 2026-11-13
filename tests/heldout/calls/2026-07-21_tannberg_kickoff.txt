@@ -1,0 +1,11 @@
+Title: Tannberg Versicherung - kickoff
+Date: 2026-07-21 11:00 CEST
+CRM account: acc_h04
+Participants: Matthias Brenner (Cairnpath, CSM), Ulrike Hammer (Tannberg Versicherung, Head of Digital Channels), Florian Kessler (Tannberg Versicherung, Information Security Officer)
+
+[00:00:25] Matthias Brenner: Welcome on board. The contract started on 1 July; the plan was to have the app sending events within two weeks.
+[00:01:02] Ulrike Hammer: That's still our wish. The developers have the SDK in a branch.
+[00:01:27] Florian Kessler: One thing to be clear about: nothing goes into production until our supplier assessment is complete. That's a regulatory step for us, not a formality.
+[00:02:14] Matthias Brenner: Understood. What do you need from us?
+[00:02:33] Florian Kessler: I'll send the questionnaire and our contract amendment. Realistically it takes six to eight weeks.
+[00:03:07] Ulrike Hammer: So we'll prepare the dashboards in the meantime with test data.

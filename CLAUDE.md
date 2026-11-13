@@ -58,7 +58,7 @@ Docs-only PRs need none.
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
 | `documents.py` | `tests/documents_test.py`, plus the handover row |
 | `generate_documents.py` | `tests/corpus_test.py` |
-| `search.py`, `documents.py`, [search] | `tests/search_test.py` (prints recall per question) |
+| `search.py`, `documents.py`, [search], `tests/heldout/` | `tests/search_test.py` (recall per question, corpus and held-out) |
 | `retention.py` | `tests/retention_test.py` |
 | the cockpit (`views_template.html`, `export_views.py`, `roles.py`, [roles]) | `node tests/cockpit_test.js` (about a minute), `python roles.py --site` then `node tests/site_test.js`, `tests/roles_test.py`, `node tests/role_pages_test.js`, `tests/peer_median_test.py` |
 | roles, routing, money or the segment bar; before a demo, after a regenerate | `node tests/scenarios_test.js` (about two minutes; results go to the acceptance page) |
@@ -311,7 +311,8 @@ Tests: `tests/`, one file per area (see Testing above).
 
 - Phase 9, AI on unstructured data: account search built 13 Nov 2026 (BM25 in SQL,
   the corpus; recall 51% on keywords, 100% with the [search.synonyms] vocabulary,
-  optimistic: written knowing the corpus); next, a held-out test, redacted results, then "ask about this account", vectors next
+  optimistic: written knowing the corpus; on a held-out set written apart, 72% -> 90%); next,
+  redacted results, then "ask about this account", vectors next
   to keywords, a Cairnpath MCP server over `facts.py` and the search, an AI
   cost demo (AI_COST.md), and last a live Ask box in the cockpit.
 - Waiting on AWS: Bedrock quota (ask again early December 2026), Lambda

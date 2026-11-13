@@ -1,0 +1,11 @@
+Title: Rivabella Reisen - check-in
+Date: 2026-08-11 15:30 CEST
+CRM account: acc_h13
+Participants: Matthias Brenner (Cairnpath, CSM), Lorenzo Gatti (Rivabella Reisen, Head of Web Analytics)
+
+[00:00:25] Matthias Brenner: How are the booking numbers since the July fix?
+[00:00:46] Lorenzo Gatti: The duplicates stopped, but now we have a new hole. Since the consent banner changed in July we lose about a third of sessions.
+[00:01:27] Matthias Brenner: Compared with what?
+[00:01:41] Lorenzo Gatti: Our booking engine. Cairnpath shows 30-something percent fewer visits, and the gap is worst on mobile.
+[00:02:16] Matthias Brenner: Events sent before consent are dropped by design. We can look at a cookieless mode for anonymous counts.
+[00:02:52] Lorenzo Gatti: Please. Right now I can't put these numbers in front of management.

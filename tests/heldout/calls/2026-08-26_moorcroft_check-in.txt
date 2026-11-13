@@ -1,0 +1,11 @@
+Title: Moorcroft Learning - check-in
+Date: 2026-08-26 13:00 BST
+CRM account: acc_h06
+Participants: Owain Pryce (Cairnpath, Scale team), Gemma Hollis (Moorcroft Learning, Product Manager)
+
+[00:00:25] Owain Pryce: How are the dashboards landing with leadership?
+[00:00:46] Gemma Hollis: Badly, to be honest. After the double-counting in June and now the anonymous Android users, nobody trusts the numbers. The director stopped opening the weekly dashboard.
+[00:01:38] Owain Pryce: When does the Android fix ship?
+[00:01:55] Gemma Hollis: App 5.4, maybe mid October. Until then the funnels are half guesswork.
+[00:02:22] Owain Pryce: I'll send you a list of the charts that are still sound, so you have something you can show.
+[00:02:55] Gemma Hollis: Thanks. And a warning: the trust's grant was cut, so every department is being asked to spend less. Expect questions.

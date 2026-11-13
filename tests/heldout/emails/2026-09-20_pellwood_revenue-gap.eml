@@ -1,0 +1,21 @@
+From: Imogen Ashby <imogen.ashby@pellwood.example>
+To: Harriet Okafor <harriet.okafor@cairnpath.example>
+Cc: Rhys Talbot <rhys.talbot@pellwood.example>
+Date: Sun, 20 Sep 2026 21:15:00 +0100
+Subject: Revenue in Cairnpath 30% under Steam
+Message-ID: <2026-09-20_pellwood_revenue-gap.eml@demo.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+Hi Harriet,
+
+Revenue in our live ops dashboard is about 30% below what Steam and the con=
+sole stores report for the launch week. I dug in: every purchase event with=
+ a currency other than GBP seems to be dropped at ingestion, and there's no=
+ error on our side.
+
+We're making pricing decisions off these charts this week, so this is urgen=
+t for us.
+
+Imogen

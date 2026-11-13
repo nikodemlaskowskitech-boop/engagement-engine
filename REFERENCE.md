@@ -223,7 +223,16 @@ Read a file's entry before changing that file, and update the entry in the same 
   Optimistic: the list was written by someone who had seen the corpus, generic words but
   not blind; a held-out set written apart is the fair test, before vectors are compared.
   Traps: the budget ones rank below all six answers; the competitor trap still ranks
-  above three of them. The three story accounts aren't in the key, so Nettle Foods
+  above three of them.
+  Held-out, same day: tests/heldout/ (18 accounts acc_h01-h18, 75 documents, 4 traps,
+  key.json with each question and two rewordings) written by a separate agent that never
+  saw the vocabulary, the corpus or the search, in the stories/ format; committed, fixed.
+  Recall over 27 wordings x 3 accounts: keywords 58 of 81 (72%), synonyms 73 of 81 (90%).
+  The nine original questions: 12 of 27 on keywords, 27 of 27 with synonyms, so the
+  vocabulary carries to new documents. The misses are all on rewordings, whose words the
+  vocabulary isn't keyed on ("broken tracking", "a bill being contested"): the gap
+  vectors should close. [search] min_heldout_recall 0.85.
+  The three story accounts aren't in the key, so Nettle Foods
   (a real overage dispute and competitor) shows as "not right". [search] min_recall 0.9
   keeps a bad edit to the list from passing.
   `tests/search_test.py`: the recall table, and BM25's mechanics on made-up documents.

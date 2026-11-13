@@ -1,0 +1,11 @@
+Title: Chateau Verdier - onboarding check-in
+Date: 2026-09-10 14:00 CEST
+CRM account: acc_h09
+Participants: Ruben De Smet (Cairnpath, Scale team), Margaux Lefebvre (Chateau Verdier, E-commerce Manager)
+
+[00:00:25] Ruben De Smet: Last time we planned the sales funnel. Did the Shopify app go in?
+[00:00:51] Margaux Lefebvre: Honestly, no. The agency that was meant to do it went quiet in August, and Thibault is only part time on the shop.
+[00:01:29] Ruben De Smet: So no orders tracked yet?
+[00:01:45] Margaux Lefebvre: Not a single real event. It's embarrassing, we signed in July.
+[00:02:10] Ruben De Smet: It's more common than you'd think. If Thibault has 30 minutes, I can walk him through it live.
+[00:02:43] Margaux Lefebvre: I'll ask him. The harvest is coming and everything else gets pushed.

@@ -1,0 +1,10 @@
+Title: Nordlys Media - onboarding call
+Date: 2026-09-04 10:00 CEST
+CRM account: acc_h14
+Participants: Signe Halvorsen (Cairnpath, Scale team), Eirik Dahl (Nordlys Media, Head of Product)
+
+[00:00:25] Signe Halvorsen: Did the app team manage the SDK install?
+[00:00:45] Eirik Dahl: Not yet. They're stuck on the Android build, it fails on start-up. And the website goes through our tag manager, which is frozen until the redesign.
+[00:01:32] Signe Halvorsen: So nothing has come in so far?
+[00:01:49] Eirik Dahl: Not one event. Five weeks in, it's not a great start.
+[00:02:12] Signe Halvorsen: Open a ticket with the error and I'll get support on it today. Then we can rebook this session.

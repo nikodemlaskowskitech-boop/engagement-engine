@@ -1,0 +1,11 @@
+Title: Graustein Bausoftware - quarterly business review
+Date: 2026-06-11 10:00 CEST
+CRM account: acc_h10
+Participants: Matthias Brenner (Cairnpath, CSM), Henrik Albers (Graustein Bausoftware, Product Owner)
+
+[00:00:25] Matthias Brenner: Fourteen months in, I wanted to look at where Cairnpath is used today.
+[00:00:52] Henrik Albers: The web planner is fully tracked. The mobile app for site managers never got the SDK, and the field teams don't log in.
+[00:01:31] Matthias Brenner: The original plan had about 200 users across project management and the field. We see twelve active.
+[00:02:06] Henrik Albers: I know. The mobile team had other priorities. And the experiments module, we've never run one.
+[00:02:39] Matthias Brenner: Then let's agree one goal for the next quarter: either the mobile app or one live experiment.
+[00:03:12] Henrik Albers: Mobile is more realistic. I'll talk to their lead.

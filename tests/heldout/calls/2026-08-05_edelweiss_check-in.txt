@@ -1,0 +1,9 @@
+Title: Edelweiss Sportartikel - check-in
+Date: 2026-08-05 10:00 CEST
+CRM account: acc_h17
+Participants: Jonas Aigner (Cairnpath, Scale team), Kai Neumann (Edelweiss Sportartikel, Mobile Lead)
+
+[00:00:25] Jonas Aigner: How's the new app release?
+[00:00:41] Kai Neumann: Stable. We moved the size guide up in the flow and returns went down a little.
+[00:01:10] Jonas Aigner: Nice. Would you like a seat in the advanced workshop in September?
+[00:01:36] Kai Neumann: Yes, for me and Theresa.
