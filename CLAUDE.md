@@ -1116,6 +1116,16 @@ One JSON event per line, one file per day in `data/events/`.
   explained, a brainstorm with the account's context; kept apart from a bot
   that acts (a Self-service inbox agent). Demo: run once against an answer
   key, save transcripts and scorecard.
+- AI on unstructured data (13 Nov 2026, planner Phase 9; asked in nearly every
+  interview): RAG first, cheap: account search over emails, tickets and call notes
+  with DuckDB full-text search (redacted chunks with citations, a generated corpus
+  of about 30 accounts with an answer key and a recall test), then "ask about this
+  account" from the laptop (its own ask_account budget), vectors next to keywords,
+  a Cairnpath MCP server (the engine's facts and the search as tools, local first,
+  same redaction and role rules), an AI cost demo (thread cleanup, prompt caching,
+  batch), and last a live Ask box in the cockpit (a new public address: sign-in,
+  rate limit, budget per person, THREAT_MODEL.md). About $0.013 a question at
+  Sonnet prices; RAG doesn't suit the handover brief (no narrow question).
 - Handover brief, long histories (needs years of data we don't have): keep a
   stored account-history layer (e.g. the first contract years: trends, key
   events), confirmed by a person, and mine fresh insight only from activity
