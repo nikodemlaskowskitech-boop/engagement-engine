@@ -387,8 +387,10 @@ for v in t.find_resources("AWS::IAM::Policy").values():
         for st in v["Properties"]["PolicyDocument"]["Statement"]:
             if any(a.startswith("kms:") for a in actions_of(st)):
                 role_kms.setdefault(r_.get("Ref"), []).append(st)
-check(all(rid in role_kms for rid in role_ids.values()),
+check(all(rid in role_kms for k, rid in role_ids.items() if k != "search"),
       "the check, engine, Slack listener and crawler roles may use the key (through S3)", sorted(role_kms))
+check("search" not in role_ids or role_ids["search"] not in role_kms,
+      "the public search's role has no key permission at all", sorted(role_kms))
 check(all(st.get("Resource") == {"Fn::GetAtt": [key_id, "Arn"]} for sts in role_kms.values() for st in sts),
       "each role's key permission is for this key only, never kms on *", role_kms)
 check([a for st in role_kms.get(role_ids["slack"], []) for a in actions_of(st)] == ["kms:GenerateDataKey"],
