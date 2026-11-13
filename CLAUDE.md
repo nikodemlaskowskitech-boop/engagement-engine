@@ -222,6 +222,12 @@ One JSON event per line, one file per day in `data/events/`.
   Spec for the per-person pages (6 Nov 2026), built the independent way: tests by
   a separate agent from the spec only, then the build, then a separate review.
   Update it whenever a role, a tab or an edit right changes.
+- `AI_COST.md`: every way to cut the cost of a model over unstructured text, each
+  with a decision (Done / Planned / Not now), the reason, and for "Not now" what
+  would change our mind (13 Nov 2026: call only on change and the output cap done;
+  text cleanup, RAG, prompt caching where it pays, Haiku extraction stored as rows
+  planned; batch and layered summaries not now). Update it when a technique is
+  built or a decision changes.
 - `DEMO.md`: the 3-minute walkthrough (what to click and say, numbers as of the
   demo data; check them after a regenerate), linked from the README.
 - `ENGAGEMENT_LOGIC.md`: the logic by tier as Mermaid diagrams (GitHub
@@ -1122,8 +1128,8 @@ One JSON event per line, one file per day in `data/events/`.
   of about 30 accounts with an answer key and a recall test), then "ask about this
   account" from the laptop (its own ask_account budget), vectors next to keywords,
   a Cairnpath MCP server (the engine's facts and the search as tools, local first,
-  same redaction and role rules), an AI cost demo (thread cleanup, prompt caching,
-  batch), and last a live Ask box in the cockpit (a new public address: sign-in,
+  same redaction and role rules), an AI cost demo (thread cleanup, prompt caching
+  where it pays, Haiku extraction stored as rows; AI_COST.md has each decision), and last a live Ask box in the cockpit (a new public address: sign-in,
   rate limit, budget per person, THREAT_MODEL.md). About $0.013 a question at
   Sonnet prices; RAG doesn't suit the handover brief (no narrow question).
 - Handover brief, long histories (needs years of data we don't have): keep a

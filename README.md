@@ -48,6 +48,8 @@ and set forecasts, and what you save stays in your own browser.
 
 A 3-minute walkthrough of the cockpit, with what to click and say: [DEMO.md](DEMO.md).
 
+What we do, and don't do, to keep AI costs down, with the reason for each: [AI_COST.md](AI_COST.md).
+
 ## What it does today
 
 | Flag | Looks for | Who acts |
