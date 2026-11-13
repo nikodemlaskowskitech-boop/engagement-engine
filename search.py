@@ -42,7 +42,6 @@ import re
 import sys
 
 import documents
-import handover                    # its redaction and leak check: one way to redact
 from settings import OUTPUTS, SETTINGS
 
 CONF = SETTINGS["search"]
@@ -182,6 +181,8 @@ def redacted(con, hits):
     hits without a real name, email, phone or company; held_back = the accounts the leak
     check stopped, with what it found (for a person on the laptop, never sent on).
     The redaction keys stay here: nothing returned can turn a label back into a name."""
+    import handover                # its redaction and leak check: one way to redact (imported here
+                                   # so the public search function, which never redacts, doesn't carry it)
     folders = dict(con.sql("SELECT account_id, folder FROM doc_folders").fetchall())
     team = [{"owner_id": i, "owner_name": n, "owner_type": t}
             for i, n, t in con.sql("SELECT owner_id, owner_name, owner_type FROM cs_team").fetchall()]

@@ -24,7 +24,7 @@ And the public demo site: CloudFront in front of a second, private bucket that
 holds only the sandbox role pages the engine builds from fake data.
 """
 
-from aws_cdk import CfnOutput, Duration, RemovalPolicy, Size, Stack
+from aws_cdk import CfnOutput, Duration, Fn, RemovalPolicy, Size, Stack
 from aws_cdk import aws_accessanalyzer as accessanalyzer
 from aws_cdk import aws_apigatewayv2 as apigwv2
 from aws_cdk import aws_apigatewayv2_integrations as integrations
@@ -46,7 +46,7 @@ from constructs import Construct
 
 import json
 
-from bundle import ENGINE_FILES, bundle_check_inputs, bundle_engine, bundle_slack
+from bundle import ENGINE_FILES, bundle_check_inputs, bundle_engine, bundle_search, bundle_slack
 from settings import SETTINGS
 
 
@@ -403,6 +403,65 @@ class DataStack(Stack):
                 resources=[site_bucket.arn_for_objects("*")],
                 conditions={"ArnNotLike": {"aws:PrincipalArn": [engine.role.role_arn] + admins}, **not_a_service}))
             CfnOutput(self, "SiteBucket", value=site_bucket.bucket_name)
+
+            # --- the public search (13 Nov 2026): /search on the site's own address ---
+            # Its own function, carrying only the demo documents redacted on the laptop
+            # (search_export.py). Its role gets nothing beyond writing its own logs: no bucket,
+            # no key, no secret. It never logs the question (see its handler).
+            finder = lambda_.Function(
+                self, "Search",
+                description="Public demo search over redacted demo documents (no data access)",
+                runtime=lambda_.Runtime.PYTHON_3_13,
+                architecture=lambda_.Architecture.ARM_64,
+                handler="handler.handler",
+                code=lambda_.Code.from_asset(str(bundle_search())),
+                memory_size=aws["search_memory_mb"],
+                timeout=Duration.seconds(aws["search_timeout_seconds"]),
+                environment={"TOP_K": str(SETTINGS["search"]["site_top_k"]),
+                             "MAX_CHARS": str(aws["search_max_chars"]),
+                             "CACHE_SECONDS": str(aws["search_cache_seconds"])},
+                log_group=logs.LogGroup(self, "SearchLogs", retention=logs.RetentionDays.ONE_MONTH,
+                                        removal_policy=RemovalPolicy.DESTROY))
+            search_api = apigwv2.HttpApi(self, "SearchApi", description="The demo site's search (through CloudFront)",
+                                         create_default_stage=False)
+            search_api.add_routes(path="/search", methods=[apigwv2.HttpMethod.GET],
+                                  integration=integrations.HttpLambdaIntegration("SearchQueries", finder))
+            search_logs = logs.LogGroup(self, "SearchApiAccessLogs", retention=logs.RetentionDays.ONE_MONTH,
+                                        removal_policy=RemovalPolicy.DESTROY)
+            search_stage = search_api.add_stage(
+                "SearchStage", stage_name="$default", auto_deploy=True,
+                # one limit for everyone: a flood is cut off at the gateway, before the function
+                throttle=apigwv2.ThrottleSettings(rate_limit=aws["search_rate_per_second"],
+                                                  burst_limit=aws["search_burst"]))
+            # the access log: when and what we answered, never the question (the route has no
+            # query string in it: "GET /search")
+            search_stage.node.default_child.access_log_settings = apigwv2.CfnStage.AccessLogSettingsProperty(
+                destination_arn=search_logs.log_group_arn,
+                format=json.dumps({"requestId": "$context.requestId", "time": "$context.requestTime",
+                                   "route": "$context.routeKey", "status": "$context.status",
+                                   "latencyMs": "$context.responseLatency"}))
+            # CloudFront sends /search to the API and keeps each answer [aws] search_cache_seconds
+            # (the function's Cache-Control): the same question twice reaches the function once.
+            # Only "q" is passed on: no cookies, no viewer headers.
+            search_cache = cloudfront.CachePolicy(
+                self, "SearchCache",
+                comment="Demo search answers, by question",
+                query_string_behavior=cloudfront.CacheQueryStringBehavior.allow_list("q"),
+                header_behavior=cloudfront.CacheHeaderBehavior.none(),
+                cookie_behavior=cloudfront.CacheCookieBehavior.none(),
+                min_ttl=Duration.seconds(0), default_ttl=Duration.seconds(0),
+                max_ttl=Duration.seconds(aws["search_cache_seconds"]),
+                enable_accept_encoding_gzip=True, enable_accept_encoding_brotli=True)
+            site.add_behavior(
+                "/search",
+                origins.HttpOrigin(Fn.select(2, Fn.split("/", search_api.api_endpoint)),
+                                   protocol_policy=cloudfront.OriginProtocolPolicy.HTTPS_ONLY),
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                allowed_methods=cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+                cache_policy=search_cache,
+                response_headers_policy=headers)
+            CfnOutput(self, "SearchFunction", value=finder.function_name)
+            CfnOutput(self, "SearchUrl", value="https://" + (domain or site.distribution_domain_name) + "/search?q=")
             CfnOutput(self, "SiteUrl", value="https://" + (domain or site.distribution_domain_name))
             # what the domain's CNAME record points at (the DNS entry at the registrar)
             CfnOutput(self, "SiteCloudFrontDomain", value=site.distribution_domain_name)

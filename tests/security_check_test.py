@@ -34,6 +34,9 @@ class FakeCfn:
                 ("CrawlerRoleA9495AEE", "AWS::IAM::Role", "CairnpathData-CrawlerRole-DDD"),
                 ("SlackListenerServiceRoleF1A2B3C4", "AWS::IAM::Role", "CairnpathData-SlackListenerServiceRole-FFF"),
                 ("SlackListener5D6E7F80", "AWS::Lambda::Function", "CairnpathData-SlackListener-FFF"),
+                ("SearchServiceRole0A1B2C3D", "AWS::IAM::Role", "CairnpathData-SearchServiceRole-GGG"),
+                ("Search4E5F6A7B", "AWS::Lambda::Function", "CairnpathData-Search-GGG"),
+                ("SearchLogsC8D9E0F1", "AWS::Logs::LogGroup", "logs-search"),
                 ("BucketNotificationsHandler050aRole", "AWS::IAM::Role", "CairnpathData-Handler-EEE"),
                 ("DataKey1F2C3D4E", "AWS::KMS::Key", "1234abcd-12ab-34cd-56ef-1234567890ab"),
                 ("Data666C94C7", "AWS::S3::Bucket", "cairnpathdata-data666c94c7-mp5lz9ky9ir4"),
@@ -167,6 +170,15 @@ results = sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION, FakeKMS())
 bad = [r for r in results if not r["ok"]]
 check(len(bad) == 1 and "change its own inputs" in bad[0]["why"], "a role that can write its inputs is caught", bad)
 check(names.get("slack", "").endswith("SlackListenerServiceRole-FFF"), "finds the Slack listener's role too", names)
+check(names.get("search", "").endswith("SearchServiceRole-GGG"), "finds the public search's role (not its function or log)", names)
+# its own policy granting a data read is still refused by the bucket's perimeter (it's not exempt):
+leaky = FakeIAM(leak=lambda role, action, res: "SearchServiceRole" in role and action == "s3:GetObject")
+check(all(r["ok"] for r in sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION, FakeKMS())),
+      "a public search given a data read by mistake is still refused by the bucket (the second lock)")
+# ...but a secret has no such second lock, so the check must catch that one itself
+leaky = FakeIAM(leak=lambda role, action, res: "SearchServiceRole" in role and action == "ssm:GetParameter")
+bad = [r for r in sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
+check(len(bad) == 1 and "public search" in bad[0]["why"], "a public search that can read the API key is caught", bad)
 leaky = FakeIAM(leak=lambda role, action, res: "SlackListener" in role and action == "s3:GetObject")
 bad = [r for r in sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
 check(len(bad) == 1 and bad[0]["role"] == "slack" and "read any data" in bad[0]["why"],

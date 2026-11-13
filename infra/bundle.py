@@ -23,6 +23,10 @@ BUILD = INFRA / "build"
 # What each Lambda needs from the repo, and nothing else (never settings.local.toml)
 CHECK_FILES = ["check_inputs.py", "settings.py", "settings.toml"]
 SLACK_FILES = ["slack_loop.py", "settings.py", "settings.toml"]   # the Slack listener: plain Python, no libraries
+# The public search: the search code and the redacted documents (in its handler folder), nothing
+# else. No stories, no contacts, no handover.py: it can't redact, so it only ever holds redacted text.
+SEARCH_FILES = ["search.py", "documents.py", "settings.py", "settings.toml"]
+SEARCH_PACKAGES = ["duckdb"]
 ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "ingest.py", "facts.py", "documents.py", "flags.py", "journeys.py",
                 "team_report.py", "backtest.py", "onboarding_report.py", "history.py", "retention.py", "export_views.py",
                 "to_parquet.py", "views_template.html", "handover.py", "llm.py", "stories",
@@ -55,16 +59,32 @@ def bundle_slack(out=None):
     return out
 
 
+def bundle_search(out=None, deps=None):
+    """The public search function: handler, SEARCH_FILES, the redacted documents, DuckDB.
+    deps=False (or CAIRNPATH_SKIP_DEPS) leaves DuckDB out, for tests."""
+    sys.path.insert(0, str(REPO))
+    from settings import SETTINGS          # where search_export.py wrote the redacted file
+    out = _fresh(out or BUILD / "search", "search")
+    for name in SEARCH_FILES:
+        shutil.copy(REPO / name, out)
+    shutil.copy(REPO / SETTINGS["search"]["site_documents_file"], out / "documents.jsonl")
+    if deps is None:
+        deps = not os.environ.get("CAIRNPATH_SKIP_DEPS")
+    if deps:
+        shutil.copytree(lambda_deps(SEARCH_PACKAGES), out, dirs_exist_ok=True)
+    return out
+
+
 def pinned(package):
     """The version requirements.txt pins for a package (one source of truth for laptop and AWS)."""
     text = (REPO / "requirements.txt").read_text(encoding="utf-8")
     return re.search(rf"^{re.escape(package)}==([\w.]+)", text, re.M).group(1)
 
 
-def lambda_deps():
+def lambda_deps(packages=None):
     """The engine's libraries built for Lambda (Linux arm64, Python 3.13), downloaded once per
     set of versions and reused. pip picks the Linux builds even on a Windows laptop."""
-    pins = [f"{p}=={pinned(p)}" for p in LAMBDA_PACKAGES]
+    pins = [f"{p}=={pinned(p)}" for p in (packages or LAMBDA_PACKAGES)]
     cache = BUILD / ("deps_" + "_".join(pin.replace("==", "-") for pin in pins))
     if not (cache / ".complete").exists():
         shutil.rmtree(cache, ignore_errors=True)

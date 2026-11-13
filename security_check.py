@@ -32,7 +32,7 @@ DENY, ALLOW = "denied", "allowed"
 # CloudFormation logical ID prefix -> short name used in the cases
 WANTED = {"CheckInputsServiceRole": "check", "RunEngineServiceRole": "engine",
           "ScheduleRole": "schedule", "CrawlerRole": "crawler",
-          "SlackListenerServiceRole": "slack",
+          "SlackListenerServiceRole": "slack", "SearchServiceRole": "search",
           "CheckInputs": "check_fn", "RunEngine": "engine_fn"}
 
 
@@ -52,12 +52,14 @@ def find(cfn):
             continue
         for prefix, name in WANTED.items():
             # longest prefix wins: "CheckInputsServiceRole..." is the role, "CheckInputs..." the function
-            is_role_name = name in ("check", "engine", "schedule", "crawler", "slack")
+            is_role_name = name in ("check", "engine", "schedule", "crawler", "slack", "search")
             if r["LogicalResourceId"].startswith(prefix) and name not in found and (
                     (kind == "AWS::IAM::Role") == is_role_name):
                 found[name] = r["PhysicalResourceId"]
                 break
-    missing = (set(WANTED.values()) | {"key"} | ({"site"} if AWS.get("site") else set())) - set(found)
+    # the public search exists only with the site
+    wanted = set(WANTED.values()) - (set() if AWS.get("site") else {"search"})
+    missing = (wanted | {"key"} | ({"site"} if AWS.get("site") else set())) - set(found)
     if missing:
         sys.exit(f"Not found in stack {STACK}: {', '.join(sorted(missing))}. Deployed?")
     return found
@@ -134,7 +136,19 @@ def cases(account, region):
         ("slack", "kms:GenerateDataKey", key, ALLOW, "control: the Slack listener can encrypt a click via S3", False, VIA_S3),
         ("admin", "kms:Decrypt", key, ALLOW, "control: the admin can still use the key directly", False),
         ("admin", "kms:PutKeyPolicy", key, ALLOW, "control: the admin can still fix the key's policy (no lockout)", False),
-    ] + (site_cases() if AWS.get("site") else [])
+    ] + (site_cases() + search_cases(b, i, api_key, key) if AWS.get("site") else [])
+
+
+def search_cases(b, i, api_key, key):
+    """The public search (13 Nov 2026): it answers anyone on the internet, so its role can do
+    nothing at all with our data, keys, secrets or site. No control case on purpose: it has no
+    right to check, and the all-deny guard is the other roles' controls."""
+    return [
+        ("search", "s3:GetObject", f"{b}/{i}crm_accounts.csv", DENY, "public search: can't read any data", False),
+        ("search", "s3:PutObject", "arn:aws:s3:::{site}/index.html", DENY, "public search: can't change the site", False),
+        ("search", "ssm:GetParameter", api_key, DENY, "public search: can't read the API key", False),
+        ("search", "kms:Decrypt", key, DENY, "public search: can't decrypt anything, even via S3", False, VIA_S3),
+    ]
 
 
 def site_cases():
