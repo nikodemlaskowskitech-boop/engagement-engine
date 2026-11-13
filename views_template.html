@@ -2546,7 +2546,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const atRisk = sum(churn, (a) => valueOf(flagOf(a, "churn"))), upside = sum(growth, (a) => valueOf(flagOf(a, "expansion")));
     const bookArr = sum(accs.filter(person), (a) => a.arr), wholeArr = sum(accs, (a) => a.arr);
     const act = churn.filter((a) => flagOf(a, "churn").status === "Act");
-    // action taken: a churn call or QBR since the signal (team report), or any customer meeting in 30 days
+    // action taken: the team report's rule only (time_to_action: a churn call, or a QBR held after the signal)
     const called = (a) => { const t = D.time_to_action.find((r) => r.account_id === a.account_id && r.flag === "churn"); return !!(t && t.call_date); };   // the same rule as every tab: time_to_action
     const planned = (a) => !!planOf(a);
     const overdue = churn.filter((a) => { const p = planOf(a); return p && (planStatus(a, p) || {}).overdue; });

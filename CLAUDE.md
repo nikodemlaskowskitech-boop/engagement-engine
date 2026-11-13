@@ -222,6 +222,17 @@ One JSON event per line, one file per day in `data/events/`.
   Spec for the per-person pages (6 Nov 2026), built the independent way: tests by
   a separate agent from the spec only, then the build, then a separate review.
   Update it whenever a role, a tab or an edit right changes.
+- `ARCHITECTURE.md`: the architecture review of 13 Nov 2026: the shape today (a
+  diagram), what five weeks of organic growth cost us (every step re-reads 485 MB
+  of events; steps talk through hand-typed CSV paths; rules leak into the page; one
+  export shaped for one page; no home for unstructured data; scripts built three
+  ways; this file a changelog), and a decision per fix: Do now (one DuckDB file per
+  run with daily roll-ups, tables between steps and one pipeline list, a facts
+  layer facts.py, one documents table, a short CLAUDE.md), Later (rules out of the
+  page tab by tab, add_views + main() everywhere, the cockpit split when the Ask box
+  comes) or Not worth it (another database, a framework, Step Functions, a new
+  generator). Order: measure step times, then A+B, C+D, G, then Phase 9. Update it
+  when a fix lands or a decision changes.
 - `AI_COST.md`: every way to cut the cost of a model over unstructured text, each
   with a decision (Done / Planned / Not now), the reason, and for "Not now" what
   would change our mind (13 Nov 2026: call only on change and the output cap done;
