@@ -422,6 +422,10 @@ min_heldout_recall = 0.85          # the same on tests/heldout/, written apart f
 synonym_weight = 0.6   # a synonym counts this much of the question's own word
 site_top_k = 5                     # results the public search shows (13 Nov 2026: first result right 16 of 27 held-out questions, top 5 finds 75%)
 site_documents_file = "infra/lambdas/search/documents.jsonl"   # search_export.py: the redacted documents the public search carries
+site_page = "search.html"          # the public site's search page (roles.py --site, from site_search.html)
+site_examples = ["Which accounts are evaluating a competitor?", "Which customers are under budget pressure?",
+                 "Where is our main contact leaving the company?", "Which accounts have data quality problems?",
+                 "Which customers need more capacity?", "Which accounts are disputing an invoice?"]
 
 [search.synonyms]
 # The team's vocabulary: a word in a question also searches for these. Written as a CS
