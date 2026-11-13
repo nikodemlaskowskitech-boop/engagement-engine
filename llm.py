@@ -20,7 +20,9 @@ feature and account, model, tokens, cost at the prices in [llm], laptop or AWS.
 
 import csv
 import os
+import statistics
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -79,7 +81,8 @@ def describe():
 LEDGER = OUTPUTS / LLM.get("ledger_file", "ai_spend.csv")
 _BUDGETS = LLM.get("monthly_budget_usd", {})
 COLUMNS = ["time_utc", "month", "feature", "account_id", "provider", "model",
-           "input_tokens", "output_tokens", "cost_usd", "where", "stop_reason"]
+           "input_tokens", "output_tokens", "cost_usd", "where", "stop_reason",
+           "seconds"]                    # how long the model took to answer (13 Nov 2026)
 
 
 class OverBudget(Exception):
@@ -125,14 +128,32 @@ def spent(feature=None, month=None):
                    and (feature is None or r["feature"] == feature))
 
 
-def record(feature, account_id, response):
+def _upgrade_ledger():
+    """A ledger written before a column was added (e.g. seconds) gets the new header;
+    its old rows keep every value and leave the new column empty."""
+    if not LEDGER.exists():
+        return
+    with LEDGER.open(encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames == COLUMNS:
+            return
+        old = list(reader)
+    with LEDGER.open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=COLUMNS, restval="", extrasaction="ignore")
+        w.writeheader()
+        w.writerows(old)
+
+
+def record(feature, account_id, response, seconds=None):
     """One row per call. Header once; the file only grows (like the action log)."""
     usage = response.usage
     row = {"time_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "month": this_month(),
            "feature": feature, "account_id": account_id, "provider": PROVIDER, "model": MODEL,
            "input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
            "cost_usd": f"{cost(usage.input_tokens, usage.output_tokens):.6f}", "where": where(),
-           "stop_reason": getattr(response, "stop_reason", "") or ""}
+           "stop_reason": getattr(response, "stop_reason", "") or "",
+           "seconds": "" if seconds is None else f"{seconds:.2f}"}
+    _upgrade_ledger()
     new = not LEDGER.exists()
     LEDGER.parent.mkdir(parents=True, exist_ok=True)
     with LEDGER.open("a", encoding="utf-8", newline="") as f:
@@ -152,9 +173,21 @@ def call(client, feature, account_id, **request):
     if so_far >= BUDGETS[feature]:
         raise OverBudget(f"{feature}: ${so_far:.2f} spent in {this_month()}, budget ${BUDGETS[feature]:.2f} "
                          f"(settings.toml [llm.monthly_budget_usd.{where()}])")
+    started = time.perf_counter()        # the whole answer: the request, the model writing, the reply
     response = client.messages.create(**request)
-    record(feature, account_id, response)
+    record(feature, account_id, response, time.perf_counter() - started)
     return response
+
+
+def call_seconds(feature, month=None):
+    """This place's call durations this month, for one feature (rows from before 13 Nov 2026 have none)."""
+    if not LEDGER.exists():
+        return []
+    month = month or this_month()
+    with LEDGER.open(encoding="utf-8", newline="") as f:
+        return [float(r["seconds"]) for r in csv.DictReader(f)
+                if r["month"] == month and r.get("where", where()) == where()
+                and r["feature"] == feature and r.get("seconds")]
 
 
 def spend_report(month=None):
@@ -162,7 +195,11 @@ def spend_report(month=None):
     lines = [f"AI spend in {month} ({where()} ledger {LEDGER.name}, {where()} budgets; estimate at the [llm] prices)"]
     for feature, budget in sorted(BUDGETS.items()):
         s = spent(feature, month)
-        lines.append(f"  {feature:<12} ${s:7.3f} of ${budget:.2f}  ({s / budget:.0%})" if budget else f"  {feature}: no budget")
+        took = sorted(call_seconds(feature, month))
+        speed = (f", {len(took)} call{'s' if len(took) != 1 else ''}, median {statistics.median(took):.1f} s, "
+                 f"slowest {took[-1]:.1f} s") if took else ""
+        lines.append(f"  {feature:<12} ${s:7.3f} of ${budget:.2f}  ({s / budget:.0%}){speed}" if budget
+                     else f"  {feature}: no budget")
     lines.append(f"  {'total':<12} ${spent(None, month):7.3f}")
     return "\n".join(lines)
 

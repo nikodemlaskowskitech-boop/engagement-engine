@@ -101,6 +101,25 @@ except llm.OverBudget:
 check("handover" in llm.spend_report() and "qbr_brief" in llm.spend_report(),
       "python llm.py --spend lists each feature against its budget")
 
+print("\nHow long each call took (13 Nov 2026)")
+r = rows()[-1]
+check(r.get("seconds") not in (None, "") and float(r["seconds"]) >= 0, "every call records how long the model took", r)
+check("median" in llm.spend_report(), "the spend report shows the median time per call", llm.spend_report())
+old_ledger = tmp / "old_ai_spend.csv"
+old_cols = [c for c in llm.COLUMNS if c != "seconds"]
+with old_ledger.open("w", encoding="utf-8", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=old_cols)
+    w.writeheader()
+    w.writerow({c: ("handover" if c == "feature" else "acc_9" if c == "account_id" else
+                    llm.this_month() if c == "month" else "0.5" if c == "cost_usd" else "x") for c in old_cols})
+kept, llm.LEDGER = llm.LEDGER, old_ledger
+llm.call(client, "handover", "acc_10", model="m", max_tokens=10, messages=[])
+upgraded = rows()
+check(list(upgraded[0].keys()) == llm.COLUMNS and len(upgraded) == 2 and upgraded[0]["account_id"] == "acc_9"
+      and upgraded[0]["cost_usd"] == "0.5" and upgraded[0]["seconds"] == "" and upgraded[1]["seconds"] != "",
+      "a ledger from before gets the new column: old rows kept as they were, the new one timed", upgraded)
+llm.LEDGER = kept
+
 print("\nBudgets split by place (audit 6 Nov 2026): the laptop and AWS can't see each other's ledger")
 with llm.LEDGER.open("a", encoding="utf-8", newline="") as f:      # AWS spent a lot this month
     csv.DictWriter(f, fieldnames=llm.COLUMNS).writerow({**rows()[0], "where": "aws", "cost_usd": "999",
