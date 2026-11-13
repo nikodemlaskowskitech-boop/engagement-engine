@@ -232,6 +232,15 @@ Read a file's entry before changing that file, and update the entry in the same 
   vocabulary carries to new documents. The misses are all on rewordings, whose words the
   vocabulary isn't keyed on ("broken tracking", "a bill being contested"): the gap
   vectors should close. [search] min_heldout_recall 0.85.
+  Redacted results, same day: redacted(con, hits) -> (safe, held_back). Per account,
+  handover.cleaner() (the brief's redaction, split out of redact(), byte for byte the
+  same on the three stories) with that folder's contacts (table doc_folders: which
+  folder an account's documents came from; handover.contacts takes a folder), then
+  handover.leak_check(); an account with anything person-shaped left is held back with
+  what was found, for a person, never sent. Keys never returned. `--redacted` on the CLI.
+  First run: 14 (account, name) pairs held back; 3 were two real people missed by
+  redaction ("Mr Brenner" twice, "Ms Vogt": PRIVACY.md fix H, [handover] titles, also
+  in people_in), 11 were eight non-person names, added to leak_check_allow. Test: 729 results, no leak, none dropped.
   The three story accounts aren't in the key, so Nettle Foods
   (a real overage dispute and competitor) shows as "not right". [search] min_recall 0.9
   keeps a bad edit to the list from passing.

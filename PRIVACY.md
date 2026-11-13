@@ -79,6 +79,10 @@ becomes **the customer**. The key is that mapping, e.g.
    that's also a word ([handover] common_word_names: Will, May, Mark...) stays
    a word at a sentence start before "you", "we" etc. ("Will you send it?") or
    next to a number ("12 May"); anywhere else it's still the person (fix D).
+   A surname after a title ([handover] titles: Mr, Ms, Dr, Herr, Mme...) →
+   that person's label: "Dear Mr Brenner" (fix H, 13 Nov 2026). A titled surname
+   also counts as the contact appearing (§1.2), so a document that only says
+   "Dear Ms Vogt" still finds her.
 4. The company name, its first word and the helpdesk organisation → "the
    customer".
 
@@ -186,6 +190,7 @@ found". That's gap 1 below.
 | 4 | Only international phone numbers are caught | `01632 960123` stayed | fixed with E (national formats). Left: numbers written in words or with unusual separators |
 | 5 | Restore is exact and case-sensitive | "The customer" at the start of a sentence stayed generic | fixed with F |
 | 6 | Labels are per brief | "Customer A" means different people in two briefs | none today; matters if briefs are ever combined |
+| 8 | A surname after a title wasn't replaced | "Dear Mr Brenner" kept his surname (found 13 Nov 2026 by the search held-out set; the leak check stopped it) | fixed with H. Left: a surname alone with no title ("Brenner said"), which could also be a word or a street |
 | 7 | Other identifiers aren't touched | job titles, street addresses, contract or invoice numbers, IBANs | a rare title ("our only CFO") can identify a person |
 
 Today's three stories have none of gaps 1, 4 or 7 (checked by hand on 4 Nov
@@ -203,6 +208,7 @@ Today's three stories have none of gaps 1, 4 or 7 (checked by hand on 4 Nov
 | D ✅ | **Safer first names** (done 4 Nov 2026, §1.4) | 2, 3 | Replace a first name alone only when it's unique in the document set and not a common word (a short stop list). | Stories with "Will" and two Annas. | none |
 | E ✅ | **Local phone formats** (done 4 Nov 2026, §1.4) | 4 | Extend the phone pattern (national formats, or rely on B). | A local number in a story. | none |
 | F ✅ | **Case-insensitive restore** (done 4 Nov 2026, §1.8) | 5 | Restore "The customer" too, keeping the capital. | Unit test on restore. | none |
+| H ✅ | **Titles before a surname** (done 13 Nov 2026, §1.4) | 8 | A known person's surname after a title from [handover] titles becomes their label. | redaction_fixes_test: "Dear Mr Turner" labelled, "Mr Smith" (unknown) and "Turner Street" left. | none |
 | G | **Stable pseudonyms across briefs** | 6 | A per-account token kept in a vault (e.g. DynamoDB), so the same person keeps the same label everywhere. | Two briefs naming the same person: same label. | only if briefs are ever combined |
 
 Suggested order: **C first** (done: a silent leak is now a stopped call),
@@ -245,3 +251,25 @@ back after the model answers. No free text, so gaps 1 to 7 don't apply.
 
 *Update this file whenever redaction, the inputs it reads or where its
 outputs live changes.*
+
+## 6. Search results (`search.py`, 13 Nov 2026)
+
+Account search ranks the raw documents on the laptop. Before any result leaves (a
+model, the MCP server), `search.redacted()` runs the same steps as the brief, per
+account: `handover.cleaner()` (people found by position and from that folder's
+contact list, labelled; emails and phones masked; the company to "the customer"),
+then `leak_check()` on everything about to go. An account where anything
+person-shaped survives is held back and listed for a person; nothing is dropped
+silently. The redaction keys never leave `search.py`.
+
+- **Labels are per account** (gap 6): "Customer A" on two accounts are two people.
+  Each result carries its account ID, so they're never merged.
+- **The first run held back 14 (account, name) pairs**: 3 were two real people
+  the redaction had missed ("Mr Brenner" on two accounts, "Ms Vogt": fix H); 11
+  were eight names that aren't people (competitor products, departments, a
+  country), added once to [handover] leak_check_allow after a look.
+- **Proof** (`tests/search_test.py`): every question and rewording on the corpus
+  and the held-out set (729 results): no contact name, company, email or phone in
+  any; every account either returned or held back; a name nobody listed, planted
+  in a ticket body, holds its account back.
+

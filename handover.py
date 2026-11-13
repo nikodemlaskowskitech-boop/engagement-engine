@@ -90,11 +90,12 @@ def directory():
     return documents.directory(STORIES)      # the stories folder is module-level so tests can point elsewhere
 
 
-def contacts(account_id):
+def contacts(account_id, stories=None):
     """The CRM's contacts for this account ([handover] contacts_file: account_id, name,
     email, side), or [] when there's no contact list. Optional: without it,
-    people are found by position only (and the leak check catches the rest)."""
-    path = STORIES / CONF.get("contacts_file", "contacts.csv")
+    people are found by position only (and the leak check catches the rest).
+    stories = another folder in the same shape (search reads the corpus too)."""
+    path = Path(stories or STORIES) / CONF.get("contacts_file", "contacts.csv")
     if not path.exists():
         return []
     with path.open(encoding="utf-8") as f:
@@ -211,7 +212,9 @@ def people_in(entry, team, docs, extra="", known=()):
     alltext = " ".join(d["text"] + " " + d["title"] for d in docs)
     for c in known:                          # the contact list: found by name, not by position
         name = c["name"].strip()
-        if re.search(rf"\b({re.escape(name)}|{re.escape(name.split()[0])})\b", alltext + " " + extra):
+        titled = "|".join(re.escape(x) for x in CONF.get("titles", []))
+        by_title = rf"|(?:{titled})\.? {re.escape(name.split()[-1])}" if titled and " " in name else ""
+        if re.search(rf"\b({re.escape(name)}|{re.escape(name.split()[0])}{by_title})\b", alltext + " " + extra):
             found[name] = "cs" if c.get("side", "").strip() == "cs" else "customer"
     for t in team:                           # our own people, only those who appear
         if " " in t["owner_name"] and t["owner_type"] != "pool" and t["owner_name"] in alltext + " " + extra:
@@ -231,7 +234,18 @@ def people_in(entry, team, docs, extra="", known=()):
 def redact(entry, team, facts, docs):
     """Replace people, contact details and the company. Returns the redacted
     text and the key (label -> real value), which never leaves the laptop."""
-    people = people_in(entry, team, docs, facts, contacts(entry["account_id"]))
+    clean, key = cleaner(entry, team, facts, docs, contacts(entry["account_id"]))
+    parts = [f"[DATA] The engine's own data (usage, flags, CS touches, forecast):\n{clean(facts)}"]
+    for doc in docs:
+        parts.append(f"[{doc['id']}] {clean(doc['title'])} ({doc['date']})\n{clean(doc['text'])}")
+    return "\n\n---\n\n".join(parts), key
+
+
+def cleaner(entry, team, facts, docs, known):
+    """The redaction itself, for one account: a function that cleans any text of it, and
+    the key (label -> real value; local only). The handover brief and the search results
+    (search.py) both use it, so there's one way to redact. known = the contact list."""
+    people = people_in(entry, team, docs, facts, known)
     key, labels, n = {}, {}, {"customer": 0, "cs": 0}
     for name, side in sorted(people.items(), key=lambda x: (x[1], x[0])):
         n[side] += 1
@@ -252,15 +266,18 @@ def redact(entry, team, facts, docs):
             # a first name alone is only replaced when one person has it; two Annas = "[name]"
             # (privacy first: the model can't tell who, but never sees the name)
             text = first_name_alone(first, labels[name] if firsts[first] == 1 else "[name]", text)
+        for name in sorted(labels, key=len, reverse=True):
+            # a surname after a title ("Dear Mr Brenner", found by the search held-out set,
+            # 13 Nov 2026): the leak check caught it, now the redaction does it itself
+            titles = "|".join(re.escape(x) for x in CONF.get("titles", []))
+            if titles and " " in name:
+                text = re.sub(rf"\b(?:{titles})\.? {re.escape(name.split()[-1])}\b", labels[name], text)
         for c in sorted({org, company, company.split()[0]}, key=len, reverse=True):
             text = re.sub(rf"\b{re.escape(c)}\b", "the customer", text)
         return text
 
-    parts = [f"[DATA] The engine's own data (usage, flags, CS touches, forecast):\n{clean(facts)}"]
-    for doc in docs:
-        parts.append(f"[{doc['id']}] {clean(doc['title'])} ({doc['date']})\n{clean(doc['text'])}")
     key["the customer"] = company
-    return "\n\n---\n\n".join(parts), key
+    return clean, key
 
 
 # --- 3. Leak check: the last look before anything leaves --------------------------

@@ -99,6 +99,52 @@ check(h_wide >= h_exact, "on the held-out set too, synonyms find at least what k
 check(h_wide >= float(CONF["min_heldout_recall"]),
       f"held-out recall {h_wide:.0%} at least [search] min_heldout_recall ({float(CONF['min_heldout_recall']):.0%})")
 
+print("\nRedacted results: the only form that may leave the laptop")
+import csv as _csv                                   # noqa: E402
+import handover                                      # noqa: E402
+for label, con_r, folder, qs in (("corpus", con, OUTPUTS / CONF["corpus_folder"], key["questions"]),
+                                 ("held-out", con_h, HELD, hkey["questions"])):
+    with (folder / SETTINGS["handover"]["contacts_file"]).open(encoding="utf-8") as f:
+        people = {r["name"] for r in _csv.DictReader(f)}
+    with (folder / "directory.csv").open(encoding="utf-8") as f:
+        companies = {r["company"] for r in _csv.DictReader(f)}
+    leaks, lost, held_all, n_hits = [], [], [], 0
+    for q in qs:
+        for text in [q["question"], *q.get("variants", [])]:
+            hits = search.search(con_r, text, 30)
+            safe, held = search.redacted(con_r, hits)
+            n_hits += len(safe)
+            held_all += held
+            if {h["account_id"] for h in safe} | {b["account_id"] for b in held} != {h["account_id"] for h in hits}:
+                lost.append(text)
+            for h in safe:
+                blob = " ".join((h["title"], h["line"], h["text"]))
+                bad = ([n for n in people if n in blob] + [c for c in companies if c in blob]
+                       + handover.EMAIL_RE.findall(blob) + handover.phones(blob))
+                if bad:
+                    leaks.append((h["account_id"], h["id"], bad))
+    check(not leaks, f"{label}: {n_hits} redacted results, no name, company, email or phone in any", leaks[:3])
+    check(not lost, f"{label}: every account is either in the results or held back, none silently dropped", lost[:3])
+    check(not held_all, f"{label}: nothing held back (each pair the leak check stopped was looked at once)",
+          sorted({(b["account_id"], f) for b in held_all for f in b["found"]})[:5])
+
+# A name nobody listed, only in a document's body: redaction can't know it, the leak check must
+tmp_r = Path(tempfile.mkdtemp())
+for sub in ("emails", "calls"):
+    (tmp_r / sub).mkdir()
+(tmp_r / "directory.csv").write_text("account_id,company,email_domain,helpdesk_org,handover_from,handover_to\n"
+                                     "acc_r,Rook Labs,rook.example,Rook Labs Ltd,,\n", encoding="utf-8")
+(tmp_r / SETTINGS["handover"]["support_file"]).write_text(
+    "ticket_id,organization,requester_name,requester_email,created_at,updated_at,priority,type,status,subject,description,latest_comment\n"
+    "R-1,Rook Labs Ltd,Pat Doe,pat.doe@rook.example,2026-10-01,2026-10-02,P3,question,open,Invoice dispute,"
+    "\"We dispute the overage invoice. Please loop in Ingrid Solberg from our legal team.\",noted\n", encoding="utf-8")
+con_r = connect()
+search.add_views(con_r, [tmp_r])
+safe, held = search.redacted(con_r, search.search(con_r, "invoice dispute"))
+check(not safe and held and "Ingrid Solberg" in held[0]["found"],
+      "a name nobody listed, in a body: the account is held back, not sent", (safe, held))
+check(all("Pat Doe" not in str(h) for h in safe), "the requester (known by position) never appears")
+
 print("\nMechanics, on made-up documents")
 tmp = Path(tempfile.mkdtemp())
 (tmp / "emails").mkdir()
