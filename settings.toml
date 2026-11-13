@@ -384,6 +384,12 @@ history_tasks = "history_tasks.csv"
 qbr_facts = "qbr_facts.json"
 qbr_user_key = "qbr_user_key.csv"
 
+[search]
+# Account search over tickets, emails and call notes (Phase 9). generate_documents.py writes a
+# corpus for about 30 accounts of the demo book here, under data/, in the same shape as stories/.
+corpus_folder = "corpus"
+key_file = "search_key.json"       # the questions and the accounts that answer them: tests only
+
 [pipeline]
 # The steps, in the order they depend on each other: the one list run_all.ps1 and the
 # engine Lambda both read (ARCHITECTURE.md fix B). where = "both" (default), "laptop"
@@ -394,6 +400,7 @@ qbr_user_key = "qbr_user_key.csv"
 # on (free, no model call), then the export runs again so the cockpit shows it.
 steps = [
     { step = "generate_events.py", where = "laptop", when = "regenerate" },
+    { step = "generate_documents.py", where = "laptop", when = "regenerate" },   # the search corpus
     { step = "pull_clicks.py", where = "laptop" },
     { step = "check_inputs.py", where = "laptop" },      # AWS: the check Lambda, before the engine wakes
     { step = "cockpit_sync.py", where = "laptop" },
