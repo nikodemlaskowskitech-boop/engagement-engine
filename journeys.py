@@ -42,7 +42,7 @@ Run flags.py first (this reads its results), then:  python journeys.py
 import sys
 
 from cairnpath_db import connect
-from settings import SETTINGS
+from settings import SETTINGS, out_sql
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -55,11 +55,11 @@ con = connect()
 
 con.sql(f"""
     CREATE VIEW journey AS
-    WITH activation AS (SELECT * FROM read_csv_auto('data/flags_activation.csv')),
+    WITH activation AS (SELECT * FROM read_csv_auto('{out_sql('flags_activation')}')),
     acts AS (
-        SELECT *, 'churn' AS flag FROM read_csv_auto('data/flags_churn.csv') WHERE status = 'Act'
+        SELECT *, 'churn' AS flag FROM read_csv_auto('{out_sql('flags_churn')}') WHERE status = 'Act'
         UNION ALL
-        SELECT *, 'expansion' AS flag FROM read_csv_auto('data/flags_expansion.csv') WHERE status = 'Act'
+        SELECT *, 'expansion' AS flag FROM read_csv_auto('{out_sql('flags_expansion')}') WHERE status = 'Act'
     ),
     act_signal AS (
         -- the day each Act account first crossed its flag's line
@@ -173,5 +173,5 @@ con.sql("""
 # flags_journey.csv (through action_status), and Windows won't replace a file
 # that is still open for reading
 con.sql("CREATE TABLE journey_rows AS SELECT * FROM journey ORDER BY status, account_id")
-con.sql("COPY journey_rows TO 'data/flags_journey.csv' (HEADER)")
+con.sql(f"COPY journey_rows TO '{out_sql('flags_journey')}' (HEADER)")
 print("\nSaved every row to data/flags_journey.csv (actions.py picks it up)")

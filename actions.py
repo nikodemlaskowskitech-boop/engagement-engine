@@ -73,14 +73,14 @@ from pathlib import Path
 from time import sleep
 
 from cairnpath_db import connect
-from settings import SETTINGS, input_path
+from settings import SETTINGS, input_path, output_file
 from slack_loop import card_blocks, card_channel, dm_target, interactive, load_env
 
 sys.stdout.reconfigure(encoding="utf-8")
 
 REPO = Path(__file__).resolve().parent
 DATA = REPO / "data"
-LOG = DATA / "action_log.csv"
+LOG = output_file("action_log")
 FLAGS = ("activation", "churn", "expansion", "qbr", "journey")   # journey: from journeys.py
 NOT_ACTIONS = {"none", "report"}
 COLUMNS = ["logged_on", "account_id", "flag", "status", "routed_to", "channel", "action", "outcome"]
@@ -311,7 +311,7 @@ flag_rows = {}                 # key -> today's flag row, for reassigned tasks
 skipped = 0
 capped = 0           # emails held back by the fatigue cap
 for flag in FLAGS:
-    path = DATA / f"flags_{flag}.csv"
+    path = output_file("flags_" + flag)
     if not path.exists():
         sys.exit(f"{path} is missing: run python flags.py, then python journeys.py")
     with path.open(encoding="utf-8") as f:

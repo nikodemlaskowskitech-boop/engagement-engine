@@ -46,7 +46,7 @@ import onboarding_report
 import retention
 import roles
 import team_report
-from settings import SETTINGS
+from settings import SETTINGS, out_sql, output_file
 from cairnpath_db import connect
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -132,11 +132,11 @@ def history(off):
     """The weekly history (history.py) for the trends: the flags that ask for action
     and the queue (tasks Open or Claimed), one row per week and account. Empty
     without history.py's files."""
-    if not (DATA / "history_flags.csv").exists() or not (DATA / "history_tasks.csv").exists():
+    if not output_file("history_flags").exists() or not output_file("history_tasks").exists():
         return {"weeks": [], "off_book": off.rows, "flags": [], "tasks": []}
-    with (DATA / "history_flags.csv").open(encoding="utf-8") as f:
+    with output_file("history_flags").open(encoding="utf-8") as f:
         hf = [r for r in csv.DictReader(f) if r["status"] not in ("Activated", "Activating")]
-    with (DATA / "history_tasks.csv").open(encoding="utf-8") as f:
+    with output_file("history_tasks").open(encoding="utf-8") as f:
         ht = list(csv.DictReader(f))
     weeks = sorted({r["week"] for r in hf} | {r["week"] for r in ht})
     wi = {w: i for i, w in enumerate(weeks)}
@@ -212,7 +212,7 @@ week_ends = [str(d) for (d,) in con.sql(
 # Open flags per account, straight from the flag files
 flags = {}
 for flag in FLAGS:
-    path = DATA / f"flags_{flag}.csv"
+    path = output_file("flags_" + flag)
     if not path.exists():
         sys.exit(f"{path} is missing: run python flags.py, then python journeys.py")
     with path.open(encoding="utf-8") as f:
@@ -222,7 +222,7 @@ for flag in FLAGS:
                  "routed_to": r["routed_to"]})
 
 # What each churn or expansion row is worth (flags.py: ARR at risk, opportunity)
-value_path = DATA / "account_value.csv"
+value_path = output_file("account_value")
 if not value_path.exists():
     sys.exit(f"{value_path} is missing: run python flags.py")
 with value_path.open(encoding="utf-8") as f:
@@ -286,10 +286,10 @@ export = {
     "team": rows(con, "SELECT * FROM cs_team ORDER BY owner_type, owner_id"),
     # the overview's sieve: every churn signal with who it went to and whether
     # (and how fast) a person acted on it
-    "churn_signals": rows(con, """
+    "churn_signals": rows(con, f"""
         SELECT f.account_id, c.tier, f.status, f.routed_to, f.reasons,
                t.signal_date, t.call_date, t.days_to_call, t.via
-        FROM read_csv('data/flags_churn.csv', all_varchar = true) f
+        FROM read_csv('{out_sql('flags_churn')}', all_varchar = true) f
         JOIN crm c USING (account_id)
         LEFT JOIN time_to_action t ON t.account_id = f.account_id AND t.flag = 'churn'
         ORDER BY f.account_id"""),

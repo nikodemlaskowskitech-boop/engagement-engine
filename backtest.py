@@ -35,7 +35,7 @@ import sys
 
 import team_report
 from cairnpath_db import connect
-from settings import SETTINGS, input_path
+from settings import SETTINGS, input_path, out_sql
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -70,7 +70,7 @@ def add_views(con):
     at_risk AS (
         -- the data's number (flags.py): ARR at risk per churn row
         SELECT account_id, amount::DOUBLE AS data_at_risk
-        FROM read_csv('data/account_value.csv', all_varchar = true) WHERE flag = 'churn'
+        FROM read_csv('{out_sql('account_value')}', all_varchar = true) WHERE flag = 'churn'
     ),
     forecast AS (
         -- the owner's (or manager's) latest renewal forecast from the cockpit
@@ -80,7 +80,7 @@ def add_views(con):
     ),
     flagged AS (
         SELECT account_id, status
-        FROM read_csv('data/flags_churn.csv', all_varchar = true)
+        FROM read_csv('{out_sql('flags_churn')}', all_varchar = true)
     ),
     signal AS (
         -- the first day of the account's current run under the churn line (30-day
@@ -205,7 +205,7 @@ if __name__ == "__main__":
         WITH churn AS (
             SELECT f.account_id, f.status, c.tier,
                    t.call_date, t.days_to_call, b.outcome, b.lost_revenue
-            FROM read_csv('data/flags_churn.csv', all_varchar = true) f
+            FROM read_csv('{out_sql('flags_churn')}', all_varchar = true) f
             JOIN crm c USING (account_id)
             LEFT JOIN time_to_action t ON t.account_id = f.account_id AND t.flag = 'churn'
             LEFT JOIN backtest b ON b.account_id = f.account_id

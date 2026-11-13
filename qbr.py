@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 from cairnpath_db import connect
-from settings import SETTINGS
+from settings import SETTINGS, output_file
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -62,7 +62,7 @@ accounts = rows("""
     LEFT JOIN monthly_usage m USING (account_id)
     CROSS JOIN as_of a
     WHERE q.qbr_coming_up
-    ORDER BY q.next_qbr_date
+    ORDER BY q.next_qbr_date, q.account_id      -- ties broken, so the order never changes between runs
 """)
 ids = ", ".join(f"'{a['account_id']}'" for a in accounts) or "''"
 
@@ -72,7 +72,7 @@ features = rows(f"""
     FROM events
     WHERE event_type = 'product' AND account_id IN ({ids})
     GROUP BY account_id, event_name
-    ORDER BY account_id, times_used DESC
+    ORDER BY account_id, times_used DESC, event_name
 """)
 
 # The top three users by activity, their share, and the champion's trend
@@ -124,7 +124,7 @@ def open_flags(account_id):
     """Every row flags.py raised for this account, read from its result files."""
     found = []
     for flag in ("activation", "churn", "expansion"):
-        path = Path(f"data/flags_{flag}.csv")
+        path = output_file("flags_" + flag)
         if not path.exists():
             sys.exit(f"{path} is missing: run python flags.py first")
         with path.open(encoding="utf-8") as f:
@@ -212,8 +212,8 @@ for a in accounts:
         },
     })
 
-Path("data/qbr_facts.json").write_text(json.dumps(packs, indent=2, default=str), encoding="utf-8")
-with Path("data/qbr_user_key.csv").open("w", newline="", encoding="utf-8") as f:
+output_file("qbr_facts").write_text(json.dumps(packs, indent=2, default=str), encoding="utf-8")
+with output_file("qbr_user_key").open("w", newline="", encoding="utf-8") as f:
     writer = csv.DictWriter(f, fieldnames=["account_id", "alias", "user_id"])
     writer.writeheader()
     writer.writerows(user_key)
