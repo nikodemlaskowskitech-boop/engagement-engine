@@ -95,6 +95,15 @@ for q, text in asks:
 h_exact, h_wide = found[False] / wanted_h, found[True] / wanted_h
 print(f"\n  Held-out recall, keywords alone: {found[False]} of {wanted_h} ({h_exact:.0%})")
 print(f"  Held-out recall, with synonyms:  {found[True]} of {wanted_h} ({h_wide:.0%})")
+# What a visitor of the demo site sees: the top [search] site_top_k, and whether the first is right
+site_k = int(CONF["site_top_k"])
+first = top_site = 0
+for q, text in asks:
+    top = [a["account_id"] for a in search.accounts(con_h, text, site_k)]
+    first += bool(top) and top[0] in q["accounts"]
+    top_site += len([a for a in top if a in q["accounts"]])
+print(f"  The demo site's view: first result right for {first} of {len(asks)} questions; "
+      f"its top {site_k} finds {top_site} of {wanted_h} ({top_site / wanted_h:.0%})")
 check(h_wide >= h_exact, "on the held-out set too, synonyms find at least what keywords find")
 check(h_wide >= float(CONF["min_heldout_recall"]),
       f"held-out recall {h_wide:.0%} at least [search] min_heldout_recall ({float(CONF['min_heldout_recall']):.0%})")

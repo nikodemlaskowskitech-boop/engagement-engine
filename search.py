@@ -71,13 +71,17 @@ def _words_sql(text_sql):
                WHERE length(w) > 1 AND w NOT IN ({stops})"""
 
 
-def add_views(con, folders=None):
+def add_views(con, folders=None, rows=None):
     """The documents (the stories and, if generated, the search corpus) and the search
     index over them: doc_terms (how often each word is in each document) and doc_stats
-    (how many documents, their average length). Returns the number of documents."""
-    if folders is None:
+    (how many documents, their average length). Returns the number of documents.
+    rows = already-redacted documents instead of folders (the public search, which has
+    nothing else: no folders, no contacts, no raw text)."""
+    if rows is not None:
+        folders = []
+    elif folders is None:
         folders = [documents.STORIES] + ([CORPUS] if (CORPUS / "directory.csv").exists() else [])
-    n = documents.add_table(con, folders)
+    n = documents.add_table(con, folders, rows)
     # which folder each account's documents came from: redaction reads that folder's contacts
     pairs = ", ".join(f"('{acc}', '{str(folder).replace(chr(92), '/')}')" for folder in folders
                       for acc in documents.directory(folder) if re.fullmatch(r"[\w-]+", acc))

@@ -245,6 +245,24 @@ Read a file's entry before changing that file, and update the entry in the same 
   (a real overage dispute and competitor) shows as "not right". [search] min_recall 0.9
   keeps a bad edit to the list from passing.
   `tests/search_test.py`: the recall table, and BM25's mechanics on made-up documents.
+- `search_export.py`: the public search's documents (13 Nov 2026, option 2 of the demo
+  search: a search function in AWS that only ever sees redacted text). Every document of
+  the stories and the corpus through search.redacted() (the brief's redaction, then the
+  leak check), written as one JSON line each (account_id, id, kind, date, title, text;
+  no source: file names and email IDs carry the company's name) to [search]
+  site_documents_file, committed beside the function's code: the function carries it and
+  has no access to the data bucket. A held-back account = nothing written, exit 1.
+  `--check`: exit 1 when the committed file is stale. documents.add_table and
+  search.add_views take rows= for it. 156 documents, 66 KB.
+  Decided the same day, with numbers: no score cut-off. Weak matches score close to
+  real ones (held-out: a 40% cut-off took precision 31% -> 40% but lost 5 real
+  accounts), so the site shows [search] site_top_k = 5 with each matching line, date
+  and ticket status, and the visitor judges. Held-out: first result right 16 of 27,
+  top 5 finds 61 of 81 (75%); search_test prints both.
+  `tests/search_export_test.py`: the committed file is today's; no contact name, email,
+  company, organisation or domain (320 strings) and no email or phone, checked apart
+  from the redaction; every document there; the redacted file finds the same right
+  accounts as the raw text.
 - `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
   2026: two windows had no start, so a year of data made every account look like
   it had lost most of its users, and "month 1" summed ten months). A perfectly flat
