@@ -177,6 +177,26 @@ Read a file's entry before changing that file, and update the entry in the same 
   before anything leaves (handover.py does). handover.py reads them only through it.
   File names in [handover]. `tests/documents_test.py`: the joins, the shape, the
   citations, one way to read them, the table.
+- `generate_documents.py`: the search corpus (Phase 9, 13 Nov 2026). Support tickets,
+  emails and call notes for 30 accounts of the demo book (Enterprise and Scale with a
+  named owner, not the three story accounts), written to data/<[search] corpus_folder>/
+  in the shape of stories/ (directory.csv, support_cases.csv, emails/, calls/,
+  contacts.csv), so documents.py reads them the same way. Each account's documents fit
+  its personality: declining talks budget cuts, a competitor (Lumen Analytics, Northbeam
+  Insights) or a champion leaving, taken in turn; slipping missing data; shelfware a
+  rollout that never happened; power users hitting the limit; new customers stuck
+  starting; half the time a second topic. Each topic is written three ways (ticket, email,
+  call) in different words, two of them per account, so a search has to match meaning,
+  not just the question's words. Every account gets two routine documents (password reset,
+  webinar thanks), and three healthy accounts a trap (a question's words without its
+  meaning: "budget approved", "looked at a competitor two years ago", an invoice copy).
+  Writes [search] key_file: nine CS questions in a CS person's words, the accounts that
+  answer each and the traps; for tests only, search never reads it. Our people are side
+  "cs" in contacts.csv (redaction labels them CS 1). Reads the generator's answer key
+  (personalities): a generator, never an engine step; in [pipeline] with -Regenerate,
+  laptop only. Own seed (7). `tests/corpus_test.py`: seeded, read through documents.py,
+  every key account has a document on its topic, routine documents everywhere, no trap
+  is an answer, every person named in contacts.csv on the right side.
 - `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
   2026: two windows had no start, so a year of data made every account look like
   it had lost most of its users, and "month 1" summed ten months). A perfectly flat

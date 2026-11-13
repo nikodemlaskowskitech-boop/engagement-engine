@@ -57,6 +57,7 @@ Docs-only PRs need none.
 | `ingest.py` | `tests/store_test.py` |
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
 | `documents.py` | `tests/documents_test.py`, plus the handover row |
+| `generate_documents.py` | `tests/corpus_test.py` |
 | `retention.py` | `tests/retention_test.py` |
 | the cockpit (`views_template.html`, `export_views.py`, `roles.py`, [roles]) | `node tests/cockpit_test.js` (about a minute), `python roles.py --site` then `node tests/site_test.js`, `tests/roles_test.py`, `node tests/role_pages_test.js`, `tests/peer_median_test.py` |
 | roles, routing, money or the segment bar; before a demo, after a regenerate | `node tests/scenarios_test.js` (about two minutes; results go to the acceptance page) |
@@ -262,6 +263,7 @@ Engine:
 - `cairnpath_db.py`: `connect()` and every shared view, defined once.
 - `ingest.py`: the events store (Parquet plus a stamp of its input files).
 - `generate_events.py`: the demo data: ~500 accounts with personalities, a year.
+- `generate_documents.py`: the search corpus: tickets, emails, calls for 30 accounts, with an answer key.
 - `check_inputs.py`: the inputs against the data contract.
 - `flags.py`: activation, churn, expansion and QBR flags, with value at stake.
 - `check_flags.py`: the flags against the generator's answer key.
