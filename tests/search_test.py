@@ -43,20 +43,34 @@ n = search.add_views(con)
 check(n > 100, f"{n} documents indexed (stories and corpus)")
 key = json.loads((OUTPUTS / CONF["corpus_folder"] / CONF["key_file"]).read_text(encoding="utf-8"))
 k = int(CONF["top_k"])
-total_right = total_wanted = 0
-print(f"\n  {'question':<64} {'recall':>8} {'precision':>10}  traps in top {k}")
-for q in key["questions"]:
-    top = [a["account_id"] for a in search.accounts(con, q["question"], k)]
-    right = [a for a in top if a in q["accounts"]]
-    traps = [a for a in top if a in q["traps"]]
-    total_right += len(right)
-    total_wanted += len(q["accounts"])
-    prec = f"{len(right)}/{len(top)}" if top else "-"
-    print(f"  {q['question']:<64} {len(right):>3}/{len(q['accounts']):<4} {prec:>10}  {', '.join(traps) or '-'}")
-recall = total_right / total_wanted
-print(f"\n  Overall recall: {total_right} of {total_wanted} accounts ({recall:.0%})")
+def recall_table(synonyms):
+    """Per question: the right accounts in the top k, how many of the top are right, traps."""
+    out = []
+    for q in key["questions"]:
+        top = [a["account_id"] for a in search.accounts(con, q["question"], k, synonyms=synonyms)]
+        out.append({"right": [a for a in top if a in q["accounts"]], "top": top,
+                    "traps": [a for a in top if a in q["traps"]]})
+    return out
+
+
+exact, wide = recall_table(False), recall_table(True)
+wanted = sum(len(q["accounts"]) for q in key["questions"])
+print(f"\n  {'question':<62} {'keywords':>12} {'+ synonyms':>12}  traps (with synonyms)")
+for q, e, w in zip(key["questions"], exact, wide):
+    cell = lambda r: f"{len(r['right'])}/{len(q['accounts'])} of {len(r['top'])}"   # noqa: E731
+    print(f"  {q['question']:<62} {cell(e):>12} {cell(w):>12}  {', '.join(w['traps']) or '-'}")
+r_exact = sum(len(e["right"]) for e in exact) / wanted
+r_wide = sum(len(w["right"]) for w in wide) / wanted
+p_wide = sum(len(w["right"]) for w in wide) / max(1, sum(len(w["top"]) for w in wide))
+print(f"\n  Recall, keywords alone: {sum(len(e['right']) for e in exact)} of {wanted} ({r_exact:.0%})")
+print(f"  Recall, with synonyms:  {sum(len(w['right']) for w in wide)} of {wanted} ({r_wide:.0%}); "
+      f"precision {p_wide:.0%} (right accounts among those returned)")
+recall = r_wide
+check(r_wide >= r_exact, "synonyms never lose an account keywords found overall")
+check(all(set(e["right"]) <= set(w["right"]) for e, w in zip(exact, wide)),
+      "per question too: every account found by keywords is still found with synonyms")
 check(recall >= float(CONF["min_recall"]),
-      f"overall recall {recall:.0%} at least [search] min_recall ({float(CONF['min_recall']):.0%}): no step backwards")
+      f"recall {recall:.0%} at least [search] min_recall ({float(CONF['min_recall']):.0%}): no step backwards")
 
 print("\nMechanics, on made-up documents")
 tmp = Path(tempfile.mkdtemp())

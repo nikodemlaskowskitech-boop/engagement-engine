@@ -390,7 +390,7 @@ qbr_user_key = "qbr_user_key.csv"
 corpus_folder = "corpus"
 key_file = "search_key.json"       # the questions and the accounts that answer them: tests only
 top_k = 10                         # results per search
-min_recall = 0.5                   # tests/search_test.py: overall recall may never fall below this (13 Nov 2026, keywords: 51%; raised as search improves)
+min_recall = 0.9                   # tests/search_test.py: recall with synonyms may never fall below this (13 Nov 2026: keywords 51%, with synonyms 100%)
 bm25_k1 = 1.2                      # BM25: how fast a repeated word stops adding (the usual 1.2)
 bm25_b = 0.75                      # BM25: how much a long document is marked down (the usual 0.75)
 # Words too common to tell documents apart, dropped from documents and questions alike.
@@ -402,6 +402,25 @@ stop_words = ["the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "wit
               "have", "has", "had", "not", "no", "so", "but", "if", "as", "any", "all", "can", "will",
               "would", "could", "should", "about", "under", "there", "here", "hi", "thanks", "really",
               "account", "accounts", "customer", "customers"]
+
+synonym_weight = 0.6               # a synonym counts this much of the question's own word
+
+[search.synonyms]
+# The team's vocabulary: a word in a question also searches for these. Written as a CS
+# team would list them for each concern, not copied from the documents. One word each
+# (stems match: "cut" finds "cuts"). Add a word when a search misses something it should find.
+competitor = ["alternative", "alternatives", "vendor", "vendors", "benchmark", "rfp", "rival", "switch", "trial", "comparison", "replace"]
+evaluating = ["comparing", "benchmark", "trial", "pilot", "assessing"]
+pressure = ["cut", "cuts", "freeze", "frozen", "reduce", "savings", "downgrade", "cheaper", "cheapest", "cancel", "cancelled", "spend", "costs"]
+leaving = ["leave", "resign", "resigned", "departure", "quit", "replacement", "successor", "joining", "role"]
+quality = ["missing", "wrong", "gap", "gaps", "mismatch", "match", "discrepancy", "dropped", "lost", "trust", "accuracy", "incorrect"]
+problems = ["issue", "issues", "broken", "bug", "error", "errors"]
+using = ["adoption", "rollout", "login", "logs", "active", "unused", "shelfware", "nobody", "paused"]
+capacity = ["limit", "limits", "volume", "quota", "overage", "cap", "bigger", "upgrade", "double", "commitment"]
+disputing = ["dispute", "overage", "charged", "charge", "credit", "refund", "billing", "pay", "overcharged"]
+security = ["sso", "saml", "okta", "infosec", "pen", "audit", "questionnaire", "encryption"]
+compliance = ["gdpr", "dpa", "legal", "processors", "hosted", "certification", "iso", "soc"]
+stuck = ["blocked", "delay", "delayed", "waiting", "slip", "fails", "failing", "install", "setup", "implementation"]
 
 [pipeline]
 # The steps, in the order they depend on each other: the one list run_all.ps1 and the

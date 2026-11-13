@@ -14,6 +14,13 @@ extension is downloaded from the internet on first use: our sandbox can't, and t
 engine in AWS shouldn't fetch code while it runs. Same numbers everywhere, nothing to
 install.
 
+Synonyms (13 Nov 2026): keywords only find the words used, so a CS-owned vocabulary in
+settings ([search.synonyms]) widens a question: "competitor" also searches for
+benchmark, RFP, alternative... A synonym counts [search] synonym_weight (less than the
+question's own word), so a document that uses the question's words still ranks first.
+It's the classic fix in enterprise search: cheap, explainable, and a person can read and
+change the list; it can't find what nobody listed. synonyms=False searches without it.
+
 Words are cut to a rough stem (evaluating, evaluate -> evaluat; invoices -> invoice)
 and common words dropped ([search] stop_words), the same way for documents and
 questions. Keywords only find the words used: "competitor" doesn't find "we're
@@ -80,7 +87,17 @@ def add_views(con, folders=None):
         SELECT (SELECT count(*) FROM documents) AS n_docs, avg(len) AS avg_len FROM lens""")
     con.sql("""CREATE OR REPLACE TABLE doc_len AS
         SELECT account_id, id, sum(tf) AS len FROM doc_terms GROUP BY ALL""")
+    # The vocabulary: each word of a question and the words it also stands for, both stemmed
+    pairs = [(_word(k), _word(s)) for k, words in CONF.get("synonyms", {}).items() for s in words]
+    values = ", ".join(f"('{k}', '{s}')" for k, s in pairs if k and s) or "(NULL, NULL)"
+    con.sql(f"""CREATE OR REPLACE TABLE synonyms AS
+        SELECT DISTINCT stem(k) AS term, stem(s) AS also FROM (VALUES {values}) v(k, s) WHERE k IS NOT NULL""")
     return n
+
+
+def _word(w):
+    """A vocabulary entry: lower-case letters only (it goes into SQL text)."""
+    return re.sub(r"[^a-zäöüßéèàâçøåæ]", "", str(w).lower())
 
 
 def _clean(query):
@@ -88,10 +105,11 @@ def _clean(query):
     return re.sub(r"[^\w ]+", " ", str(query), flags=re.UNICODE).replace("_", " ").strip()
 
 
-def search(con, query, k=None, account_id=None):
+def search(con, query, k=None, account_id=None, synonyms=True):
     """The k documents that match the question best (BM25), best first: account_id, id
     (the citation: S1, E2, C1), kind, date, title, score and the line that matched best.
-    account_id = search one account's documents only."""
+    account_id = search one account's documents only. synonyms = widen the question with
+    [search.synonyms], each counting synonym_weight."""
     k = int(k or CONF["top_k"])
     q = _clean(query)
     if not q:
@@ -102,16 +120,24 @@ def search(con, query, k=None, account_id=None):
             raise ValueError(f"not an account ID: {account_id!r}")
         only = f"AND t.account_id = '{account_id}'"
     k1, b = float(CONF["bm25_k1"]), float(CONF["bm25_b"])
+    weight = float(CONF["synonym_weight"])
     rel = con.sql(f"""
-        WITH q AS (SELECT DISTINCT term FROM ({_words_sql(f"'{q}'")})),
+        WITH asked AS (SELECT DISTINCT term FROM ({_words_sql(f"'{q}'")})),
+             -- the question's own words count 1, the words they also stand for synonym_weight
+             q AS (SELECT term, max(weight) AS weight FROM (
+                      SELECT term, 1.0 AS weight FROM asked
+                      UNION ALL
+                      SELECT s.also, {weight} FROM synonyms s JOIN asked a USING (term) WHERE {bool(synonyms)})
+                   GROUP BY term),
              df AS (SELECT term, count(*) AS df FROM doc_terms WHERE term IN (SELECT term FROM q) GROUP BY term),
              scored AS (
                 SELECT t.account_id, t.id,
-                       sum(ln(1 + (s.n_docs - df.df + 0.5) / (df.df + 0.5))
+                       sum(q.weight * ln(1 + (s.n_docs - df.df + 0.5) / (df.df + 0.5))
                            * t.tf * ({k1} + 1)
                            / (t.tf + {k1} * (1 - {b} + {b} * l.len / s.avg_len))) AS score,
                        list(t.term ORDER BY t.term) AS matched
-                FROM doc_terms t JOIN df USING (term) JOIN doc_len l USING (account_id, id), doc_stats s
+                FROM doc_terms t JOIN df USING (term) JOIN q USING (term)
+                     JOIN doc_len l USING (account_id, id), doc_stats s
                 WHERE true {only}
                 GROUP BY ALL)
         SELECT s.account_id, s.id, d.kind, d.date, d.title, round(s.score, 3) AS score, s.matched, d.text
@@ -125,11 +151,11 @@ def search(con, query, k=None, account_id=None):
     return out
 
 
-def accounts(con, query, k=None):
+def accounts(con, query, k=None, synonyms=True):
     """The accounts whose documents match the question best: each account once, ranked by
     its best document, with the citations that matched (k accounts)."""
     k = int(k or CONF["top_k"])
-    hits = search(con, query, k=k * 5)        # enough documents to fill k accounts
+    hits = search(con, query, k=k * 5, synonyms=synonyms)        # enough documents to fill k accounts
     ranked = {}
     for h in hits:
         r = ranked.setdefault(h["account_id"], {"account_id": h["account_id"], "score": h["score"], "documents": []})
@@ -153,9 +179,10 @@ if __name__ == "__main__":
     ap.add_argument("query")
     ap.add_argument("--account", help="search one account's documents only")
     ap.add_argument("-k", type=int, default=None, help="how many results")
+    ap.add_argument("--exact", action="store_true", help="the question's own words only, no synonyms")
     args = ap.parse_args()
     from cairnpath_db import connect
     con = connect()
     print(f"{add_views(con)} documents")
-    for h in search(con, args.query, args.k, args.account):
+    for h in search(con, args.query, args.k, args.account, synonyms=not args.exact):
         print(f"{h['score']:6.2f}  {h['account_id']} [{h['id']}] {h['date']}  {h['title']}\n        {h['line']}")
