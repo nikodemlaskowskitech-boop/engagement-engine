@@ -214,7 +214,18 @@ Read a file's entry before changing that file, and update the entry in the same 
   questions; perfect where people use the question's words (onboarding, security, a
   champion leaving), 0 of 6 on competitors and on budget pressure, where the documents
   say "benchmark Lumen Analytics" or "the CFO is going through every subscription", and
-  it fell for the traps there. [search] min_recall (0.5) keeps it from going backwards.
+  it fell for the traps there.
+  Synonyms, same day: [search.synonyms], a CS-owned vocabulary (a question word -> the
+  words it also stands for, stemmed into a table "synonyms"), each counting [search]
+  synonym_weight (0.6) of the question's own word, so a document using the question's
+  words still ranks first; search(..., synonyms=False) and `--exact` turn it off.
+  Recall 37 of 37 (100%), precision 42% in a top 10 (most questions have 3 to 6 answers).
+  Optimistic: the list was written by someone who had seen the corpus, generic words but
+  not blind; a held-out set written apart is the fair test, before vectors are compared.
+  Traps: the budget ones rank below all six answers; the competitor trap still ranks
+  above three of them. The three story accounts aren't in the key, so Nettle Foods
+  (a real overage dispute and competitor) shows as "not right". [search] min_recall 0.9
+  keeps a bad edit to the list from passing.
   `tests/search_test.py`: the recall table, and BM25's mechanics on made-up documents.
 - `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
   2026: two windows had no start, so a year of data made every account look like

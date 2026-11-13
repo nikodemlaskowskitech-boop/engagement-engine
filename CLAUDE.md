@@ -310,8 +310,8 @@ Tests: `tests/`, one file per area (see Testing above).
 ## Planned next
 
 - Phase 9, AI on unstructured data: account search built 13 Nov 2026 (BM25 in SQL,
-  the corpus, recall 51% on keywords alone); next, synonyms or vectors to beat it,
-  redacted results, then "ask about this account", vectors next
+  the corpus; recall 51% on keywords, 100% with the [search.synonyms] vocabulary,
+  optimistic: written knowing the corpus); next, a held-out test, redacted results, then "ask about this account", vectors next
   to keywords, a Cairnpath MCP server over `facts.py` and the search, an AI
   cost demo (AI_COST.md), and last a live Ask box in the cockpit.
 - Waiting on AWS: Bedrock quota (ask again early December 2026), Lambda
