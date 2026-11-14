@@ -380,6 +380,7 @@ ledger_file = "ai_spend.csv"
 [llm.monthly_budget_usd.laptop]
 qbr_brief = 1.00
 handover = 1.50
+ask_account = 1.00            # ask.py: about a cent a question (laptop only: AWS has no budget, so it's refused there)
 [llm.monthly_budget_usd.aws]
 qbr_brief = 1.00
 handover = 1.50
@@ -450,6 +451,11 @@ stuck = ["blocked", "delay", "delayed", "waiting", "slip", "fails", "failing", "
 # and how many rows a tool returns at most. Set your own in settings.local.toml.
 person = "leader"
 max_results = 10
+
+[ask]
+# ask.py: one question about one account, answered from its facts and documents (RAG).
+top_k = 5                  # documents the search picks for the question (an account has 3 to 8)
+max_output_tokens = 600    # about 150 words, with room; a cut-off answer is refused, not shown
 
 [pipeline]
 # The steps, in the order they depend on each other: the one list run_all.ps1 and the

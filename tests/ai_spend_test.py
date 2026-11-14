@@ -137,8 +137,10 @@ check(llm.budgets_here("laptop") == llm.budgets_here("aws") == {"qbr_brief": 3.0
       "an old flat section (one amount per feature) still works, for both places")
 llm._BUDGETS = real
 places = {p: llm.budgets_here(p) for p in ("laptop", "aws")}
-check(all(set(b) == {"qbr_brief", "handover"} for b in places.values()),
-      "settings.toml gives the laptop and AWS a budget for both features", places)
+check(all({"qbr_brief", "handover"} <= set(b) for b in places.values()),
+      "settings.toml gives the laptop and AWS a budget for the briefs (QBR and handover)", places)
+check(set(places["laptop"]) - set(places["aws"]) == {"ask_account"} and set(places["aws"]) <= set(places["laptop"]),
+      "ask_account is the laptop's only: AWS has no budget for it, so it can't run there (14 Nov 2026)", places)
 total = sum(v for b in places.values() for v in b.values())
 check(total <= 10, f"both places together (${total:.2f}) stay under the $10 Anthropic spend limit")
 
