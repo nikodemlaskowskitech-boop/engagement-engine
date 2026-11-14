@@ -194,9 +194,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   answer each and the traps; for tests only, search never reads it. Our people are side
   "cs" in contacts.csv (redaction labels them CS 1). Reads the generator's answer key
   (personalities): a generator, never an engine step; in [pipeline] with -Regenerate,
-  laptop only. Own seed (7). `tests/corpus_test.py`: seeded, read through documents.py,
+  laptop only. Own seed (7). Every call note is also a logged meeting (14 Nov 2026: the
+  first "ask about this account" answer found call notes the engine didn't know, so
+  "not called" was understated): data/engagement/document_calls.jsonl, rewritten whole each
+  run, meeting_held by the account's owner (a Scale account's named member), on the call's
+  day (calls moved off weekends, like generate_events), topic by purpose (CALL_TOPIC:
+  churn worries = churn_call, more volume = growth_call, stuck = activation_call, the rest
+  check_in), source cs_history. Effect: Act accounts called 8 -> 10 of 12 (DEMO.md). Detecting
+  calls recorded but never logged is a feature request in the spec. `tests/corpus_test.py`: seeded, read through documents.py,
   every key account has a document on its topic, routine documents everywhere, no trap
-  is an answer, every person named in contacts.csv on the right side.
+  is an answer, every person named in contacts.csv on the right side, every call note a
+  logged meeting (same account and day, the owner's, never a weekend) and no meeting extra.
 - `search.py`: account search (Phase 9, 13 Nov 2026). add_views(con) loads the documents
   (stories/ and, when generated, the search corpus) through documents.add_table (which
   now takes a list of folders) and indexes them: doc_terms (each stemmed word's count per

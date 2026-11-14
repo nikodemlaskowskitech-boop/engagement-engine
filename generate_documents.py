@@ -25,6 +25,7 @@ import csv
 import json
 import random
 import sys
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import format_datetime
@@ -173,6 +174,15 @@ TEMPLATES = {
     },
 }
 
+# Every call note is also a meeting in the engagement data (14 Nov 2026: "ask about this account"
+# found call notes the engine didn't know about). Its topic is the call's purpose, in the
+# engagement schema's words: a call about a churn worry is a churn call, and so on.
+CALL_TOPIC = {"budget_cut": "churn_call", "competitor": "churn_call", "champion_leaving": "churn_call",
+              "data_missing": "churn_call", "not_rolled_out": "churn_call", "billing_dispute": "churn_call",
+              "more_volume": "growth_call", "onboarding_stuck": "activation_call",
+              "security_review": "check_in", "routine": "check_in", "trap": "check_in"}
+MEETINGS_FILE = "document_calls.jsonl"     # in data/engagement/, rewritten whole each run (never doubled)
+
 # Routine documents every account has some of: they must never answer a question
 ROUTINE = [
     ("ticket", ("Password reset email not arriving", "Two of our users never get the reset email.",
@@ -265,6 +275,7 @@ def main():
     directory, contacts, tickets, key = [], [], [], {q: set() for q in QUESTIONS}
     traps = {q: set() for q in TRAPS}
     used_names = set()
+    meetings = []                              # every call note, as the meeting it was
     ticket_no = 5000
     healthy_seen = 0
     turn = {}                                  # how many of each personality so far
@@ -317,6 +328,8 @@ def main():
 
         for n, (topic, kind, tpl) in enumerate(docs):
             day = as_of - timedelta(days=rng.randrange(5, 120))
+            if kind == "call":                 # meetings never at weekends (generate_events' rule)
+                day += timedelta(days={5: -1, 6: 1}.get(day.weekday(), 0))
             when = datetime(day.year, day.month, day.day, rng.randrange(9, 17), rng.choice([0, 15, 30, 45]), tzinfo=tz)
             name = f"{day}_{slug(company)}_{topic.replace('_', '-')}-{n}"
             writer = f if topic == "billing_dispute" or (topic == "budget_cut" and kind == "email") else c
@@ -348,10 +361,20 @@ def main():
                     lines.append(f"[00:{start // 60:02d}:{start % 60:02d}] {speaker}: {fill(text, people, rng)}")
                     start += rng.randrange(20, 60)
                 title = {"routine": "check-in", "trap": "check-in"}.get(topic, "call")
+                meetings.append({"event_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"cairnpath-call/{name}")),
+                                 "event_name": "meeting_held", "event_type": "engagement",
+                                 "timestamp": when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                 "account_id": acc, "user_id": f"{acc}_usr_01",
+                                 "properties": {"owner_id": a["owner"]["owner_id"], "topic": CALL_TOPIC[topic]},
+                                 "context": {"source": "cs_history"}})
                 (OUT / "calls" / f"{name}.txt").write_text(
                     f"Title: {company} - {title}\nDate: {when:%Y-%m-%d %H:%M}\nCRM account: {acc}\n"
                     f"Participants: {s} (Cairnpath, {'CSM' if a['owner']['owner_type'] == 'csm' else 'Scale team'}), "
                     f"{c} ({company}, {c_role})\n\n" + "\n".join(lines) + "\n", encoding="utf-8")
+
+    (OUTPUTS / "engagement" / MEETINGS_FILE).write_text(
+        "".join(json.dumps(m) + "\n" for m in sorted(meetings, key=lambda m: (m["timestamp"], m["account_id"]))),
+        encoding="utf-8")
 
     def write(name, rows):
         with (OUT / name).open("w", newline="", encoding="utf-8") as fh:
@@ -367,7 +390,8 @@ def main():
         "questions": [{"id": q, "question": text, "accounts": sorted(key[q]), "traps": sorted(traps.get(q, []))}
                       for q, text in QUESTIONS.items()]}, indent=2) + "\n", encoding="utf-8")
     n_docs = len(tickets) + sum(1 for _ in (OUT / "emails").iterdir()) + sum(1 for _ in (OUT / "calls").iterdir())
-    print(f"Search corpus: {len(accounts)} accounts, {n_docs} documents in {OUT}")
+    print(f"Search corpus: {len(accounts)} accounts, {n_docs} documents in {OUT}; "
+          f"{len(meetings)} calls logged as meetings in data/engagement/{MEETINGS_FILE}")
     for q, text in QUESTIONS.items():
         print(f"  {len(key[q]):>2} accounts  {text}")
 
