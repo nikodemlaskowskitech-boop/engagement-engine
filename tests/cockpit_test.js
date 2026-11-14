@@ -404,6 +404,16 @@ const segment = async (page, values) => {
       const cols = await page.$$eval("#tl-chart svg path, #tl-chart svg rect, #tl-chart svg circle", (els) => [...new Set(els.map((e) => e.getAttribute("fill") || ""))]);
       check(cols.includes("var(--viz-qbr)"), "review: the timeline colours a QBR sage, like My book", cols.join(","));
     }
+    // bug found by hand 14 Nov 2026: with a year of data the line ran off the chart to the left
+    // (the window began on a date typed in from the 90-day era). Every mark stays inside the chart.
+    const longest = [...D.accounts].sort((x, y) => y.util.filter((u) => u != null).length - x.util.filter((u) => u != null).length)[0];
+    await page.goto(PAGE + "#" + longest.account_id); await page.reload(); await page.waitForTimeout(500);   // the hash is read on load
+    const out = await page.$$eval("#tl-chart svg", ([s]) => {
+      const W = s.viewBox.baseVal.width;
+      return [...s.querySelectorAll("path, circle, rect, line, text")].map((e) => e.getBBox())
+        .filter((b) => b.width + b.height > 0 && (b.x < -1 || b.x + b.width > W + 1)).length;
+    });
+    check(out === 0, `timeline: every mark inside the chart, for the account with the most data (${longest.account_id})`, out + " outside");
     // tasks: Open is neutral until it has waited 14 days, then amber; Claimed is neutral
     await tab(page, "tasks");
     const bad2 = await page.$$eval("#view-tasks .badge", (bs) => bs.map((b) => {
