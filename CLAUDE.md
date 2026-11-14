@@ -324,8 +324,8 @@ Tests: `tests/`, one file per area (see Testing above).
   (#166-169) and the local MCP server (mcp_server.py) the same day; "ask about this account" (ask.py) 14 Nov 2026; next
   vectors next to keywords, a remote MCP server (sign-in first), an AI
   cost demo (AI_COST.md), and last a live Ask box in the cockpit.
-- Waiting on AWS: Bedrock quota (ask again early December 2026), Lambda
-  concurrency quota. GuardDuty trial: keep or switch off before about 5 Dec 2026.
+- Waiting on AWS: Bedrock quota (ask again early December 2026). Lambda concurrency
+  quota approved 14 Nov 2026 (1000): engine one run at a time, search capped at 5. GuardDuty trial: keep or switch off before about 5 Dec 2026.
 - Later (ARCHITECTURE.md): rules out of the page tab by tab, every script as
   `add_views` + `main()`, events uploaded as Parquet, the cockpit split.
 - Parked: AI to assist CS (a draft, not a bot that acts), calls recorded but never

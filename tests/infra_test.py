@@ -204,7 +204,7 @@ check(not any(c["Filter"]["Key"]["FilterRules"][0]["Value"].startswith((aws["out
 print("\nEngine Lambda: the API key for the briefs")
 eng = next(v for v in ours.values() if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"])
 check(eng["Properties"].get("ReservedConcurrentExecutions") == (aws["engine_max_runs"] or None),
-      f"engine runs at once from settings ([aws] engine_max_runs = {aws['engine_max_runs']}; 0 = no limit, until the quota allows 1)")
+      f"engine runs at once from settings ([aws] engine_max_runs = {aws['engine_max_runs']}: one run at a time, a second waits)")
 evars = eng["Properties"]["Environment"]["Variables"]
 check(evars.get("API_KEY_PARAMETER") == aws["api_key_parameter"] and evars.get("LLM_PROVIDER") == aws["briefs_llm_provider"]
       and json.loads(evars.get("OPTIONAL_STEPS", "[]")) == aws["engine_optional_steps"],
@@ -522,6 +522,8 @@ if aws.get("site"):
     check(len(srch) == 1 and fp.get("Runtime") == "python3.13" and fp.get("Architectures") == ["arm64"]
           and fp.get("MemorySize") == aws["search_memory_mb"] and fp.get("Timeout") == aws["search_timeout_seconds"],
           "one function, Python 3.13 on arm64, memory and timeout from settings")
+    check(fp.get("ReservedConcurrentExecutions") == (aws["search_max_runs"] or None),
+          f"at most {aws['search_max_runs']} at once: a flood can't take the engine's or the Slack listener's capacity")
     check(fv == {"TOP_K": str(SETTINGS["search"]["site_top_k"]), "MAX_CHARS": str(aws["search_max_chars"]),
                  "CACHE_SECONDS": str(aws["search_cache_seconds"])},
           "told only how many results, the longest question and the cache time (no bucket, no secret)", fv)
