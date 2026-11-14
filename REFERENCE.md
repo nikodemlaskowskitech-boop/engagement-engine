@@ -285,7 +285,8 @@ Read a file's entry before changing that file, and update the entry in the same 
   CloudFront behavior /search to that API (HTTPS only, GET/HEAD, cache policy keyed on q
   only, no cookies or headers forwarded, the site's security headers). Same address as the
   pages, so the CSP's connect-src 'self' already allows it. Outputs SearchFunction and
-  SearchUrl. `tests/search_lambda_test.py`: the real bundle in its own Python: only those
+  SearchUrl. At most [aws] search_max_runs (5) at once, a reserved ceiling (14 Nov 2026, once
+  the account quota rose to 1000). `tests/search_lambda_test.py`: the real bundle in its own Python: only those
   files; answers, citations from the file, cacheable, same order as the laptop; 400/405/500;
   a planted name never in the logs, even on an error. infra_test.py and security_check.py
   check the rest (THREAT_MODEL.md 20-22).
@@ -857,9 +858,8 @@ Read a file's entry before changing that file, and update the entry in the same 
   A data ERROR is a result, not a crash. May only read inputs/* and write
   reports/check_inputs/* (so it can't trigger itself); logs kept 30 days;
   memory, timeout and disk in [aws]. Plus the engine Lambda (RunEngine, same
-  runtime; [aws] engine_max_runs = 1 would make a second run wait its turn, but
-  a new account has 10 slots and AWS keeps 10 free, so it's 0 = off until the
-  quota increase to 1000 asked on 6 Nov 2026 is approved):
+  runtime; [aws] engine_max_runs = 1: one run at a time, a second waits its turn; set
+  14 Nov 2026 when the quota increase to 1000, asked on 6 Nov, was approved):
   wakes when the check writes reports/check_inputs/latest.json, and
   if its status is ERROR writes outputs/run.json SKIPPED and stops (the gate).
   Otherwise it copies the engine's code (bundle.py ENGINE_FILES) and a data/

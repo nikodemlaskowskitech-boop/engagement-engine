@@ -417,6 +417,9 @@ class DataStack(Stack):
                 code=lambda_.Code.from_asset(str(bundle_search())),
                 memory_size=aws["search_memory_mb"],
                 timeout=Duration.seconds(aws["search_timeout_seconds"]),
+                # a ceiling of its own, so a flood of searches can't use the slots the engine and
+                # the Slack listener need (possible since the account quota is 1000, 14 Nov 2026)
+                reserved_concurrent_executions=aws["search_max_runs"] or None,
                 environment={"TOP_K": str(SETTINGS["search"]["site_top_k"]),
                              "MAX_CHARS": str(aws["search_max_chars"]),
                              "CACHE_SECONDS": str(aws["search_cache_seconds"])},
