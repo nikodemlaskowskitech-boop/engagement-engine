@@ -96,6 +96,22 @@ with (OUTPUTS / "crm_accounts.csv").open(encoding="utf-8") as f:
 check(all(a in book and book[a]["status"] != "churned" for a in by_acc), "every corpus account is in today's book")
 check(len(by_acc) == 30, f"{len(by_acc)} accounts")
 
+print("\nEvery call note is a logged meeting (14 Nov 2026)")
+from generate_documents import CALL_TOPIC, MEETINGS_FILE      # noqa: E402
+meetings = [json.loads(line) for line in (OUTPUTS / "engagement" / MEETINGS_FILE).read_text(encoding="utf-8").splitlines()]
+calls = [d for d in docs if d["kind"] == "C"]
+logged = {(m["account_id"], m["timestamp"][:10]) for m in meetings}
+check(len(meetings) == len(calls) and all((c["account_id"], c["date"]) in logged for c in calls),
+      f"each of the {len(calls)} call notes has its meeting (same account, same day), and no meeting is extra",
+      [(c["account_id"], c["date"]) for c in calls if (c["account_id"], c["date"]) not in logged][:3])
+from datetime import date as _date                              # noqa: E402
+check(all(_date.fromisoformat(m["timestamp"][:10]).weekday() < 5 for m in meetings), "no meeting at a weekend")
+check(all(m["properties"]["topic"] in set(CALL_TOPIC.values()) and m["context"]["source"] == "cs_history"
+          and m["event_name"] == "meeting_held" for m in meetings), "topics from the engagement schema, written as CS history")
+owners = {r["account_id"]: r["csm_owner"] or r["pool_owner"] for r in book.values()}
+check(all(m["properties"]["owner_id"] == owners[m["account_id"]] for m in meetings),
+      "each meeting is the account owner's (a Scale account's named pool member)")
+
 print("\nPeople")
 with (CORPUS / SETTINGS["handover"]["contacts_file"]).open(encoding="utf-8") as f:
     contacts = list(csv.DictReader(f))

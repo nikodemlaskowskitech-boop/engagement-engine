@@ -328,5 +328,5 @@ Tests: `tests/`, one file per area (see Testing above).
   concurrency quota. GuardDuty trial: keep or switch off before about 5 Dec 2026.
 - Later (ARCHITECTURE.md): rules out of the page tab by tab, every script as
   `add_views` + `main()`, events uploaded as Parquet, the cockpit split.
-- Parked: AI to assist CS (a draft, not a bot that acts), long-history handover
-  briefs, maturity score and journey stage as QBR inputs. Detail in REFERENCE.md.
+- Parked: AI to assist CS (a draft, not a bot that acts), calls recorded but never
+  logged (spec, Feature requests), long-history handover briefs, maturity score and journey stage as QBR inputs. Detail in REFERENCE.md.
