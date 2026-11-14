@@ -281,3 +281,11 @@ labels, masks, the leak check. The facts tools (account, at_risk, timeline) retu
 the cockpit shows: account names, owners' names, ARR, flags and reasons, no user IDs and
 no customer people. One person's view at a time ([mcp] person), cut like their page.
 
+## 8. Ask about an account (`ask.py`, 14 Nov 2026)
+
+A question about one account goes to the model with the engine's facts and the documents
+the search picks for it. The same steps as the brief: `handover.cleaner()` with that
+folder's contact list, over the facts, the documents **and the question itself** (a name
+typed into it becomes its label), then `leak_check()` over all of it; a name nobody
+listed stops the call. Real names go back in after the model. Laptop only.
+

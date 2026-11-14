@@ -66,6 +66,7 @@ Docs-only PRs need none.
 | roles, routing, money or the segment bar; before a demo, after a regenerate | `node tests/scenarios_test.js` (about two minutes; results go to the acceptance page) |
 | `handover.py`, `stories/` | `tests/handover_test.py`, `tests/leak_check_test.py`, `tests/contacts_test.py`, `tests/redaction_fixes_test.py`, `tests/handover_cache_test.py` |
 | `llm.py`, `brief.py`, `handover.py` | `tests/ai_spend_test.py` |
+| `ask.py`, [ask], or the redaction or search it uses | `tests/ask_test.py` (stand-in model, no key) |
 | `cockpit_sync.py` | `tests/cockpit_sync_test.py` |
 | `infra/`, or what an engine step imports | `tests/infra_test.py` (Nikodem: needs aws_cdk), `tests/check_lambda_test.py`, `tests/engine_lambda_test.py`, `tests/slack_lambda_test.py` |
 | `slack_loop.py`, `listener.py` | `tests/slack_lambda_test.py` |
@@ -299,6 +300,7 @@ Actions and Slack:
 AI:
 - `llm.py`: the provider, budgets per feature and the spend ledger.
 - `brief.py`: QBR briefs; `handover.py`: handover briefs with redaction and the leak check.
+- `ask.py`: one question about one account, answered from its facts and the documents the search picks (RAG), cited and checked.
 - `stories/`: three hand-written account stories and their answer key (tests only).
 
 AWS (run by Nikodem, signed in with `aws login --profile cairnpath`):
@@ -319,7 +321,7 @@ Tests: `tests/`, one file per area (see Testing above).
   the corpus; recall 51% on keywords, 100% with the [search.synonyms] vocabulary,
   optimistic: written knowing the corpus; on a held-out set written apart, 72% -> 90%); redacted
   results (search.redacted, PRIVACY.md §6) built the same day; the public search on the demo site
-  (#166-169) and the local MCP server (mcp_server.py) the same day; next "ask about this account",
+  (#166-169) and the local MCP server (mcp_server.py) the same day; "ask about this account" (ask.py) 14 Nov 2026; next
   vectors next to keywords, a remote MCP server (sign-in first), an AI
   cost demo (AI_COST.md), and last a live Ask box in the cockpit.
 - Waiting on AWS: Bedrock quota (ask again early December 2026), Lambda

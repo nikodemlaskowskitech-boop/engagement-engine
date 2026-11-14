@@ -313,6 +313,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   the leader's facts equal the cockpit's; as a CSM, another team's account refused and none
   in at_risk or search; search results without contact names, emails, phones, companies;
   a real stdio round trip started from another folder.
+- `ask.py` (14 Nov 2026): one question about one account, answered in at most 150 words, every
+  sentence citing [DATA] or a document ID. RAG on the laptop: search.search picks the
+  account's [ask] top_k documents for the question (BM25 with the vocabulary; doc_folders says
+  which folder), handover.engine_facts gives [DATA]; an account without documents is answered
+  from its facts, its company still redacted (a minimal directory entry). handover.cleaner
+  (split out of redact for search, 13 Nov) over facts, documents and the question; leak_check
+  over all of it; llm.call with feature "ask_account" ([llm.monthly_budget_usd.laptop] 1.00;
+  none in AWS, so llm.call refuses it there); a reply not ending "end_turn" or empty = no
+  answer; handover.check flags unknown citations, uncited sentences and numbers in no source;
+  handover.restore puts names back. `--dry-run` prints what would be sent. [ask] top_k 5,
+  max_output_tokens 600. `tests/ask_test.py`: stand-in model, temporary ledger.
 - `tests/long_history_test.py`: a year of data must read like 90 days did (12 Nov
   2026: two windows had no start, so a year of data made every account look like
   it had lost most of its users, and "month 1" summed ten months). A perfectly flat
