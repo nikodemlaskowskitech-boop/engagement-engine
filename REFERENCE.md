@@ -530,6 +530,12 @@ Read a file's entry before changing that file, and update the entry in the same 
   meanings: not called = red; the Called column neutral; an Open task neutral, amber
   once it has waited [cockpit] stale_task_days (14); Claimed neutral, Done green.
   cockpit_test.js checks each.
+  Account timeline window (14 Nov 2026, bug found by hand on the public site): the chart
+  shows the last 90 days counted back from the data's own date (TL_DAYS). It began on a
+  fixed 21 July from the 90-day era, so with a year of data the line ran off the chart
+  to the left; the month ticks and the "no 30-day average yet" label were typed in too.
+  Now points, touches, ticks and hover keep to the window, and the label shows only when
+  a newer account's line starts late. cockpit_test.js checks every mark stays inside.
   Phone (10 Nov 2026): under 640px every chart is drawn at about the panel's width
   (fitW(): text stays 10px+, not an 880 box shrunk to 4px), with a shorter layout
   (labels above bars, fewer week labels, no numbers inside stacked segments); the book

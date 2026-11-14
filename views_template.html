@@ -668,7 +668,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <h2>Usage and CS touches</h2>
           <div id="tl-chart"></div>
           <div class="legend" id="tl-legend"></div>
-          <p class="note">Utilisation is the 30-day average share of contracted volume, so it starts on 19 August, 30 days into the data. The dashed lines are the flags' lines: under 40% counts towards churn, 80% and up towards expansion.</p>
+          <p class="note">The last 90 days. Utilisation is the 30-day average share of contracted volume, so a newer account's line starts 30 days after its first data. The dashed lines are the flags' lines: under 40% counts towards churn, 80% and up towards expansion.</p>
         </div>
         <div class="panel">
           <h2>Account</h2>
@@ -794,6 +794,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     return n;
   };
   const day = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5;
+  const TL_DAYS = 90;                                    // the account chart's window, ending on the data's date
   const fmt = (s) => new Date(day(s) * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
   // A person's page holds only their team, so it can't work out a book-wide median itself:
   // roles.py computes them once (D.peer_medians, by kind of owner) and the page uses those.
@@ -1144,7 +1145,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     pressChips(id);
     const host = $("tl-chart"); host.innerHTML = ""; host.classList.remove("fade"); void host.offsetWidth; host.classList.add("fade");
     const ph = isPhone(), W = fitW(720, 330), H = 330, L = ph ? 36 : 44, R = ph ? 6 : 16, top = 12;
-    const x0 = day("2026-07-21"), x1 = day(D.as_of) + 1;
+    // the last 90 days, counted from the data's own date (it was a fixed 21 July from the
+    // 90-day era: with a year of data, older points were drawn off the chart, 14 Nov 2026)
+    const x1 = day(D.as_of) + 1, x0 = x1 - TL_DAYS;
+    const inWin = (d) => day(d) >= x0;
     const X = (d) => L + ((d - x0) / (x1 - x0)) * (W - L - R);
     const uTop = top, uH = 150, wTop = 188, wH = 64, tY = 292;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `Usage and CS touches for ${a.account_name}` }, host);
@@ -1161,19 +1165,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       el("line", { x1: L, x2: W - R, y1: UY(v), y2: UY(v), stroke: "var(--ink-3)", "stroke-width": 1, "stroke-dasharray": "4 4" }, svg);
       el("text", { x: W - R, y: UY(v) - 4, "text-anchor": "end" }, svg).textContent = label;
     }
-    const pts = a.util.map((u, i) => (u == null ? null : [X(day(D.util_dates[i])), UY(u)])).filter(Boolean);
+    const pts = a.util.map((u, i) => (u == null || !inWin(D.util_dates[i]) ? null : [X(day(D.util_dates[i])), UY(u)])).filter(Boolean);
+    const firstU = D.util_dates.find((d, i) => a.util[i] != null && inWin(d));
     if (pts.length) {
       el("path", { d: "M" + pts.map((p) => p.join(" ")).join("L"), fill: "none", stroke: "var(--viz-measure)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
       const last = pts[pts.length - 1], lastU = a.util.filter((u) => u != null).slice(-1)[0];
       el("circle", { cx: last[0], cy: last[1], r: 4, fill: "var(--viz-measure)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
       el("text", { x: last[0] - 8, y: last[1] - 9, "text-anchor": "end", class: "val" }, svg).textContent = lastU + "%";
       // hover band for daily values
-      const hit = el("rect", { x: X(day(D.util_dates[0])), y: uTop, width: X(x1) - X(day(D.util_dates[0])), height: uH, fill: "transparent" }, svg);
+      const hit = el("rect", { x: X(day(firstU)), y: uTop, width: X(x1) - X(day(firstU)), height: uH, fill: "transparent" }, svg);
       const cross = el("line", { y1: uTop, y2: uTop + uH, stroke: "var(--ink-3)", "stroke-width": 1, visibility: "hidden" }, svg);
       hit.addEventListener("pointermove", (e) => {
         const r = svg.getBoundingClientRect(), sx = ((e.clientX - r.left) / r.width) * W;
         let best = 0, bd = 1e9;
-        D.util_dates.forEach((d, i) => { const dd = Math.abs(X(day(d)) - sx); if (dd < bd && a.util[i] != null) { bd = dd; best = i; } });
+        D.util_dates.forEach((d, i) => { const dd = Math.abs(X(day(d)) - sx); if (dd < bd && a.util[i] != null && inWin(d)) { bd = dd; best = i; } });
         cross.setAttribute("x1", X(day(D.util_dates[best]))); cross.setAttribute("x2", X(day(D.util_dates[best]))); cross.setAttribute("visibility", "visible");
         showTip(e, `<b>${fmt(D.util_dates[best])}</b><br>30-day utilisation <b>${a.util[best]}%</b>`);
       });
@@ -1181,7 +1186,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     } else {
       el("text", { x: (L + W - R) / 2, y: uTop + uH / 2, "text-anchor": "middle", class: "lbl" }, svg).textContent = "No usage yet";
     }
-    if (pts.length) el("text", { x: X(x0) + 2, y: uTop + uH - 6 }, svg).textContent = (ph ? "no 30-day average before 19 Aug" : "before 19 Aug: no 30-day average yet");
+    // only when the line starts late (a newer account, or the data's first 30 days)
+    if (pts.length && day(firstU) > x0 + 3) el("text", { x: X(x0) + 2, y: uTop + uH - 6 }, svg).textContent =
+      (ph ? "no 30-day average before " : "before " ) + fmt(firstU) + (ph ? "" : ": no 30-day average yet");
 
     // weekly active users
     const wMax = Math.max(1, ...a.wau);
@@ -1204,7 +1211,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     el("text", { x: L, y: tY - 16, class: "lbl" }, svg).textContent = "CS touches";
     const rows = { email_sent: -7, email_opened: -7, workshop_attended: 0, meeting_held: 7 };
     for (const t of (touchesBy[id] || [])) {
-      const k = TOUCH[t.event]; if (!k) continue;
+      const k = TOUCH[t.event]; if (!k || !inWin(t.date)) continue;      // older touches: in the summary, not on the chart
       const cx = X(day(t.date) + 0.5), cy = tY + rows[t.event];
       const strong = t.event === "meeting_held" && PROBLEM.has(t.topic);
       const MCOL = { qbr: "var(--viz-qbr)", call: "var(--viz-call)", other: "var(--viz-other)" };   // the same as My book's charts
@@ -1222,7 +1229,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       el("text", { x: X(dd) + 4, y: uTop + 10, class: "lbl" }, svg).textContent = label + " " + fmt(d);
     }
     // month ticks
-    for (const m of ["2026-08-01", "2026-09-01", "2026-10-01"]) {
+    const months = [], s0 = new Date(x0 * 864e5);       // the first of each month inside the window
+    for (let mo = s0.getUTCMonth() + 1; ; mo++) {        // Date.UTC rolls month 12 into January
+      const m = new Date(Date.UTC(s0.getUTCFullYear(), mo, 1));
+      if (m.getTime() / 864e5 >= x1) break;
+      months.push(m.toISOString().slice(0, 10));
+    }
+    for (const m of months) {
       el("line", { x1: X(day(m)), x2: X(day(m)), y1: tY + 14, y2: tY + 19, stroke: "var(--ink-3)" }, svg);
       el("text", { x: X(day(m)), y: tY + 32, "text-anchor": "middle" }, svg).textContent = fmt(m);
     }
