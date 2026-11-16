@@ -88,5 +88,14 @@ check(handover.check("Usage fell 37% [DATA].", "Usage fell sharply.", {"DATA"})[
       "a number in no source is still flagged")
 check("someone" in handover.as_digits("someone often"), "words that only contain a number word stay as they are")
 
+print("\nA person's label used for the account is caught (found by a review, 16 Nov 2026)")
+mix = handover.check("Customer A is an Enterprise DACH account with 234,400 EUR ARR [DATA]. Customer A's ARR fell [DATA].",
+                     "ARR 234,400 EUR", {"DATA"})["label_mixups"]
+check(len(mix) == 2, "'Customer A is an Enterprise ... account' and 'Customer A's ARR' are both flagged", mix)
+ok = handover.check("The customer is an Enterprise account [DATA]. Customer A leaves in November [C2]. "
+                    "CS 1 is the account owner [DATA]. Customer B was the champion on the account [E1].",
+                    "", {"DATA", "C2", "E1"})["label_mixups"]
+check(not ok, "the customer as the account, and people doing things, are not flagged", ok)
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)

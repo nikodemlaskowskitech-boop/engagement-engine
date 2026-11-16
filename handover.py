@@ -379,7 +379,16 @@ def check(brief, sent, ids):
         if len(s) > 40 and not s.startswith("#") and not honest_gap and not re.search(r"\[[A-Z0-9, ]+\]", s):
             uncited.append(s[:120])
     numbers = sorted((x for x in numbers_in(brief) - numbers_in(sent) if float(x) > 3), key=float)
-    return {"unknown_citations": unknown, "uncited_sentences": uncited, "unverified_numbers": numbers}
+    # a person's label used for the account (16 Nov 2026: a brief opened "Barry White is an
+    # Enterprise DACH account": the model wrote a contact's label where "the customer" belonged)
+    mixups = sorted({m.group(0) for m in LABEL_AS_ACCOUNT.finditer(brief)})
+    return {"unknown_citations": unknown, "uncited_sentences": uncited, "unverified_numbers": numbers,
+            "label_mixups": mixups}
+
+
+LABEL_AS_ACCOUNT = re.compile(
+    r"\b(?:Customer [A-Z]|CS \d+)(?:'s)?\s+(?:(?:is|was)\s+an?\s+(?:[A-Z&][\w&]*\s+){1,4}account\b"
+    r"|(?:ARR|contract|renewal|utilisation|usage|commitment|add-ons?)\b)")
 
 
 def restore(text, key):
@@ -464,6 +473,10 @@ def run(account_id, dry_run, force=False):
     new = fingerprint(account_id, entry, docs)
     old = json.loads(meta_path.read_text(encoding="utf-8"))["parts"] if meta_path.exists() else {}
     changes = what_changed(old, new) if kept_brief_ok(account_id) else ["no finished brief yet"]
+    if kept_brief_ok(account_id) and not meta_path.exists():
+        # a brief from before briefs recorded what they were written from (5 Nov 2026): it may
+        # rest on an older data set entirely, so say that, not "no brief yet" next to a brief
+        changes = ["it was written before briefs recorded their sources, possibly on older data"]
     # "Out of date" marker for the cockpit. Never deleted, only rewritten: the engine in AWS may
     # not delete anything, so a removed file would live on in the bucket. Current = no changes.
     stale = OUT / f"{account_id}_stale.json"
@@ -515,6 +528,9 @@ def run(account_id, dry_run, force=False):
         flags.append("Numbers found in no source: " + ", ".join(checks["unverified_numbers"]))
     if checks["uncited_sentences"]:
         flags.append(f"{len(checks['uncited_sentences'])} sentence(s) without a source")
+    if checks["label_mixups"]:
+        flags.append("A person's label used for the account (the names put back may be wrong there): "
+                     + "; ".join(checks["label_mixups"]))
     brief += "\n\n---\n**Sources**\n- **DATA** the engine's own data\n" + restore(sources, {})
     brief += ("\n\n**Unverified** (check before relying on it):\n- " + "\n- ".join(flags)) if flags else "\n\nAll sentences cite a source; every number traces back to one."
     brief += "\n\n_Draft: the previous owner confirms it before the new owner relies on it._\n"
