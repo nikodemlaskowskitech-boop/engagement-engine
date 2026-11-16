@@ -206,6 +206,14 @@ stale_task_days = 14      # Tasks: an Open task turns amber (needs attention) on
 below_median_points = 10  # Leadership: "book met" turns red only this many points below the median (one point on a book of 7 is noise)
 min_compare = 10          # a with/without comparison shows rates only when each group has this many accounts; fewer = "too few to tell" (16 Nov 2026: "3 of 5 vs 0 of 1" read as "calls don't work")
 
+[demo]
+# The public demo site only (roles.py --site): who built it and why, with links, and a 3-minute tour
+# (16 Nov 2026, demo review: a visitor saw "a nice dashboard" and never learned who built it or why).
+# The in-house cockpit shows neither. Empty author = no strip.
+author = "Nikodem Laskowski"
+why = "a former Customer Success director. It's the cockpit I wished I'd had: an engine on AWS turns product usage into flags, tasks routed by tier, Slack follow-ups and AI briefs, and this page is its output."
+repo_url = "https://github.com/nikodemlaskowskitech-boop/engagement-engine"
+
 [roles]
 # Who sees what, and who may change what (ROLES.md explains each choice and how to change it).
 # One page per person, holding only what their role may see: data minimisation, not a filter.

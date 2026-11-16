@@ -263,6 +263,16 @@ button.small.primary { background: var(--accent); color: var(--surface); }
 button.small:disabled, td .act select:disabled { opacity: 0.5; cursor: not-allowed; }
 button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background: none; border: 0; text-decoration: underline; cursor: pointer; padding: 0; }
 .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.banner.who { border-left-color: var(--accent); background: transparent; margin: 6px 0 10px; }
+.banner.who b { color: var(--ink); }
+.banner.who a, .banner.who button { margin-left: 4px; }
+.tour { position: fixed; right: 20px; bottom: 20px; z-index: 50; width: min(380px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--accent); border-radius: 12px; padding: 16px 18px; box-shadow: 0 8px 28px rgba(0,0,0,0.35); }
+.tour .step { font-size: 0.78rem; color: var(--ink-3); letter-spacing: 0.04em; text-transform: uppercase; }
+.tour h3 { margin: 4px 0 6px; font-size: 1.02rem; }
+.tour p { margin: 0 0 12px; font-size: 0.9rem; color: var(--ink-2); }
+.tour .row { display: flex; gap: 8px; align-items: center; }
+.tour .row .end { margin-left: auto; }
+@media (max-width: 640px) { .tour { right: 16px; bottom: 16px; } }
 .banner { font-size: 0.88rem; border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 8px 12px; border-radius: 4px; margin: 0; }
 /* my book: one owner's morning page */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
@@ -402,7 +412,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <span class="asof" id="asof"></span>
       <label class="page-switch" id="page-switch-wrap" hidden>Viewing as <select id="page-switch">__PAGE_OPTIONS__</select></label>
     </div>
-    <p class="lede">Ten views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
+    <p class="banner who" id="who-strip" hidden></p>
+    <p class="lede"><span id="n-views"></span> views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
     <nav role="tablist" aria-label="Views">
       <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
       <button role="tab" id="tab-lead" data-view="lead" aria-selected="false">Leadership</button>
@@ -768,6 +779,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 <div class="tip" id="tip" hidden></div>
 
 <script id="views-data" type="application/json">__VIEWS_DATA__</script>
+<div class="tour" id="tour" role="dialog" aria-label="Tour" aria-live="polite" hidden></div>
 <script id="page-meta" type="application/json">__PAGE_META__</script>
 <script>
 (function () {
@@ -1006,6 +1018,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
   // tabs, with a bookmarkable #token per view
   const views = PAGE ? PAGE.tabs.slice() : ["overview", "lead", "case", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
+  // counted, never typed: "Ten views" stayed after a tab moved to its own page (16 Nov 2026 review)
+  $("n-views").textContent = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"][views.length - 1] || String(views.length);
   if (PAGE) {                                    // tabs this role doesn't have aren't in the file at all (roles.py)
     const nav = document.querySelector("nav[role=tablist]");
     for (const v of views) nav.append($("tab-" + v));
@@ -3176,5 +3190,55 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     show(views[0]);
   }
   else show(hashToken);
+
+  // The public demo site: who built it and why, and a 3-minute tour (16 Nov 2026, demo review: a
+  // visitor saw "a nice dashboard", never who built it or why, nor where to click first).
+  // Text and links from settings.toml [demo]; the in-house cockpit has neither.
+  const DEMO = PAGE && PAGE.sandbox && PAGE.demo;
+  const tourOk = !!(DEMO && $("view-lead") && $("view-timeline"));
+  if (DEMO) {
+    const w = $("who-strip");
+    w.innerHTML = `Built by <b>${esc(DEMO.author)}</b>, ${esc(DEMO.why)} ` +
+      (tourOk ? `<button type="button" class="linkish" id="tour-start">Take the 3-minute tour</button> · ` : "") +
+      `<a href="${esc(DEMO.repo_url)}#readme" target="_blank" rel="noopener">How it works (GitHub)</a>`;
+    w.hidden = false;
+  }
+  if (tourOk) {
+    // the account with the most ARR at risk at churn Act: one account, end to end
+    const churnAct = D.accounts.filter((a) => a.tier !== "Self-service" && a.flags.some((f) => f.flag === "churn" && f.status === "Act"))
+      .sort((a, b) => (valueOf(b.flags.find((f) => f.flag === "churn")) || 0) - (valueOf(a.flags.find((f) => f.flag === "churn")) || 0));
+    const pick = churnAct[0];
+    const STEPS = [
+      { v: "lead", h: "The leader's one page", p: "What's at risk, whether anyone has called, what's planned and the forecast, sorted by value. Click any number to list its accounts." },
+      pick && { v: "timeline", acc: pick.account_id, h: `One account, end to end: ${pick.account_name}`, p: "Usage, every CS touch, why the engine flagged it (in words, never a score), the plan and the renewal forecast." },
+      views.includes("tasks") && { v: "tasks", h: "Where the work goes", p: "Every task the engine sent, routed by tier: a named CSM for Enterprise, a regional pool for Scale, automation for Self-service. Owner, age and status." },
+      views.includes("outcomes") && { v: "outcomes", h: "Did it work?", p: "Today's flags held against what really happened at renewal: caught, missed and false alarms, and how much warning they gave." },
+      { h: "A page per person, and the documents", p: "Each person gets their own page, holding only their team's data. Open a CSM's morning page, or ask the tickets, emails and call notes in plain words.",
+        links: [DEMO.csm_page && [`${DEMO.csm_name}'s page (a CSM)`, DEMO.csm_page], ["Ask the documents", "search.html"]].filter(Boolean) },
+    ].filter(Boolean);
+    let at = 0;
+    const tour = $("tour");
+    const go = (i) => {
+      at = Math.max(0, Math.min(STEPS.length - 1, i));
+      const s = STEPS[at];
+      if (s.acc) { sel.value = s.acc; drawTimeline(s.acc); }
+      if (s.v) { show(s.v); $("view-" + s.v).scrollIntoView({ behavior: "smooth", block: "start" }); }
+      tour.innerHTML = `<div class="step">Step ${at + 1} of ${STEPS.length}</div><h3>${esc(s.h)}</h3><p>${esc(s.p)}</p>` +
+        (s.links ? `<p>${s.links.map(([l, href]) => `<a href="${esc(href)}">${esc(l)}</a>`).join(" · ")}</p>` : "") +
+        `<div class="row">${at ? '<button type="button" class="small" data-tour="back">Back</button>' : ""}` +
+        `${at < STEPS.length - 1 ? '<button type="button" class="small" data-tour="next">Next</button>' : ""}` +
+        `<button type="button" class="linkish end" data-tour="close">${at < STEPS.length - 1 ? "Close" : "Done"}</button></div>`;
+      tour.hidden = false;
+      const first = tour.querySelector('[data-tour="next"]') || tour.querySelector('[data-tour="close"]');
+      if (first) first.focus({ preventScroll: true });
+    };
+    tour.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-tour]"); if (!b) return;
+      if (b.dataset.tour === "next") go(at + 1); else if (b.dataset.tour === "back") go(at - 1); else tour.hidden = true;
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !tour.hidden) tour.hidden = true; });
+    $("tour-start").addEventListener("click", () => go(0));
+    if (/[?&]tour\b/.test(location.search)) go(0);         // a link can open the tour: index.html?tour
+  }
 })();
 </script>
