@@ -545,6 +545,16 @@ Read a file's entry before changing that file, and update the entry in the same 
   with the owned ARR on Business case and CS team), and churn Act; CS team: accounts at Act
   split into churn and expansion; Did it work?: everything really lost first, then the part
   on flagged accounts (reconciles with Business case). cockpit_test checks each.
+  Review fixes, timeline and phone (16 Nov 2026, both reviews): the timeline sentence counts
+  touches in the chart's window (it said "5 in 90 days" for five touches 160+ days old); the
+  summary shows one line per touch (three people at one workshop = one line, "· 3 people");
+  the flag lines' labels sit on the left, so the last value never covers them; the Find hint
+  is "Account name or ID" (it was cut off). Phone: compact tabs (still all in sight), no
+  intro line, the who strip without its why, the sandbox note's first sentence: the
+  Leadership headline is in the first screen (site_test checks it). flags.py: the at-risk
+  basis at Act says "at Act, the customer may leave" (it said "usage and users are falling",
+  wrong when Act came from one usage signal plus rising ingestion errors). The search page's
+  account IDs open that account's timeline (index.html#acc_...).
   Who and why, and a tour (16 Nov 2026, demo review: a visitor saw "a nice dashboard", never
   who built it or why, nor where to click first): on the public site only (roles.py --site
   puts settings.toml [demo] into the page's meta; the in-house cockpit has neither), a strip

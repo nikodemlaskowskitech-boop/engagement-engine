@@ -47,6 +47,8 @@ ol.results { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 
 ol.results li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .head { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.8rem; color: var(--ink-3); }
 .head b { color: var(--ink-2); font-weight: 600; }
+.head a.acc { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.head a.acc:hover b { color: var(--accent); }
 .title { margin: 4px 0 6px; font-weight: 500; }
 .line { margin: 0; color: var(--ink-2); font-size: 0.92rem; overflow-wrap: anywhere; }
 mark { background: var(--accent-soft); color: var(--ink); border-bottom: 1px solid var(--accent); padding: 0 1px; }
@@ -79,7 +81,7 @@ details.about li { margin: 4px 0; }
       <li>It finds and ranks documents. It doesn't write an answer: read the matching line and judge.</li>
       <li>It matches words, plus a short CS vocabulary (a "competitor" question also looks for a benchmark, an RFP, a trial). It doesn't understand meaning, so a question in unusual words finds less.</li>
       <li>It doesn't understand dates, amounts or "not", and it doesn't read the engine's numbers: "the biggest churn risk" is a question for the cockpit's Leadership tab, which ranks accounts by ARR at risk.</li>
-      <li>People appear as labels (Customer A, CS 1) and companies as "the customer": names were removed, and checked for, before the search ever saw the text.</li>
+      <li>People appear as labels (Customer A, CS 1) and companies as "the customer": names were removed, and checked for, before the search ever saw the text. So search by topic, not by company name; the account ID opens that account in the cockpit, with its name.</li>
       <li>It shows the top __TOP_K__ accounts. On a test set written by someone who never saw the search, the first result was right about 6 times in 10, and the top 5 held 3 of every 4 right accounts.</li>
       <li>What you type isn't stored anywhere.</li>
     </ul>
@@ -106,7 +108,7 @@ function show(results) {
   const list = $("results");
   list.innerHTML = results.map((r) => `
     <li>
-      <div class="head"><b>${esc(r.account_id)}</b><span>${esc(KIND[r.best.kind] || r.best.kind)} [${esc(r.best.id)}]</span><span>${esc(day(r.best.date))}</span></div>
+      <div class="head"><a class="acc" href="index.html#${encodeURIComponent(r.account_id)}" title="Open this account's timeline in the cockpit"><b>${esc(r.account_id)}</b></a><span>${esc(KIND[r.best.kind] || r.best.kind)} [${esc(r.best.id)}]</span><span>${esc(day(r.best.date))}</span></div>
       <p class="title">${highlight(r.best.title, r.matched)}</p>
       <p class="line">${highlight(r.best.line, r.matched)}</p>
       ${r.more.length ? `<p class="more">Also matched on this account: ${r.more.map(esc).join(", ")}</p>` : ""}
