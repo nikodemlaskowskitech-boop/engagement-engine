@@ -45,6 +45,7 @@ anthropic: ANTHROPIC_API_KEY in .env). Nothing needed with --dry-run.
 import csv
 import hashlib
 import json
+import os
 import re
 import sys
 from collections import Counter
@@ -376,6 +377,7 @@ def check(brief, sent, ids):
     for line in brief.splitlines():
         s = line.strip(" -*")
         honest_gap = s.lower().startswith("not in the sources")   # saying what's missing needs no source
+        honest_gap = honest_gap or s.rstrip().endswith("?")       # a question for the previous owner asserts nothing (16 Nov 2026)
         if len(s) > 40 and not s.startswith("#") and not honest_gap and not re.search(r"\[[A-Z0-9, ]+\]", s):
             uncited.append(s[:120])
     numbers = sorted((x for x in numbers_in(brief) - numbers_in(sent) if float(x) > 3), key=float)
@@ -551,10 +553,12 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     dry = "--dry-run" in sys.argv
     force = "--force" in sys.argv
+    # AWS: request_briefs.py --force acc_x reaches here as an environment variable on this step only
+    forced = {a for a in os.environ.get("CAIRNPATH_FORCE_BRIEFS", "").split(",") if a}
     ids = args or list(directory())
     tin = tout = 0
     for account_id in ids:
-        i, o = run(account_id, dry, force)
+        i, o = run(account_id, dry, force or account_id in forced)
         tin, tout = tin + i, tout + o
     if not dry:
         print(f"Written with {llm.describe()}")

@@ -54,6 +54,7 @@ A failing step is a real failure: run.json says FAILED, then the function raises
 
 import hashlib
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -74,7 +75,9 @@ STEPS = json.loads(os.environ.get("ENGINE_STEPS", "[]"))
 CODE = json.loads(os.environ.get("ENGINE_CODE", "[]"))   # files and folders copied into the work folder
 OPTIONAL = json.loads(os.environ.get("OPTIONAL_STEPS", "[]"))   # a failure here is a warning, not a failed run
 BRIEFS_STEP = os.environ.get("BRIEFS_STEP", "handover.py")   # the only step that calls the model: on request only
-DRY_RUN = BRIEFS_STEP + " --dry-run"                         # what every other run does instead (free)
+DRY_RUN = BRIEFS_STEP + " --dry-run"
+ACCOUNT_ID = re.compile(r"acc_[A-Za-z0-9_-]{1,40}")               # what a forced brief may name
+MAX_FORCE = 5                         # what every other run does instead (free)
 KEY_PARAMETER = os.environ.get("API_KEY_PARAMETER", "")    # Parameter Store name of the LLM API key
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "")          # who writes the briefs in AWS (settings [aws])
 LEDGER = os.environ.get("LEDGER_FILE", "ai_spend.csv")      # the AI spend ledger, kept between runs (outputs/)
@@ -271,6 +274,15 @@ def handler(event, context, s3=None, work=None, ssm=None):
                    event.get("trigger", "manual"))
     # briefs only when explicitly asked for, never on an S3 event (those carry Records)
     briefs = bool(event.get("briefs")) and not event.get("Records")
+    # a briefs request may name accounts to rewrite even if nothing changed (16 Nov 2026: a brief's
+    # checks improved, its sources didn't). Account IDs only, at most a few: anything else is refused.
+    force = event.get("force") or []
+    if force and (not briefs or not isinstance(force, list) or len(force) > MAX_FORCE
+                  or not all(isinstance(a, str) and ACCOUNT_ID.fullmatch(a) for a in force)):
+        summary = {"started_at": now(), "triggered_by": event.get("trigger", "manual"), "briefs": briefs,
+                   "status": "REFUSED", "reason": "force: a list of up to %d account IDs, with briefs" % MAX_FORCE}
+        print(json.dumps(summary))
+        return summary
     steps = [BRIEFS_STEP if briefs and s == DRY_RUN else s for s in STEPS]
     summary = {"started_at": now(), "triggered_by": trigger, "briefs": briefs, "code": code_version()}
 
@@ -304,7 +316,8 @@ def handler(event, context, s3=None, work=None, ssm=None):
         cache = {rel: md5(data / CACHE / rel) for rel in download(s3, OUTPUTS + CACHE, data / CACHE)}
         ledger = carry(s3, LEDGER, data)         # this month's AI spend so far: the budget counts it
         key = api_key(ssm or _ssm()) if BRIEFS_STEP in steps else None    # read only on a briefs request
-        ok, log, failed, times, warnings = run_steps(work, {"ANTHROPIC_API_KEY": key} if key else None, steps)
+        secrets = {"ANTHROPIC_API_KEY": key, **({"CAIRNPATH_FORCE_BRIEFS": ",".join(force)} if force else {})} if key else None
+        ok, log, failed, times, warnings = run_steps(work, secrets, steps)
         # everything the steps wrote, at any depth (tables/<name>/ for Athena), minus what came in,
         # minus redaction keys, minus cache files that didn't change (no new S3 version for nothing)
         written = []

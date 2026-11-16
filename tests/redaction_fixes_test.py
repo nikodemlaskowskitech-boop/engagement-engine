@@ -97,5 +97,9 @@ ok = handover.check("The customer is an Enterprise account [DATA]. Customer A le
                     "", {"DATA", "C2", "E1"})["label_mixups"]
 check(not ok, "the customer as the account, and people doing things, are not flagged", ok)
 
+unc = handover.check("## Ask the previous owner\n1. Have you replied to Customer B's email, or sent her the iOS timeline?\n"
+                     "2. The renewal is at risk because usage collapsed after the reorg in the spring.", "", {"DATA"})["uncited_sentences"]
+check(len(unc) == 1 and unc[0].startswith("2."), "a question for the previous owner needs no source; a claim still does (16 Nov 2026)", unc)
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)
