@@ -833,6 +833,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   6 Nov 2026), a name from the key, an email or a phone number; any hit
   stops the call for that account (no brief), lists what it found, and
   handover.py exits 1 (in AWS: a warning in run.json).
+  Label mix-ups and old briefs (16 Nov 2026, demo review: Yarrow Studio's brief opened
+  "Barry White is an Enterprise DACH account", a person's label where "the customer"
+  belonged, on data from before the 12 Nov regenerate): check() also lists label_mixups (a
+  Customer X / CS N label used as the account: "is an Enterprise ... account", "'s ARR /
+  contract / renewal / usage"), shown under Unverified like the other checks (ask.py too).
+  A brief with no _meta.json (written before briefs recorded their sources) is marked out
+  of date for that reason, not "no brief yet" next to a brief.
 - `stories/`: three hand-written account stories (Yarrow Studio: champion
   leaving and a budget cut; Nettle Foods: expansion with a competitor and an
   overage dispute; Driftwood Labs: shelfware with a renewal in two weeks),

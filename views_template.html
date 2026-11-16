@@ -1482,8 +1482,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       (h.why && h.why.length ? ` Last written because: ${esc(h.why.join("; "))}.` : "") + `</p>`;
     // out of date: the engine's free daily check (handover.py --dry-run) saw the context move on.
     // Briefs are rewritten only when the admin asks (request_briefs.py), never by a click here.
-    if (h.stale && h.stale.length) x += `<div class="ho-check ho-stale"><b>Out of date</b>: since it was written, ` +
-      `${esc(h.stale.join("; "))}. Briefs are rewritten only when the admin asks for it.</div>`;
+    if (h.stale && h.stale.length) x += `<div class="ho-check ho-stale"><b>Out of date</b>: ` +
+      `${/^it was written before/.test(h.stale[0]) ? "" : "since it was written, "}${esc(h.stale.join("; "))}. Briefs are rewritten only when the admin asks for it.</div>`;
     if (conf) x += `<p class="note">${current ? "Confirmed" : "Last confirmed"} by ${esc(conf.role === "manager" ? managerName(conf.by) + " (manager)" : ownerName[conf.by] || conf.by)}, ${whenText(conf.decided_at)}${conf.note ? ` · “${esc(conf.note)}”` : ""}</p>`;
     // the brief itself is long: folded until asked for (the checks stay in sight)
     x += `<details class="ho-fold" id="ho-fold"><summary>Read the brief</summary><div class="ho-brief">${briefHtml(h.brief, ids)}</div></details>`;

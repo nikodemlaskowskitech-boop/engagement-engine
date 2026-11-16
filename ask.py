@@ -119,7 +119,8 @@ def show(r):
     if c:
         flags = ([f"citations to sources that don't exist: {', '.join(c['unknown_citations'])}"] if c["unknown_citations"] else []) \
             + ([f"numbers found in no source: {', '.join(c['unverified_numbers'])}"] if c["unverified_numbers"] else []) \
-            + ([f"{len(c['uncited_sentences'])} sentence(s) without a source"] if c["uncited_sentences"] else [])
+            + ([f"{len(c['uncited_sentences'])} sentence(s) without a source"] if c["uncited_sentences"] else []) \
+            + ([f"a person's label used for the account: {'; '.join(c['label_mixups'])}"] if c.get("label_mixups") else [])
         print("\nUnverified (check before relying on it):\n  - " + "\n  - ".join(flags) if flags
               else "\nEvery sentence cites a source; every number traces back to one.")
 

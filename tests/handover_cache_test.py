@@ -127,6 +127,15 @@ ok = json.loads(stale.read_text(encoding="utf-8")) == {"changes": []}
 failed += not ok
 print(f"  {'PASS' if ok else 'FAIL'}  ...and the brief is current again (the mark rewritten as no changes, not deleted)")
 
+# a brief from before briefs recorded their sources (no _meta.json): 16 Nov 2026, the site
+# said "since it was written, no brief yet" next to a brief written on older data
+(handover.OUT / f"{ACC}_meta.json").unlink()
+step("a brief with no record of its sources, the free check", False, dry_run=True)
+marked = json.loads(stale.read_text(encoding="utf-8"))["changes"]
+ok = len(marked) == 1 and marked[0].startswith("it was written before briefs recorded their sources")
+failed += not ok
+print(f"  {'PASS' if ok else 'FAIL'}  ...marks it out of date for that reason, not 'no brief yet': {'; '.join(marked)}")
+
 shutil.rmtree(tmp)
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)
