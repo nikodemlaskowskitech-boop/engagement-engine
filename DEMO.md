@@ -20,7 +20,7 @@ had."
 
 [Leadership tab]
 
-"€1.5M of the €12.3M on CSM and pool books is at risk (the whole book is €14.7M),
+"€1.5M of the €12.3M Enterprise and Scale ARR is at risk (€325k of it has no owner yet; the whole book is €14.7M),
 across 12 accounts at Act. 10 of those 12 have had a call (a churn call, or a QBR
 held in the 30 days after the signal: the same rule on every tab), but only 3
 have a next step planned. That gap is the conversation
