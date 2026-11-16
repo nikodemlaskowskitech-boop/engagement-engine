@@ -545,6 +545,15 @@ Read a file's entry before changing that file, and update the entry in the same 
   with the owned ARR on Business case and CS team), and churn Act; CS team: accounts at Act
   split into churn and expansion; Did it work?: everything really lost first, then the part
   on flagged accounts (reconciles with Business case). cockpit_test checks each.
+  Who and why, and a tour (16 Nov 2026, demo review: a visitor saw "a nice dashboard", never
+  who built it or why, nor where to click first): on the public site only (roles.py --site
+  puts settings.toml [demo] into the page's meta; the in-house cockpit has neither), a strip
+  above the intro: built by [demo] author, [demo] why, a link to the repo's README, and on
+  the leader's page "Take the 3-minute tour": five steps (Leadership; the account with the
+  most ARR at risk at churn Act, on its timeline; Tasks; Did it work?; a CSM's page and the
+  search), Back / Next / Close, Escape closes, ?tour opens it. The intro counts the page's
+  tabs ("Nine views"), never a typed number. site_test checks the strip, the count and the
+  tour, and that the laptop's pages have no strip.
   Too few to tell (16 Nov 2026, both reviews: "3 of 5 churned with a call, 0 of 1 without"
   read as "calls don't work"): a with/without comparison shows rates only when every group
   has [cockpit] min_compare (10) accounts; fewer = the counts and "too few to tell", the

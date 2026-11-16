@@ -239,6 +239,10 @@ def build(export, template=None, out=PAGES, sandbox=False):
     for pid, person in everyone.items():
         page, meta = slice_export(export, pid, person)
         meta["sandbox"] = bool(sandbox)
+        if sandbox and SETTINGS.get("demo", {}).get("author"):      # the public site's who-and-why strip and tour
+            csm = next((o for o, p in everyone.items() if p["role"] == "csm"), None)
+            meta["demo"] = {**{k: SETTINGS["demo"][k] for k in ("author", "why", "repo_url")},
+                            "csm_page": files[csm] if csm else None, "csm_name": everyone[csm]["name"] if csm else None}
         options = "".join(f'<option value="{files[o]}"{" selected" if o == pid else ""}>'
                           f'{everyone[o]["name"]} ({kind[everyone[o]["role"]]})</option>' for o in everyone)
         html = strip_tabs(template, set(meta["tabs"]))

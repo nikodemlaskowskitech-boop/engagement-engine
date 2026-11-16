@@ -151,6 +151,37 @@ print(json.dumps(r))`;
     await c3.close(); await ctx.close();
   }
 
+  console.log("\nWho built it, and a 3-minute tour (demo review, 16 Nov 2026)");
+  {
+    const TOML = fs.readFileSync(path.join(ROOT, "settings.toml"), "utf8");
+    const demo = (k) => (TOML.split("[demo]")[1] || "").match(new RegExp(`^${k} = "([^"]*)"`, "m"))[1];
+    const ctx = await b.newContext(), p = await ctx.newPage(), errors = watch(p);
+    await p.goto(base + "index.html"); await p.waitForTimeout(600);
+    const strip = await p.textContent("#who-strip");
+    check(await p.isVisible("#who-strip") && strip.includes(demo("author")) && (await p.getAttribute("#who-strip a", "href")).startsWith(demo("repo_url")),
+      "the landing page says who built it and why, and links to the repo (from settings.toml [demo])", strip);
+    const tabs = (await p.$$("nav [role=tab]")).length;
+    const lede = await p.textContent(".lede");
+    const WORDS = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
+    check(lede.startsWith(`${WORDS[tabs - 1]} views`), `the intro counts the tabs on the page (${tabs}), never a typed number`, lede.slice(0, 40));
+    await p.click("#tour-start"); await p.waitForTimeout(300);
+    const seen = [];
+    for (let i = 0; i < 8; i++) {
+      seen.push([(await p.textContent("#tour .step")), await p.$eval("nav [aria-selected=true]", (e) => e.dataset.view)]);
+      const n = await p.$('[data-tour="next"]'); if (!n) break; await n.click(); await p.waitForTimeout(250);
+    }
+    const views = seen.map((s) => s[1]);
+    check(seen.length === 5 && /Step 1 of 5/.test(seen[0][0]) && views.slice(0, 4).join() === "lead,timeline,tasks,outcomes",
+      "the tour: 5 steps, Leadership, one account, Tasks, Did it work?", JSON.stringify(seen));
+    const links = await p.$$eval("#tour a", (as) => as.map((a) => a.getAttribute("href")));
+    check(links.includes("search.html") && links.some((h) => /^csm_\w+\.html$/.test(h)), "...ending on a CSM's page and the search", links.join(", "));
+    await p.click('[data-tour="close"]');
+    check(await p.isHidden("#tour") && !errors.length, "...and it closes, with no script errors", errors.join(" | "));
+    const p2 = await ctx.newPage(); await p2.goto(base + "csm_anna.html"); await p2.waitForTimeout(500);
+    check(await p2.isVisible("#who-strip") && !(await p2.$("#tour-start")), "a CSM's page: who built it, but no tour (it walks the leader's page)");
+    await ctx.close();
+  }
+
   console.log("\nThe laptop's pages stay as they were");
   for (const f of ["views.html", "pages/csm_mia.html"]) {
     const file = path.join(ROOT, "data", f);
@@ -158,6 +189,7 @@ print(json.dumps(r))`;
     const html = fs.readFileSync(file, "utf8"), m = html.match(/<script id="page-meta"[^>]*>([\s\S]*?)<\/script>/);
     const sandbox = m && m[1] !== "null" ? JSON.parse(m[1]).sandbox : false;
     check(!sandbox, `data/${f}: not in sandbox mode`);
+    check(!/id="who-strip"[^>]*>[^<]/.test(html), `data/${f}: no who-built-it strip (the in-house cockpit isn't a demo)`);
   }
 
   await b.close(); server.close();
