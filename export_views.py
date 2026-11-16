@@ -231,6 +231,7 @@ export = {
     "settings": {"fast_days": SETTINGS["journeys"]["act_for_days"],
                  "stale_task_days": SETTINGS["cockpit"]["stale_task_days"],
                  "below_median_points": SETTINGS["cockpit"]["below_median_points"],
+                 "min_compare": SETTINGS["cockpit"]["min_compare"],
                  "call_target_days": SETTINGS["journeys"]["act_for_days"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"],

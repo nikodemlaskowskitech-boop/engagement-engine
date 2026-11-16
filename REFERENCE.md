@@ -545,6 +545,11 @@ Read a file's entry before changing that file, and update the entry in the same 
   with the owned ARR on Business case and CS team), and churn Act; CS team: accounts at Act
   split into churn and expansion; Did it work?: everything really lost first, then the part
   on flagged accounts (reconciles with Business case). cockpit_test checks each.
+  Too few to tell (16 Nov 2026, both reviews: "3 of 5 churned with a call, 0 of 1 without"
+  read as "calls don't work"): a with/without comparison shows rates only when every group
+  has [cockpit] min_compare (10) accounts; fewer = the counts and "too few to tell", the
+  rows still list their accounts (Did a churn call help?, on every page; Business case's
+  calling-in-time bars). Under 0.1 points of GRR is said so, not "0.0 points".
   Account timeline window (14 Nov 2026, bug found by hand on the public site): the chart
   shows the last 90 days counted back from the data's own date (TL_DAYS). It began on a
   fixed 21 July from the 90-day era, so with a year of data the line ran off the chart
