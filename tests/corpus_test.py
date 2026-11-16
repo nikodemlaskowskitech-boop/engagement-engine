@@ -108,6 +108,10 @@ from datetime import date as _date                              # noqa: E402
 check(all(_date.fromisoformat(m["timestamp"][:10]).weekday() < 5 for m in meetings), "no meeting at a weekend")
 check(all(m["properties"]["topic"] in set(CALL_TOPIC.values()) and m["context"]["source"] == "cs_history"
           and m["event_name"] == "meeting_held" for m in meetings), "topics from the engagement schema, written as CS history")
+signed = {r["account_id"]: r["customer_since"] or r["contract_start"] for r in book.values()}
+early = [(d["account_id"], d["date"]) for d in docs if d["date"] <= signed[d["account_id"]]]
+check(not early, "no document from before the customer signed (bug found by hand 16 Nov 2026: four call notes were)", early)
+check(all(m["timestamp"][:10] > signed[m["account_id"]] for m in meetings), "...so no meeting before it either")
 owners = {r["account_id"]: r["csm_owner"] or r["pool_owner"] for r in book.values()}
 check(all(m["properties"]["owner_id"] == owners[m["account_id"]] for m in meetings),
       "each meeting is the account owner's (a Scale account's named pool member)")
