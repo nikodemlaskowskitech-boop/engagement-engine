@@ -201,7 +201,11 @@ Read a file's entry before changing that file, and update the entry in the same 
   day (calls moved off weekends, like generate_events), topic by purpose (CALL_TOPIC:
   churn worries = churn_call, more volume = growth_call, stuck = activation_call, the rest
   check_in), source cs_history. Effect: Act accounts called 8 -> 10 of 12 (DEMO.md). Detecting
-  calls recorded but never logged is a feature request in the spec. `tests/corpus_test.py`: seeded, read through documents.py,
+  calls recorded but never logged is a feature request in the spec. Nothing before the
+  customer signed (16 Nov 2026, found by hand: 22 documents on 3 young accounts, so their
+  meetings too, e.g. an activation call in July for a customer signed in October): a date
+  that falls before customer_since (or contract_start) is spread over the account's own
+  days instead, with the same random draws, so no other account moves. `tests/corpus_test.py`: seeded, read through documents.py,
   every key account has a document on its topic, routine documents everywhere, no trap
   is an answer, every person named in contacts.csv on the right side, every call note a
   logged meeting (same account and day, the owner's, never a weekend) and no meeting extra.
@@ -303,6 +307,11 @@ Read a file's entry before changing that file, and update the entry in the same 
   meaning; no dates, amounts or "not"; labels instead of names; top 5 and the held-out
   numbers in words (update them when the search changes); nothing typed is stored. The
   cockpit's sandbox banner now carries the same disclaimer and a link to it.
+  Numbers (16 Nov 2026: "what is my biggest churn" found nothing, with no reason why): the
+  lede says it reads what was written, not the numbers, and links to Leadership; a
+  no-match on a question that reads like one about numbers (NUMBERS: biggest, top, ARR,
+  churn, renewals, forecast...) says so and links to Leadership (index.html#lead). Sending
+  number questions to the engine's facts is a Phase 10 item.
   `tests/site_test.js` (search section): served with the real content policy, /search
   answered by the real handler over the real file: chips, results citing documents in the
   file, highlights, shareable ?q=, empty, 429, no match, phone width, no script error;

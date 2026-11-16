@@ -60,7 +60,7 @@ details.about li { margin: 4px 0; }
 <main>
   <a class="back" href="index.html">&larr; Back to the cockpit</a>
   <h1>Ask the documents</h1>
-  <p class="lede">Search the demo accounts' support tickets, emails and call notes in plain words. You get the accounts that match best, with the line that matched and its source.</p>
+  <p class="lede">Search the demo accounts' support tickets, emails and call notes in plain words. You get the accounts that match best, with the line that matched and its source. It reads what was written, not the numbers: for churn risk, ARR or renewals, see <a href="index.html#lead">Leadership in the cockpit</a>.</p>
   <p class="disclaimer" role="note">All companies, people and numbers in this demo are fictional and generated.</p>
 
   <form id="ask" role="search">
@@ -78,7 +78,7 @@ details.about li { margin: 4px 0; }
     <ul>
       <li>It finds and ranks documents. It doesn't write an answer: read the matching line and judge.</li>
       <li>It matches words, plus a short CS vocabulary (a "competitor" question also looks for a benchmark, an RFP, a trial). It doesn't understand meaning, so a question in unusual words finds less.</li>
-      <li>It doesn't understand dates, amounts or "not".</li>
+      <li>It doesn't understand dates, amounts or "not", and it doesn't read the engine's numbers: "the biggest churn risk" is a question for the cockpit's Leadership tab, which ranks accounts by ARR at risk.</li>
       <li>People appear as labels (Customer A, CS 1) and companies as "the customer": names were removed, and checked for, before the search ever saw the text.</li>
       <li>It shows the top __TOP_K__ accounts. On a test set written by someone who never saw the search, the first result was right about 6 times in 10, and the top 5 held 3 of every 4 right accounts.</li>
       <li>What you type isn't stored anywhere.</li>
@@ -89,6 +89,8 @@ details.about li { margin: 4px 0; }
 "use strict";
 const EXAMPLES = __EXAMPLES__;
 const KIND = { S: "Ticket", E: "Email", C: "Call" };
+// a question about the engine's numbers, not about what was written (for the empty-result hint)
+const NUMBERS = /\b(biggest|largest|most|top|how (many|much)|arr|revenue|value|forecast|at risk|renewals?|churn(ing)?|ranking|total)\b/i;
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const day = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -136,7 +138,13 @@ async function ask(q) {
   const results = body.results || [];
   status.textContent = results.length
     ? `${results.length} account${results.length > 1 ? "s" : ""}, best match first.`
-    : "No document matches those words. Try other words, or one of the examples.";
+    : NUMBERS.test(q)
+      ? "No document matches. That reads like a question about numbers: this search reads what customers and CS wrote, not the engine's figures. "
+      : "No document matches those words. Try other words, or one of the examples.";
+  if (!results.length && NUMBERS.test(q)) {               // 16 Nov 2026: "what is my biggest churn" found nothing, with no reason why
+    const a = document.createElement("a"); a.href = "index.html#lead"; a.textContent = "See the biggest risks on Leadership.";
+    status.append(a);
+  }
   show(results);
 }
 

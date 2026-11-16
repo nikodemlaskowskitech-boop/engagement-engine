@@ -326,10 +326,18 @@ def main():
                 traps[trap].add(acc)
                 docs.append(("trap", *TRAPS[trap]))
 
+        # nothing before the customer signed (16 Nov 2026: four call notes came before it, so
+        # their meetings did too); the same random draws as before, so other accounts don't move
+        since = date.fromisoformat(a["customer_since"] or a["contract_start"])
         for n, (topic, kind, tpl) in enumerate(docs):
-            day = as_of - timedelta(days=rng.randrange(5, 120))
+            back = rng.randrange(5, 120)
+            day = as_of - timedelta(days=back)
+            if day <= since:                   # a young account: spread over its own days instead
+                day = since + timedelta(days=1 + back % max(1, (as_of - since).days - 1))
             if kind == "call":                 # meetings never at weekends (generate_events' rule)
                 day += timedelta(days={5: -1, 6: 1}.get(day.weekday(), 0))
+                if day <= since:               # a Saturday just after signing: the Monday instead
+                    day += timedelta(days=2)
             when = datetime(day.year, day.month, day.day, rng.randrange(9, 17), rng.choice([0, 15, 30, 45]), tzinfo=tz)
             name = f"{day}_{slug(company)}_{topic.replace('_', '-')}-{n}"
             writer = f if topic == "billing_dispute" or (topic == "budget_cut" and kind == "email") else c

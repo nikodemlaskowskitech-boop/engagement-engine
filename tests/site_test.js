@@ -131,6 +131,11 @@ print(json.dumps(r))`;
     check(/try again/i.test(await s.textContent("#status")), "the rate limit (429): a friendly 'try again', not an error");
     await s.fill("#q", "zzqx vvbn"); await s.click("button.go"); await s.waitForTimeout(2500);
     check(/No document matches/.test(await s.textContent("#status")), "no match: says so and suggests the examples");
+    // 16 Nov 2026: "what is my biggest churn" found nothing, with no reason why
+    await s.fill("#q", "zzqx biggest churn"); await s.click("button.go"); await s.waitForTimeout(2500);
+    check(/numbers/.test(await s.textContent("#status")) && (await s.getAttribute("#status a", "href")) === "index.html#lead",
+      "a number question with no match: says the search doesn't read numbers, links to Leadership");
+    check(/Leadership in the cockpit/.test(await s.textContent(".lede")), "the page says up front what it reads and where the numbers are");
     const page2 = await ctx.newPage(), e2 = watch(page2);
     await page2.goto(base + "search.html?q=" + encodeURIComponent("Which customers need more capacity?"));
     await page2.waitForSelector("#results li", { timeout: 15000 });
