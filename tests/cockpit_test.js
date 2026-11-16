@@ -859,6 +859,14 @@ const segment = async (page, values) => {
     const tta = D.time_to_action;
     check(tf.includes(`of ${tta.length} accounts at Act (${tta.filter((r) => r.flag === "churn").length} churn, ${tta.filter((r) => r.flag === "expansion").length} expansion)`), "CS team splits its Act count into churn and expansion", tf);
     await tab(page, "outcomes");
+    // 16 Nov 2026 review: "3 of 5 churned with a call, 0 of 1 without" read as "calls don't work"
+    const MINC = D.settings.min_compare;
+    const callRows = await page.$$eval("#oc-calls tbody tr", (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent.trim())));
+    const callNote = await page.textContent("#oc-calls-note");
+    const fewCalls = callRows.some((r) => +r[1] < MINC);
+    check(MINC >= 2 && (fewCalls ? callRows.every((r) => r[2] === "too few to tell" && !/%/.test(r.join(" "))) && callNote.startsWith("Too few to tell")
+                                 : callRows.every((r) => /%/.test(r[2]))),
+      `Did a churn call help?: rates only with ${MINC}+ accounts per group, else "too few to tell" (${callRows.map((r) => r[1]).join(" vs ")})`, JSON.stringify(callRows) + " " + callNote);
     const vf = await page.textContent("#oc-value-finding"), vt = await page.textContent("#oc-value");
     const allLost = (vt.match(/All renewals[^€]*€[\d.]+[kM][^€]*€[\d.]+[kM][^€]*(€[\d.]+[kM])/) || [])[1];
     check(allLost && vf.startsWith(`Of ${allLost} really lost`) && /no churn flag/.test(vf), "Did it work? starts from everything lost, then the flagged part (reconciles with Business case)", vf);
