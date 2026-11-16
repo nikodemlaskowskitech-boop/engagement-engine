@@ -4,6 +4,7 @@ called in AWS (5 Nov 2026).
 
     python request_briefs.py          ask, then wait for the run and say what happened
     python request_briefs.py --no-wait  ask and return at once
+    python request_briefs.py --force acc_024   rewrite that brief even if its sources haven't changed
 
 Every other run (an upload, the daily schedule) only checks, for free, whether
 each brief is out of date; the cockpit shows which ones are. This starts one
@@ -17,6 +18,7 @@ nobody else. Sign in first: aws login --profile cairnpath.
 """
 
 import json
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -46,12 +48,13 @@ def last_run(s3):
         return {}
 
 
-def request(cfn, lam, s3, wait=True, sleep=time.sleep, clock=time.time):
+def request(cfn, lam, s3, wait=True, sleep=time.sleep, clock=time.time, force=()):
     asked_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     name = engine_function(cfn)
     # "Event": start it and return; the run takes a minute or two
     lam.invoke(FunctionName=name, InvocationType="Event",
-               Payload=json.dumps({"trigger": "briefs", "briefs": True}).encode("utf-8"))
+               Payload=json.dumps({"trigger": "briefs", "briefs": True,
+                                   **({"force": list(force)} if force else {})}).encode("utf-8"))
     print(f"Asked {name} to write the handover briefs ({asked_at}).")
     if not wait:
         print(f"See outputs/run.json in a couple of minutes (\"briefs\": true).")
@@ -74,9 +77,19 @@ def request(cfn, lam, s3, wait=True, sleep=time.sleep, clock=time.time):
     return 1
 
 
+def forced_ids(argv):
+    """--force acc_024 [acc_012]: rewrite these briefs even if their sources haven't changed."""
+    if "--force" not in argv:
+        return []
+    ids = [a for a in argv[argv.index("--force") + 1:] if not a.startswith("--")]
+    if not ids or not all(re.fullmatch(r"acc_[A-Za-z0-9_-]{1,40}", a) for a in ids) or len(ids) > 5:
+        sys.exit("--force takes 1 to 5 account IDs, e.g. --force acc_024")
+    return ids
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     import boto3
     session = boto3.Session(profile_name=AWS.get("profile") or None, region_name=AWS["region"])
     sys.exit(request(session.client("cloudformation"), session.client("lambda"), session.client("s3"),
-                     wait="--no-wait" not in sys.argv))
+                     wait="--no-wait" not in sys.argv, force=forced_ids(sys.argv)))

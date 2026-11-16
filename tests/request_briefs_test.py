@@ -70,6 +70,19 @@ check(len(lam.calls) == 1 and call["FunctionName"] == "CairnpathData-RunEngine-X
 check(call["InvocationType"] == "Event", "asynchronously: it starts the run and doesn't hold a connection open")
 check(json.loads(call["Payload"]) == {"trigger": "briefs", "briefs": True}, "with exactly {\"briefs\": true}")
 check(code == 0, "waits for that run (not an older one) and reports OK")
+lamf = Lam()
+rb.request(Cfn(), lamf, S3([done]), sleep=fake_sleep, clock=fake_clock, force=["acc_024"])
+check(json.loads(lamf.calls[0]["Payload"]) == {"trigger": "briefs", "briefs": True, "force": ["acc_024"]},
+      "--force acc_024: the request names the account (16 Nov 2026)")
+check(rb.forced_ids(["x", "--force", "acc_024", "acc_012"]) == ["acc_024", "acc_012"] and rb.forced_ids(["x"]) == [],
+      "--force reads account IDs after it")
+for bad in (["x", "--force"], ["x", "--force", "acc_1;ls"], ["x", "--force"] + [f"acc_{i}" for i in range(6)]):
+    try:
+        rb.forced_ids(bad); ok = False
+    except SystemExit:
+        ok = True
+    check(ok, f"--force refuses {bad[2:] or 'no ID'}")
+clock[0] = 0.0
 lam2 = Lam()
 check(rb.request(Cfn(), lam2, S3([None]), wait=False) == 0 and len(lam2.calls) == 1, "--no-wait: asks and returns")
 clock[0] = 0.0

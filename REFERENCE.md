@@ -852,6 +852,11 @@ Read a file's entry before changing that file, and update the entry in the same 
   6 Nov 2026), a name from the key, an email or a phone number; any hit
   stops the call for that account (no brief), lists what it found, and
   handover.py exits 1 (in AWS: a warning in run.json).
+  Questions and forced rewrites (16 Nov 2026, the live brief): a question for the previous
+  owner (a line ending in ?) needs no source, so it's no longer listed as unsourced.
+  CAIRNPATH_FORCE_BRIEFS (account IDs, comma-separated) forces those briefs; only the engine
+  Lambda sets it, on the briefs step only, from request_briefs.py --force acc_x (1 to 5 IDs;
+  anything else is refused before the run starts or the key is read).
   Label mix-ups and old briefs (16 Nov 2026, demo review: Yarrow Studio's brief opened
   "Barry White is an Enterprise DACH account", a person's label where "the customer"
   belonged, on data from before the 12 Nov regenerate): check() also lists label_mixups (a

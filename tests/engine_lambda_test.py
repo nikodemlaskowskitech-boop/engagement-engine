@@ -255,6 +255,7 @@ class FakeSSM:
 
 (bundle / "plain.py").write_text(
     "import os\nassert 'ANTHROPIC_API_KEY' not in os.environ, 'the key leaked to a plain step'\n"
+    "assert 'CAIRNPATH_FORCE_BRIEFS' not in os.environ, 'the forced list reached a plain step'\n"
     "print('plain step ran without the key')\n", encoding="utf-8")
 (bundle / "briefs.py").write_text(
     "import os, sys\nfrom pathlib import Path\n"
@@ -268,6 +269,7 @@ class FakeSSM:
     "for name, text in (('acc_1.md', 'brief'), ('acc_1_meta.json', '{}'), ('acc_1_key.json', '{\"Customer A\": \"Real Name\"}')):\n"
     "    (out / name).write_text(text, encoding='utf-8')\n"
     "(out / 'acc_1_stale.json').write_text('{\"changes\": []}', encoding='utf-8')\n"
+    "print('forced: ' + os.environ.get('CAIRNPATH_FORCE_BRIEFS', '-'))\n"
     "print('briefs written')\n", encoding="utf-8")
 h.CODE, h.STEPS = ENGINE_FILES + ["plain.py", "briefs.py"], ["plain.py", "briefs.py --dry-run"]
 h.BRIEFS_STEP, h.DRY_RUN, h.OPTIONAL = "briefs.py", "briefs.py --dry-run", ["briefs.py --dry-run", "briefs.py"]
@@ -309,6 +311,16 @@ down = h.handler(ASK, None, s3=FakeS3(bucket_with_demo("OK")), work=work, ssm=Fa
 del os.environ["BREAK_BRIEFS"]
 check(down["status"] == "OK" and any("briefs.py failed" in w for w in down["warnings"]),
       "the model API fails: a warning, and the cockpit still updates", down.get("warnings"))
+# --force acc_x (request_briefs.py): those briefs rewritten even if unchanged; IDs only (16 Nov 2026)
+s3f = FakeS3(bucket_with_demo("OK"))
+forced = h.handler({**ASK, "force": ["acc_024"]}, None, s3=s3f, work=work, ssm=FakeSSM("test-key-123"))
+check(forced["status"] == "OK" and "forced: acc_024" in s3f.objects[OUTPUTS + "last_run.txt"].decode(),
+      "force: the named account reaches the briefs step (and no plain step)", forced.get("warnings"))
+for bad, why in (({**ASK, "force": ["acc_1; rm -rf /"]}, "not an account ID"), ({**ASK, "force": "acc_024"}, "not a list"),
+                 ({"trigger": "manual", "force": ["acc_024"]}, "without a briefs request"),
+                 ({**ASK, "force": [f"acc_{i}" for i in range(6)]}, "more than 5")):
+    r = h.handler(bad, None, s3=FakeS3(bucket_with_demo("OK")), work=work, ssm=(spy := FakeSSM("test-key-123")))
+    check(r["status"] == "REFUSED" and spy.asked == [], f"force refused ({why}), before anything runs or the key is read", r)
 h.OPTIONAL = []
 
 print("\nEngine Lambda: the AI spend ledger carried from run to run (outputs/ai_spend.csv)")
