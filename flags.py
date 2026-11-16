@@ -118,7 +118,9 @@ def at_risk_sql():
         else:
             share = float(rule)
             amount.append(f"WHEN '{status}' THEN b.arr * {share}")
-            basis.append(f"WHEN '{status}' THEN '{'Whole ARR' if share == 1 else f'{share:.0%} of ARR'}: usage and users are falling'"
+            # the status's meaning, not one route to it: Act can also be one usage signal plus rising
+            # ingestion errors, with users flat (16 Nov 2026 review: "users are falling" on flat users)
+            basis.append(f"WHEN '{status}' THEN '{'Whole ARR' if share == 1 else f'{share:.0%} of ARR'}: at Act, the customer may leave'"
                          if status == "Act" else f"WHEN '{status}' THEN '{share:.0%} of ARR'")
     return ("CASE ch.status " + " ".join(amount) + " ELSE 0 END",
             "CASE ch.status " + " ".join(basis) + " END")

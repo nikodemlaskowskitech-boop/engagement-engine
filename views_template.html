@@ -332,7 +332,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 /* phone: tabs wrap, filters fold behind one button, tables read as cards */
 .seg-toggle { display: none; }
 @media (max-width: 640px) {
-  nav { flex-wrap: wrap; overflow-x: visible; }
+  nav { flex-wrap: wrap; overflow-x: visible; gap: 0 2px; }
+  nav button { font-size: 0.84rem; padding: 7px 8px 8px; }
+  .lede, .banner.who .why, #sandbox-note .more { display: none; }
+  .banner { font-size: 0.82rem; padding: 6px 10px; }
   .seg-toggle { display: inline-block; }
   .segbar:not(.open) > label, .segbar:not(.open) > .grp, .segbar:not(.open) > .acc-find { display: none; }
   table.cards, table.cards tbody, table.cards tr, table.cards td { display: block; width: auto; }
@@ -428,7 +431,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     </nav>
   </div>
   <div class="wrap">
-    <p class="banner" id="sandbox-note" hidden>Demo sandbox: all companies, people and numbers here are fictional and generated. <a href="search.html">Ask the documents</a>. What you save here stays in this browser only. Nobody else sees it, and nothing reaches the engine. Managers and CSMs can save; pick one under "Viewing as". <button type="button" class="linkish" id="sandbox-clear">Clear my changes</button></p>
+    <p class="banner" id="sandbox-note" hidden>Demo sandbox: all companies, people and numbers here are fictional and generated. <a href="search.html">Ask the documents</a>.<span class="more"> What you save here stays in this browser only. Nobody else sees it, and nothing reaches the engine. Managers and CSMs can save; pick one under "Viewing as".</span> <button type="button" class="linkish" id="sandbox-clear">Clear my changes</button></p>
     <p class="banner" id="carry-note" hidden></p>
     <div class="segbar" id="segbar" role="group" aria-label="Segment">
       <button type="button" class="small seg-toggle" id="seg-toggle" aria-expanded="false" aria-controls="segbar">Filters</button>
@@ -439,7 +442,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <span class="grp">Accounts</span>
       <label>Region <select id="seg-region"></select></label>
       <label>Tier <select id="seg-tier"></select></label>
-      <div class="acc-find"><label>Find <input type="search" id="seg-find" placeholder="Pin an account (name or ID)" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="seg-find-list"></label><ul class="acc-list" id="seg-find-list" role="listbox" hidden></ul></div>
+      <div class="acc-find"><label>Find <input type="search" id="seg-find" placeholder="Account name or ID" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="seg-find-list"></label><ul class="acc-list" id="seg-find-list" role="listbox" hidden></ul></div>
       <span class="pins" id="seg-pins" aria-label="Pinned accounts"></span>
       <span class="count" id="seg-count"></span>
       <button class="reset" id="seg-reset" hidden>Whole book</button>
@@ -1183,7 +1186,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     }
     for (const [v, label] of [[40, ph ? "churn 40%" : "churn line 40%"], [80, ph ? "expansion 80%" : "expansion line 80%"]]) {
       el("line", { x1: L, x2: W - R, y1: UY(v), y2: UY(v), stroke: "var(--ink-3)", "stroke-width": 1, "stroke-dasharray": "4 4" }, svg);
-      el("text", { x: W - R, y: UY(v) - 4, "text-anchor": "end" }, svg).textContent = label;
+      el("text", { x: L + 4, y: UY(v) - 4, "text-anchor": "start" }, svg).textContent = label;   // left: the line's last value is on the right
     }
     const pts = a.util.map((u, i) => (u == null || !inWin(D.util_dates[i]) ? null : [X(day(D.util_dates[i])), UY(u)])).filter(Boolean);
     const firstU = D.util_dates.find((d, i) => a.util[i] != null && inWin(d));
@@ -1282,12 +1285,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       `<span class="fact">ARR <b>${money(a.arr)}</b></span>` +
       `<span class="fact">Renews <b>${fmt(a.renewal_date)} ${a.renewal_date.slice(0, 4)}</b> (${days >= 0 ? "in " + days + " days" : days + " days ago"})</span>` +
       (topFlag ? `<span class="flag ${severity(topFlag)} inline"><span class="pill">${esc(topFlag.flag)} · ${esc(topFlag.status)}</span></span>` : `<span class="fact">No open flags</span>`);
-    const tc = (touchesBy[id] || []).length;
+    const tc = (touchesBy[id] || []).filter((t) => day(t.date) > day(D.as_of) - TL_DAYS).length;   // the chart's window, as the sentence says
     drawNext(id);
     drawForecast(id);
     drawHandover(id);
     $("tl-find").placeholder = `${a.account_name} (${a.account_id}): search another account`;
-    $("tl-finding").textContent = (segOn() && !inSeg(a) ? `Outside ${segName()}: ` : "") + `${a.account_name}: ${a.flags.length ? a.flags.length + " open flag" + (a.flags.length > 1 ? "s" : "") : "no open flags"}, ${tc} CS touch${tc === 1 ? "" : "es"} in 90 days.`;
+    $("tl-finding").textContent = (segOn() && !inSeg(a) ? `Outside ${segName()}: ` : "") + `${a.account_name}: ${a.flags.length ? a.flags.length + " open flag" + (a.flags.length > 1 ? "s" : "") : "no open flags"}, ${tc} CS touch${tc === 1 ? "" : "es"} in ${TL_DAYS} days.`;
   }
   // Next step ("action planned"): what the owner will do next and by when.
   // Overdue when the date passes with no meeting since it was set. A QBR
@@ -1320,7 +1323,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   function drawSummary(id) {
     const a = byId[id]; if (!a) return;
     const done = [];
-    for (const t of touchesBy[id] || []) { const f = DONE_TEXT[t.event]; if (!f) continue; const [what, who, customer] = f(t); done.push({ date: t.date, at: t.date, what, who, customer }); }
+    const same = {};                                     // one line per touch: three people at one workshop = one line, "3 people"
+    for (const t of touchesBy[id] || []) {
+      const f = DONE_TEXT[t.event]; if (!f) continue;
+      const k = [t.date, t.event, t.topic, t.owner_id].join("|");
+      if (same[k]) { same[k].n++; same[k].what = same[k].base + ` · ${same[k].n} people`; continue; }
+      const [what, who, customer] = f(t);
+      done.push(same[k] = { date: t.date, at: t.date, what, base: what, n: 1, who, customer });
+    }
     for (const t of TASKS.filter((x) => x.account_id === id && x.sent_on))
       done.push({ date: t.sent_on, at: t.sent_on, what: `Task sent: ${t.flag} ${t.status}`, who: `${ownerName[t.routed_to] || t.routed_to} · now ${t.action_status}`, customer: false });
     for (const s of nextSteps[id] || []) done.push({ date: String(s.decided_at).slice(0, 10), at: String(s.decided_at), what: `Next step planned: ${STEP_TYPES[s.type] || s.type} by ${fmt(s.due)}`, who: s.role === "manager" ? managerName(s.by) + " (manager)" : ownerName[s.by] || s.by, customer: false });
@@ -3198,7 +3208,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const tourOk = !!(DEMO && $("view-lead") && $("view-timeline"));
   if (DEMO) {
     const w = $("who-strip");
-    w.innerHTML = `Built by <b>${esc(DEMO.author)}</b>, ${esc(DEMO.why)} ` +
+    w.innerHTML = `Built by <b>${esc(DEMO.author)}</b><span class="why">, ${esc(DEMO.why)}</span> ` +
       (tourOk ? `<button type="button" class="linkish" id="tour-start">Take the 3-minute tour</button> · ` : "") +
       `<a href="${esc(DEMO.repo_url)}#readme" target="_blank" rel="noopener">How it works (GitHub)</a>`;
     w.hidden = false;

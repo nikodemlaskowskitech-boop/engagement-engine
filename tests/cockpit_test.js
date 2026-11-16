@@ -414,6 +414,20 @@ const segment = async (page, values) => {
         .filter((b) => b.width + b.height > 0 && (b.x < -1 || b.x + b.width > W + 1)).length;
     });
     check(out === 0, `timeline: every mark inside the chart, for the account with the most data (${longest.account_id})`, out + " outside");
+    // 16 Nov 2026 review: "5 CS touches in 90 days" counted the whole year, and three people at
+    // one workshop showed as three identical lines
+    const dupAcc = Object.entries(D.touches.reduce((m, x) => { const k = [x.account_id, x.date, x.event, x.topic, x.owner_id].join("|"); m[k] = (m[k] || 0) + 1; return m; }, {}))
+      .filter(([, n]) => n > 1).map(([k]) => k.split("|")[0])[0];
+    if (dupAcc) {
+      await page.goto(PAGE + "#" + dupAcc); await page.reload(); await page.waitForTimeout(500);
+      const DAY = 864e5, asOf = Date.parse(D.as_of);
+      const inWin = D.touches.filter((x) => x.account_id === dupAcc && asOf - Date.parse(x.date) < 90 * DAY).length;
+      const fin = await page.textContent("#tl-finding");
+      check(fin.includes(`${inWin} CS touch${inWin === 1 ? "" : "es"} in 90 days`), `timeline: touches counted in the 90-day window (${dupAcc}: ${inWin})`, fin);
+      await page.click("#tl-done-all").catch(() => {});
+      const lines = await page.$$eval("#tl-done li", (ls) => ls.map((l) => l.innerText.replace(/\s+/g, " ")));
+      check(new Set(lines).size === lines.length && lines.some((l) => / people/.test(l)), "timeline: one line per touch, '· N people' when several attended", lines.join(" | "));
+    }
     // tasks: Open is neutral until it has waited 14 days, then amber; Claimed is neutral
     await tab(page, "tasks");
     const bad2 = await page.$$eval("#view-tasks .badge", (bs) => bs.map((b) => {
