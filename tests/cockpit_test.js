@@ -841,12 +841,27 @@ const segment = async (page, values) => {
     await tab(page, "lead");
     const lf = await page.textContent("#ld-finding");
     const whole = D.accounts.reduce((t, a) => t + (a.arr || 0), 0);
-    check(/on CSM and pool books/.test(lf) && lf.includes(`whole book ${money(whole)}`), `Leadership names CSM and pool books and the whole book (${money(whole)})`, lf);
+    // 16 Nov 2026 review: €12.3M on Leadership vs €11.9M on Business case read as a wrong number.
+    // Each base now says what it counts, and the no-owner part closes the gap.
+    const isOwned = (a) => ["csm", "member"].includes((D.team.find((t) => t.owner_id === a.owner_id) || {}).owner_type);
+    const es = D.accounts.filter((a) => a.tier !== "Self-service"), owned = D.accounts.filter(isOwned);
+    const esArr = es.reduce((t, a) => t + (a.arr || 0), 0), ownedArr = owned.reduce((t, a) => t + (a.arr || 0), 0);
+    check(lf.includes(`${money(esArr)} Enterprise and Scale ARR`) && lf.includes(`whole book ${money(whole)}`), `Leadership names its base: Enterprise and Scale ARR (${money(esArr)}), and the whole book`, lf);
+    check(esArr === ownedArr || lf.includes(`${money(esArr - ownedArr)} of it has no owner yet`), `...and the part with no owner (${money(esArr - ownedArr)}), so it reconciles with the owned ARR`, lf);
+    check(/churn Act accounts have/.test(lf), "Leadership says churn Act, not just Act", lf);
     if (D.retention) {
       await tab(page, "case");
       const rec = await page.textContent("#cs-recon");
-      check(rec.startsWith(`Book ${money(whole)} =`) && /with a named CSM or pool member/.test(rec), "Business case reconciles the book: owned + Self-service", rec);
+      check(rec.startsWith(`Book ${money(whole)} =`) && rec.includes(`${money(ownedArr)} with a named CSM or pool member`), "Business case reconciles the book: owned + Self-service", rec);
     }
+    await tab(page, "team");
+    const tf = await page.textContent("#tm-finding");
+    const tta = D.time_to_action;
+    check(tf.includes(`of ${tta.length} accounts at Act (${tta.filter((r) => r.flag === "churn").length} churn, ${tta.filter((r) => r.flag === "expansion").length} expansion)`), "CS team splits its Act count into churn and expansion", tf);
+    await tab(page, "outcomes");
+    const vf = await page.textContent("#oc-value-finding"), vt = await page.textContent("#oc-value");
+    const allLost = (vt.match(/All renewals[^€]*€[\d.]+[kM][^€]*€[\d.]+[kM][^€]*(€[\d.]+[kM])/) || [])[1];
+    check(allLost && vf.startsWith(`Of ${allLost} really lost`) && /no churn flag/.test(vf), "Did it work? starts from everything lost, then the flagged part (reconciles with Business case)", vf);
     // a pool member sees pool-queue tasks on their own accounts, tagged
     const member = D.team.find((t) => t.owner_type === "member" && D.tasks.some((k) => {
       const a = D.accounts.find((x) => x.account_id === k.account_id), q = D.team.find((x) => x.owner_id === k.routed_to);

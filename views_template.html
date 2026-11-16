@@ -1627,7 +1627,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const ownerRows = teamRows(all);
     const csm = ownerRows.filter((r) => r.o.owner_type === "csm"), pool = ownerRows.filter((r) => r.o.owner_type === "pool");
     const sum = (rs, k) => rs.reduce((s, r) => s + r[k], 0);
-    $("tm-finding").textContent = !all.length ? `${segName()}: no account at churn or expansion Act with a CSM or a pool.` : `${segOn() ? segName() + ": " : ""}${all.length - called.length} of ${all.length} Act accounts have had no call yet, ${all.filter((a) => !a.call_date && day(D.as_of) - day(a.signal_date) >= (D.settings.call_target_days ?? 14)).length} of them past the ${D.settings.call_target_days ?? 14}-day target: ${sum(pool, "n") - sum(pool, "called")} with the Scale pools, ${sum(csm, "n") - sum(csm, "called")} with named CSMs.`;
+    $("tm-finding").textContent = !all.length ? `${segName()}: no account at churn or expansion Act with a CSM or a pool.` : `${segOn() ? segName() + ": " : ""}${all.length - called.length} of ${all.length} accounts at Act (${all.filter((r) => r.flag === "churn").length} churn, ${all.filter((r) => r.flag === "expansion").length} expansion) have had no call yet, ${all.filter((a) => !a.call_date && day(D.as_of) - day(a.signal_date) >= (D.settings.call_target_days ?? 14)).length} of them past the ${D.settings.call_target_days ?? 14}-day target: ${sum(pool, "n") - sum(pool, "called")} with the Scale pools, ${sum(csm, "n") - sum(csm, "called")} with named CSMs.`;
 
     // dot plot (redesigned 10 Nov 2026): one axis, days since the signal, for every Act account.
     // Called = a filled mark on the day of the call. Not called yet = an open ring at how long it
@@ -2150,7 +2150,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const groups = ["Act", "Watch", "Shelfware", "No churn flag"].map((g) => [g, V.filter((r) => (r.flag_status || "No churn flag") === g)]).filter(([, xs]) => xs.length);
       groups.push(["All renewals", V]);
       const fl = V.filter((r) => r.flagged), lostF = sumV(fl, "lost_arr"), ruleF = sumV(fl, "data_at_risk"), wholeF = sumV(fl, "arr");
-      $("oc-value-finding").textContent = fl.length ? `Flagged accounts lost ${money(lostF)}; the rule said ${money(ruleF)} at risk, and counting their whole ARR would have said ${money(wholeF)}.` : "No flagged account renewed in the period.";
+      const lostAll = sumV(V, "lost_arr");
+      $("oc-value-finding").textContent = fl.length ? `Of ${money(lostAll)} really lost at renewal, ${money(lostF)} was on accounts the churn flags had flagged and ${money(lostAll - lostF)} on accounts with no churn flag. For the flagged ones the rule said ${money(ruleF)} at risk (their whole ARR: ${money(wholeF)}).` : "No flagged account renewed in the period.";
       $("oc-value").innerHTML = `<table class="nosort"><thead><tr><th>Status today</th><th class="r">Renewals</th><th class="r">ARR</th><th class="r">At risk (rule)</th><th class="r">Really lost</th><th class="r">Lost / at risk</th></tr></thead><tbody>` +
         groups.map(([g, xs]) => { const ar = sumV(xs, "data_at_risk"), lo = sumV(xs, "lost_arr");
           return `<tr class="click" tabindex="0" data-k="${g}"><td>${g === "All renewals" ? "<b>All renewals</b>" : esc(g)}</td><td class="r num">${xs.length}</td><td class="r num">${money(sumV(xs, "arr"))}</td><td class="r num">${ar ? money(ar) : "–"}</td><td class="r num">${money(lo)}</td><td class="r num">${ar ? pct(lo, ar) + "%" : "–"}</td></tr>`; }).join("") + "</tbody></table>";
@@ -2558,6 +2559,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
     const atRisk = sum(churn, (a) => valueOf(flagOf(a, "churn"))), upside = sum(growth, (a) => valueOf(flagOf(a, "expansion")));
     const bookArr = sum(accs.filter(person), (a) => a.arr), wholeArr = sum(accs, (a) => a.arr);
+    // Enterprise and Scale ARR, owned or not: the part with no owner yet is said, so it reconciles
+    // with Business case and CS team, which count only accounts with a named CSM or pool member
+    const unownedArr = sum(accs.filter((a) => person(a) && !["csm", "member"].includes((teamById[a.owner_id] || {}).owner_type)), (a) => a.arr);
     const act = churn.filter((a) => flagOf(a, "churn").status === "Act");
     // action taken: the team report's rule only (time_to_action: a churn call, or a QBR held after the signal)
     const called = (a) => { const t = D.time_to_action.find((r) => r.account_id === a.account_id && r.flag === "churn"); return !!(t && t.call_date); };   // the same rule as every tab: time_to_action
@@ -2566,7 +2570,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const gaps = accs.filter((a) => { const f = (forecasts[a.account_id] || []).slice(-1)[0]; return f && forecastGap(a, f); });
     const actCalled = act.filter(called).length, actPlanned = act.filter(planned).length;
     $("ld-finding").textContent = churn.length
-      ? `${segOn() ? segName() + ": " : ""}${money(atRisk)} of ${money(bookArr)} on CSM and pool books is at risk (whole book ${money(wholeArr)}); ${!act.length ? "no account is at Act." : act.length === actPlanned ? `all ${act.length} Act accounts have a next step planned.` : `${act.length - actPlanned} of ${act.length} Act accounts have no next step planned.`}`
+      ? `${segOn() ? segName() + ": " : ""}${money(atRisk)} of ${money(bookArr)} Enterprise and Scale ARR is at risk (${unownedArr ? `${money(unownedArr)} of it has no owner yet; ` : ""}whole book ${money(wholeArr)}); ${!act.length ? "no account is at churn Act." : act.length === actPlanned ? `all ${act.length} churn Act accounts have something planned.` : `${act.length - actPlanned} of ${act.length} churn Act accounts have nothing planned.`}`
       : `${segName()}: no CSM or pool account at churn risk.`;
     // not picked up: every task still Open, oldest first (amber past the stale line, like Tasks)
     const STALE = D.settings.stale_task_days || 14;

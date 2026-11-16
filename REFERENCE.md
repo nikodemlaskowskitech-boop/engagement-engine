@@ -539,6 +539,12 @@ Read a file's entry before changing that file, and update the entry in the same 
   meanings: not called = red; the Called column neutral; an Open task neutral, amber
   once it has waited [cockpit] stale_task_days (14); Claimed neutral, Done green.
   cockpit_test.js checks each.
+  One number, one definition (16 Nov 2026, CS leader review: "€12.3M here, €11.9M there",
+  "12 Act here, 19 there" read as wrong numbers): each base says what it counts. Leadership:
+  ARR at risk of Enterprise and Scale ARR, with the part that has no owner yet (it reconciles
+  with the owned ARR on Business case and CS team), and churn Act; CS team: accounts at Act
+  split into churn and expansion; Did it work?: everything really lost first, then the part
+  on flagged accounts (reconciles with Business case). cockpit_test checks each.
   Account timeline window (14 Nov 2026, bug found by hand on the public site): the chart
   shows the last 90 days counted back from the data's own date (TL_DAYS). It began on a
   fixed 21 July from the 90-day era, so with a year of data the line ran off the chart
