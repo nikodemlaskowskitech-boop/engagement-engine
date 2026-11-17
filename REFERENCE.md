@@ -545,6 +545,14 @@ Read a file's entry before changing that file, and update the entry in the same 
   with the owned ARR on Business case and CS team), and churn Act; CS team: accounts at Act
   split into churn and expansion; Did it work?: everything really lost first, then the part
   on flagged accounts (reconciles with Business case). cockpit_test checks each.
+  Not reached (17 Nov 2026, forecast spec step 1b, from the CS leader review: Ironwood at Act
+  with no live task, Vantage claimed 35 days with no call): a Leadership panel judged on the
+  account, from time_to_action, never the task: every Act account with no call, its days left
+  or "overdue N d" (its tier's reach_days from the signal), and whether its task is open,
+  claimed or missing. Tasks has a "Reach by" column on Act tasks, and "Now:" under a live
+  task whose flag's ask got more urgent (a deadline in the flag's text the task lacks, or a new
+  status; a reworded ask is noise). facts.py exports each flag's action. "Not picked up" stays,
+  as queue hygiene.
   Reach in time, by tier (17 Nov 2026, the forecast spec): one rule, settings [journeys]
   reach_days (Enterprise 7, Scale 14), read everywhere "in time" means anything: journeys.py's
   escalation, the sieve, CS team (a target line per group, "past their tier's target"), Tasks

@@ -73,7 +73,8 @@ def flags_by_account():
         with path.open(encoding="utf-8") as f:
             for r in csv.DictReader(f):
                 flags.setdefault(r["account_id"], []).append(
-                    {"flag": flag, "status": r["status"], "reasons": r["reasons"], "routed_to": r["routed_to"]})
+                    {"flag": flag, "status": r["status"], "reasons": r["reasons"], "routed_to": r["routed_to"],
+                     "action": r.get("action", "")})      # what the flag asks for today (a task's text can lag it)
     value_path = output_file("account_value")
     if not value_path.exists():
         sys.exit(f"{value_path} is missing: run python flags.py")
