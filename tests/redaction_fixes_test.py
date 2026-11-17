@@ -101,5 +101,10 @@ unc = handover.check("## Ask the previous owner\n1. Have you replied to Customer
                      "2. The renewal is at risk because usage collapsed after the reorg in the spring.", "", {"DATA"})["uncited_sentences"]
 check(len(unc) == 1 and unc[0].startswith("2."), "a question for the previous owner needs no source; a claim still does (16 Nov 2026)", unc)
 
+k = {"Customer A": "Barry White", "Customer B": "Ines Keller", "Customer C": "Martin Schulz"}
+got = [handover.restore(s, k) for s in ("promised in writing to Customers A and C, not B.", "Customers A, B or C", "Plan B stays.")]
+check(got == ["promised in writing to Barry White and Martin Schulz, not Ines Keller.", "Barry White, Ines Keller or Martin Schulz", "Plan B stays."],
+      "grouped labels get their names back ('Customers A and C, not B' stayed as letters in a live brief, 17 Nov 2026)", got)
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)

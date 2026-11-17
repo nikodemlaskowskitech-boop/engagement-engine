@@ -852,6 +852,10 @@ Read a file's entry before changing that file, and update the entry in the same 
   6 Nov 2026), a name from the key, an email or a phone number; any hit
   stops the call for that account (no brief), lists what it found, and
   handover.py exits 1 (in AWS: a warning in run.json).
+  Grouped labels (17 Nov 2026, the rewritten live brief: "promised to Customers A and C, not
+  B" kept the letters): restore() spells each letter out first ("Customer A and Customer
+  C", and "not B" when Customer B is in the key), the model's own and / or kept. A forced
+  rewrite says "an admin asked for a rewrite" in the cockpit, not "--force".
   Questions and forced rewrites (16 Nov 2026, the live brief): a question for the previous
   owner (a line ending in ?) needs no source, so it's no longer listed as unsourced.
   CAIRNPATH_FORCE_BRIEFS (account IDs, comma-separated) forces those briefs; only the engine
