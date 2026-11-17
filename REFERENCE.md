@@ -275,6 +275,14 @@ Read a file's entry before changing that file, and update the entry in the same 
   company, organisation or domain (320 strings) and no email or phone, checked apart
   from the redaction; every document there; the redacted file finds the same right
   accounts as the raw text.
+- `infra/lock_lambda.py` and `infra/locks/`: the Lambdas' libraries locked (17 Nov 2026, supply chain,
+  chosen by risk: the engine Lambda reads the API key, so nothing in it may float). Every package
+  the engine and search functions install, sub-dependencies included, pinned to the exact Linux
+  arm64 file by its sha256. bundle.py installs with --require-hashes --no-deps and stops if a pin in
+  requirements.txt moved without a new lock. Made on the laptop (needs PyPI). Not locked: the
+  laptop's own venv (it doesn't reinstall by itself). With it: Dependabot alerts (GitHub settings),
+  the new-package rule in CLAUDE.md, the cdk CLI pinned (infra/cdk-cli-version.txt). Weighed and
+  left out: pip-audit (Dependabot reads the same advisories), a laptop lock, an SBOM.
 - `infra/lambdas/search/` (13 Nov 2026): the public search on the demo site. handler.py: GET
   ?q= (empty or over [aws] search_max_chars: 400; not GET: 405), BM25 with synonyms over its
   bundled documents.jsonl (search_export.py's file), top [search] site_top_k accounts with

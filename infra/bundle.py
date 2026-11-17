@@ -9,6 +9,7 @@ fetch those builds from any laptop (--platform), so no Docker is needed. The
 versions come from requirements.txt, so the laptop and AWS always match.
 """
 
+import hashlib
 import os
 import re
 import shutil
@@ -34,6 +35,10 @@ ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "ingest.py", 
                 "roles.py"]                             # export_views.py builds the role pages with it
 NEVER_BUNDLE = ["answer_key.json", "README.md"]     # stories/: the test's answer key never reaches AWS
 LAMBDA_PACKAGES = ["duckdb", "anthropic"]           # third-party libraries the engine needs, pinned in requirements.txt
+# The Lambdas' libraries, sub-dependencies included, each pinned to one file by its hash
+# (17 Nov 2026, supply chain): a hijacked release of httpx or pydantic can't slip into the
+# function that reads the API key. Made on the laptop by infra/lock_lambda.py.
+LOCKS = {"engine": INFRA / "locks" / "engine.txt", "search": INFRA / "locks" / "search.txt"}
 LAMBDA_PLATFORMS = ["manylinux_2_28_aarch64", "manylinux_2_27_aarch64", "manylinux2014_aarch64"]
 
 
@@ -81,16 +86,35 @@ def pinned(package):
     return re.search(rf"^{re.escape(package)}==([\w.]+)", text, re.M).group(1)
 
 
+def lock_for(packages):
+    """The lock file for a set of packages, after checking it still matches requirements.txt:
+    a changed pin with an old lock stops the build (run python infra/lock_lambda.py)."""
+    name = "search" if list(packages) == SEARCH_PACKAGES else "engine"
+    path = LOCKS[name]
+    if not path.exists():
+        sys.exit(f"{path} is missing: run python infra/lock_lambda.py (laptop, venv on)")
+    locked = dict(re.findall(r"^([\w.-]+)==([\w.]+) --hash=sha256:[0-9a-f]{64}$", path.read_text(encoding="utf-8"), re.M))
+    stale = [p for p in packages if locked.get(p.lower()) != pinned(p)]
+    if stale:
+        sys.exit(f"{path} doesn't match requirements.txt for {', '.join(stale)}: run python infra/lock_lambda.py")
+    return path
+
+
 def lambda_deps(packages=None):
     """The engine's libraries built for Lambda (Linux arm64, Python 3.13), downloaded once per
-    set of versions and reused. pip picks the Linux builds even on a Windows laptop."""
-    pins = [f"{p}=={pinned(p)}" for p in (packages or LAMBDA_PACKAGES)]
-    cache = BUILD / ("deps_" + "_".join(pin.replace("==", "-") for pin in pins))
+    lock and reused. pip picks the Linux builds even on a Windows laptop. Exactly the locked
+    files: --require-hashes refuses a file whose hash differs, --no-deps anything not locked."""
+    packages = packages or LAMBDA_PACKAGES
+    lock = lock_for(packages)
+    pins = [f"{p}=={pinned(p)}" for p in packages]
+    tag = hashlib.sha256(lock.read_bytes()).hexdigest()[:8]
+    cache = BUILD / ("deps_" + "_".join(pin.replace("==", "-") for pin in pins) + "_" + tag)
     if not (cache / ".complete").exists():
         shutil.rmtree(cache, ignore_errors=True)
         cmd = [sys.executable, "-m", "pip", "install", "--quiet", "--target", str(cache),
                "--implementation", "cp", "--python-version", "3.13", "--only-binary=:all:",
-               *[a for p in LAMBDA_PLATFORMS for a in ("--platform", p)], *pins]
+               *[a for p in LAMBDA_PLATFORMS for a in ("--platform", p)],
+               "--require-hashes", "--no-deps", "-r", str(lock)]
         print(f"Fetching {', '.join(pins)} for Lambda (Linux arm64, Python 3.13) ...")
         subprocess.run(cmd, check=True)
         (cache / ".complete").write_text("ok")
