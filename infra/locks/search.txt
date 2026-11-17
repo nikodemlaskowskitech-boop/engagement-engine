@@ -1,0 +1,2 @@
+# made by infra/lock_lambda.py: do not edit by hand
+duckdb==1.5.6 --hash=sha256:364992ba1089a2b327391cfcb68fd0bd0ce9090cf293baef861a0ba6847abfee

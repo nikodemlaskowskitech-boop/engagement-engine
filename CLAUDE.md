@@ -25,6 +25,14 @@ read a file's entry there before changing the file, and update it in the same PR
   run scripts from the repo root (paths are relative to it). CDK runs from
   `infra/` with `--profile cairnpath`.
 - Pinned dependencies live in `requirements.txt`. Add, never overwrite.
+- A new package (17 Nov 2026, supply chain; AI tools suggest names that don't exist, and
+  attackers register them): only with a reason we can't meet with what's installed. Before
+  adding it, check on PyPI (or npm) that the exact name is the project we mean: its own
+  homepage and repo, a known maintainer, releases for 6+ months, real downloads; no
+  look-alikes (python-dateutil, not dateutil). Pin it with a one-line reason. If a Lambda
+  uses it, run `python infra/lock_lambda.py` (Lambda libraries are locked with hashes).
+  Never pick the release from the last 2 weeks. The cdk CLI: `npm install -g aws-cdk@<the
+  version in infra/cdk-cli-version.txt>`.
 - Thresholds and time windows live in `settings.toml`, not in the scripts.
 - Integrations are configuration, not code: anything tied to one workspace,
   account or environment (Slack channels and member IDs, URLs, the LLM model
@@ -71,6 +79,7 @@ Docs-only PRs need none.
 | `infra/`, or what an engine step imports | `tests/infra_test.py` (Nikodem: needs aws_cdk), `tests/check_lambda_test.py`, `tests/engine_lambda_test.py`, `tests/slack_lambda_test.py` |
 | `slack_loop.py`, `listener.py` | `tests/slack_lambda_test.py` |
 | `infra/lambdas/search/`, `search.py`, `documents.py` | `tests/search_lambda_test.py` |
+| `infra/bundle.py`, `infra/lock_lambda.py`, `infra/locks/`, a pin a Lambda uses | `tests/lambda_lock_test.py` |
 | `upload.py` / `pull_clicks.py` / `site_cert.py` / `put_key.py` / `request_briefs.py` | its own `tests/<name>_test.py` |
 | `guardduty_report.py` / `access_report.py` | its own `tests/<name>_test.py` |
 | IAM roles or policies | `tests/security_check_test.py`; after the deploy Nikodem runs `python security_check.py` (live) |
@@ -324,7 +333,8 @@ Tests: `tests/`, one file per area (see Testing above).
   (#166-169) and the local MCP server (mcp_server.py) the same day; "ask about this account" (ask.py) 14 Nov 2026; next
   vectors next to keywords, a remote MCP server (sign-in first), an AI
   cost demo (AI_COST.md), and last a live Ask box in the cockpit.
-- Waiting on AWS: Bedrock quota (ask again early December 2026). Lambda concurrency
+- Bedrock quota for Claude declined again 17 Nov 2026 (new account): no need to ask; AWS
+  re-evaluates by itself as usage builds. Briefs use the Anthropic API meanwhile. Lambda concurrency
   quota approved 14 Nov 2026 (1000): engine one run at a time, search capped at 5. GuardDuty trial: keep or switch off before about 5 Dec 2026.
 - Later (ARCHITECTURE.md): rules out of the page tab by tab, every script as
   `add_views` + `main()`, events uploaded as Parquet, the cockpit split.
