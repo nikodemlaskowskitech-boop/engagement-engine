@@ -213,6 +213,7 @@ button.link.back { display: inline-block; margin: 0 0 8px; padding: 4px 0; font-
 .pin-x { font: 600 0.9rem var(--font-body); color: var(--accent); background: none; border: 0; cursor: pointer; padding: 0 4px; line-height: 1; }
 .segbar.on { box-shadow: inset 0 -2px 0 var(--accent-soft); }
 /* tasks */
+.badge.overdue { background: var(--critical); color: var(--on-strong, #fff); }
 .badge { display: inline-block; font: 600 0.72rem var(--font-body); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
 .badge.Open { background: var(--bg); color: var(--ink-2); border: 1px solid var(--rule); }
 .badge.Open.stale, .badge.Draft { background: var(--warning-bg); color: var(--warning-ink); border: 0; }
@@ -481,6 +482,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <div class="panel" id="ld-trail-panel" hidden>
         <h2 id="ld-trail-title"></h2>
         <div class="tablewrap" id="ld-trail-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Not reached: accounts at Act past their deadline</h2>
+        <p class="finding small" id="ld-reach-finding"></p>
+        <div class="examples tablewrap" id="ld-reach"></div>
+        <p class="note">Every account at churn or expansion Act with a CSM or a pool, judged on the account: reached means a call or meeting logged since its signal, within its tier's days (<span id="ld-reach-days"></span>). A task claimed in Slack doesn't count, and an account still counts when its task is missing.</p>
       </div>
       <div class="grid2">
         <div class="panel">
@@ -815,6 +822,18 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const REACH = (tier) => ((D.settings.reach_days || {})[tier] ?? D.settings.reach_days_other ?? 14);
   const REACH_TEXT = Object.entries(D.settings.reach_days || {}).map(([tr, d], i) => (i ? `${d} for ${tr}` : `${d} days for ${tr}`)).join(", ");
   const tierOf = (id) => (byId[id] || {}).tier;
+  // the account's clock to reach the customer: from its signal, by its tier's days; judged on the
+  // account (a call or meeting logged), never on its task (a claim isn't contact). 17 Nov 2026.
+  function reachOf(id, flag) {
+    const r = (D.time_to_action || []).find((x) => x.account_id === id && x.flag === flag);
+    if (!r) return null;
+    const n = REACH(tierOf(id));
+    if (r.call_date) return { reached: r.call_date, n };
+    return { left: n - (day(D.as_of) - day(r.signal_date)), n, signal: r.signal_date };
+  }
+  const liveT = (t) => t.action_status === "Open" || t.action_status === "Claimed";
+  const reachBadge = (s) => !s ? "–" : s.reached ? `<span class="badge Done">reached ${fmt(s.reached)}</span>`
+    : s.left >= 0 ? `<span class="badge Open">${s.left} d left</span>` : `<span class="badge overdue">overdue ${-s.left} d</span>`;
   const REACH_SHORT = Object.entries(D.settings.reach_days || {}).map(([tr, d]) => `${d} d ${tr}`).join(", ");
   // a with/without comparison shows rates only when every group has [cockpit] min_compare accounts
   // (16 Nov 2026 review: "3 of 5 churned with a call, 0 of 1 without" read as "calls don't work")
@@ -2255,6 +2274,16 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       return `<span class="pending">Going to ${esc(ownerName[a.to_owner] || a.to_owner)} on the next run</span> ${live ? `<button class="link" data-undo="${esc(docId("assign", t))}">Undo</button>` : ""}`;
     return live ? `<div class="act">${assignSelect(t)}</div>` : "—";
   }
+  // the flag's ask today, under a live task whose text has fallen behind it (16 Nov 2026 review:
+  // Driftwood's task still said "agree a ramp plan" while its flag said "call this week")
+  const nowAsk = (t) => {
+    const f = ((byId[t.account_id] || {}).flags || []).find((x) => x.flag === t.flag);
+    // only when the ask got more urgent: a deadline in the flag's text that the task's lacks (a
+    // reworded but unchanged ask is noise); a different status (Watch -> Act) always shows
+    const URGENT = /this week|act now|renewal in|renewal within|overage/i;
+    const sharper = f && (f.status !== t.status || (URGENT.test(f.action) && !URGENT.test(t.action)));
+    return f && f.action && liveT(t) && sharper && !t.action.endsWith(f.action) ? `<small class="nowask"><br><b>Now:</b> ${esc(f.status === t.status ? "" : f.status + ": ")}${esc(f.action)}</small>` : "";
+  };
   function drawTasks() {
     if (!$("view-tasks")) return;                     // not on this person's page
     const T = TASKS.filter(taskInSeg);
@@ -2286,11 +2315,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         && teamById[byId[t.account_id].owner_id].owner_type === "member"
         ? `<small class="pooltag"><br>Pool queue · ${seg.owner === byId[t.account_id].owner_id ? "your" : esc(ownerName[byId[t.account_id].owner_id]) + "'s"} account</small>` : "") +
       (t.assigned_from ? `<small><br>given by ${esc(managerName(t.assigned_by))}, was with ${esc(ownerName[t.assigned_from] || t.assigned_from)}</small>` : "");
-    host.innerHTML = `<table><thead><tr><th>Account</th><th>Region</th><th>Task</th><th>Owner</th><th class="r">Age</th><th>Status</th><th>Decision</th></tr></thead><tbody>` +
+    host.innerHTML = `<table><thead><tr><th>Account</th><th>Region</th><th>Task</th><th>Owner</th><th class="r">Age</th><th>Reach by</th><th>Status</th><th>Decision</th></tr></thead><tbody>` +
       items.map((t) => `<tr><td><button class="link" data-open="${esc(t.account_id)}">${nameOf(t.account_id)}</button><small><br>${esc(byId[t.account_id] ? byId[t.account_id].tier : "not in the CRM")}</small></td>` +
         `<td>${esc(byId[t.account_id] ? byId[t.account_id].region : "—")}</td>` +
-        `<td>${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small></td>` +
+        `<td>${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small>${nowAsk(t)}</td>` +
         `<td>${ownerCell(t)}</td><td class="r num">${t.age_days} d</td>` +
+        `<td>${t.status === "Act" && liveT(t) ? reachBadge(reachOf(t.account_id, t.flag)) : "–"}</td>` +
         `<td>${badge(t)}</td><td>${decisionCell(t)}</td></tr>`).join("") + "</tbody></table>";
     const byDoc = Object.fromEntries(items.flatMap((t) => [[docId("assign", t), t], [docId("handback", t), t]]));
     host.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
@@ -2625,6 +2655,22 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("ld-finding").textContent = churn.length
       ? `${segOn() ? segName() + ": " : ""}${money(atRisk)} of ${money(bookArr)} Enterprise and Scale ARR is at risk (${unownedArr ? `${money(unownedArr)} of it has no owner yet; ` : ""}whole book ${money(wholeArr)}); ${!act.length ? "no account is at churn Act." : act.length === actPlanned ? `all ${act.length} churn Act accounts have something planned.` : `${act.length - actPlanned} of ${act.length} churn Act accounts have nothing planned.`}`
       : `${segName()}: no CSM or pool account at churn risk.`;
+    // not reached: Act accounts with no call, judged on the account (17 Nov 2026: a claimed task
+    // with no call, or an Act account whose task never went out, hid inaction)
+    $("ld-reach-days").textContent = REACH_TEXT;
+    const liveTask = (id, flag) => D.tasks.filter((t) => t.account_id === id && t.flag === flag && t.status === "Act" && liveT(t)).slice(-1)[0];
+    const unreached = (D.time_to_action || []).filter((r) => !r.call_date && inSegId(r.account_id) && person(byId[r.account_id] || {}))
+      .map((r) => ({ ...r, s: reachOf(r.account_id, r.flag), task: liveTask(r.account_id, r.flag) })).sort((a, b) => a.s.left - b.s.left);
+    const late = unreached.filter((r) => r.s.left < 0);
+    $("ld-reach-finding").textContent = !unreached.length ? "Every account at Act has been reached."
+      : `${unreached.length} account${unreached.length === 1 ? "" : "s"} at Act not reached yet, ${late.length} past ${late.length === 1 ? "its" : "their"} deadline` +
+        (late.length ? `: ${late.filter((r) => r.task && r.task.action_status === "Claimed").length} claimed in Slack, ${late.filter((r) => !r.task).length} with no live task.` : ".");
+    shortList($("ld-reach"), unreached, [
+      { label: "Account", get: (r) => `${nameOf(r.account_id)}<small><br>${esc(tierOf(r.account_id) || "")}</small>` },
+      { label: "Act", get: (r) => esc(r.flag) },
+      { label: "With", get: (r) => esc(ownerName[r.routed_to] || r.routed_to) + `<small><br>${r.task ? "task " + esc(r.task.action_status.toLowerCase()) : "no live task"}</small>` },
+      { label: "Reach by", r: true, get: (r) => reachBadge(r.s) },
+    ], "Every account at Act has been reached.", 5);
     // not picked up: every task still Open, oldest first (amber past the stale line, like Tasks)
     const STALE = D.settings.stale_task_days || 14;
     $("ld-queue-stale").textContent = STALE;

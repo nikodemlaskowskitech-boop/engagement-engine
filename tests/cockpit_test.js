@@ -683,6 +683,39 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // --- Not reached (17 Nov 2026): judged on the account, a claim isn't contact ---------------------
+  {
+    const { page, errors } = await open(browser, { width: 1300 });
+    await tab(page, "lead");
+    const tierOf = (id) => (D.accounts.find((a) => a.account_id === id) || {}).tier;
+    const want = D.time_to_action.filter((r) => !r.call_date && tierOf(r.account_id) && tierOf(r.account_id) !== "Self-service");
+    const ASOF = Date.parse(D.as_of + "T00:00:00Z") / 864e5;
+    const left = (r) => (D.settings.reach_days[tierOf(r.account_id)] ?? D.settings.reach_days_other) - (ASOF - Date.parse(r.signal_date + "T00:00:00Z") / 864e5);
+    const lateN = want.filter((r) => left(r) < 0).length;
+    const rf = await page.textContent("#ld-reach-finding");
+    check(want.length ? rf.startsWith(`${want.length} account${want.length === 1 ? "" : "s"} at Act not reached yet, ${lateN} past`) : /Every account at Act/.test(rf),
+      `Not reached: ${want.length} Act accounts with no call, ${lateN} past their tier's deadline, from time_to_action (not the tasks)`, rf);
+    const noTask = want.filter((r) => !D.tasks.some((x) => x.account_id === r.account_id && x.flag === r.flag && x.status === "Act" && ["Open", "Claimed"].includes(x.action_status)));
+    await page.click("#ld-reach [data-more]").catch(() => {}); await page.waitForTimeout(80);
+    const rows = await page.$$eval("#ld-reach tbody tr", (rs) => rs.map((r) => r.innerText));
+    check(noTask.every((r) => rows.some((x) => /no live task/.test(x))) && rows.length === want.length,
+      `...an Act account with no live task still counts (${noTask.length} here), every one listed`, rows.join(" | ").slice(0, 300));
+    const od = await page.$$eval("#ld-reach .badge.overdue", (bs) => bs.length);
+    check(od === lateN, `...past the deadline shows "overdue N d" (${lateN})`, od);
+    await tab(page, "tasks");
+    const tk = await page.$$eval("#tk-list tbody tr", (rs) => rs.map((r) => [r.cells[2].innerText, r.cells[5].innerText]));
+    check(tk.filter(([task]) => / · Act/.test(task)).every(([, reach]) => /left|overdue|reached|–/.test(reach)) && tk.some(([, r]) => /left|overdue|reached/.test(r)),
+      "Tasks: an Act task shows its reach-by (days left, overdue or reached)", JSON.stringify(tk.slice(0, 3)));
+    const sharper = D.tasks.filter((x) => ["Open", "Claimed"].includes(x.action_status)).filter((x) => {
+      const f = ((D.accounts.find((a) => a.account_id === x.account_id) || {}).flags || []).find((y) => y.flag === x.flag);
+      return f && (f.status !== x.status || (/this week|act now|renewal in|renewal within|overage/i.test(f.action) && !/this week|act now|renewal in|renewal within|overage/i.test(x.action)));
+    });
+    const nowLines = await page.$$eval("#tk-list .nowask", (s) => s.length);
+    check(nowLines > 0 && nowLines <= sharper.length, `Tasks: "Now:" under a task whose flag's ask got more urgent (${nowLines}, e.g. Driftwood)`, `${nowLines} vs ${sharper.length}`);
+    check(!errors.length, "no script errors", errors.join(" | "));
+    await page.close();
+  }
+
   // --- Leadership, 12 Nov 2026: work not picked up, Enterprise accounts with no CSM, folded tables ---
   {
     const { page, errors } = await open(browser);
