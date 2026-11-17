@@ -393,9 +393,19 @@ LABEL_AS_ACCOUNT = re.compile(
     r"|(?:ARR|contract|renewal|utilisation|usage|commitment|add-ons?)\b)")
 
 
+GROUPED = re.compile(r"\bCustomers ((?:[A-Z](?:, | and | & | or ))+[A-Z])\b")
+
+
 def restore(text, key):
     """Real values back in, longest label first. "the customer" also comes back when the
-    model starts a sentence with it ("The customer ...", PRIVACY.md fix F)."""
+    model starts a sentence with it ("The customer ...", PRIVACY.md fix F). Grouped labels are
+    spelled out first: "Customers A and C" -> "Customer A and Customer C" (17 Nov 2026: a live
+    brief kept "Customers A and C, not B", since only the full label is in the key)."""
+    def spell(m):          # each letter becomes its full label; the model's own "and" / "or" stay
+        return re.sub(r"\b([A-Z])\b", r"Customer \1", m.group(1))
+    text = GROUPED.sub(spell, text)
+    text = re.sub(r"\bnot ([A-Z])\b(?=[.,;)]|$)", lambda m: f"not Customer {m.group(1)}"
+                  if f"Customer {m.group(1)}" in key else m.group(0), text)
     for label in sorted(key, key=len, reverse=True):
         text = text.replace(label, key[label])
         if label[0].islower():
@@ -541,7 +551,7 @@ def run(account_id, dry_run, force=False):
     # remember what this brief was written from, so an unchanged account isn't rewritten
     from datetime import datetime, timezone      # when this version was written: the cockpit's confirm points at it
     meta_path.write_text(json.dumps({"written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                                     "written_as_of": json.loads(VIEWS.read_text(encoding="utf-8"))["as_of"], "why": changes or ["--force"],
+                                     "written_as_of": json.loads(VIEWS.read_text(encoding="utf-8"))["as_of"], "why": changes or ["an admin asked for a rewrite"],
                                      "parts": new}, indent=1), encoding="utf-8")
     current()                                    # just rewritten: current again
     print(f"           brief -> data/handover/{account_id}.md"
