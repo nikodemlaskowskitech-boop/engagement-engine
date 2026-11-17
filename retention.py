@@ -26,7 +26,7 @@ Where each number comes from:
               The demo knows what happened next (renewal_outcomes), so it shows
               forecast against actual: how predictable the number is.
   Calls       accounts that got a churn task during the year, called within
-              [journeys] act_for_days or not, and what they renewed at. Fake data
+              [journeys] reach_days (by tier) or not, and what they renewed at. Fake data
               with a planted effect: it shows the method, never "we saved X".
 
 Run after backtest.py (export_views.py also calls add_views):  python retention.py
@@ -39,7 +39,7 @@ from settings import SETTINGS, input_path, out_sql
 sys.stdout.reconfigure(encoding="utf-8")
 
 FORECAST_DAYS = SETTINGS["retention"]["forecast_days"]
-FAST = SETTINGS["journeys"]["act_for_days"]
+# "in time" = within the account's tier's days to reach the customer (reach_days, settings [journeys])
 
 
 def add_views(con):
@@ -205,7 +205,7 @@ def add_views(con):
         FROM retention_forecast_accounts, book
     """)
     # What a call is worth, like for like: accounts with a churn Act task during the
-    # year, called within FAST days or not, and their next renewal (if it came).
+    # year, reached within its tier's days or not (reach_days), and their next renewal (if it came).
     # No action log yet: an empty view with the same columns.
     has_log = con.sql("SELECT count(*) FROM information_schema.tables WHERE table_name = 'action_log'").fetchone()[0]
     if not has_log:
@@ -233,7 +233,7 @@ def add_views(con):
                 GROUP BY t.account_id
             )
             SELECT t.account_id,
-                   CASE WHEN c.call_day - t.sent <= {FAST} THEN 'in_time' ELSE 'late_or_never' END AS grp,
+                   CASE WHEN c.call_day - t.sent <= reach_days((SELECT tier FROM crm_all x WHERE x.account_id = t.account_id)) THEN 'in_time' ELSE 'late_or_never' END AS grp,
                    t.sent, c.call_day, r.outcome, r.arr_before, r.renewal_arr
             FROM tasks t JOIN renewed r USING (account_id) LEFT JOIN calls c USING (account_id)
         """)

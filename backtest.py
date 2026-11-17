@@ -42,7 +42,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 LINE = SETTINGS["churn"]["util_below"]                 # the churn line (settings.toml)
 TOO_LATE = SETTINGS["backtest"]["too_late_days"]       # less warning than this can't be acted on
 OUTCOMES = str(input_path("outcomes_file")).replace("\\", "/")   # closed renewals ([data] in settings)
-FAST = SETTINGS["journeys"]["act_for_days"]            # "called within" for the funnel (14 days)
+from settings import reach_text                       # "reached in time": each tier's days ([journeys] reach_days)
 
 def add_views(con):
     """Create the backtest view (also used by export_views.py). Empty, with the
@@ -216,10 +216,10 @@ if __name__ == "__main__":
             (3, '  sieved to a person (Scale, Enterprise)', (SELECT count(*) FROM churn WHERE tier <> 'Self-service')),
             (4, '    at Act: need a call now',            (SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act')),
             (5, '      called',                           (SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND call_date IS NOT NULL)),
-            (6, '        called within {FAST} days',         (SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND days_to_call <= {FAST})),
+            (6, '        called in time ({reach_text()})', (SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND days_to_call <= reach_days(tier))),
             -- each stage is a subset of the one above it, so it reads top to bottom
-            (7, '          renewing in the next 180 days',(SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND days_to_call <= {FAST} AND outcome IS NOT NULL)),
-            (8, '            kept whole (renewed or grew)',(SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND days_to_call <= {FAST} AND outcome IS NOT NULL AND NOT lost_revenue))
+            (7, '          renewing in the next 180 days',(SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND days_to_call <= reach_days(tier) AND outcome IS NOT NULL)),
+            (8, '            kept whole (renewed or grew)',(SELECT count(*) FROM churn WHERE tier <> 'Self-service' AND status = 'Act' AND days_to_call <= reach_days(tier) AND outcome IS NOT NULL AND NOT lost_revenue))
         ) AS funnel(step, stage, accounts)
         ORDER BY step
     """).show(max_width=200)

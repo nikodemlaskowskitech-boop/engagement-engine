@@ -36,7 +36,7 @@ import json
 from pathlib import Path
 
 import settings
-from settings import OUTPUTS, SETTINGS, input_path
+from settings import OUTPUTS, SETTINGS, input_path, reach_sql
 
 
 USAGE_EVENT = SETTINGS["utilisation"]["usage_event"]   # what counts as usage (settings.toml)
@@ -103,6 +103,8 @@ def store_is_fresh():
 
 def connect():
     con = duckdb.connect()
+    # reach_days(tier): days to reach an Act account's customer, by tier (settings [journeys])
+    con.sql(f"CREATE MACRO reach_days(t) AS {reach_sql()}")
     # CS history: your export (if any) plus what the engine itself wrote to
     # data/engagement (emails, Slack clicks, cockpit decisions). The same
     # folder once when you run on the demo data.
