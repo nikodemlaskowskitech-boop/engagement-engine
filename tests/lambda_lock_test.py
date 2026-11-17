@@ -41,7 +41,11 @@ for name, packages in (("engine", bundle.LAMBDA_PACKAGES), ("search", bundle.SEA
 print("\nThe build installs exactly the locked files")
 calls = []
 real = bundle.subprocess.run
-bundle.subprocess.run = lambda cmd, **kw: calls.append(cmd)
+def fake_pip(cmd, **kw):
+    # stands in for pip: records the command and creates the target folder, as pip does
+    calls.append(cmd)
+    Path(cmd[cmd.index("--target") + 1]).mkdir(parents=True, exist_ok=True)
+bundle.subprocess.run = fake_pip
 bundle.BUILD = Path(__import__("tempfile").mkdtemp())
 try:
     if all(p.exists() for p in bundle.LOCKS.values()):
