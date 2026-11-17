@@ -48,7 +48,6 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 UNOPENED_AFTER_DAYS = SETTINGS["journeys"]["unopened_after_days"]   # all in settings.toml
 NO_MEETING_DAYS = SETTINGS["journeys"]["no_meeting_days"]
-ACT_FOR_DAYS = SETTINGS["journeys"]["act_for_days"]
 HANDBACK_DAYS = SETTINGS["follow_ups"]["handback_after_days"]
 
 con = connect()
@@ -105,7 +104,7 @@ con.sql(f"""
         CROSS JOIN as_of a
         WHERE (t.last_meeting_date IS NULL OR a.as_of_date - t.last_meeting_date > {NO_MEETING_DAYS})
           -- no signal date (Act from users and errors, not utilisation): keep it
-          AND (s.signal_date IS NULL OR a.as_of_date - s.signal_date >= {ACT_FOR_DAYS})
+          AND (s.signal_date IS NULL OR a.as_of_date - s.signal_date >= reach_days(f.tier))   -- its tier's days to reach them
           -- QBR first: a QBR in the next 30 days is the meeting, no escalation;
           -- unless an earlier QBR for this account already slipped (qbr_slips)
           AND f.account_id NOT IN (SELECT account_id FROM qbr_schedule WHERE qbr_coming_up

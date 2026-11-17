@@ -83,6 +83,24 @@ def optional_steps():
     return [s["step"] for s in SETTINGS["pipeline"]["steps"] if s.get("optional")]
 
 
+# --- Reaching the customer: N days by tier ([journeys] reach_days, 17 Nov 2026) ---
+def reach_days(tier):
+    """Days to reach an Act account's customer after its signal, for its tier."""
+    return SETTINGS["journeys"]["reach_days"].get(tier, SETTINGS["journeys"]["reach_days_other"])
+
+
+def reach_sql():
+    """The same rule as a SQL expression on a tier named t (cairnpath_db makes it a macro)."""
+    cases = " ".join(f"WHEN '{t}' THEN {int(d)}" for t, d in SETTINGS["journeys"]["reach_days"].items())
+    return f"CASE t {cases} ELSE {int(SETTINGS['journeys']['reach_days_other'])} END"
+
+
+def reach_text():
+    """For people: "7 days for Enterprise, 14 for Scale"."""
+    items = list(SETTINGS["journeys"]["reach_days"].items())
+    return ", ".join(f"{d} days for {t}" if i == 0 else f"{d} for {t}" for i, (t, d) in enumerate(items))
+
+
 # The Lambda's lists come from the same pipeline, so the laptop and AWS can't drift apart
 # (they had: retention.py was in one list only).
 SETTINGS["aws"]["engine_steps"] = pipeline("aws")

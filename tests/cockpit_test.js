@@ -647,14 +647,21 @@ const segment = async (page, values) => {
   for (const width of [1300, 390]) {
     const { page, errors } = await open(browser, { width });
     await tab(page, "team");
-    const TARGET = D.settings.call_target_days ?? 14, ASOF = Date.parse(D.as_of + "T00:00:00Z") / 864e5;
+    // each account's target is its tier's days to reach the customer ([journeys] reach_days, 17 Nov 2026)
+    const TARGET_OF = (a) => D.settings.reach_days[(D.accounts.find((x) => x.account_id === a.account_id) || {}).tier] ?? D.settings.reach_days_other;
+    const ASOF = Date.parse(D.as_of + "T00:00:00Z") / 864e5;
     const act = D.time_to_action.filter((a) => a.owner_type === "csm" || a.owner_type === "pool");
-    const waiting = act.filter((a) => !a.call_date), lateN = waiting.filter((a) => ASOF - Date.parse(a.signal_date + "T00:00:00Z") / 864e5 >= TARGET).length;
+    const waiting = act.filter((a) => !a.call_date), lateN = waiting.filter((a) => ASOF - Date.parse(a.signal_date + "T00:00:00Z") / 864e5 >= TARGET_OF(a)).length;
     const got = await page.$$eval("#tm-dots circle.waiting, #tm-dots circle.late", (cs) => ({ waiting: cs.filter((c) => c.classList.contains("waiting")).length, late: cs.filter((c) => c.classList.contains("late")).length,
       lateRed: cs.filter((c) => c.classList.contains("late")).every((c) => /critical/.test(c.getAttribute("stroke"))), freshNeutral: cs.filter((c) => c.classList.contains("waiting")).every((c) => !/critical/.test(c.getAttribute("stroke"))) }));
     const plus = await page.$$eval("#tm-dots text.val", (ts) => ts.filter((t) => /^\+\d+$/.test(t.textContent)).reduce((s, t) => s + +t.textContent.slice(1), 0));
     check(got.late + got.waiting + (width < 640 ? plus : 0) >= waiting.length - (width < 640 ? plus : 0) && got.late <= lateN && got.lateRed && got.freshNeutral,
-      `${width}px: every account not yet called sits at its waiting age, red only past ${TARGET} days`, JSON.stringify({ ...got, expect: waiting.length, lateN, plus }));
+      `${width}px: every account not yet called sits at its waiting age, red only past its tier's target`, JSON.stringify({ ...got, expect: waiting.length, lateN, plus }));
+    if (width > 640) {
+      const lbl = await page.$$eval("#tm-dots svg > text.val", (ts) => ts.map((x) => x.textContent));
+      const want = [...new Set(Object.values(D.settings.reach_days))];
+      check(want.every((d) => lbl.some((l) => l.startsWith(`${d}-day target`))), `${width}px: each tier's own target line (${want.join(", ")} days)`, lbl.slice(0, 8).join(" | "));
+    }
     if (width > 640) check(got.late === lateN && got.late + got.waiting === waiting.length, `${width}px: ${lateN} late and ${waiting.length - lateN} still-in-time rings, as the export says`, JSON.stringify(got));
     const col = await page.$$eval("#tm-dots text", (ts) => ts.some((t) => t.textContent === "no call"));
     check(!col, `${width}px: no separate "no call" column any more`);

@@ -136,5 +136,19 @@ with tempfile.TemporaryDirectory() as tmp:
             ok, err = False, str(e)[:200]
         check(ok, f"{v} runs", "" if ok else err)
 
+print("\nOne rule for 'in time' (17 Nov 2026: N days by tier, never a second number)")
+import re as _re                                    # noqa: E402
+from settings import SETTINGS as _S, reach_sql    # noqa: E402
+import duckdb as _duckdb                            # noqa: E402
+c2 = _duckdb.connect()
+c2.sql(f"CREATE MACRO reach_days(t) AS {reach_sql()}")   # exactly as cairnpath_db.connect() makes it
+check(all(c2.sql(f"SELECT reach_days('{tier}')").fetchone()[0] == d for tier, d in _S["journeys"]["reach_days"].items())
+      and c2.sql("SELECT reach_days('Self-service')").fetchone()[0] == _S["journeys"]["reach_days_other"],
+      "the SQL macro reach_days(tier) matches settings [journeys] reach_days, tier by tier")
+src = {f: (ROOT / f).read_text(encoding="utf-8") for f in ("journeys.py", "backtest.py", "retention.py", "generate_events.py", "views_template.html", "export_views.py")}
+stale = [f for f, s in src.items() if _re.search(r"act_for_days|fast_days|call_target_days|CALL_IN_TIME_DAYS", s)]
+check("CREATE MACRO reach_days(t) AS {reach_sql()}" in (ROOT / "cairnpath_db.py").read_text(encoding="utf-8"), "cairnpath_db.connect() makes the macro from the same function")
+check(not stale, "no step keeps its own 'in time' number (act_for_days, fast_days, call_target_days, CALL_IN_TIME_DAYS are gone)", stale)
+
 print(f"\n{'All passed' if not failed else f'{failed} failed'}")
 sys.exit(1 if failed else 0)

@@ -545,6 +545,15 @@ Read a file's entry before changing that file, and update the entry in the same 
   with the owned ARR on Business case and CS team), and churn Act; CS team: accounts at Act
   split into churn and expansion; Did it work?: everything really lost first, then the part
   on flagged accounts (reconciles with Business case). cockpit_test checks each.
+  Reach in time, by tier (17 Nov 2026, the forecast spec): one rule, settings [journeys]
+  reach_days (Enterprise 7, Scale 14), read everywhere "in time" means anything: journeys.py's
+  escalation, the sieve, CS team (a target line per group, "past their tier's target"), Tasks
+  and My book ("past the days to reach"), Leadership's trail, Business case ("reached in
+  time"), backtest's funnel, retention's call effect and the generator's planted effect. In SQL
+  the macro reach_days(tier) (cairnpath_db.connect, from settings.reach_sql()). The old
+  act_for_days / fast_days / call_target_days / CALL_IN_TIME_DAYS are gone; retention_test
+  fails if one comes back. Demo figures after the regenerate: reached in time kept 59.5% vs
+  43.3% (14 vs 15 accounts).
   Review fixes, timeline and phone (16 Nov 2026, both reviews): the timeline sentence counts
   touches in the chart's window (it said "5 in 90 days" for five touches 160+ days old); the
   summary shows one line per touch (three people at one workshop = one line, "· 3 people");

@@ -330,7 +330,12 @@ too_late_days = 30        # warning shorter than this before a renewal is too la
 [journeys]
 unopened_after_days = 5   # give people a few days to open an email
 no_meeting_days = 30      # an Act account should have had a conversation by now...
-act_for_days = 14         # ...once it has been Act this long (a fair chance to act)
+# Reach the customer (a call or a meeting) within this many days of the signal, by tier (17 Nov 2026,
+# the forecast spec): the escalation above, the countdown in the cockpit, "reached in time" in every
+# analysis and the demo generator's planted effect all read it, so the rule and the evidence never
+# disagree. Set centrally by the CS leader; never per team (no drift across the book).
+reach_days = { Enterprise = 7, Scale = 14 }
+reach_days_other = 14     # any other tier (Self-service has no human contact: unused in practice)
 
 [team_report]
 early_days = 14           # a call this many days before the signal still counts (as 0 days)

@@ -810,6 +810,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
   const day = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5;
   const TL_DAYS = 90;
+  // days to reach an Act account's customer, by tier: one rule for the countdown, the escalation
+  // and every "in time" in the analysis (settings.toml [journeys] reach_days, 17 Nov 2026)
+  const REACH = (tier) => ((D.settings.reach_days || {})[tier] ?? D.settings.reach_days_other ?? 14);
+  const REACH_TEXT = Object.entries(D.settings.reach_days || {}).map(([tr, d], i) => (i ? `${d} for ${tr}` : `${d} days for ${tr}`)).join(", ");
+  const tierOf = (id) => (byId[id] || {}).tier;
+  const REACH_SHORT = Object.entries(D.settings.reach_days || {}).map(([tr, d]) => `${d} d ${tr}`).join(", ");
   // a with/without comparison shows rates only when every group has [cockpit] min_compare accounts
   // (16 Nov 2026 review: "3 of 5 churned with a call, 0 of 1 without" read as "calls don't work")
   const MIN_COMPARE = (D.settings && D.settings.min_compare) || 10;
@@ -1657,7 +1663,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const ownerRows = teamRows(all);
     const csm = ownerRows.filter((r) => r.o.owner_type === "csm"), pool = ownerRows.filter((r) => r.o.owner_type === "pool");
     const sum = (rs, k) => rs.reduce((s, r) => s + r[k], 0);
-    $("tm-finding").textContent = !all.length ? `${segName()}: no account at churn or expansion Act with a CSM or a pool.` : `${segOn() ? segName() + ": " : ""}${all.length - called.length} of ${all.length} accounts at Act (${all.filter((r) => r.flag === "churn").length} churn, ${all.filter((r) => r.flag === "expansion").length} expansion) have had no call yet, ${all.filter((a) => !a.call_date && day(D.as_of) - day(a.signal_date) >= (D.settings.call_target_days ?? 14)).length} of them past the ${D.settings.call_target_days ?? 14}-day target: ${sum(pool, "n") - sum(pool, "called")} with the Scale pools, ${sum(csm, "n") - sum(csm, "called")} with named CSMs.`;
+    $("tm-finding").textContent = !all.length ? `${segName()}: no account at churn or expansion Act with a CSM or a pool.` : `${segOn() ? segName() + ": " : ""}${all.length - called.length} of ${all.length} accounts at Act (${all.filter((r) => r.flag === "churn").length} churn, ${all.filter((r) => r.flag === "expansion").length} expansion) have had no call yet, ${all.filter((a) => !a.call_date && day(D.as_of) - day(a.signal_date) >= REACH(tierOf(a.account_id))).length} of them past their tier's target (${REACH_TEXT}): ${sum(pool, "n") - sum(pool, "called")} with the Scale pools, ${sum(csm, "n") - sum(csm, "called")} with named CSMs.`;
 
     // dot plot (redesigned 10 Nov 2026): one axis, days since the signal, for every Act account.
     // Called = a filled mark on the day of the call. Not called yet = an open ring at how long it
@@ -1665,10 +1671,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // after which journeys.py escalates). The axis is stretched near zero (square root) so the
     // calls in the first two weeks don't crowd, while a 60-day wait still fits.
     const host = $("tm-dots"); host.innerHTML = "";
-    const TARGET = D.settings.call_target_days ?? 14, ASOF = day(D.as_of);
+    const TARGET_OF = (a) => REACH(tierOf(a.account_id)), ASOF = day(D.as_of);
+    const TARGETS = [...new Set(ownerRows.flatMap((r) => r.rs.map(TARGET_OF)))].sort((x, z) => x - z);
     const waited = (a) => ASOF - day(a.signal_date);
     const val = (a) => (a.call_date ? Math.max(0, a.days_to_call) : waited(a));
-    const hi = Math.max(TARGET, ...ownerRows.flatMap((r) => r.rs.map(val)));
+    const hi = Math.max(...TARGETS, 14, ...ownerRows.flatMap((r) => r.rs.map(val)));
     const maxD = hi <= 30 ? 30 : hi <= 60 ? 60 : 90;
     const TICKS = [0, 3, 7, 14, 30, 60, 90].filter((t) => t <= maxD);
     const ph = isPhone(), W = fitW(760, 330), L = ph ? 0 : 150, R = ph ? 8 : 190;
@@ -1677,21 +1684,30 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const lab = ph ? 30 : 0, rowH = 32 + lab, headH = 22, top = 20;   // top: room for the target's label
     const groups = [["Named CSMs", csm, "about 8 accounts each"], ["Scale pools", pool, "a regional book of about 40"]].filter(([, rs]) => rs.length);
     let y = top; const layout = [];
-    for (const [g, rs, note] of groups) { layout.push({ head: `${g} (${note})`, y }); y += headH; for (const r of rs) { layout.push({ r, y }); y += rowH; } }
+    const spans = [];                                    // each group's rows, for its own tier's target line
+    for (const [g, rs, note] of groups) {
+      layout.push({ head: `${g} (${note})`, y }); y += headH;
+      const y0 = y; for (const r of rs) { layout.push({ r, y }); y += rowH; }
+      const tg = [...new Set(rs.flatMap((r) => r.rs.map(TARGET_OF)))];
+      spans.push({ y0: y0 - headH, y1: y, targets: tg.length ? tg : [REACH(g === "Named CSMs" ? "Enterprise" : "Scale")] });
+    }
     const yEnd = y, H = yEnd + 40;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Days since the signal per Act account: called on day N, or still waiting N days" }, host);
     for (const t of TICKS) {
-      el("line", { x1: X(t), x2: X(t), y1: top, y2: yEnd, stroke: "var(--rule)", "stroke-dasharray": t === TARGET ? "none" : "2 4" }, svg);
+      el("line", { x1: X(t), x2: X(t), y1: top, y2: yEnd, stroke: "var(--rule)", "stroke-dasharray": TARGETS.includes(t) ? "none" : "2 4" }, svg);
       el("text", { x: X(t), y: yEnd + 16, "text-anchor": "middle", class: "val" }, svg).textContent = t === maxD ? `${t}+` : t;
     }
-    // the target: past this line an account still waiting is late
-    el("line", { x1: X(TARGET), x2: X(TARGET), y1: top, y2: yEnd, stroke: "var(--ink-3)", "stroke-width": 1.5 }, svg);
-    el("text", { x: X(TARGET), y: 12, "text-anchor": "middle", class: "val" }, svg).textContent = `${TARGET}-day target`;
+    // the targets, one per tier: past its tier's line an account still waiting is late
+    const tiersAt = (d) => Object.entries(D.settings.reach_days || {}).filter(([, v]) => v === d).map(([tr]) => tr).join(", ");
+    for (const s of spans) for (const T of s.targets) {
+      el("line", { x1: X(T), x2: X(T), y1: s.y0 + 4, y2: s.y1, stroke: "var(--ink-3)", "stroke-width": 1.5 }, svg);
+      el("text", { x: X(T) + 4, y: s.y0 + 15, "text-anchor": "start", class: "val" }, svg).textContent = `${T}-day target (${tiersAt(T) || "its tier"})`;
+    }
     el("text", { x: (X(0) + X(maxD)) / 2, y: yEnd + 32, "text-anchor": "middle" }, svg).textContent = "days since the signal (stretched near zero)";
     for (const it of layout) {
       if (it.head) { el("text", { x: 0, y: it.y + 15, class: "lbl", "font-weight": 600 }, svg).textContent = it.head; continue; }
       const r = it.r, cyRow = it.y + lab + 16;
-      const wait = r.rs.filter((a) => !a.call_date), late = wait.filter((a) => waited(a) >= TARGET);
+      const wait = r.rs.filter((a) => !a.call_date), late = wait.filter((a) => waited(a) >= TARGET_OF(a));
       const summary = `${r.med == null ? "no calls" : "median " + r.med + " d"} · ${wait.length} waiting`;
       el("line", { x1: 0, x2: W, y1: it.y + rowH, y2: it.y + rowH, stroke: "var(--rule)", "stroke-opacity": 0.5 }, svg);
       const name = ph ? r.o.owner_name.replace(" Scale team", " pool") : r.o.owner_name;
@@ -1714,7 +1730,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         placed.push(spot);
         const cyo = spot.o, col = (spot.x - x0) / 10;
         const cx = X(v) + col * 10, cy = cyRow + cyo;
-        const isGrowth = a.flag === "expansion", isLate = !a.call_date && v >= TARGET;
+        const isGrowth = a.flag === "expansion", isLate = !a.call_date && v >= TARGET_OF(a);
         const m = a.call_date
           ? (isGrowth ? el("rect", { x: cx - 4.5, y: cy - 4.5, width: 9, height: 9, rx: 1, fill: "var(--viz-call)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg)
                       : el("circle", { cx, cy, r: 4.5, fill: "var(--viz-call)", stroke: "var(--surface)", "stroke-width": 1.5 }, svg))
@@ -1722,14 +1738,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         const nm = byId[a.account_id]?.account_name || a.account_id;
         hover(m, `<b>${esc(nm)}</b> · ${a.flag} Act<br>Signal ${fmt(a.signal_date)}<br>` + (a.call_date
           ? (a.via === "qbr" ? `Covered by the QBR on ${fmt(a.call_date)}, ${a.days_to_call} days later` : a.called_early ? `Called ${fmt(a.call_date)}, before the signal` : `Called ${fmt(a.call_date)}, ${a.days_to_call} days later`)
-          : `No call yet: waiting ${v} days` + (isLate ? `, past the ${TARGET}-day target` : "")) + (v > maxD ? ` (shown at ${maxD}+)` : "") + (a.escalated ? "<br>Escalated to the manager" : ""));
+          : `No call yet: waiting ${v} days` + (isLate ? `, past its ${TARGET_OF(a)}-day target (${tierOf(a.account_id)})` : "")) + (v > maxD ? ` (shown at ${maxD}+)` : "") + (a.escalated ? "<br>Escalated to the manager" : ""));
         m.style.cursor = "pointer";
         m.addEventListener("click", () => openAccount(a.account_id));
       }
       for (const [x, n] of Object.entries(extra)) el("text", { x: +x + 8, y: cyRow + 4, class: "val" }, svg).textContent = `+${n}`;
     }
     $("tm-legend").innerHTML = "";
-    for (const [shape, color, name] of [["circle", "var(--viz-call)", "Churn Act, called on that day"], ["square", "var(--viz-call)", "Expansion Act, called on that day"], ["circle-open", "var(--ink-3)", "Not called yet, still in time"], ["circle-open", "var(--critical)", `Not called, waiting past ${D.settings.call_target_days ?? 14} days`]]) {
+    for (const [shape, color, name] of [["circle", "var(--viz-call)", "Churn Act, called on that day"], ["square", "var(--viz-call)", "Expansion Act, called on that day"], ["circle-open", "var(--ink-3)", "Not called yet, still in time"], ["circle-open", "var(--critical)", `Not called, waiting past its tier's target`]]) {
       const s = document.createElement("span"); s.append(legendSwatch(shape, color), name); $("tm-legend").appendChild(s);
     }
     drawCapacity();
@@ -1957,7 +1973,6 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const STATUS_COLOR = { Act: "var(--critical)", Watch: "var(--warning)", Shelfware: "url(#hatch-warning)", "No churn flag": "var(--neutral-fill)" };
 
   // ---------------------------------------------------------------- overview: the sieve
-  const FAST = D.settings.fast_days;
   const person = (r) => r.tier !== "Self-service";
   const atAct = (r) => person(r) && r.status === "Act";
   const STAGES = [
@@ -1967,7 +1982,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     { key: "act", label: "At Act: a call is needed", depth: 2, parent: "person", test: atAct },
     { key: "nocall", label: "Not called yet", depth: 3, parent: "act", test: (r) => atAct(r) && !r.call_date, color: "var(--critical)" },
     { key: "called", label: "Called", depth: 3, parent: "act", test: (r) => atAct(r) && r.call_date },
-    { key: "fast", label: `Called within ${FAST} days of the signal`, depth: 4, parent: "called", test: (r) => atAct(r) && r.call_date && r.days_to_call <= FAST },
+    { key: "fast", label: `Reached in time (${REACH_TEXT})`, depth: 4, parent: "called", test: (r) => atAct(r) && r.call_date && r.days_to_call <= REACH(r.tier) },
   ];
   const SIG_COLS = [
     { label: "Account", get: (r) => nameOf(r.account_id) },
@@ -2203,7 +2218,6 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // (the offline file, or no permission) the list is read-only.
   const TASK_STATES = ["Open", "Claimed", "Done", "Resolved"];
   const tkShow = new Set(["Open", "Claimed"]);
-  const WAIT = D.settings.fast_days;                     // "waiting too long" in the finding
   const TASKS = D.tasks || [];
   const taskInSeg = (t) => {
     const a = byId[t.account_id];
@@ -2249,7 +2263,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const pooled = open.filter((t) => teamById[t.routed_to] && teamById[t.routed_to].owner_type === "pool").length;
     $("tk-finding").textContent = !TASKS.length
       ? "No tasks sent yet: run .\\run_all.ps1 -Actions to send them, and the cockpit shows what became of each."
-      : `${segName()}: ${n.Open} open and ${n.Claimed} claimed tasks, ${open.filter((t) => t.age_days >= WAIT).length} of them open ${WAIT}+ days. ${pooled} sit in a shared pool queue with nobody on them.`;
+      : `${segName()}: ${n.Open} open and ${n.Claimed} claimed tasks, ${open.filter((t) => t.age_days >= REACH(tierOf(t.account_id))).length} of them open longer than their tier's days to reach the customer (${REACH_TEXT}). ${pooled} sit in a shared pool queue with nobody on them.`;
     // what the viewer can do here
     const banner = $("tk-banner");
     const msg = !TASKS.length ? "" : saveError ? saveError
@@ -2563,15 +2577,15 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     ];
     const listCalls = (xs, t) => () => caseList(t, xs.map((r) => ({ account_id: r[0], o: r[2], b: r[3], a: r[4] })).sort((p, q) => q.b - p.b), CALL_COLS);
     hbars($("cs-call"), [
-      { label: `Called within ${D.settings.fast_days} days (${inT.length})`, from: 0, to: kIn || 0, color: "var(--viz-call)", value: `${pct1(kIn)} <small>kept · ${grp("in_time").filter((r) => r[2] === "churned").length} churned</small>`, onClick: listCalls(inT, `Called within ${D.settings.fast_days} days, at their next renewal`) },
+      { label: `Reached in time (${inT.length})`, from: 0, to: kIn || 0, color: "var(--viz-call)", value: `${pct1(kIn)} <small>kept · ${grp("in_time").filter((r) => r[2] === "churned").length} churned</small>`, onClick: listCalls(inT, `Reached in time (${REACH_TEXT}), at their next renewal`) },
       { label: `Later or never (${late.length})`, from: 0, to: kLate || 0, color: BASE, value: `${pct1(kLate)} <small>kept · ${late.filter((r) => r[2] === "churned").length} churned</small>`, onClick: listCalls(late, "Called later or never, at their next renewal") },
     ], 1.04);
     const fewV = tooFew([inT.length, late.length]);
     const gPts = (v) => { const x = v / Math.max(1, point); return x > 0 && x < 0.1 ? "under 0.1 points" : `${x.toFixed(1)} points`; };
     $("cs-call-finding").textContent = value != null && fewV
-      ? `Too few renewals after a churn task to compare: ${inT.length} called within ${D.settings.fast_days} days, ${late.length} later or never (at least ${MIN_COMPARE} each).`
+      ? `Too few renewals after a churn task to compare: ${inT.length} reached in time (${REACH_TEXT}), ${late.length} later or never (at least ${MIN_COMPARE} each).`
       : value != null
-      ? `Accounts called within ${D.settings.fast_days} days kept ${pct1(kIn)} of their ARR at renewal, against ${pct1(kLate)}. Today ${plural(waiting.length, "account")} at Act (${money(waitArr)}) ${waiting.length === 1 ? "hasn't" : "haven't"} had a call: at those rates, calling them in time keeps about ${money(value)} more, ${gPts(value)} of GRR.`
+      ? `Accounts reached in time (${REACH_TEXT}) kept ${pct1(kIn)} of their ARR at renewal, against ${pct1(kLate)}. Today ${plural(waiting.length, "account")} at Act (${money(waitArr)}) ${waiting.length === 1 ? "hasn't" : "haven't"} had a call: at those rates, calling them in time keeps about ${money(value)} more, ${gPts(value)} of GRR.`
       : "Not enough renewals after a churn task in this segment to compare.";
     if (value != null && fewV) $("cs-call").innerHTML = "";        // no bars for groups too small to read
     $("cs-call-note").textContent = `Like for like: every account that got a churn task this year and has renewed since, ${inT.length} against ${late.length}. Small groups and a planted effect in the demo data: this shows the method a CFO can check, never "we saved X".${D.settings.cs_cost_per_head ? "" : " The cost side shows once a cost per CS person is set (settings.toml [money] cs_cost_per_head)."}`;
@@ -2646,7 +2660,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         lvl: churn.length > act.length ? "attention" : churn.length ? "act" : "ok",
         u: churn.length > act.length ? `${churn.length - act.length} at Watch or Shelfware` : churn.length ? "all at Act" : "nothing at risk" },
       { key: "act", v: act.length, l: "at Act", r: pct(act.length, churn.length), list: act,
-        lvl: act.length ? "act" : "ok", u: act.length ? `call within ${FAST} days` : "none at Act" },
+        lvl: act.length ? "act" : "ok", u: act.length ? `reach within ${REACH_SHORT}` : "none at Act" },
       { key: "called", v: actCalled, l: "called", r: act.length ? pct(actCalled, act.length) : "no Act account", list: act.filter(called),
         lvl: notCalled.length ? "act" : "ok", u: notCalled.length ? `${notCalled.length} still to call` : "all called", gap: notCalled },
       { key: "planned", v: actPlanned, l: "with a next step", r: (act.length ? pct(actPlanned, act.length) : "no Act account") + (overdue.length ? ` · ${overdue.length} overdue` : " · none overdue"),
@@ -3005,7 +3019,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const mine = (p) => workOf(p).filter(LIVE);
     const live = mine(o).sort((a, b) => b.age_days - a.age_days);
     const open = live.filter((t) => t.action_status === "Open");
-    const old = live.filter((t) => t.age_days >= FAST), given = live.filter((t) => t.assigned_from);
+    const old = live.filter((t) => t.age_days >= REACH(tierOf(t.account_id))), given = live.filter((t) => t.assigned_from);
     const qbr30 = accountsOf(o).filter((a) => a.next_qbr_date && day(a.next_qbr_date) >= RUN && day(a.next_qbr_date) < RUN + 30);
     $("mb-finding").textContent = !live.length ? `${name}: nothing on the plate right now.`
       : live[0].age_days ? `${name}: ${plural(live.length, "task")} on the plate; the oldest has waited ${plural(live[0].age_days, "day")}.`
@@ -3013,7 +3027,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("mb-work").innerHTML =
       tile("Open", open.length, `median for ${kind}: ${PM ? (peerMed(okind, "open") ?? "–") : med((p) => mine(p).filter((t) => t.action_status === "Open").length)}`, false) +
       tile("Claimed, not done", live.length - open.length, "taken in Slack, no meeting yet", false) +
-      tile(`Waiting ${FAST}+ days`, old.length, `of ${live.length} on the plate`, old.length > 0) +
+      tile("Past the days to reach", old.length, `of ${live.length} on the plate (${REACH_SHORT})`, old.length > 0) +
       tile("Given to me by a manager", given.length, given.length ? `from ${[...new Set(given.map((t) => ownerName[t.assigned_from] || t.assigned_from))].join(", ")}` : "none", false) +
       tile("QBRs in the next 30 days", qbr30.length, `of ${plural(accountsOf(o).filter((a) => a.tier === "Enterprise").length, "Enterprise account")}`, false);
     shortList($("mb-work-list"), live, [

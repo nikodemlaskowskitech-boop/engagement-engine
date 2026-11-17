@@ -27,6 +27,8 @@ import uuid
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
+from settings import reach_days     # the planted effect uses the cockpit's own rule (17 Nov 2026)
+
 # --- Settings -------------------------------------------------------------
 
 SLOW_HANDOFF_SHARE = 0.3       # new Enterprise logos whose CSM came weeks late...
@@ -122,14 +124,13 @@ TRAILING_LAG_DAYS = 15     # a 30-day average crosses a line about 15 days after
 FIRST_YEAR_SHARE = 0.12     # new logos: with the new customers of today's story, about 25% ARR growth a year
 # Episodes: accounts that hit a dip during the year. The owner gets a task when it
 # shows and calls (or doesn't) in their own style. The planted effect, like the
-# onboarding email's: called within CALL_IN_TIME_DAYS, the account recovers more
+# onboarding email's: reached within its tier's reach_days (settings [journeys]), the account recovers more
 # often. A recovered account carries on as one of today's healthy accounts; one
 # that doesn't churns at its renewal and leaves the book (status "churned" in the
 # CRM, no events after). Fake data: it shows the method, not that calls work.
 # Tuned (12 Nov 2026) so the year reads like a healthy B2B book: about 89% GRR.
 EPISODES = 110
 EPISODE_LAST_START = 195   # the last day a dip may start: recovered by the time today's story begins
-CALL_IN_TIME_DAYS = 14
 RECOVERY_ODDS = {"called_in_time": 0.80, "not_in_time": 0.55}
 # In-year renewals of accounts that stayed: most renew flat, some grow, some shrink
 # (an account that had a dip shrinks more often); the bigger the tier, the more
@@ -539,7 +540,7 @@ def plan_episodes(accounts, names):
             continue
         called = bool(style) and rng.random() < style["acts"]
         call_day = nearest_weekday(seen + timedelta(days=rng.randint(*style["act_days"]))) if called else None
-        in_time = called and (call_day - seen).days <= CALL_IN_TIME_DAYS
+        in_time = called and (call_day - seen).days <= reach_days(tier)
         recovered = rng.random() < RECOVERY_ODDS["called_in_time" if in_time else "not_in_time"]
         bottom = start + DIP_DAYS
         if recovered:
