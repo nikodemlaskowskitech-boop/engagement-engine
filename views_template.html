@@ -91,7 +91,14 @@ h1 { font-family: var(--font-display); font-weight: 600; font-size: 1.55rem; let
 .lede { margin: 0; color: var(--ink-2); max-width: 70ch; }
 nav { display: flex; gap: 4px; overflow-x: auto; }
 nav button { font: 500 0.92rem var(--font-body); color: var(--ink-2); background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px 12px; cursor: pointer; white-space: nowrap; }
-.page-switch { margin-left: auto; font-size: 0.85rem; color: var(--muted); }
+.page-switch { margin-left: auto; font-size: 0.85rem; color: var(--ink-3); }
+/* the public site's two doors (18 Nov 2026): Leader | CSM, the rest under "More people" */
+.doors { margin-left: auto; display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; font-size: 0.9rem; }
+.doors a { padding: 0.3rem 0.8rem; color: var(--ink); text-decoration: none; }
+.doors a + a { border-left: 1px solid var(--rule); }
+.doors a[aria-current="page"] { background: var(--accent); color: var(--bg); font-weight: 600; }
+.doors a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.doors:not([hidden]) + .page-switch { margin-left: 0.6rem; }
 .page-switch select { margin-left: 0.4rem; }
 nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 nav button:hover { color: var(--ink); }
@@ -336,6 +343,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   nav { flex-wrap: wrap; overflow-x: visible; gap: 0 2px; }
   nav button { font-size: 0.84rem; padding: 7px 8px 8px; }
   .lede, .banner.who .why, #sandbox-note .more { display: none; }
+  .doors a { padding: 0.25rem 0.6rem; }
+  .page-switch select { max-width: 8.5rem; }      /* doors and the list on one line */
+  #page-switch-label:empty { display: none; }
   .banner { font-size: 0.82rem; padding: 6px 10px; }
   .seg-toggle { display: inline-block; }
   .segbar:not(.open) > label, .segbar:not(.open) > .grp, .segbar:not(.open) > .acc-find { display: none; }
@@ -414,7 +424,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     <div class="brand">
       <div class="logo"><svg role="img" aria-label="Cairnpath logo" viewBox="0 0 48 56"><use href="#logo-path"></use></svg><div><h1>Cairnpath</h1><span class="tag">CS cockpit</span></div></div>
       <span class="asof" id="asof"></span>
-      <label class="page-switch" id="page-switch-wrap" hidden>Viewing as <select id="page-switch">__PAGE_OPTIONS__</select></label>
+      <span class="doors" id="doors" hidden><a id="door-leader">Leader</a><a id="door-csm">CSM</a></span>
+      <label class="page-switch" id="page-switch-wrap" hidden><span id="page-switch-label">Viewing as</span> <select id="page-switch">__PAGE_OPTIONS__</select></label>
     </div>
     <p class="banner who" id="who-strip" hidden></p>
     <p class="lede"><span id="n-views"></span> views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
@@ -432,7 +443,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     </nav>
   </div>
   <div class="wrap">
-    <p class="banner" id="sandbox-note" hidden>Demo sandbox: all companies, people and numbers here are fictional and generated. <a href="search.html">Ask the documents</a>.<span class="more"> What you save here stays in this browser only. Nobody else sees it, and nothing reaches the engine. Managers and CSMs can save; pick one under "Viewing as". Visits are counted by country only: no IP address or cookie is kept.</span> <button type="button" class="linkish" id="sandbox-clear">Clear my changes</button></p>
+    <p class="banner" id="sandbox-note" hidden>Demo sandbox: all companies, people and numbers here are fictional and generated. <a href="search.html">Ask the documents</a>.<span class="more"> What you save here stays in this browser only. Nobody else sees it, and nothing reaches the engine. Managers and CSMs can save: switch to CSM at the top, or another person under "More people". Visits are counted by country only: no IP address or cookie is kept.</span> <button type="button" class="linkish" id="sandbox-clear">Clear my changes</button></p>
     <p class="banner" id="carry-note" hidden></p>
     <div class="segbar" id="segbar" role="group" aria-label="Segment">
       <button type="button" class="small seg-toggle" id="seg-toggle" aria-expanded="false" aria-controls="segbar">Filters</button>
@@ -1053,6 +1064,17 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     for (const v of views) nav.append($("tab-" + v));
     const sw = $("page-switch");
     $("page-switch-wrap").hidden = false;
+    if (PAGE.sandbox && PAGE.demo && PAGE.demo.leader_page) {      // public site: two doors, the list one level down
+      const here = location.pathname.split("/").pop() || "index.html";
+      const onLeader = PAGE.role === "leader", onCsm = here === PAGE.demo.csm_page;
+      $("door-leader").href = PAGE.demo.leader_page + "#lead";
+      $("door-csm").href = PAGE.demo.csm_page || "#";
+      $("door-csm").title = PAGE.demo.csm_name ? `${PAGE.demo.csm_name}'s book` : "";
+      if (onLeader) $("door-leader").setAttribute("aria-current", "page");
+      if (onCsm) $("door-csm").setAttribute("aria-current", "page");
+      $("doors").hidden = false;
+      $("page-switch-label").textContent = onLeader || onCsm ? "" : "Viewing as";
+    }
     // Switch person without leaving this page: a published artifact gives only its main page
     // the database, so the chosen person's file is fetched and written into this one (each file
     // still holds only that person's data). Offline, fetch can't read files: open it instead.

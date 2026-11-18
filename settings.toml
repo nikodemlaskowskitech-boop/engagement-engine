@@ -232,6 +232,10 @@ min_compare = 10          # a with/without comparison shows rates only when each
 author = "Nikodem Laskowski"
 why = "a former Customer Success director. It's the cockpit I wished I'd had: an engine on AWS turns product usage into flags, tasks routed by tier, Slack follow-ups and AI briefs, and this page is its output."
 repo_url = "https://github.com/nikodemlaskowskitech-boop/engagement-engine"
+# The two doors at the top of the public site (18 Nov 2026, instead of a list of every person):
+# Leader (the whole book) and CSM, this one. Tom Brennan: an expansion at Act, a churn Watch task
+# waiting, five QBRs coming up: both kinds of work in one book. Everyone else stays one level down.
+csm = "csm_tom"
 
 [roles]
 # Who sees what, and who may change what (ROLES.md explains each choice and how to change it).
