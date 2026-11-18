@@ -172,6 +172,7 @@ python security_check.py    # live: 39 questions on what each deployed role can 
 python access_report.py     # anything reachable from outside the account (baseline: 0)
 python guardduty_report.py  # threat findings and the cost so far
 python llm.py --spend       # this month's AI spend by feature, against its budget
+python visitors.py          # who looks at the demo site: counts by day and country, no IP or cookie kept
 ```
 
 ## How each tier is handled

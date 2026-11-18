@@ -1075,6 +1075,20 @@ Read a file's entry before changing that file, and update the entry in the same 
   because a us-east-1 stack would need a bootstrap in a region the SCPs keep
   closed), prints both records, `--wait`s until issued and prints the two settings
   lines. `tests/site_cert_test.py`: stand-in ACM.
+  Visits (18 Nov 2026, Nikodem: "is anyone but me looking?"): a private bucket of
+  its own (VisitLogs: public-access blocks, ACLs off, S3-managed encryption, HTTPS
+  only, files expire after [aws] site_visit_days), written only by AWS's log
+  delivery for this account's own delivery sources, read only by the admins.
+  Outputs SiteDistributionId and VisitLogsBucket. `site_logs.py` turns the delivery
+  on from us-east-1 (CloudFront's rule; a script for the same SCP reason as
+  site_cert.py; says plainly if the SCPs refuse it), with exactly the [visits]
+  fields: no IP, cookie, query string or port (it refuses them). Cookie logging
+  would have needed the legacy logging setting, which also logs IPs, so the owner
+  is left out by address instead: he opens the cloudfront.net address, visitors.py
+  counts only [aws] site_domain. `visitors.py` prints per day visitors (browser +
+  country + day, rough), page views, searches, countries, pages and referrers, and
+  what it left out (the owner's address, bots by a [visits] bots word, errors,
+  assets). `tests/visitors_test.py`: made-up records and a stand-in Logs client.
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.

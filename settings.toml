@@ -188,6 +188,25 @@ site_price_class = "PriceClass_100"   # edge locations in Europe and North Ameri
 # certificate is issued and prints its ARN for the line below. Then cdk deploy. Neither is a secret.
 site_domain = "cairnpath.nikodem-laskowski.com"
 site_certificate_arn = "arn:aws:acm:us-east-1:809071263914:certificate/fd64b2a2-8b18-45e5-8255-b7fd8e36c489"
+# Visits (18 Nov 2026): is anyone but Nikodem looking? CloudFront writes its access logs to a
+# private bucket of their own (VisitLogs), with only the fields in [visits]: no IP address, no
+# cookie; the country comes from CloudFront itself. Deleted after site_visit_days. Turned on once
+# by python site_logs.py (us-east-1, CloudFront's rule); counted by python visitors.py.
+site_visits = true
+site_visit_days = 30
+
+[visits]
+# site_logs.py and visitors.py (18 Nov 2026). The fields CloudFront logs for each request, chosen
+# so nothing identifies a visitor: no c-ip (the IP address), no cs(Cookie), and no cs-uri-query
+# (it holds the search question, which the search never logs either). c-country is CloudFront's
+# own lookup. Nikodem is left out by address: he opens the xxxx.cloudfront.net address, and only
+# visits to [aws] site_domain count (x-host-header says which one was used).
+fields = ["date", "time", "x-host-header", "cs-uri-stem", "sc-status", "cs(Referer)", "cs(User-Agent)", "c-country"]
+source_name = "cairnpath-site"              # the CloudWatch delivery source (the distribution)
+destination_name = "cairnpath-site-visits"  # ...and destination (the VisitLogs bucket)
+# a user agent with any of these words is a bot, link preview or script, not a person
+bots = ["bot", "crawl", "spider", "slurp", "preview", "facebookexternalhit", "embed", "curl", "wget",
+        "python", "go-http", "headless", "monitor", "scan", "okhttp", "java/", "http-client", "axios", "node-fetch"]
 
 [retention]
 # retention.py: GRR and NRR (standard definitions), the ARR bridge and the forecast

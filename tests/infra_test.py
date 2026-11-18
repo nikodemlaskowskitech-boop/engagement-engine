@@ -51,10 +51,13 @@ buckets = t.find_resources("AWS::S3::Bucket")
 data_buckets = {k: v for k, v in buckets.items() if k.startswith("Data")}
 data_id, bucket = next(iter(data_buckets.items()), (None, {}))
 site_buckets = {k: v for k, v in buckets.items() if k.startswith("Site")}
+visit_buckets = {k: v for k, v in buckets.items() if k.startswith("VisitLogs")}
 
 print("\nData bucket: safe by default")
-check(len(data_buckets) == 1 and len(buckets) == 1 + len(site_buckets) and len(site_buckets) == int(bool(SETTINGS["aws"].get("site"))),
-      "one data bucket (plus the public site's own bucket when [aws] site is on), nothing else", sorted(buckets))
+check(len(data_buckets) == 1 and len(buckets) == 1 + len(site_buckets) + len(visit_buckets)
+      and len(site_buckets) == int(bool(SETTINGS["aws"].get("site")))
+      and len(visit_buckets) == int(bool(SETTINGS["aws"].get("site") and SETTINGS["aws"].get("site_visits"))),
+      "one data bucket (plus the public site's own bucket, and its visit logs, when on), nothing else", sorted(buckets))
 keys = t.find_resources("AWS::KMS::Key")
 key_id = next(iter(keys), None)
 r = has(t, "AWS::S3::Bucket", {"BucketEncryption": {"ServerSideEncryptionConfiguration": [
@@ -607,7 +610,7 @@ if aws.get("site"):
         t2 = Template.from_stack(DataStack(cdk.App(), "TestNoSite", env=stack.environment and cdk.Environment(
             account=str(aws["account_id"]), region=aws["region"])))
         check(not t2.find_resources("AWS::CloudFront::Distribution")
-              and not [k for k in t2.find_resources("AWS::S3::Bucket") if k.startswith("Site")]
+              and not [k for k in t2.find_resources("AWS::S3::Bucket") if k.startswith(("Site", "VisitLogs"))]
               and "SITE_BUCKET" not in json.dumps(t2.find_resources("AWS::Lambda::Function"))
               and "TOP_K" not in json.dumps(t2.find_resources("AWS::Lambda::Function"))
               and len(t2.find_resources("AWS::ApiGatewayV2::Api")) == 1,
@@ -616,6 +619,38 @@ if aws.get("site"):
         aws["site"] = True
 else:
     check(not dists and not site_buckets, "[aws] site = false: no distribution, no site bucket")
+
+print("\nVisits (18 Nov 2026): CloudFront's access logs, nothing that identifies a visitor")
+if aws.get("site") and aws.get("site_visits"):
+    vid, vb = next(iter(visit_buckets.items()), (None, {}))
+    vp = vb.get("Properties", {})
+    check(vp.get("PublicAccessBlockConfiguration") == {"BlockPublicAcls": True, "BlockPublicPolicy": True,
+                                                       "IgnorePublicAcls": True, "RestrictPublicBuckets": True}
+          and vp.get("OwnershipControls") == {"Rules": [{"ObjectOwnership": "BucketOwnerEnforced"}]}
+          and vp.get("BucketEncryption", {}).get("ServerSideEncryptionConfiguration", [{}])[0]
+          .get("ServerSideEncryptionByDefault", {}).get("SSEAlgorithm") == "AES256"
+          and vid not in (data_id,) and vb.get("DeletionPolicy") == "Retain",
+          "its own private bucket: public-access blocks on, ACLs off, S3-managed encryption, kept", vp)
+    rules = vp.get("LifecycleConfiguration", {}).get("Rules", [])
+    check(any(r.get("ExpirationInDays") == aws["site_visit_days"] and r.get("Status") == "Enabled" for r in rules),
+          f"logs deleted after {aws['site_visit_days']} days ([aws] site_visit_days)", rules)
+    vst = next((p for p in t.find_resources("AWS::S3::BucketPolicy").values()
+                if p["Properties"].get("Bucket") == {"Ref": vid}), {}).get("Properties", {}) \
+        .get("PolicyDocument", {}).get("Statement", [])
+    vallow = [st for st in vst if st.get("Effect") == "Allow"]
+    check(len(vallow) == 2 and all(st.get("Principal") == {"Service": "delivery.logs.amazonaws.com"} for st in vallow)
+          and sorted(a for st in vallow for a in actions_of(st)) == ["s3:GetBucketAcl", "s3:PutObject"]
+          and all("aws:SourceAccount" in json.dumps(st.get("Condition")) and "delivery-source" in json.dumps(st.get("Condition"))
+                  for st in vallow),
+          "only AWS's log delivery may write, for this account's own delivery sources (add files, check the ACL)", vallow)
+    check(any(st.get("Sid") == "DenyVisitsToAnyoneElse" and st.get("Effect") == "Deny" for st in vst)
+          and any(st.get("Condition") == {"Bool": {"aws:SecureTransport": "false"}} for st in vst),
+          "nobody else reads or writes (the admins only), plain HTTP refused", vst)
+    outs = t.find_outputs("*")
+    check("VisitLogsBucket" in outs and "SiteDistributionId" in outs,
+          "prints the bucket and the distribution ID (site_logs.py and visitors.py read them)", sorted(outs))
+else:
+    check(not visit_buckets, "[aws] site_visits off: no visit logs bucket", sorted(visit_buckets))
 
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)
