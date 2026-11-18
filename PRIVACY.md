@@ -309,3 +309,11 @@ What's left: in a tiny audience, browser plus country plus time can still point 
 (one visitor from a small country on a quiet day). That is why the logs stay 30 days in a
 bucket only the admins can read, and only counts are printed. The site's note says what is
 counted.
+
+## 10. Meeting notes (18 Nov 2026)
+
+A CSM can type a note when logging a meeting in Slack. It is free text, so it could name
+anyone. It shows on the in-house cockpit (Last in My work), where the team already sees the
+account. It never goes on the public demo site (roles.py --site drops it; site_test checks
+every page) and never to a model (the MCP timeline drops it; mcp_server_test checks it). The
+meeting's outcome is a fixed label from slack_loop.OUTCOMES and may go anywhere.

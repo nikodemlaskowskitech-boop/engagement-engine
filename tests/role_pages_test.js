@@ -65,6 +65,53 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       JSON.stringify({ rows: rows.length, offered: rows.filter((r) => r.act).length, wrong: wrong.slice(0, 3) }));
     await p.close();
   }
+  console.log("\nMy work (18 Nov 2026): a CSM's queue, by cash at stake per day left");
+  for (const f of ["csm_anna.html", "csm_tom.html", "csm_mia.html", "pm_jonas.html", "mgr_sophie.html"]) {
+    const m = meta(f), { p } = await open(f, "tasks", true);
+    await p.click("#tab-tasks"); await p.waitForTimeout(150);
+    const label = (await p.textContent("#tab-tasks")).trim();
+    if (m.role === "manager") {          // managers and the leader keep the task table and its decisions
+      const heads = await p.$$eval("#tk-list thead th", (ths) => ths.map((t) => t.textContent.replace(/[▲▼↕]/g, "").trim()));
+      check(label === "Tasks" && heads.includes("Decision") && !heads.includes("At stake"), `${f}: still "Tasks", the manager's table`, `${label} ${heads}`);
+      await p.close(); continue;
+    }
+    const rows = await p.$$eval("table.queue tbody tr:not(.detail)", (trs) => trs.map((tr) => tr.querySelector("[data-open]").dataset.open));
+    if (!rows.length) {                  // nothing open: the page says so, still under "My work"
+      check(label === "My work" && /No tasks here|nothing to pick up/.test(await p.textContent("#view-tasks")), `${f}: "My work", nothing open, and it says so`, label);
+      await p.close(); continue;
+    }
+    const data = await p.evaluate(() => JSON.parse(document.getElementById("views-data").textContent));
+    const byId = Object.fromEntries(data.accounts.map((a) => [a.account_id, a]));
+    const heads = await p.$$eval("table.queue thead th", (ths) => ths.map((t) => t.textContent.trim()));
+    check(label === "My work" && heads.join() === "Account,ARR,At stake,Why,Reach by,Last,Next,Status" && !(await p.$("table.queue th.sortable")),
+      `${f}: "My work", the queue's eight columns, in a fixed order (no re-sorting)`, `${label} | ${heads}`);
+    check(!(await p.isVisible("#tk-banner")) || !/Manager/.test(await p.textContent("#tk-banner")), `${f}: no manager's instruction on a CSM's page`);
+    // the order: cash at stake / days left (reach deadline at Act, else renewal), ARR breaks ties
+    const day = (d) => Date.parse(d + "T00:00:00Z") / 864e5;
+    const reach = (data.settings.reach_days || {});
+    const key = (id) => {
+      const a = byId[id] || {}, t = data.tasks.find((x) => x.account_id === id && ["Open", "Claimed"].includes(x.action_status)) || {};
+      const fl = (a.flags || []).find((x) => x.flag === t.flag) || {};
+      const ta = (data.time_to_action || []).find((x) => x.account_id === id && x.flag === t.flag);
+      const left = t.status === "Act" && ta && !ta.call_date ? (reach[a.tier] || data.settings.reach_days_other) - (day(data.as_of) - day(ta.signal_date))
+        : a.renewal_date ? day(a.renewal_date) - day(data.as_of) : 365;
+      return (fl.value || 0) / Math.max(1, left);
+    };
+    const keys = rows.map(key);
+    check(rows.length > 0 && keys.every((k, i) => i === 0 || keys[i - 1] >= k - 1e-9), `${f}: ${rows.length} rows, the most cash at stake per day left first`, JSON.stringify(rows.map((r, i) => [r, Math.round(keys[i])])));
+    const last = await p.$("[data-last]");
+    if (last) {
+      await last.click(); await p.waitForTimeout(100);
+      const det = await p.$eval("table.queue tr.detail", (d) => d.textContent).catch(() => "");
+      await last.click(); await p.waitForTimeout(100);
+      check(/^Last: .+, \d+ \w+/.test(det) && /Outcome:/.test(det) && !(await p.$("table.queue tr.detail")),
+        `${f}: Last opens that engagement under its row (kind, date, outcome) and a second click closes it`, det.slice(0, 90));
+    }
+    const nothing = await p.$$eval("table.queue .badge.nothing", (b) => b.length);
+    const noPlan = rows.filter((id) => { const a = byId[id] || {}; return !(data.next_steps || []).some((s) => s.account_id === id) && !(a.next_qbr_date > data.as_of); }).length;
+    check(nothing === noPlan, `${f}: "nothing planned" exactly where there's no next step and no QBR booked (${nothing})`, `${nothing} vs ${noPlan}`);
+    await p.close();
+  }
   console.log("\nHandover Confirm only for the outgoing owner or their manager (stand-in database)");
   for (const [f, acc, want] of [["csm_mia.html", "acc_024", true], ["csm_lukas.html", "acc_024", false],
                                 ["mgr_sophie.html", "acc_024", true], ["leader.html", "acc_024", false],

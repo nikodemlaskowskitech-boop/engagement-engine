@@ -238,6 +238,8 @@ def build(export, template=None, out=PAGES, sandbox=False):
     written = {}
     for pid, person in everyone.items():
         page, meta = slice_export(export, pid, person)
+        if sandbox:    # a meeting's free-text note is typed in Slack and may hold anything: never public
+            page["touches"] = [{**t, "note": None} for t in page.get("touches", [])]
         meta["sandbox"] = bool(sandbox)
         if sandbox and SETTINGS.get("demo", {}).get("author"):      # the public site's who-and-why strip and tour
             # the CSM door: [demo] csm, else the first CSM (a company's own team has no Tom)
