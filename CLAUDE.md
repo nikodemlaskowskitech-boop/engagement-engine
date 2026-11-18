@@ -82,6 +82,7 @@ Docs-only PRs need none.
 | `infra/bundle.py`, `infra/lock_lambda.py`, `infra/locks/`, a pin a Lambda uses | `tests/lambda_lock_test.py` |
 | `upload.py` / `pull_clicks.py` / `site_cert.py` / `put_key.py` / `request_briefs.py` | its own `tests/<name>_test.py` |
 | `guardduty_report.py` / `access_report.py` | its own `tests/<name>_test.py` |
+| `visitors.py`, `site_logs.py`, [visits] | `tests/visitors_test.py`, plus `tests/infra_test.py` if the bucket changes |
 | IAM roles or policies | `tests/security_check_test.py`; after the deploy Nikodem runs `python security_check.py` (live) |
 
 ## Scope: a CSM cockpit
@@ -319,6 +320,7 @@ AWS (run by Nikodem, signed in with `aws login --profile cairnpath`):
 - `put_key.py`: secrets into Parameter Store, never printed.
 - `security_check.py`: live IAM checks; `access_report.py`, `guardduty_report.py`: read-only reports.
 - `site_cert.py`: the certificate for the demo site's own address.
+- `site_logs.py`: turns on the demo site's visit logs (us-east-1, once): no IP, no cookie; `visitors.py`: counts them.
 - `to_parquet.py`: the engine's tables for Athena.
 - `infra/lambdas/search/`: the public search on the demo site: its handler and the redacted file it carries.
 

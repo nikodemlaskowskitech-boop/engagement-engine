@@ -403,6 +403,40 @@ class DataStack(Stack):
                 resources=[site_bucket.arn_for_objects("*")],
                 conditions={"ArnNotLike": {"aws:PrincipalArn": [engine.role.role_arn] + admins}, **not_a_service}))
             CfnOutput(self, "SiteBucket", value=site_bucket.bucket_name)
+            CfnOutput(self, "SiteDistributionId", value=site.distribution_id)   # for site_logs.py
+
+            # --- visits (18 Nov 2026): CloudFront's access logs, in a private bucket of their own ---
+            # site_logs.py asks CloudFront (from us-east-1, its rule) to write here, with only the
+            # fields in [visits]: no IP address, no cookie. visitors.py counts them. Nobody reads
+            # them but the admins; AWS's log delivery may only add files, for this account's own
+            # delivery sources. Deleted after [aws] site_visit_days.
+            if aws.get("site_visits"):
+                visits = s3.Bucket(
+                    self, "VisitLogs",
+                    block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+                    object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+                    encryption=s3.BucketEncryption.S3_MANAGED,      # the log delivery gets no grant on our key
+                    enforce_ssl=True,
+                    lifecycle_rules=[s3.LifecycleRule(id="DeleteOldVisits",
+                                                      expiration=Duration.days(aws["site_visit_days"]))],
+                    removal_policy=RemovalPolicy.RETAIN)
+                delivery = iam.ServicePrincipal("delivery.logs.amazonaws.com")
+                ours = {"StringEquals": {"aws:SourceAccount": acct},
+                        "ArnLike": {"aws:SourceArn": f"arn:aws:logs:us-east-1:{acct}:delivery-source:*"}}
+                visits.add_to_resource_policy(iam.PolicyStatement(
+                    sid="AWSLogDeliveryWrite", principals=[delivery], actions=["s3:PutObject"],
+                    resources=[visits.arn_for_objects("*")],
+                    conditions={"StringEquals": {**ours["StringEquals"], "s3:x-amz-acl": "bucket-owner-full-control"},
+                                "ArnLike": ours["ArnLike"]}))
+                visits.add_to_resource_policy(iam.PolicyStatement(
+                    sid="AWSLogDeliveryAclCheck", principals=[delivery], actions=["s3:GetBucketAcl"],
+                    resources=[visits.bucket_arn], conditions=ours))
+                visits.add_to_resource_policy(iam.PolicyStatement(
+                    sid="DenyVisitsToAnyoneElse", effect=iam.Effect.DENY, principals=[iam.AnyPrincipal()],
+                    actions=["s3:GetObject*", "s3:PutObject*", "s3:DeleteObject*", "s3:ListBucket*"],
+                    resources=[visits.bucket_arn, visits.arn_for_objects("*")],
+                    conditions={"ArnNotLike": {"aws:PrincipalArn": admins}, **not_a_service}))
+                CfnOutput(self, "VisitLogsBucket", value=visits.bucket_name)
 
             # --- the public search (13 Nov 2026): /search on the site's own address ---
             # Its own function, carrying only the demo documents redacted on the laptop

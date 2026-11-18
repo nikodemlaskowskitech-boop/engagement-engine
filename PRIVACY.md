@@ -289,3 +289,23 @@ folder's contact list, over the facts, the documents **and the question itself**
 typed into it becomes its label), then `leak_check()` over all of it; a name nobody
 listed stops the call. Real names go back in after the model. Laptop only.
 
+
+## 9. Visitors to the demo site (`visitors.py`, 18 Nov 2026)
+
+The question: is anyone but Nikodem looking at the demo site? Answered with counts, never
+identities. CloudFront logs each request with only the fields in settings.toml [visits]:
+the day and time, the address used, the page, the status, the referrer, the browser (user
+agent) and the country, which CloudFront looks up itself. Left out on purpose: the IP address
+(`c-ip`, `x-forwarded-for`), cookies, the query string (it holds the search question, which
+the search never logs either, §6) and the port. `site_logs.py` refuses any of those. The site
+sets no cookie, so no consent banner is needed. Nikodem is left out by the address he uses
+(the xxxx.cloudfront.net one), not by marking his browser.
+
+The logs sit in their own private bucket and expire after 30 days ([aws] site_visit_days).
+`visitors.py` prints counts per day: visitors (one browser in one country on one day, a rough
+count), page views, searches, countries, pages and where people came from.
+
+What's left: in a tiny audience, browser plus country plus time can still point at one person
+(one visitor from a small country on a quiet day). That is why the logs stay 30 days in a
+bucket only the admins can read, and only counts are printed. The site's note says what is
+counted.
