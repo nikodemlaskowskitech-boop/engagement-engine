@@ -198,8 +198,8 @@ print(json.dumps(r))`;
     const notes = [];
     for (const f of fs.readdirSync(DIR).filter((x) => x.endsWith(".html") && x !== "search.html")) {
       const mm = fs.readFileSync(path.join(DIR, f), "utf8").match(/<script id="views-data" type="application\/json">([\s\S]*?)<\/script>/);
-      if (mm) for (const t of JSON.parse(mm[1]).touches || []) if (t.note) notes.push(`${f}: ${t.account_id}`); }
-    check(!notes.length, "no meeting note (free text from Slack) on any public page; the outcome may show", notes.slice(0, 3).join(", "));
+      if (mm) for (const t of JSON.parse(mm[1]).touches || []) if (t.note && t.source !== "cs_history") notes.push(`${f}: ${t.account_id} (${t.source})`); }
+    check(!notes.length, "no note typed in Slack on any public page (the generator's made-up notes may show)", notes.slice(0, 3).join(", "));
     // two doors instead of a list of every person (18 Nov 2026): Leader | CSM, the rest under "More people"
     const csmDoor = demo("csm") + ".html";
     const door = async (pg) => ({ shown: await pg.isVisible("#doors"),

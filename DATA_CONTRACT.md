@@ -130,7 +130,7 @@ engine runs.
 | `email_sent` | owner_id, topic | An email went out (`automated` or a person) |
 | `email_opened` | owner_id, topic | The customer opened it (user_id = who) |
 | `workshop_attended` | owner_id, topic | A customer user attended |
-| `meeting_held` | owner_id, topic (+ outcome, note, slack_user from Slack) | A call or meeting took place |
+| `meeting_held` | owner_id, topic (+ outcome, note, slack_user from Slack; the demo generator writes outcome and note too, 18 Nov 2026) | A call or meeting took place |
 | `task_claimed` | owner_id, topic, slack_user | Someone took a task in Slack |
 | `task_assigned` | owner_id (the new owner), topic (the flag), status, manager | A manager gave a task to someone else in the cockpit |
 | `handback_approved` | owner_id (the manager), topic `handback`, slack_user or manager | A manager approved handing a follow-up back to the pool |

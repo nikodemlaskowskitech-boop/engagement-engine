@@ -66,6 +66,7 @@ Docs-only PRs need none.
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
 | `documents.py` | `tests/documents_test.py`, plus the handover row |
 | `generate_documents.py` | `tests/corpus_test.py` |
+| `generate_events.py`'s meeting outcomes and notes | `tests/meeting_log_test.py` |
 | `search.py`, `documents.py`, [search], `tests/heldout/` | `tests/search_test.py` (recall per question, corpus and held-out; redacted results), plus the handover row if redaction changes |
 | `search_export.py`, its committed file, or anything that changes the redaction or the documents | `tests/search_export_test.py` (stale file = FAIL: run `python search_export.py`) |
 | `mcp_server.py`, [mcp], or what it calls (`facts.py`, `search.py`, `roles.py`) | `tests/mcp_server_test.py` |

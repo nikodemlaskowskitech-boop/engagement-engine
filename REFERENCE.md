@@ -85,6 +85,11 @@ Read a file's entry before changing that file, and update the entry in the same 
   never a path typed into SQL. `tests/pipeline_test.py`: both lists from one
   source, every step a real script, no typed hand-off path left.
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
+  (18 Nov 2026: meetings carry what a CSM would log in Slack, for Last in My work: meeting_log()
+  gives about 8 in 10 an outcome from slack_loop.OUTCOMES, at risk mostly for the at-risk
+  personalities, 1 in 4 the other way, and 3 in 4 of those a note composed from two parts (36
+  different). Taken from the meeting's own ID, never a random draw: every other output came
+  out byte for byte the same; no rule reads them. tests/meeting_log_test.py.)
   declining, slipping (volume sliding, users steady: one signal, churn Watch),
   power_user, new_customer, shelfware, stalled, never_onboarded,
   handoff_gap) mixed by weight (tuned 12 Nov 2026 so today reads like a real book:

@@ -2408,8 +2408,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       (plan.note && plan.kind !== "crm" ? `<br>${esc(plan.note)}` : "");
     return `<b>Last: ${esc(kindOf(x))}, ${fmt(x.date)}</b> · ${esc(ownerName[x.owner_id] || x.owner_id || "—")}` +
       `<br>Outcome: ${x.outcome ? esc(OUT[x.outcome] || x.outcome) : '<span class="muted">none logged</span>'}` +
-      (x.note ? ` · ${esc(x.note)}` : PAGE && PAGE.sandbox ? "" : ' · <span class="muted">no note logged</span>') +
-      (PAGE && PAGE.sandbox ? '<br><small class="muted">Notes typed in Slack are kept off the public demo.</small>' : "");
+      (x.note ? `<br>${esc(x.note)}` : ' · <span class="muted">no note logged</span>');
   }
   function drawQueue(items, host) {
     const Q = items.slice().sort((x, y) => urgency(y) - urgency(x)
