@@ -174,6 +174,197 @@ TEMPLATES = {
     },
 }
 
+# Two more wordings per topic and channel (18 Nov 2026). Calls keep their number of lines,
+# so the random draws (times, gaps) stay exactly as before.
+MORE_WORDINGS = {
+    "competitor": {
+        "email": [("Before we sign again",
+                   "Hi {s_first},\n\nOur new head of data is pushing us to look at other analytics vendors "
+                   "before the renewal. Two of them have already sent proposals. Can you help me make the case "
+                   "for staying?"),
+                  ("Alternatives on the table",
+                   "{s_first},\n\nI should be open with you: we've had a demo from Northbeam Insights and the "
+                   "team liked it. Nothing is decided, but price will matter when the contract comes up.")],
+        "call": [[("c", "Procurement wants three quotes this year, so we're talking to Lumen Analytics too."),
+                  ("s", "What would they need to see from us to stop the search?"),
+                  ("c", "A lower price, or proof the add-ons pay for themselves.")],
+                 [("c", "One of our product leads keeps comparing your funnels with another tool he trialled."),
+                  ("s", "Which parts of the comparison worry you most?"),
+                  ("c", "Speed of the dashboards, and the cost per event.")]],
+        "ticket": [("API limits for a data migration",
+                    "We may move our analytics to another platform and need to pull everything out through "
+                    "the API. What rate limits apply?",
+                    "Shared the API limits and the export endpoints."),
+                   ("Feature comparison request",
+                    "Our evaluation team is comparing analytics vendors. Can you confirm what is included in our "
+                    "plan versus the higher tiers?",
+                    "Sent the plan comparison; flagged to the account owner.")],
+    },
+    "budget_cut": {
+        "email": [("Our renewal and the budget",
+                   "{s_first},\n\nWe've just come out of budget planning and analytics took a hit. I'll need a "
+                   "cheaper option for next year, or a much smaller volume."),
+                  ("Cost savings exercise",
+                   "Hi {s_first},\n\nThe board has asked for savings across all vendors this quarter. Could you "
+                   "send me options to bring the annual cost down?")],
+        "call": [[("c", "Every vendor has to justify its cost to the finance committee next month."),
+                  ("c", "We're cutting anything that isn't clearly essential."),
+                  ("s", "Let's show them which decisions your team made with the data this year.")],
+                 [("c", "Our spending is under a lot of scrutiny since the funding round slipped."),
+                  ("c", "I've been asked to reduce the contract at renewal."),
+                  ("s", "Which teams depend on it most? We'll protect those first.")]],
+        "ticket": [("Downgrade options",
+                    "Management wants us to lower our costs. Can we move to a cheaper plan mid-contract?",
+                    "Explained the contract terms; passed to the account owner."),
+                   ("Reduce the committed volume",
+                    "What would our price be if we cut our committed events in half at the next renewal?",
+                    "Sent the price bands; the account owner will follow up.")],
+    },
+    "champion_leaving": {
+        "email": [("Handing over",
+                   "Hi {s_first},\n\nQuick note: I've resigned and leave at the end of next month. {c2_first} "
+                   "will be your contact, but she's new to analytics, so she'll need help."),
+                  ("Change of contact",
+                   "{s_first},\n\nI'm stepping away from my role here soon. Please copy {c2_first} on "
+                   "everything from now on. I'm not sure the new team will keep the weekly review going.")],
+        "call": [[("c", "I've accepted an offer elsewhere, so this is probably our last call together."),
+                  ("s", "Who should we work with once you've gone?"),
+                  ("c", "Probably {c2_first}, but nothing is confirmed.")],
+                 [("c", "The reorganisation means I'm leaving the product team in a few weeks."),
+                  ("s", "Who will own the dashboards after that?"),
+                  ("c", "Nobody has been named yet.")]],
+        "ticket": [("Make a new admin",
+                    "I'm leaving the company soon. Please give {c2} admin rights so the account isn't locked.",
+                    "{c2} is now an admin."),
+                   ("Change the main contact",
+                    "Please change the primary contact on our account to {c2}. I'm leaving shortly.",
+                    "Main contact updated to {c2}.")],
+    },
+    "data_missing": {
+        "email": [("Can we trust these numbers?",
+                   "{s_first},\n\nOur conversion figures in Cairnpath have been off since the last release, and "
+                   "our managers have noticed. We need to find out why before the board pack."),
+                  ("Duplicate events",
+                   "Hi {s_first},\n\nSome of our sign-up events are counted twice, so the funnel looks better than "
+                   "it is. The team doesn't know which numbers to believe.")],
+        "call": [[("c", "Our weekly report showed zero purchases on two days last month."),
+                  ("s", "Were the events sent and dropped, or never sent?"),
+                  ("c", "We don't know. That's the problem.")],
+                 [("c", "The dashboard and our finance figures disagree by about a fifth."),
+                  ("s", "Is it all events or one platform?"),
+                  ("c", "Mostly the web app, since the redesign.")]],
+        "ticket": [("Incorrect user counts",
+                    "Our active user count dropped by 30% overnight, but our traffic didn't. Is the data wrong?",
+                    "Found a filter on the project; investigating with the customer."),
+                   ("Ingestion errors on our project",
+                    "We see a lot of rejected events in the debugger since Tuesday. Can you check what is failing?",
+                    "Schema mismatch found; fix shared.")],
+    },
+    "not_rolled_out": {
+        "email": [("Getting more teams on board",
+                   "Hi {s_first},\n\nWe've barely used Cairnpath outside the analytics team. Sales and support "
+                   "never picked it up. Have other customers solved this?"),
+                  ("Low adoption",
+                   "{s_first},\n\nI'll be honest: most of the licences we planned for are unused. The rollout "
+                   "stalled after the pilot. Can we talk about a plan?")],
+        "call": [[("c", "We only ever finished the pilot with one team."),
+                  ("c", "Everyone else still works from spreadsheets."),
+                  ("s", "Who sponsored the pilot, and are they still there?")],
+                 [("c", "We haven't touched the experiments add-on since we bought it."),
+                  ("c", "Nobody had time to set it up."),
+                  ("s", "Let's pick one test we could run this month.")]],
+        "ticket": [("Training materials",
+                    "Do you have training videos? Most of our teams haven't started using the tool yet.",
+                    "Shared the academy links."),
+                   ("How to set up the experiments add-on",
+                    "We paid for experiments but never set them up. Where do we start?",
+                    "Sent the setup guide; offered a session.")],
+    },
+    "more_volume": {
+        "email": [("Running out of events",
+                   "Hi {s_first},\n\nOur traffic is growing faster than planned and we're close to our yearly "
+                   "event limit. What are our options for more volume?"),
+                  ("Expanding to new markets",
+                   "{s_first},\n\nWe're rolling out to three more countries this spring, so we'll need far more "
+                   "events than our current plan. Could you send a quote?")],
+        "call": [[("c", "Our usage has grown much faster than we expected this year."),
+                  ("s", "Is that new users or new tracking?"),
+                  ("c", "New users, mostly from the mobile launch.")],
+                 [("c", "We're adding two more product lines to the tracking next quarter."),
+                  ("s", "Do you know roughly how many events that adds?"),
+                  ("c", "Our engineers think about 40% more.")]],
+        "ticket": [("Over our event limit",
+                    "We've passed 95% of our annual volume. Will data stop coming in when we hit 100%?",
+                    "No data loss; explained overage and passed to the account owner."),
+                   ("Increase our plan",
+                    "How do we add more events to our contract before we run out?",
+                    "Passed to the account owner for a quote.")],
+    },
+    "billing_dispute": {
+        "email": [("Query on {inv}",
+                   "Hi {s_first},\n\nWe don't agree with invoice {inv} (EUR {amt} in overage). The usage "
+                   "alerts never reached us. Please put it on hold while we review."),
+                  ("Invoice {inv} on hold",
+                   "{s_first},\n\nFinance has put invoice {inv} on hold. EUR {amt} for overage wasn't in our "
+                   "budget and we were never told we were close to the limit.")],
+        "call": [[("c", "Finance is refusing to pay the overage invoice."),
+                  ("c", "They say nobody told them about the limit."),
+                  ("s", "I'll send the monthly usage and the alerts we sent, and we'll review it together.")],
+                 [("c", "We have a disagreement about the last bill."),
+                  ("c", "The amount doesn't match what we thought we'd used."),
+                  ("s", "Let's go through the usage line by line.")]],
+        "ticket": [("Wrong amount on invoice",
+                    "Our latest invoice is higher than our contract. Please explain the extra charge.",
+                    "Explained the overage; passed to billing."),
+                   ("Credit note request",
+                    "We were billed for a plan we didn't order. Please send a credit note.",
+                    "Passed to billing.")],
+    },
+    "security_review": {
+        "email": [("Compliance documents",
+                   "Hi {s_first},\n\nAs part of our annual vendor review we need your ISO certificate, the "
+                   "latest pen test summary and the data processing agreement."),
+                  ("GDPR questions",
+                   "{s_first},\n\nOur DPO has questions about where our data is stored and how long you keep it. "
+                   "We can't add new users until this is answered.")],
+        "call": [[("c", "Our auditors are asking for your SOC 2 report and the sub-processor list."),
+                  ("s", "I'll send both under NDA this week.")],
+                 [("c", "We need data residency in the EU confirmed in writing."),
+                  ("s", "It's all hosted in the EU. I'll get you the written confirmation.")]],
+        "ticket": [("Enforce SSO for all users",
+                    "Our security policy says every user must log in through single sign-on. How do we enforce it?",
+                    "Shared the SSO enforcement setting."),
+                   ("Data retention settings",
+                    "Compliance needs us to delete user-level data after 12 months. Where is this set?",
+                    "Shared the retention settings.")],
+    },
+    "onboarding_stuck": {
+        "email": [("Still not live",
+                   "{s_first},\n\nWe're further behind than planned. The tracking plan is still with our "
+                   "developers and they won't get to it before next month."),
+                  ("Help with the setup",
+                   "Hi {s_first},\n\nWe signed a while ago but still haven't sent any data. Could someone help us "
+                   "with the SDK installation?")],
+        "call": [[("c", "Nothing has been implemented yet; the developers are on another project."),
+                  ("s", "Could we help with a working session?"),
+                  ("c", "That would help. We don't know where to start.")],
+                 [("c", "We're stuck on the tracking plan. Nobody agrees on the event names."),
+                  ("s", "Shall I share a starter plan from a similar customer?"),
+                  ("c", "Yes please, anything to get going.")]],
+        "ticket": [("No events arriving",
+                    "We installed the SDK but nothing shows up in the project. Are we missing a step?",
+                    "Wrong API key in the config; fixed."),
+                   ("Help with the tracking plan",
+                    "We're new and don't know which events to track first. Is there a template?",
+                    "Sent the starter tracking plan.")],
+    },
+}
+# Each topic's three wordings per channel, taken in turn across the corpus (no random draw, so
+# nothing else moves): with one wording, accounts on the same topic had word-for-word the same
+# email, which a demo viewer spotted (18 Nov 2026)
+WORDINGS = {t: {k: [v, *MORE_WORDINGS[t][k]] for k, v in kinds.items()} for t, kinds in TEMPLATES.items()}
+
+
 # Every call note is also a meeting in the engagement data (14 Nov 2026: "ask about this account"
 # found call notes the engine didn't know about). Its topic is the call's purpose, in the
 # engagement schema's words: a call about a churn worry is a churn call, and so on.
@@ -279,6 +470,7 @@ def main():
     ticket_no = 5000
     healthy_seen = 0
     turn = {}                                  # how many of each personality so far
+    used = {}                                  # how many times each topic's wording was used
 
     for a in accounts:
         acc, region, company = a["account_id"], a["region"], a["account_name"]
@@ -316,7 +508,9 @@ def main():
         for topic in topics:
             key[topic].add(acc)
             for kind in rng.sample(["ticket", "email", "call"], 2):     # two of the three ways
-                docs.append((topic, kind, TEMPLATES[topic][kind]))
+                n_used = used.get((topic, kind), 0)
+                used[(topic, kind)] = n_used + 1
+                docs.append((topic, kind, WORDINGS[topic][kind][n_used % len(WORDINGS[topic][kind])]))
         for kind, tpl in rng.sample(ROUTINE, 2):
             docs.append(("routine", kind, tpl))
         if personality[acc] == "healthy":

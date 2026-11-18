@@ -187,7 +187,10 @@ Read a file's entry before changing that file, and update the entry in the same 
   rollout that never happened; power users hitting the limit; new customers stuck
   starting; half the time a second topic. Each topic is written three ways (ticket, email,
   call) in different words, two of them per account, so a search has to match meaning,
-  not just the question's words. Every account gets two routine documents (password reset,
+  not just the question's words. 18 Nov 2026 (Nikodem spotted three accounts with the same
+  "Volume for next year" email): each topic and channel has three wordings (WORDINGS:
+  TEMPLATES plus MORE_WORDINGS), taken in turn across the corpus, never drawn, and calls
+  keep their number of lines, so dates, people and meetings stay byte for byte the same. Every account gets two routine documents (password reset,
   webinar thanks), and three healthy accounts a trap (a question's words without its
   meaning: "budget approved", "looked at a competitor two years ago", an invoice copy).
   Writes [search] key_file: nine CS questions in a CS person's words, the accounts that
@@ -234,6 +237,12 @@ Read a file's entry before changing that file, and update the entry in the same 
   Recall 37 of 37 (100%), precision 42% in a top 10 (most questions have 3 to 6 answers).
   Optimistic: the list was written by someone who had seen the corpus, generic words but
   not blind; a held-out set written apart is the fair test, before vectors are compared.
+  18 Nov 2026, with three wordings per topic (generate_documents.py): keywords 21 of 37
+  (57%), synonyms 35 of 37 (95%), precision 40%. The two misses are paraphrase, the new
+  text the vocabulary wasn't written for: "three quotes ... talking to Lumen Analytics" and
+  "move our analytics to another platform" (competitor, acc_076); "barely used outside the
+  analytics team" (not rolled out, acc_013). Left unfixed on purpose: synonyms fitted to
+  these lines would make the score flattering again; it's the case for vectors.
   Traps: the budget ones rank below all six answers; the competitor trap still ranks
   above three of them.
   Held-out, same day: tests/heldout/ (18 accounts acc_h01-h18, 75 documents, 4 traps,
