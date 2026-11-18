@@ -700,6 +700,10 @@ const segment = async (page, values) => {
     const rows = await page.$$eval("#ld-reach tbody tr", (rs) => rs.map((r) => r.innerText));
     check(noTask.every((r) => rows.some((x) => /no live task/.test(x))) && rows.length === want.length,
       `...an Act account with no live task still counts (${noTask.length} here), every one listed`, rows.join(" | ").slice(0, 300));
+    check(noTask.length ? rf.endsWith(`${noTask.length} of the ${want.length} have no live task to prompt anyone.`) : rf.endsWith("."),
+      `...the finding's "no live task" count matches the rows (${noTask.length} of ${want.length}), not only the overdue ones`, rf);
+    const note = await page.textContent("#view-lead .note:has(#ld-reach-early)");
+    check(note.includes(`up to ${D.settings.early_days} days before it`), `...the note says a call up to ${D.settings.early_days} days before the signal counts (team_report's early_days)`, note.slice(0, 160));
     const od = await page.$$eval("#ld-reach .badge.overdue", (bs) => bs.length);
     check(od === lateN, `...past the deadline shows "overdue N d" (${lateN})`, od);
     await tab(page, "tasks");
