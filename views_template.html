@@ -290,6 +290,10 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
 .tour h3 { margin: 4px 0 6px; font-size: 1.02rem; }
 .tour p { margin: 0 0 12px; font-size: 0.9rem; color: var(--ink-2); }
 .tour .row { display: flex; gap: 8px; align-items: center; }
+.tour ol.journey { margin: -4px 0 12px; padding-left: 1.2rem; font-size: 0.86rem; color: var(--ink-2); line-height: 1.45; }
+.tour ol.journey li { margin-bottom: 4px; }
+.tour ol.journey b { color: var(--ink); }
+.tour { max-height: calc(100vh - 40px); overflow-y: auto; }
 .tour .row .end { margin-left: auto; }
 @media (max-width: 640px) { .tour { right: 16px; bottom: 16px; } }
 .banner { font-size: 0.88rem; border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 8px 12px; border-radius: 4px; margin: 0; }
@@ -3327,9 +3331,33 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const churnAct = D.accounts.filter((a) => a.tier !== "Self-service" && a.flags.some((f) => f.flag === "churn" && f.status === "Act"))
       .sort((a, b) => (valueOf(b.flags.find((f) => f.flag === "churn")) || 0) - (valueOf(a.flags.find((f) => f.flag === "churn")) || 0));
     const pick = churnAct[0];
+    // One account through the system (18 Nov 2026, recruiter review: "show me one customer going
+    // through it"): picked by rule, never by name, so it holds after a regenerate. A churn signal,
+    // its task, a call on or after the signal and inside the tier's days, and a known renewal;
+    // a renewal kept in full first, then the biggest. The outcome is shown as it is, good or bad.
+    const ren = Object.fromEntries((D.renewals || []).map((r) => [r.account_id, r]));
+    const J = (D.churn_signals || []).map((s) => ({ s, a: byId[s.account_id], r: ren[s.account_id],
+        t: D.tasks.filter((x) => x.account_id === s.account_id && x.flag === "churn").sort((x, y) => (x.sent_on < y.sent_on ? -1 : 1))[0] }))
+      .filter(({ s, a, r, t }) => a && a.tier !== "Self-service" && r && t && s.call_date && s.call_date >= s.signal_date
+              && s.days_to_call <= REACH(a.tier))
+      .sort((x, y) => (y.r.outcome === "renewed") - (x.r.outcome === "renewed") || (y.r.arr || 0) - (x.r.arr || 0))[0];
+    const yr = (d) => fmt(d) + (d.slice(0, 4) !== D.as_of.slice(0, 4) ? " " + d.slice(0, 4) : "");
+    const journey = J && [
+      ["Signal", `${fmt(J.s.signal_date)}: churn ${J.s.status}. ${J.s.reasons.split(";")[0]}`],
+      ["Task", `${fmt(J.t.sent_on)}: to ${ownerName[J.t.routed_to] || J.t.routed_to}, "${J.t.action}"`],
+      ["Action", `${fmt(J.s.call_date)}: ${J.s.via === "qbr" ? "a QBR" : "a call"} with the customer`],
+      ["Reached", `in ${J.s.days_to_call} day${J.s.days_to_call === 1 ? "" : "s"}, inside the ${REACH(J.a.tier)} days set for ${J.a.tier}`],
+      // the outcome is after the data ends (as-of), read looking back, like "Did it work?": said so,
+      // or "renews in 104 days" on the page and "downsized" here read as a contradiction
+      ["Renewal", `${yr(J.r.renewal_date)}, after the data ends: ${J.r.outcome}, ${money(J.r.arr)} to ${money(J.r.renewal_arr)}`],
+      ["Measured", `flagged ${J.r.warning_days} days ahead, called, ${J.r.outcome}. A call is no guarantee; the engine measures either way.`],
+    ];
     const STEPS = [
+      J ? { v: "timeline", acc: J.a.account_id, h: `One account through the system: ${J.a.account_name}`,
+            p: `From signal to renewal outcome, the way every account moves through the engine. The data ends ${fmt(D.as_of)}; the outcome is read looking back from six months later, as "Did it work?" does.`,
+            list: journey }
+        : pick && { v: "timeline", acc: pick.account_id, h: `One account, end to end: ${pick.account_name}`, p: "Usage, every CS touch, why the engine flagged it (in words, never a score), the plan and the renewal forecast." },
       { v: "lead", h: "The leader's one page", p: "What's at risk, whether anyone has called, what's planned and the forecast, sorted by value. Click any number to list its accounts." },
-      pick && { v: "timeline", acc: pick.account_id, h: `One account, end to end: ${pick.account_name}`, p: "Usage, every CS touch, why the engine flagged it (in words, never a score), the plan and the renewal forecast." },
       views.includes("tasks") && { v: "tasks", h: "Where the work goes", p: "Every task the engine sent, routed by tier: a named CSM for Enterprise, a regional pool for Scale, automation for Self-service. Owner, age and status." },
       views.includes("outcomes") && { v: "outcomes", h: "Did it work?", p: "Today's flags held against what really happened at renewal: caught, missed and false alarms, and how much warning they gave." },
       { h: "A page per person, and the documents", p: "Each person gets their own page, holding only their team's data. Open a CSM's morning page, or ask the tickets, emails and call notes in plain words.",
@@ -3343,6 +3371,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       if (s.acc) { sel.value = s.acc; drawTimeline(s.acc); }
       if (s.v) { show(s.v); $("view-" + s.v).scrollIntoView({ behavior: "smooth", block: "start" }); }
       tour.innerHTML = `<div class="step">Step ${at + 1} of ${STEPS.length}</div><h3>${esc(s.h)}</h3><p>${esc(s.p)}</p>` +
+        (s.list ? `<ol class="journey">${s.list.map(([k, t]) => `<li><b>${esc(k)}</b> ${esc(t)}</li>`).join("")}</ol>` : "") +
         (s.links ? `<p>${s.links.map(([l, href]) => `<a href="${esc(href)}">${esc(l)}</a>`).join(" · ")}</p>` : "") +
         `<div class="row">${at ? '<button type="button" class="small" data-tour="back">Back</button>' : ""}` +
         `${at < STEPS.length - 1 ? '<button type="button" class="small" data-tour="next">Next</button>' : ""}` +

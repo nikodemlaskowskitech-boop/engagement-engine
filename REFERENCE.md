@@ -596,9 +596,16 @@ Read a file's entry before changing that file, and update the entry in the same 
   who built it or why, nor where to click first): on the public site only (roles.py --site
   puts settings.toml [demo] into the page's meta; the in-house cockpit has neither), a strip
   above the intro: built by [demo] author, [demo] why, a link to the repo's README, and on
-  the leader's page "Take the 3-minute tour": five steps (Leadership; the account with the
-  most ARR at risk at churn Act, on its timeline; Tasks; Did it work?; a CSM's page and the
-  search), Back / Next / Close, Escape closes, ?tour opens it. The intro counts the page's
+  the leader's page "Take the 3-minute tour": five steps (one account through the system;
+  Leadership; Tasks; Did it work?; a CSM's page and the search), Back / Next / Close, Escape
+  closes, ?tour opens it. Step 1 since 18 Nov 2026 (recruiter review: "show one customer going
+  through it"): six stages on the account's timeline, signal, task, action, reached, renewal,
+  measured. The account by rule, never by name: a churn signal, its task, a call on or after
+  the signal inside the tier's reach days, a known renewal; kept in full first, then the
+  biggest ARR (today Yarrow Studio: reached in 2 days, still downsized; shown as it is). The
+  renewal is after the data ends, read looking back like "Did it work?", and the step says so
+  (the page's "renews in 104 days" next to "downsized" read as a contradiction). With no such
+  account, step 1 is the account with the most ARR at risk, as before. The intro counts the page's
   tabs ("Nine views"), never a typed number. site_test checks the strip, the count and the
   tour, and that the laptop's pages have no strip.
   Two doors (18 Nov 2026, instead of a landing page: an extra page in front of the cockpit
