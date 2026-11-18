@@ -601,6 +601,14 @@ Read a file's entry before changing that file, and update the entry in the same 
   search), Back / Next / Close, Escape closes, ?tour opens it. The intro counts the page's
   tabs ("Nine views"), never a typed number. site_test checks the strip, the count and the
   tour, and that the laptop's pages have no strip.
+  Two doors (18 Nov 2026, instead of a landing page: an extra page in front of the cockpit
+  loses visitors): on the public site the top-left is Leader | CSM (the leader's page on
+  Leadership, and [demo] csm's book, Tom Brennan: an expansion at Act, a churn Watch task
+  waiting, five QBRs coming up), marked current; everyone else is under "More people", where
+  "Viewing as" comes back when you pick someone. The in-house cockpit keeps its "Viewing as"
+  list. The tour's last step links the same CSM. site_test checks the doors, the switch, the
+  list and that the phone has no side scroll. A colour the switcher named (--muted) never
+  existed; it now uses --ink-3.
   Too few to tell (16 Nov 2026, both reviews: "3 of 5 churned with a call, 0 of 1 without"
   read as "calls don't work"): a with/without comparison shows rates only when every group
   has [cockpit] min_compare (10) accounts; fewer = the counts and "too few to tell", the

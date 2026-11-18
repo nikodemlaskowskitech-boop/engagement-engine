@@ -185,6 +185,29 @@ print(json.dumps(r))`;
     const top = await ph.$eval("#ld-finding", (e) => e.getBoundingClientRect().top);
     check(top < 844 - 60, `phone: the Leadership headline is in the first screen (top ${Math.round(top)} px of 844)`);
     await ph.close();
+    // two doors instead of a list of every person (18 Nov 2026): Leader | CSM, the rest under "More people"
+    const csmDoor = demo("csm") + ".html";
+    const door = async (pg) => ({ shown: await pg.isVisible("#doors"),
+      current: await pg.$$eval("#doors a[aria-current=page]", (as) => as.map((a) => a.id)),
+      csm: await pg.getAttribute("#door-csm", "href"), leader: await pg.getAttribute("#door-leader", "href"),
+      first: await pg.$eval("#page-switch", (s) => s.options[s.selectedIndex].text) });
+    let d = await door(p);
+    check(d.shown && d.current.join() === "door-leader" && d.csm === csmDoor && d.leader === "leader.html#lead"
+          && d.first === "More people\u2026",
+      `landing page: Leader | CSM doors, Leader current, CSM opens ${csmDoor}, the list says "More people…"`, JSON.stringify(d));
+    await p.click("#door-csm"); await p.waitForTimeout(600);
+    d = await door(p);
+    check(new URL(p.url()).pathname.endsWith(csmDoor) && d.current.join() === "door-csm" && d.first === "More people\u2026",
+      "...the CSM door opens that CSM's book, marked current", `${p.url()} ${JSON.stringify(d)}`);
+    await p.selectOption("#page-switch", "csm_anna.html"); await p.waitForTimeout(600);
+    d = await door(p);
+    check(new URL(p.url()).pathname.endsWith("csm_anna.html") && !d.current.length && /Anna/.test(d.first) && (await p.textContent("#page-switch-label")) === "Viewing as",
+      '..."More people" opens anyone else: no door current, "Viewing as" that person', `${p.url()} ${JSON.stringify(d)}`);
+    const pw = await ctx.newPage(); await pw.setViewportSize({ width: 390, height: 844 });
+    await pw.goto(base + "index.html"); await pw.waitForTimeout(500);
+    const wide = await pw.evaluate(() => document.documentElement.scrollWidth);
+    check(await pw.isVisible("#doors") && wide <= 390, `phone: the doors fit, no side scroll (${wide} px)`);
+    await pw.close();
     const p2 = await ctx.newPage(); await p2.goto(base + "csm_anna.html"); await p2.waitForTimeout(500);
     check(await p2.isVisible("#who-strip") && !(await p2.$("#tour-start")), "a CSM's page: who built it, but no tour (it walks the leader's page)");
     await ctx.close();
@@ -198,6 +221,8 @@ print(json.dumps(r))`;
     const sandbox = m && m[1] !== "null" ? JSON.parse(m[1]).sandbox : false;
     check(!sandbox, `data/${f}: not in sandbox mode`);
     check(!/id="who-strip"[^>]*>[^<]/.test(html), `data/${f}: no who-built-it strip (the in-house cockpit isn't a demo)`);
+    check(!/<option value="" selected>More people/.test(html) && /<span id="page-switch-label">Viewing as<\/span>/.test(html),
+      `data/${f}: the in-house "Viewing as" list, no demo doors`);
   }
 
   await b.close(); server.close();

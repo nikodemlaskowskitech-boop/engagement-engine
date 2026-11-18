@@ -240,11 +240,16 @@ def build(export, template=None, out=PAGES, sandbox=False):
         page, meta = slice_export(export, pid, person)
         meta["sandbox"] = bool(sandbox)
         if sandbox and SETTINGS.get("demo", {}).get("author"):      # the public site's who-and-why strip and tour
-            csm = next((o for o, p in everyone.items() if p["role"] == "csm"), None)
+            # the CSM door: [demo] csm, else the first CSM (a company's own team has no Tom)
+            csm = SETTINGS["demo"].get("csm") if SETTINGS["demo"].get("csm") in everyone else \
+                next((o for o, p in everyone.items() if p["role"] == "csm"), None)
             meta["demo"] = {**{k: SETTINGS["demo"][k] for k in ("author", "why", "repo_url")},
-                            "csm_page": files[csm] if csm else None, "csm_name": everyone[csm]["name"] if csm else None}
-        options = "".join(f'<option value="{files[o]}"{" selected" if o == pid else ""}>'
-                          f'{everyone[o]["name"]} ({kind[everyone[o]["role"]]})</option>' for o in everyone)
+                            "csm_page": files[csm] if csm else None, "csm_name": everyone[csm]["name"] if csm else None,
+                            "leader_page": files[ROLES["leader_id"]]}
+        doors = sandbox and meta.get("demo") and pid in (ROLES["leader_id"], csm)
+        options = (('<option value="" selected>More people…</option>' if doors else "")    # on a door: the list is "more"
+                   + "".join(f'<option value="{files[o]}"{" selected" if o == pid and not doors else ""}>'
+                             f'{everyone[o]["name"]} ({kind[everyone[o]["role"]]})</option>' for o in everyone))
         html = strip_tabs(template, set(meta["tabs"]))
         html = (html.replace("__PAGE_OPTIONS__", options)
                     .replace("__PAGE_META__", safe_json(meta))
