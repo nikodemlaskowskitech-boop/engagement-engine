@@ -46,6 +46,7 @@ count it.
 | Leadership tab | Yes (opens here) | Yes | No | No |
 | Business case tab (GRR, NRR, the forecast) | Yes | No | No | No |
 | Opens on | Leadership | Tasks | My book | My book |
+| The queue | Tasks (with decisions) | Tasks (with decisions) | My work (by cash at stake, 18 Nov 2026) | My work |
 
 Every change is checked twice: the page offers only what the role allows, and
 `cockpit_sync.py` checks each saved decision again on our side (never trust the

@@ -161,6 +161,9 @@ Read a file's entry before changing that file, and update the entry in the same 
   never uploads the store. `tests/store_test.py`: same rows and types as the JSON,
   a new, edited or removed file or a missing stamp means the JSON again.
 - `facts.py`: the facts layer (13 Nov 2026, ARCHITECTURE.md fix C): the questions the
+  (18 Nov 2026: touches carry the outcome and note a CSM logged with a meeting in Slack, for
+  Last in My work; the public site and the MCP timeline drop the note, free text that could
+  name anyone.)
   product answers, asked one way. Building blocks the cockpit export uses for the
   whole book (accounts with util, weekly users and flags with their value; touches;
   forecasts; next steps; tasks; time_to_action), and the questions the MCP server and
@@ -334,6 +337,8 @@ Read a file's entry before changing that file, and update the entry in the same 
   file, highlights, shareable ?q=, empty, 429, no match, phone width, no script error;
   every cockpit page's banner links to it.
 - `mcp_server.py` (13 Nov 2026): the engine as MCP tools (mcp 2.2.0, MCPServer; pinned in
+  (18 Nov 2026: timeline leaves out a meeting's free-text note, which goes to a model; the
+  outcome, a fixed label, stays. mcp_server_test checks it.)
   requirements.txt). Local: the client (Claude Desktop) starts it and talks over stdio, no
   network address. Five read-only tools (ToolAnnotations read_only_hint): who_am_i,
   account (facts.account; utilisation trimmed to the last 30 days, weekly users for 13
@@ -616,6 +621,20 @@ Read a file's entry before changing that file, and update the entry in the same 
   list. The tour's last step links the same CSM. site_test checks the doors, the switch, the
   list and that the phone has no side scroll. A colour the switcher named (--muted) never
   existed; it now uses --ink-3.
+  My work (18 Nov 2026, Nikodem's CSM route: start on My book, pick up from the queue, know the
+  account, act): on a CSM's or pool member's page the Tasks tab is "My work", the queue.
+  Columns: account, ARR, at stake (the flag's value: Act the whole ARR, Watch/Shelfware the
+  unused part, expansion the upside), why, reach by (the reach deadline at Act, else the
+  renewal), last and next CS engagement (meetings and workshops, not automated emails; next =
+  planOf: the owner's next step, else a QBR booked), status. Order: cash at stake per day left
+  (to the reach deadline at Act, else the renewal; overdue counts as the last day), ARR breaks
+  ties: "value, not volume", and ARR shown as a fact, never the only driver. Fixed order
+  (class keep-order: no re-sorting, still cards on a phone). Last or Next opens that engagement
+  in a row under its task (kind, date, owner, outcome from slack_loop.OUTCOMES, the note
+  in-house only); "nothing planned" is a warning badge, never a blank. No manager's banner on a
+  CSM's page. Managers and the leader keep the task table and its decisions. role_pages_test
+  checks the columns, the order against the data, Last opening and closing, "nothing planned"
+  and the empty queue; site_test that no note reaches a public page.
   About this project (18 Nov 2026, recruiter review: "what did YOU build?" scored 4/10): a
   button in the strip opens five parts in place, under it (the problem, the approach, what I
   did, the technology, the limits), from settings.toml [demo.about] in Nikodem's confirmed

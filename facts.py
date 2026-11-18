@@ -122,12 +122,14 @@ def accounts(con, where=""):
 
 
 def touches(con, account_id=None):
-    """Customer touches (emails, meetings, workshops, clicks), oldest first."""
+    """Customer touches (emails, meetings, workshops, clicks), oldest first. With what the
+    CSM logged with a meeting in Slack, its outcome and note (18 Nov 2026: Last in My work
+    opens it); the public site drops the free-text note (roles.py --site)."""
     only = f"AND account_id = '{_id(account_id)}'" if account_id else ""
     return rows(con, f"""
         SELECT account_id, event_date AS date, event_name AS event,
                properties.topic AS topic, properties.owner_id AS owner_id,
-               context.source AS source
+               context.source AS source, properties.outcome AS outcome, properties.note AS note
         FROM engagement
         WHERE event_name NOT IN ('forecast_set', 'next_step_set')   -- internal: exported apart
         {only}

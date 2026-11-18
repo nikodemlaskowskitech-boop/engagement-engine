@@ -224,6 +224,10 @@ button.link.back { display: inline-block; margin: 0 0 8px; padding: 4px 0; font-
 .badge { display: inline-block; font: 600 0.72rem var(--font-body); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
 .badge.Open { background: var(--bg); color: var(--ink-2); border: 1px solid var(--rule); }
 .badge.Open.stale, .badge.Draft { background: var(--warning-bg); color: var(--warning-ink); border: 0; }
+/* My work (18 Nov 2026): "nothing planned" is a warning, shown as such, never a blank */
+.badge.nothing { background: var(--warning-bg); color: var(--warning-ink); border: 0; }
+table.queue tr.detail td { background: var(--surface); font-size: 0.86rem; color: var(--ink-2); padding: 8px 12px; border-left: 3px solid var(--accent); }
+table.queue button.link small { color: var(--ink-3); }
 .badge.Claimed { background: var(--bg); color: var(--ink); border: 1px solid var(--ink-3); }
 .badge.Done { background: var(--good-bg); color: var(--good-ink); }
 .badge.Resolved { background: var(--bg); color: var(--ink-3); border: 1px solid var(--rule); }
@@ -2324,6 +2328,15 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const sharper = f && (f.status !== t.status || (URGENT.test(f.action) && !URGENT.test(t.action)));
     return f && f.action && liveT(t) && sharper && !t.action.endsWith(f.action) ? `<small class="nowask"><br><b>Now:</b> ${esc(f.status === t.status ? "" : f.status + ": ")}${esc(f.action)}</small>` : "";
   };
+  // a CSM's or pool member's page shows My work, the queue (18 Nov 2026)
+  const QUEUE = !!(PAGE && (PAGE.role === "csm" || PAGE.role === "member"));
+  if (QUEUE && $("tab-tasks")) {                     // a CSM's page: the tab is their work, not "Tasks"
+    $("tab-tasks").textContent = "My work";
+    const tnote = document.querySelector("#view-tasks .panel .note");
+    if (tnote) tnote.textContent = "At stake: the money the flag puts at risk (Act: the whole ARR; Watch and Shelfware: the unused part) or in play (expansion upside). \"Nothing planned\": no next step and no QBR booked.";
+    const sub = document.querySelector("#view-tasks .sub");
+    if (sub) sub.textContent = "What to pick up, the most cash at stake per day left first: to the reach deadline at Act, else to the renewal. ARR is there as a fact and breaks ties. Click Last or Next to see that engagement.";
+  }
   function drawTasks() {
     if (!$("view-tasks")) return;                     // not on this person's page
     const T = TASKS.filter(taskInSeg);
@@ -2338,7 +2351,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const msg = !TASKS.length ? "" : saveError ? saveError
       : dbState === "none" ? "This copy is read-only: decisions are saved in the published cockpit."
       : dbState === "loading" ? "Loading saved decisions…"
-      : !seg.manager ? "Pick your name under Manager (top of the page) to give tasks to someone else or approve hand-backs." : "";
+      : !seg.manager && !QUEUE ? "Pick your name under Manager (top of the page) to give tasks to someone else or approve hand-backs." : "";
     banner.setAttribute("role", saveError ? "alert" : "status");   // a failed save is announced at once
     banner.textContent = msg; banner.hidden = !msg;
     // status chips, with counts
@@ -2350,6 +2363,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("tk-title").textContent = `Tasks: ${items.length}`;
     const host = $("tk-list");
     if (!items.length) { host.innerHTML = '<p class="note">No tasks here.</p>'; return; }
+    if (QUEUE) return drawQueue(items, host);        // a CSM's or pool member's page: My work
     const ownerCell = (t) => esc(ownerName[t.routed_to] || t.routed_to) +
       (teamById[t.routed_to] && teamById[t.routed_to].owner_type === "pool" && byId[t.account_id] && teamById[byId[t.account_id].owner_id]
         && teamById[byId[t.account_id].owner_id].owner_type === "member"
@@ -2367,6 +2381,71 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     host.querySelectorAll("select[data-assign]").forEach((s) => s.addEventListener("change", () => { if (s.value) decide("assign", byDoc[s.dataset.assign], s.value, s); }));
     host.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", () => decide("handback", byDoc[b.dataset.approve], null, b)));
     host.querySelectorAll("[data-undo]").forEach((b) => b.addEventListener("click", () => undo(b.dataset.undo, b)));
+  }
+  // ---------------------------------------------------------------- My work (18 Nov 2026)
+  // A CSM's or pool member's page: the queue to pick up from, ordered by the cash at stake per day
+  // left (to the reach deadline at Act, else to the renewal), the account's ARR beside it as a
+  // fact and the tie-break. Last and Next open that CS engagement in place, not more columns.
+  const stakeOf = (t) => {
+    const f = ((byId[t.account_id] || {}).flags || []).find((x) => x.flag === t.flag);
+    return { v: (f && f.value) || 0, basis: f && f.value_basis ? f.value_basis.split(":")[0] : "", up: t.flag === "expansion" };
+  };
+  const daysLeft = (t) => {
+    const s = t.status === "Act" && liveT(t) ? reachOf(t.account_id, t.flag) : null;
+    if (s && !s.reached) return s.left;
+    const a = byId[t.account_id];
+    return a && a.renewal_date ? day(a.renewal_date) - day(D.as_of) : 365;
+  };
+  const urgency = (t) => stakeOf(t).v / Math.max(1, daysLeft(t));      // overdue counts as the last day
+  const CS_TOUCH = new Set(["meeting_held", "workshop_attended"]);      // CS engagements, not automated emails
+  const lastOf = (id) => (D.touches || []).filter((x) => x.account_id === id && CS_TOUCH.has(x.event) && x.date <= D.as_of)
+    .sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0)).slice(-1)[0];
+  const kindOf = (x) => x.event === "workshop_attended" ? `Workshop (${topicName(x.topic)})` : topicName(x.topic);
+  function engagementDetail(x, plan) {
+    const OUT = (D.settings && D.settings.meeting_outcomes) || {};
+    if (plan) return `<b>Next: ${esc(plan.type)}, ${fmt(plan.due)}</b>` +
+      (plan.kind === "crm" ? " · booked in the CRM" : ` · set by ${esc(ownerName[plan.by] || plan.by || "the owner")}`) +
+      (plan.note && plan.kind !== "crm" ? `<br>${esc(plan.note)}` : "");
+    return `<b>Last: ${esc(kindOf(x))}, ${fmt(x.date)}</b> · ${esc(ownerName[x.owner_id] || x.owner_id || "—")}` +
+      `<br>Outcome: ${x.outcome ? esc(OUT[x.outcome] || x.outcome) : '<span class="muted">none logged</span>'}` +
+      (x.note ? ` · ${esc(x.note)}` : PAGE && PAGE.sandbox ? "" : ' · <span class="muted">no note logged</span>') +
+      (PAGE && PAGE.sandbox ? '<br><small class="muted">Notes typed in Slack are kept off the public demo.</small>' : "");
+  }
+  function drawQueue(items, host) {
+    const Q = items.slice().sort((x, y) => urgency(y) - urgency(x)
+      || ((byId[y.account_id] || {}).arr || 0) - ((byId[x.account_id] || {}).arr || 0) || (x.account_id < y.account_id ? -1 : 1));
+    $("tk-title").textContent = `My work: ${Q.length}`;
+    const live = Q.filter(liveT), stake = live.reduce((n, t) => n + (stakeOf(t).up ? 0 : stakeOf(t).v), 0);
+    const up = live.reduce((n, t) => n + (stakeOf(t).up ? stakeOf(t).v : 0), 0);
+    const late = live.filter((t) => { const s = t.status === "Act" ? reachOf(t.account_id, t.flag) : null; return s && !s.reached && s.left < 0; }).length;
+    $("tk-finding").textContent = !live.length ? `${segName()}: nothing to pick up.`
+      : `${segName()}: ${live.length} to work, ${money(stake)} at risk${up ? ` and ${money(up)} of upside` : ""}` +
+        (late ? `; ${late} past ${late === 1 ? "its" : "their"} days to reach.` : ".");
+    host.innerHTML = `<table class="queue keep-order"><thead><tr><th>Account</th><th class="r">ARR</th><th class="r">At stake</th><th>Why</th><th>Reach by</th><th>Last</th><th>Next</th><th>Status</th></tr></thead><tbody>` +
+      Q.map((t, i) => {
+        const a = byId[t.account_id] || {}, st = stakeOf(t), last = lastOf(t.account_id), plan = a.account_id ? planOf(a) : null;
+        const s = t.status === "Act" && liveT(t) ? reachOf(t.account_id, t.flag) : null;
+        return `<tr data-row="${i}"><td><button class="link" data-open="${esc(t.account_id)}">${nameOf(t.account_id)}</button><small><br>${esc(a.tier || "not in the CRM")}</small></td>` +
+          `<td class="r num">${a.arr ? money(a.arr) : "—"}</td>` +
+          `<td class="r num">${st.v ? money(st.v) : "—"}<small><br>${esc(st.up ? "upside" : st.basis.toLowerCase())}</small></td>` +
+          `<td>${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small>${nowAsk(t)}</td>` +
+          `<td>${s ? reachBadge(s) : a.renewal_date ? `<small>renewal ${fmt(a.renewal_date)}</small>` : "–"}</td>` +
+          `<td>${last ? `<button class="link" data-last="${i}" aria-expanded="false">${fmt(last.date)}<small><br>${esc(kindOf(last))}</small></button>` : '<span class="muted">none on record</span>'}</td>` +
+          `<td>${plan ? `<button class="link" data-next="${i}" aria-expanded="false">${esc(plan.type)}<small><br>${fmt(plan.due)}</small></button>` : '<span class="badge nothing">nothing planned</span>'}</td>` +
+          `<td>${badge(t)}</td></tr>`;
+      }).join("") + "</tbody></table>";
+    host.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
+    // Last / Next: the engagement opens in a row under its task, a second click closes it
+    host.querySelectorAll("[data-last], [data-next]").forEach((b) => b.addEventListener("click", () => {
+      const i = Number(b.dataset.last ?? b.dataset.next), t = Q[i], tr = b.closest("tr"), open = tr.nextElementSibling;
+      const which = b.dataset.last != null ? "last" : "next";
+      host.querySelectorAll("[aria-expanded=true]").forEach((x) => x.setAttribute("aria-expanded", "false"));
+      if (open && open.classList.contains("detail")) { const same = open.dataset.which === which; open.remove(); if (same) return; }
+      const a = byId[t.account_id] || {};
+      const d = document.createElement("tr"); d.className = "detail"; d.dataset.which = which;
+      d.innerHTML = `<td colspan="8">${which === "last" ? engagementDetail(lastOf(t.account_id)) : engagementDetail(null, planOf(a))}</td>`;
+      tr.after(d); b.setAttribute("aria-expanded", "true");
+    }));
   }
   async function decide(kind, t, to, control) {
     control.disabled = true; saveError = "";
@@ -2970,7 +3049,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   }
   // headings become buttons; managed lists redraw themselves, other tables sort their rows in place
   function markSortable(table, redraw) {
-    if (!table || table.classList.contains("nosort") || table.classList.contains("matrix")) return;
+    // keep-order: a list whose order is the point (My work); it still becomes cards on a phone
+    if (!table || table.classList.contains("nosort") || table.classList.contains("keep-order") || table.classList.contains("matrix")) return;
     const head = headRow(table);
     if (!head) return;
     const ths = [...head.cells];

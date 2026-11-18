@@ -134,6 +134,9 @@ def timeline(account_id: str, limit: int = 20) -> list:
     """What happened on one account, newest first: customer touches (emails, meetings),
     tasks sent to CS and what became of them, next steps planned and renewal forecasts."""
     items = facts.timeline(con(), _mine(account_id))
+    # a meeting's note is free text typed in Slack (18 Nov 2026): it could name anyone, and this
+    # answer goes to a model, so it stays out; the outcome is a fixed label and may go
+    items = [{k: v for k, v in i.items() if not (i.get("kind") == "touch" and k == "note")} for i in items]
     return items[: max(1, min(int(limit), 100))]
 
 

@@ -88,6 +88,9 @@ check(ok and risk and all(r["status"] == "Act" for r in risk)
 ok, tl = call("timeline", account_id=acc, limit=5)
 check(ok and 0 < len(tl) <= 5 and [x["date"] for x in tl] == sorted((x["date"] for x in tl), reverse=True),
       "a timeline, newest first, as long as asked")
+ok, tl100 = call("timeline", account_id=acc, limit=100)
+check(ok and not [x for x in tl100 if x.get("kind") == "touch" and "note" in x],
+      "...a meeting's free-text note never goes to the model (the outcome may)")
 for bad in ("acc_1' OR '1'='1", "acc_nope"):
     ok, msg = call("account", account_id=bad)
     check(not ok and ("not an account ID" in msg or "isn't in" in msg), f"refused, with a reason: {bad!r}", msg)
