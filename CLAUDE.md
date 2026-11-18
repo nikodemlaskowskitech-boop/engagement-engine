@@ -327,7 +327,7 @@ Tests: `tests/`, one file per area (see Testing above).
 ## Planned next
 
 - Phase 9, AI on unstructured data: account search built 13 Nov 2026 (BM25 in SQL,
-  the corpus; recall 51% on keywords, 100% with the [search.synonyms] vocabulary,
+  the corpus; recall 57% on keywords, 95% with the [search.synonyms] vocabulary (18 Nov: three wordings per topic),
   optimistic: written knowing the corpus; on a held-out set written apart, 72% -> 90%); redacted
   results (search.redacted, PRIVACY.md §6) built the same day; the public search on the demo site
   (#166-169) and the local MCP server (mcp_server.py) the same day; "ask about this account" (ask.py) 14 Nov 2026; next

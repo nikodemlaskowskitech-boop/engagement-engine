@@ -69,15 +69,15 @@ for q in key["questions"]:
     check(not set(q["accounts"]) & set(q["traps"]), f"{q['id']}: no trap account is an answer")
 
 # A topic's documents: emails and calls by file name, tickets by their subject
-from generate_documents import TEMPLATES      # noqa: E402
-subjects = {topic: t["ticket"][0] for topic, t in TEMPLATES.items()}
+from generate_documents import TEMPLATES, WORDINGS      # noqa: E402
+subjects = {topic: [w[0] for w in t["ticket"]] for topic, t in WORDINGS.items()}
 
 
 def topics_of(account_id):
     found = set()
     for d in by_acc.get(account_id, []):
         for topic in TEMPLATES:
-            if topic.replace("_", "-") + "-" in d["source"] or d["title"].endswith(subjects[topic].split("{")[0].strip()):
+            if topic.replace("_", "-") + "-" in d["source"] or any(d["title"].endswith(sub.split("{")[0].strip()) for sub in subjects[topic]):
                 found.add(topic)
     return found
 
