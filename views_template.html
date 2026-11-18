@@ -487,7 +487,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <div class="panel">
         <h2>The engagement sieve: churn signals, stage by stage</h2>
         <div id="ov-sieve"></div>
-        <p class="note">Each bar is a share of all churn signals; the figure on the right is its share of the stage above. "Called": a churn, growth or activation call from 14 days before the signal on (counted as 0 days), or a QBR held in the 30 days after it. Check-ins don't count.</p>
+        <p class="note">Each bar is a share of all churn signals; the figure on the right is its share of the stage above. "Called": a churn, growth or activation call from 14 days before the signal on (counted as 0 days), or a QBR held in the 30 days after it. Check-ins don't count. "Reached in time": called within <span id="ov-reach-days"></span>.</p>
       </div>
       <div class="panel">
         <h2>Renewals at churn risk in the next 180 days</h2>
@@ -2039,7 +2039,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     { key: "act", label: "At Act: a call is needed", depth: 2, parent: "person", test: atAct },
     { key: "nocall", label: "Not called yet", depth: 3, parent: "act", test: (r) => atAct(r) && !r.call_date, color: "var(--critical)" },
     { key: "called", label: "Called", depth: 3, parent: "act", test: (r) => atAct(r) && r.call_date },
-    { key: "fast", label: `Reached in time (${REACH_TEXT})`, depth: 4, parent: "called", test: (r) => atAct(r) && r.call_date && r.days_to_call <= REACH(r.tier) },
+    // the days per tier are in the note: the long label ran into its bar (18 Nov 2026)
+    { key: "fast", label: "Reached in time", depth: 4, parent: "called", test: (r) => atAct(r) && r.call_date && r.days_to_call <= REACH(r.tier) },
   ];
   const SIG_COLS = [
     { label: "Account", get: (r) => nameOf(r.account_id) },
@@ -2062,6 +2063,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("ov-finding").textContent = act
       ? `${segOn() ? segName() + ": " : ""}${n.nocall} of the ${act} accounts that need a call (${pct(n.nocall, act)}%) haven't had one yet.`
       : `${segOn() ? segName() + ": " : ""}no account at Act needs a call.`;
+    if ($("ov-reach-days")) $("ov-reach-days").textContent = REACH_TEXT;
     const host = $("ov-sieve"); host.innerHTML = "";
     // desktop: label, bar, share in one row; phone: the label above its bar, the share as "n%"
     const ph = isPhone(), W = fitW(880), LBL = ph ? 0 : 300, BAR = ph ? W - 90 : W - LBL - 150, RH = ph ? 44 : 34;
