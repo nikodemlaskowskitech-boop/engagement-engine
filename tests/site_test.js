@@ -168,14 +168,23 @@ print(json.dumps(r))`;
     const WORDS = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
     check(lede.startsWith(`${WORDS[tabs - 1]} views`), `the intro counts the tabs on the page (${tabs}), never a typed number`, lede.slice(0, 40));
     await p.click("#tour-start"); await p.waitForTimeout(300);
+    // step 1 (18 Nov 2026, recruiter review): one account from signal to renewal outcome, by rule
+    const jr = await p.$$eval("#tour ol.journey li", (ls) => ls.map((l) => l.textContent));
+    const jAcc = await p.$eval("#tl-account", (e) => e.value).catch(() => "");
+    const data = await p.evaluate(() => JSON.parse(document.getElementById("views-data").textContent));
+    const js = data.churn_signals.find((x) => x.account_id === jAcc) || {};
+    const jr2 = data.renewals.find((x) => x.account_id === jAcc) || {};
+    check(jr.map((t) => t.split(" ")[0]).join() === "Signal,Task,Action,Reached,Renewal,Measured"
+          && js.call_date >= js.signal_date && jr2.outcome && jr.join(" ").includes(jr2.outcome),
+      `...step 1 follows one account (${jAcc}) through six stages: called on or after its signal, with its real renewal outcome`, jr.join(" | "));
     const seen = [];
     for (let i = 0; i < 8; i++) {
       seen.push([(await p.textContent("#tour .step")), await p.$eval("nav [aria-selected=true]", (e) => e.dataset.view)]);
       const n = await p.$('[data-tour="next"]'); if (!n) break; await n.click(); await p.waitForTimeout(250);
     }
     const views = seen.map((s) => s[1]);
-    check(seen.length === 5 && /Step 1 of 5/.test(seen[0][0]) && views.slice(0, 4).join() === "lead,timeline,tasks,outcomes",
-      "the tour: 5 steps, Leadership, one account, Tasks, Did it work?", JSON.stringify(seen));
+    check(seen.length === 5 && /Step 1 of 5/.test(seen[0][0]) && views.slice(0, 4).join() === "timeline,lead,tasks,outcomes",
+      "the tour: 5 steps, one account through the system, Leadership, Tasks, Did it work?", JSON.stringify(seen));
     const links = await p.$$eval("#tour a", (as) => as.map((a) => a.getAttribute("href")));
     check(links.includes("search.html") && links.some((h) => /^csm_\w+\.html$/.test(h)), "...ending on a CSM's page and the search", links.join(", "));
     await p.click('[data-tour="close"]');
