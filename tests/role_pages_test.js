@@ -115,7 +115,18 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       window.__subs = subs; window.claude = { use: async (n) => n === "db" ? db : n === "user" ? { id: async () => "tester" } : null };
     });
     const person = () => p.evaluate(() => JSON.parse(document.getElementById("page-meta").textContent).person);
-    const switchTo = async (f) => { await p.selectOption("#page-switch", f); await p.waitForTimeout(600); };
+    // wait for the new page itself, not a fixed time: under load 600 ms read a half-drawn page
+    // (18 Nov 2026, a flaky FAIL). Done = the page says it's that person and its tabs are drawn.
+    const switchTo = async (f) => {
+      const want = f.replace(/\.html$/, "");
+      await p.selectOption("#page-switch", f);
+      await p.waitForFunction((w) => {
+        try { return JSON.parse(document.getElementById("page-meta").textContent).person === w
+                     && document.readyState === "complete" && !!document.querySelector('nav button[aria-selected="true"]'); }
+        catch (e) { return false; }
+      }, want, { timeout: 15000 });
+      await p.waitForTimeout(150);                 // the page's own first draw after load
+    };
     await switchTo("mgr_sophie.html");
     await p.click("#tab-tasks");
     const assigns = await p.$$eval("select[data-assign]", (x) => x.length);
