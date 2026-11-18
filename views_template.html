@@ -274,6 +274,17 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
 .banner.who { border-left-color: var(--accent); background: transparent; margin: 6px 0 10px; }
 .banner.who b { color: var(--ink); }
 .banner.who a, .banner.who button { margin-left: 4px; }
+/* About this project: in place under the strip (18 Nov 2026) */
+.about { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 22px; margin: 0 0 12px;
+         padding: 12px 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+.about[hidden] { display: none; }
+.about h3 { margin: 0 0 3px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-3); }
+.about p { margin: 0; font-size: 0.9rem; line-height: 1.5; color: var(--ink-2); }
+.about #about-close { justify-self: start; grid-column: 1 / -1; }
+@media (min-width: 900px) {      /* two even rows: "What I did", the longest, gets two columns */
+  .about { grid-template-columns: repeat(3, 1fr); grid-auto-flow: row dense; }
+  .about > div:nth-child(3) { grid-column: span 2; }
+}
 .tour { position: fixed; right: 20px; bottom: 20px; z-index: 50; width: min(380px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--accent); border-radius: 12px; padding: 16px 18px; box-shadow: 0 8px 28px rgba(0,0,0,0.35); }
 .tour .step { font-size: 0.78rem; color: var(--ink-3); letter-spacing: 0.04em; text-transform: uppercase; }
 .tour h3 { margin: 4px 0 6px; font-size: 1.02rem; }
@@ -428,6 +439,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <label class="page-switch" id="page-switch-wrap" hidden><span id="page-switch-label">Viewing as</span> <select id="page-switch">__PAGE_OPTIONS__</select></label>
     </div>
     <p class="banner who" id="who-strip" hidden></p>
+    <section class="about" id="about" hidden aria-label="About this project"></section>
     <p class="lede"><span id="n-views"></span> views on one book of business: <span id="n-accounts"></span> European accounts of a fictional product-analytics SaaS. Every number comes from the engagement engine's SQL; the data is generated.</p>
     <nav role="tablist" aria-label="Views">
       <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
@@ -3294,8 +3306,21 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const w = $("who-strip");
     w.innerHTML = `Built by <b>${esc(DEMO.author)}</b><span class="why">, ${esc(DEMO.why)}</span> ` +
       (tourOk ? `<button type="button" class="linkish" id="tour-start">Take the 3-minute tour</button> · ` : "") +
+      (DEMO.about && DEMO.about.mine ? `<button type="button" class="linkish" id="about-open" aria-expanded="false" aria-controls="about">About this project</button> · ` : "") +
       `<a href="${esc(DEMO.repo_url)}#readme" target="_blank" rel="noopener">How it works (GitHub)</a>`;
     w.hidden = false;
+    // About this project (18 Nov 2026, recruiter review): in place under the strip, never a gate
+    if (DEMO.about && DEMO.about.mine) {
+      const A = DEMO.about, box = $("about"), btn = $("about-open");
+      box.innerHTML = [["The problem", A.problem], ["The approach", A.approach], ["What I did", A.mine],
+                       ["The technology", A.technology], ["The limits", A.limits]]
+        .filter(([, t]) => t).map(([h, t]) => `<div><h3>${esc(h)}</h3><p>${esc(t)}</p></div>`).join("")
+        + `<button type="button" class="linkish" id="about-close">Close</button>`;
+      const open = (on) => { box.hidden = !on; btn.setAttribute("aria-expanded", String(on)); if (on) box.querySelector("h3").scrollIntoView({ block: "nearest" }); };
+      btn.addEventListener("click", () => open(box.hidden));
+      $("about-close").addEventListener("click", () => { open(false); btn.focus(); });
+      if (/[?&]about\b/.test(location.search)) open(true);        // a link straight to it: ?about
+    }
   }
   if (tourOk) {
     // the account with the most ARR at risk at churn Act: one account, end to end
