@@ -560,7 +560,10 @@ Read a file's entry before changing that file, and update the entry in the same 
   claimed or missing. Tasks has a "Reach by" column on Act tasks, and "Now:" under a live
   task whose flag's ask got more urgent (a deadline in the flag's text the task lacks, or a new
   status; a reworded ask is noise). facts.py exports each flag's action. "Not picked up" stays,
-  as queue hygiene.
+  as queue hygiene. 18 Nov 2026 (Nikodem's fact check): the finding counted "no live task" only
+  among the overdue rows, so it said 0 while the table showed 2; it now counts every row. The
+  note says a call up to [team_report] early_days before the signal counts (Lumen Energy: called
+  4 days before, so reached, though its task still waits in "Not picked up").
   Reach in time, by tier (17 Nov 2026, the forecast spec): one rule, settings [journeys]
   reach_days (Enterprise 7, Scale 14), read everywhere "in time" means anything: journeys.py's
   escalation, the sieve, CS team (a target line per group, "past their tier's target"), Tasks

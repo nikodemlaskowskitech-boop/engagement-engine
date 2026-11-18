@@ -230,6 +230,7 @@ export = {
     "retention": retention_export(con, off),
     "settings": {"reach_days": SETTINGS["journeys"]["reach_days"], "reach_days_other": SETTINGS["journeys"]["reach_days_other"],
                  "stale_task_days": SETTINGS["cockpit"]["stale_task_days"],
+                 "early_days": SETTINGS["team_report"]["early_days"],
                  "below_median_points": SETTINGS["cockpit"]["below_median_points"],
                  "min_compare": SETTINGS["cockpit"]["min_compare"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],

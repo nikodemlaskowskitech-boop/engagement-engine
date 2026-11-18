@@ -487,7 +487,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <h2>Not reached: accounts at Act past their deadline</h2>
         <p class="finding small" id="ld-reach-finding"></p>
         <div class="examples tablewrap" id="ld-reach"></div>
-        <p class="note">Every account at churn or expansion Act with a CSM or a pool, judged on the account: reached means a call or meeting logged since its signal, within its tier's days (<span id="ld-reach-days"></span>). A task claimed in Slack doesn't count, and an account still counts when its task is missing.</p>
+        <p class="note">Every account at churn or expansion Act with a CSM or a pool, judged on the account: reached means a call or meeting logged since its signal (or up to <span id="ld-reach-early"></span> days before it), within its tier's days (<span id="ld-reach-days"></span>). A task claimed in Slack doesn't count, and an account still counts when its task is missing.</p>
       </div>
       <div class="grid2">
         <div class="panel">
@@ -2658,13 +2658,15 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // not reached: Act accounts with no call, judged on the account (17 Nov 2026: a claimed task
     // with no call, or an Act account whose task never went out, hid inaction)
     $("ld-reach-days").textContent = REACH_TEXT;
+    $("ld-reach-early").textContent = D.settings.early_days ?? 14;   // team_report's rule: an early call counts
     const liveTask = (id, flag) => D.tasks.filter((t) => t.account_id === id && t.flag === flag && t.status === "Act" && liveT(t)).slice(-1)[0];
     const unreached = (D.time_to_action || []).filter((r) => !r.call_date && inSegId(r.account_id) && person(byId[r.account_id] || {}))
       .map((r) => ({ ...r, s: reachOf(r.account_id, r.flag), task: liveTask(r.account_id, r.flag) })).sort((a, b) => a.s.left - b.s.left);
     const late = unreached.filter((r) => r.s.left < 0);
     $("ld-reach-finding").textContent = !unreached.length ? "Every account at Act has been reached."
       : `${unreached.length} account${unreached.length === 1 ? "" : "s"} at Act not reached yet, ${late.length} past ${late.length === 1 ? "its" : "their"} deadline` +
-        (late.length ? `: ${late.filter((r) => r.task && r.task.action_status === "Claimed").length} claimed in Slack, ${late.filter((r) => !r.task).length} with no live task.` : ".");
+        // the task count covers every row above it, so the sentence matches the table (18 Nov 2026)
+        (unreached.filter((r) => !r.task).length ? `; ${unreached.filter((r) => !r.task).length} of the ${unreached.length} have no live task to prompt anyone.` : ".");
     shortList($("ld-reach"), unreached, [
       { label: "Account", get: (r) => `${nameOf(r.account_id)}<small><br>${esc(tierOf(r.account_id) || "")}</small>` },
       { label: "Act", get: (r) => esc(r.flag) },
