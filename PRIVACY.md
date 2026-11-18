@@ -314,6 +314,6 @@ counted.
 
 A CSM can type a note when logging a meeting in Slack. It is free text, so it could name
 anyone. It shows on the in-house cockpit (Last in My work), where the team already sees the
-account. It never goes on the public demo site (roles.py --site drops it; site_test checks
-every page) and never to a model (the MCP timeline drops it; mcp_server_test checks it). The
+account. A note typed in Slack never goes on the public demo site (roles.py --site drops it; site_test
+checks every page); the generator's made-up notes (source cs_history) may show there and never to a model (the MCP timeline drops it; mcp_server_test checks it). The
 meeting's outcome is a fixed label from slack_loop.OUTCOMES and may go anywhere.

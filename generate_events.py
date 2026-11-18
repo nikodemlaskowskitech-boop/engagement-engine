@@ -746,6 +746,47 @@ def cs_event(rng, name, when, acc, owner, topic, user_id=None):
     }
 
 
+# What the CSM logged with a meeting (18 Nov 2026, for Last in My work): an outcome from the
+# Slack form's list and, for most, a short note. Taken from the meeting's own ID, never from
+# the random draws, so every other number stays exactly as it was. No rule reads them.
+AT_RISK = {"declining", "slipping", "shelfware", "stalled", "never_onboarded"}
+MEETING_NOTES = {   # (kind, outcome): what they said, then what's next; 3 x 3 = 9 notes each
+    ("call", "reached_at_risk"): (
+        ["Usage is down since their reorg.", "Sponsor less engaged than last quarter.",
+         "They question the value at today's volume."],
+        ["Agreed a usage review in two weeks.", "Sending a short adoption plan.",
+         "Want a plan before the renewal talks."]),
+    ("call", "reached_fine"): (
+        ["All good: the dip was a holiday period.", "No concerns raised.", "Healthy, main contact happy."],
+        ["Asked about the experiments add-on.", "Follow-up booked next month.",
+         "Dashboards now shared with their sales team."]),
+    ("qbr", "reached_at_risk"): (
+        ["QBR: renewal volume will be questioned.", "QBR: budget pressure from finance.",
+         "QBR: champion moving roles."],
+        ["Two teams barely use it.", "They want the business outcome in numbers.",
+         "Need a new sponsor before the renewal."]),
+    ("qbr", "reached_fine"): (
+        ["QBR: on track.", "QBR: strong adoption in product.", "QBR: positive."],
+        ["Goals for next quarter agreed.", "Analytics team wants more people trained.",
+         "Might add a second business unit next year."]),
+}
+
+
+def meeting_log(event, personality, topic):
+    """The outcome and note for a generated meeting, from its own ID (no random draw)."""
+    h = int(event["event_id"].replace("-", ""), 16)
+    if h % 10 >= 8:                                    # 2 in 10: nothing logged in Slack
+        return None, None
+    risk = personality in AT_RISK
+    if (h // 10) % 4 == 0:                             # 1 in 4 goes the other way: real calls surprise
+        risk = not risk
+    outcome = "reached_at_risk" if risk else "reached_fine"
+    kind = "qbr" if topic == "qbr" else "call"
+    said, next_ = MEETING_NOTES[(kind, outcome)]
+    note = f"{said[(h // 40) % 3]} {next_[(h // 120) % 3]}" if (h // 360) % 4 != 0 else None   # 3 in 4 with a note
+    return outcome, note
+
+
 def local_time(rng, day, region, hour):
     """A moment around `hour` local time on `day`, converted to UTC."""
     moment = datetime.combine(day, time(hour)) + timedelta(minutes=rng.randint(-20, 40))
@@ -799,8 +840,14 @@ def engagement_for_account(rng, acc):
 
     def meeting(day, topic):
         day = nearest_weekday(day)
-        out.append(cs_event(rng, "meeting_held", local_time(rng, day, region, rng.choice([10, 11, 14, 15])),
-                            acc, owner, topic, contact))
+        e = cs_event(rng, "meeting_held", local_time(rng, day, region, rng.choice([10, 11, 14, 15])),
+                     acc, owner, topic, contact)
+        outcome, note = meeting_log(e, acc["personality"], topic)
+        if outcome:                                    # only what a CSM would have logged
+            e["properties"]["outcome"] = outcome
+            if note:
+                e["properties"]["note"] = note
+        out.append(e)
 
     # Getting started email, the day after signing (control group: none)
     if acc["welcomed"]:
