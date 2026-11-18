@@ -237,6 +237,16 @@ repo_url = "https://github.com/nikodemlaskowskitech-boop/engagement-engine"
 # waiting, five QBRs coming up: both kinds of work in one book. Everyone else stays one level down.
 csm = "csm_tom"
 
+[demo.about]
+# "About this project", one click from the strip (18 Nov 2026, recruiter review: "what did YOU
+# build?" scored 4/10). In place under the strip, never a page in front of the cockpit. Nikodem's
+# words, confirmed 18 Nov 2026: edit here, not in the page.
+problem = "CS teams usually see risk in time. What breaks is turning it into an accountable action: who acts, by when, and did it work."
+approach = "An engine that turns product usage into flags, routes each one to an owner by tier, follows up in Slack, and measures what happened at renewal."
+mine = "I designed the operating model and the business rules (the flags, the routing, the \"reached in time\" rule, the forecast), the data model, the AWS architecture and the security controls (least-privilege roles, a data perimeter, redaction before any AI call). The code was written with Claude Code, working to my specifications and reviews, across more than 180 pull requests, each one tested."
+technology = "Python and SQL (DuckDB), AWS (Lambda, S3 with KMS, CloudFront, API Gateway, Athena, GuardDuty), the Anthropic API for briefs, Slack, and a single-page cockpit."
+limits = "The data is generated, so the outcomes show the method, not proof that calls work. One person's demo, not a product in use."
+
 [roles]
 # Who sees what, and who may change what (ROLES.md explains each choice and how to change it).
 # One page per person, holding only what their role may see: data minimisation, not a filter.

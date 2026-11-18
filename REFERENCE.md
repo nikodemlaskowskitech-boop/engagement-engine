@@ -609,6 +609,12 @@ Read a file's entry before changing that file, and update the entry in the same 
   list. The tour's last step links the same CSM. site_test checks the doors, the switch, the
   list and that the phone has no side scroll. A colour the switcher named (--muted) never
   existed; it now uses --ink-3.
+  About this project (18 Nov 2026, recruiter review: "what did YOU build?" scored 4/10): a
+  button in the strip opens five parts in place, under it (the problem, the approach, what I
+  did, the technology, the limits), from settings.toml [demo.about] in Nikodem's confirmed
+  words, the code's authorship (Claude Code, to his specifications) said plainly. Never a page
+  in front of the cockpit; ?about opens it (a link to send). site_test checks it opens, closes
+  and that the in-house cockpit has none.
   Too few to tell (16 Nov 2026, both reviews: "3 of 5 churned with a call, 0 of 1 without"
   read as "calls don't work"): a with/without comparison shows rates only when every group
   has [cockpit] min_compare (10) accounts; fewer = the counts and "too few to tell", the

@@ -245,7 +245,8 @@ def build(export, template=None, out=PAGES, sandbox=False):
                 next((o for o, p in everyone.items() if p["role"] == "csm"), None)
             meta["demo"] = {**{k: SETTINGS["demo"][k] for k in ("author", "why", "repo_url")},
                             "csm_page": files[csm] if csm else None, "csm_name": everyone[csm]["name"] if csm else None,
-                            "leader_page": files[ROLES["leader_id"]]}
+                            "leader_page": files[ROLES["leader_id"]],
+                            "about": dict(SETTINGS["demo"].get("about", {}))}
         doors = sandbox and meta.get("demo") and pid in (ROLES["leader_id"], csm)
         options = (('<option value="" selected>More people…</option>' if doors else "")    # on a door: the list is "more"
                    + "".join(f'<option value="{files[o]}"{" selected" if o == pid and not doors else ""}>'

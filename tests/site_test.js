@@ -203,6 +203,21 @@ print(json.dumps(r))`;
     d = await door(p);
     check(new URL(p.url()).pathname.endsWith("csm_anna.html") && !d.current.length && /Anna/.test(d.first) && (await p.textContent("#page-switch-label")) === "Viewing as",
       '..."More people" opens anyone else: no door current, "Viewing as" that person', `${p.url()} ${JSON.stringify(d)}`);
+    // About this project (18 Nov 2026, recruiter review): in place, from settings [demo.about]
+    const pa = await ctx.newPage(); await pa.goto(base + "index.html"); await pa.waitForTimeout(500);
+    const hiddenFirst = await pa.isHidden("#about");
+    await pa.click("#about-open"); await pa.waitForTimeout(150);
+    const heads = await pa.$$eval("#about h3", (hs) => hs.map((h) => h.textContent));
+    const aboutText = await pa.textContent("#about");
+    const mine = (TOML.split("[demo.about]")[1] || "").match(/^mine = "((?:[^"\\]|\\.)*)"/m)[1].replace(/\\"/g, '"');
+    check(hiddenFirst && await pa.isVisible("#about") && heads.join() === "The problem,The approach,What I did,The technology,The limits"
+          && aboutText.includes(mine) && /Claude Code/.test(aboutText) && (await pa.getAttribute("#about-open", "aria-expanded")) === "true",
+      "About this project: closed at first, opens in place with the five parts from [demo.about], Claude Code named", heads.join());
+    await pa.click("#about-close"); await pa.waitForTimeout(100);
+    check(await pa.isHidden("#about") && await pa.isVisible("#ld-finding"), "...closes, and the cockpit was never behind it");
+    await pa.goto(base + "index.html?about"); await pa.waitForTimeout(500);
+    check(await pa.isVisible("#about"), "...and ?about opens it straight away (a link to send)");
+    await pa.close();
     const pw = await ctx.newPage(); await pw.setViewportSize({ width: 390, height: 844 });
     await pw.goto(base + "index.html"); await pw.waitForTimeout(500);
     const wide = await pw.evaluate(() => document.documentElement.scrollWidth);
@@ -223,6 +238,8 @@ print(json.dumps(r))`;
     check(!/id="who-strip"[^>]*>[^<]/.test(html), `data/${f}: no who-built-it strip (the in-house cockpit isn't a demo)`);
     check(!/<option value="" selected>More people/.test(html) && /<span id="page-switch-label">Viewing as<\/span>/.test(html),
       `data/${f}: the in-house "Viewing as" list, no demo doors`);
+    const meta = m && m[1] !== "null" ? JSON.parse(m[1]) : {};
+    check(!meta.demo && /<section class="about" id="about" hidden/.test(html), `data/${f}: no About (no demo settings in the page; the section stays hidden)`);
   }
 
   await b.close(); server.close();
