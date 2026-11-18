@@ -966,6 +966,13 @@ const segment = async (page, values) => {
       await stage.focus(); await page.keyboard.press("Enter"); await page.waitForTimeout(200);
       const after = await page.textContent("#ov-list-title");
       check(after !== before && (await page.$$("#ov-list tbody tr")).length > 0, "Enter on a stage lists its accounts", `${before} -> ${after}`); }
+    // no stage label runs into its bar (18 Nov 2026: "Reached in time (7 days for Enterprise, 14 for Scale)" did)
+    const clash = await page.$$eval("#ov-sieve g.stage", (gs) => gs.map((g) => {
+      const t = g.querySelector("text.lbl").getBBox(), r = g.querySelector("rect");
+      return t.x + t.width > Number(r.getAttribute("x")) - 2 ? g.querySelector("text.lbl").textContent : null; }).filter(Boolean));
+    check(!clash.length, "Sieve: every stage label ends before its bar starts", clash.join(" | "));
+    check(/Reached in time.: called within \d+ days for Enterprise/.test(await page.textContent("#view-overview .note")),
+      "...and the note gives the days per tier, which the label no longer carries", (await page.textContent("#view-overview .note")).slice(-120));
     check(await page.evaluate(() => document.documentElement.lang === "en"), "the page declares its language (en)");
     check(!errors.length, "no script errors in batch 1 checks", errors.join("; "));
     await page.close();
