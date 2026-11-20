@@ -428,9 +428,11 @@ def add_views(con):
                        WHEN util_m3 >= {EXP_AT_CAP} THEN
                            format('Already at {{}}% of contracted volume', util_m3::INT)
                        ELSE
-                           format('Utilisation {{}}% and climbing {{}} points a month: about {{}} months to {EXP_AT_CAP}%, renewal in {{}}',
-                                  util_m3::INT, round(climb_per_month)::INT, months_to_cap::INT,
-                                  round(months_to_renewal)::INT)
+                           -- "1 month", "2 months": the unit said, singular when it's one (20 Nov 2026)
+                           format('Utilisation {{}}% and climbing {{}} points a month: about {{}} to {EXP_AT_CAP}%, renewal in {{}}',
+                                  util_m3::INT, round(climb_per_month)::INT,
+                                  months_to_cap::INT || CASE WHEN months_to_cap::INT = 1 THEN ' month' ELSE ' months' END,
+                                  round(months_to_renewal)::INT || CASE WHEN round(months_to_renewal)::INT = 1 THEN ' month' ELSE ' months' END)
                    END,
                    CASE WHEN breadth_signal THEN
                        format('{{}} active users this month vs. {{}} two months ago (+{{}}%)',

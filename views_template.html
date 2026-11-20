@@ -638,6 +638,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         </div>
         <div class="panel">
           <h2>3. Accounts in the portfolio: risk first</h2>
+          <div class="chips" id="mb-port-view" aria-label="Show"></div>
           <p class="finding" style="font-size:1rem" id="mb-port-finding"></p>
           <div class="tablewrap" id="mb-port"></div>
           <p class="note">Sorted by value at stake. At risk: the whole ARR at Act (they may leave), the unused part at Watch and Shelfware (customers cut their commitment to what they use). Upside: forecast usage above the contract at renewal. "≠ data" marks a forecast a quarter of the ARR away from the data's number. Value guides the work; it isn't anyone's credit. Action planned: the owner's next step with a date (set it on the account's timeline), or a QBR booked in the CRM; overdue when the date passes with no meeting.</p>
@@ -3270,6 +3271,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     draw();
   }
 
+  let mbPortView = "all";                              // My book's portfolio: All | Churn | Growth
   function drawMyBook() {
     if (!$("view-mybook")) return;                     // not on this person's page
     // a pool's book = its team + the Scale tier (pools aren't in the Owner list)
@@ -3310,10 +3312,17 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const loss = ups.reduce((t, a) => { const fc = (forecasts[a.account_id] || []).slice(-1)[0]; return t + (fc ? expectedLoss(a, fc) : dataRisk(a)); }, 0);
     const grr = upArr ? (upArr - loss) / upArr : null;
     const p100 = (x) => (x == null ? "–" : `${Math.round(100 * x)}%`);
+    // growth apart from churn, as the leader reports them (20 Nov 2026): the upside the expansion
+    // flags put in play, never netted against the risk
+    const expOf = (a) => a.flags.find((x) => x.flag === "expansion");
+    const kUp = kAccs.reduce((t, a) => t + (valueOf(expOf(a)) || 0), 0);
+    const kUpN = kAccs.filter((a) => expOf(a)).length;
+    const kUpAct = kAccs.filter((a) => (expOf(a) || {}).status === "Act").reduce((t, a) => t + (valueOf(expOf(a)) || 0), 0);
     $("mb-kpi").innerHTML =
       tile("My book", money(kArr), `${plural(kAccs.length, "account")}${ref.arr ? ` · ${pct(kArr, ref.arr)}% of the book` : ""}`, false) +
       tile("ARR at risk", money(kRisk), `${kArr ? pct(kRisk, kArr) : 0}% of my ARR` +
         (kActArr ? ` · ${money(kReached)} of ${money(kActArr)} at Act reached in time` : " · none at Act"), kActArr > kReached) +
+      tile("Upside in play", money(kUp), kUpN ? `${plural(kUpN, "account")} with a growth signal${kUpAct ? ` · ${money(kUpAct)} at Act` : ""}${kUp ? "" : " · none forecast above contract yet"}` : "no growth signal", false) +
       tile("ARR met in 30 days", p100(kArr ? kMet / kArr : null), `${money(kMet)} of ${money(kArr)} · median for ${kind}: ${p100(medMetV)}`,
         medMetV != null && kArr && kMet / kArr < medMetV) +
       tile(`Renewals, next ${fdays} days`, grr == null ? "–" : `${p100(grr)} kept`,
@@ -3422,15 +3431,29 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           return f ? `<span class="${flag && flag.status === "Act" ? "bad" : "muted"}">no next step recorded</span>` : ""; })()}</td></tr>`;
     };
     let restOpen = accs.length <= (D.settings.open_no_flags_up_to ?? 15);   // a small book: every account in sight
+    // All | Churn | Growth (20 Nov 2026, Nikodem: the leader reports growth and churn apart)
+    const PV = [["all", "All"], ["churn", "Churn"], ["growth", "Growth"]];
+    const upAll = sumOf(growth, (a) => valueOf(fl(a, "expansion"))) + sumOf(churn, (a) => valueOf(fl(a, "expansion")));
+    const portText = { all: $("mb-port-finding").textContent,
+      churn: $("mb-port-finding").textContent,
+      growth: `${money(upAll)} of upside in ${name}'s book, across ${plural(accs.filter((a) => fl(a, "expansion")).length, "account")}; growth stays with CS, Sales signs.` };
+    const drawPortView = () => {
+      $("mb-port-view").innerHTML = PV.map(([k, l]) => `<button class="chip${mbPortView === k ? " on" : ""}" aria-pressed="${mbPortView === k}" data-pv="${k}">${l}</button>`).join("");
+      $("mb-port-view").querySelectorAll("[data-pv]").forEach((b) => b.addEventListener("click", () => { mbPortView = b.dataset.pv; drawPortView(); drawPort(); }));
+      $("mb-port-finding").textContent = portText[mbPortView];
+    };
     const drawPort = () => {
       $("mb-port").innerHTML = `<table><thead><tr><th>Account</th><th>Value</th><th>Utilisation, 90 days</th><th>Renewal</th><th>Why</th><th>Last action</th><th>Action planned</th></tr></thead><tbody>` +
-        `<tr class="group"><td colspan="7">Churn risk (${churn.length})</td></tr>` + churn.map((a) => row(a, "churn", ["churn_call", "qbr"])).join("") +
-        `<tr class="group"><td colspan="7">Growth (${growth.length})</td></tr>` + growth.map((a) => row(a, "expansion", ["growth_call", "qbr"])).join("") +
-        `<tr class="group"><td colspan="7">No flags (${rest.length}) <button class="link" data-rest>${restOpen ? "hide" : "show"}</button></td></tr>` + (restOpen ? rest.map((a) => row(a, null)).join("") : "") +
+        (mbPortView !== "growth" ? `<tr class="group"><td colspan="7">Churn risk (${churn.length})</td></tr>` + churn.map((a) => row(a, "churn", ["churn_call", "qbr"])).join("") : "") +
+        // Growth view: every account with an expansion signal, including those also at churn risk
+        (mbPortView !== "churn" ? `<tr class="group"><td colspan="7">Growth (${mbPortView === "growth" ? accs.filter((a) => fl(a, "expansion")).length : growth.length})</td></tr>` +
+          (mbPortView === "growth" ? accs.filter((a) => fl(a, "expansion")).sort(byValue("expansion")) : growth).map((a) => row(a, "expansion", ["growth_call", "qbr"])).join("") : "") +
+        (mbPortView === "all" ? `<tr class="group"><td colspan="7">No flags (${rest.length}) <button class="link" data-rest>${restOpen ? "hide" : "show"}</button></td></tr>` + (restOpen ? rest.map((a) => row(a, null)).join("") : "") : "") +
         "</tbody></table>";
       $("mb-port").querySelectorAll("tr.click").forEach((tr) => { tr.addEventListener("click", () => openAccount(tr.dataset.id)); tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); }); });
       const b = $("mb-port").querySelector("[data-rest]"); if (b) b.addEventListener("click", (e) => { e.stopPropagation(); restOpen = !restOpen; drawPort(); });
     };
+    drawPortView();
     drawPort();
 
     // 4. pipeline: what's booked in the next 8 weeks, on top of today's plate
