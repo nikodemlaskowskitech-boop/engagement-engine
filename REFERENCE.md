@@ -444,6 +444,8 @@ Read a file's entry before changing that file, and update the entry in the same 
   at Watch and Shelfware (they shrink to what they use at renewal); opportunity =
   forecast utilisation at renewal above 100% x ARR (Watch at a share).
   Value guides the work; it's never a CSM's credit.
+  Reasons say "1 month", not "1 months", and always give the unit ("renewal in 2
+  months"; 20 Nov 2026, seen on a screenshot); pipeline_test checks every reason.
 - `check_flags.py`: tests the flags against the answer key (run `flags.py`
   first): share of each personality found, false alarms, and every miss by
   name. Re-run it after any change to a flag rule.
@@ -664,6 +666,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   roles.book_ref gives a person's page the book's ARR and forecast GRR (numbers only); the
   peer medians add met_value. cockpit_test, role_pages_test (the tiles recomputed from the
   whole export) and peer_median_test check it.
+  Growth apart from churn (20 Nov 2026, Nikodem: "if the leader reports on growth and churn
+  separately, shouldn't we have that option here"): a third tile, "Upside in play", sums the
+  expansion flags' upside (forecast usage above the contract at renewal) and counts every
+  account with a growth signal, even at €0 upside (renewal too soon to pass the contract), so
+  the tile and the Growth list agree. It never nets against the risk. The portfolio has All |
+  Churn | Growth chips (mbPortView): Churn keeps the risk groups, Growth lists the expansion
+  accounts by upside, each view with its own finding. role_pages_test checks both.
   My work (18 Nov 2026, Nikodem's CSM route: start on My book, pick up from the queue, know the
   account, act): on a CSM's or pool member's page the Tasks tab is "My work", the queue.
   Columns: account, ARR, at stake (the flag's value: Act the whole ARR, Watch/Shelfware the

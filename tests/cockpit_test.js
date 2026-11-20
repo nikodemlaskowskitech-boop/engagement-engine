@@ -514,8 +514,8 @@ const segment = async (page, values) => {
       `My book: the week with the most ARR met (€${Math.round(bestT / 1000)}k) lists its ${names.length} meetings, the ARR of its accounts`, `${mt} / ${names.length} rows / ${sumArr}`);
     const head = await page.textContent("#view-mybook .panel h2");
     const kpi = await page.$$eval("#mb-kpi .tile .k", (k) => k.map((x) => x.textContent));
-    check(head.startsWith("Where I stand") && kpi.join() === "My book,ARR at risk,ARR met in 30 days,Renewals, next 180 days",
-      "My book opens on where the owner stands, in value: book, at risk, met in 30 days, renewals kept", kpi.join(" | "));
+    check(head.startsWith("Where I stand") && kpi.join() === "My book,ARR at risk,Upside in play,ARR met in 30 days,Renewals, next 180 days",
+      "My book opens on where the owner stands, in value: book, at risk, upside apart, met in 30 days, renewals kept", kpi.join(" | "));
     // CS team heatmap: a cell lists that person's meetings that week
     await segment(page, {}); await tab(page, "team");
     // the first person's last week, counted independently from the export

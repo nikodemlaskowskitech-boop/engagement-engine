@@ -132,9 +132,19 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     const bookGrr = 1 - full.retention.forecast.owner_loss / full.retention.forecast.up_for_renewal;
     check(tiles[0].v === eurTxt(arr) && tiles[0].r.startsWith(`${mine.length} account`), `${f}: My book ${eurTxt(arr)}, ${mine.length} accounts`, JSON.stringify(tiles[0]));
     check(tiles[1].v === eurTxt(risk), `${f}: ARR at risk ${eurTxt(risk)} (Act whole, Watch and Shelfware the unused part)`, JSON.stringify(tiles[1]));
-    check(!up || (tiles[3].v === `${Math.round(100 * (up - loss) / up)}% kept` && tiles[3].r.includes(`the book: ${Math.round(100 * bookGrr)}%`)),
-      `${f}: renewals in ${win} days, ${up ? Math.round(100 * (up - loss) / up) + "% kept" : "none"}, against the book's ${Math.round(100 * bookGrr)}% (retention.py's own forecast)`, JSON.stringify(tiles[3]));
-    check(/median for CSMs: \d+%/.test(tiles[2].r), `${f}: met in 30 days, by ARR, against the CSMs' median by ARR`, tiles[2].r);
+    check(!up || (tiles[4].v === `${Math.round(100 * (up - loss) / up)}% kept` && tiles[4].r.includes(`the book: ${Math.round(100 * bookGrr)}%`)),
+      `${f}: renewals in ${win} days, ${up ? Math.round(100 * (up - loss) / up) + "% kept" : "none"}, against the book's ${Math.round(100 * bookGrr)}% (retention.py's own forecast)`, JSON.stringify(tiles[4]));
+    check(/median for CSMs: \d+%/.test(tiles[3].r), `${f}: met in 30 days, by ARR, against the CSMs' median by ARR`, tiles[3].r);
+    const upside = mine.reduce((t, a) => t + (((a.flags || []).find((x) => x.flag === "expansion") || {}).value || 0), 0);
+    check(tiles[2].k === "Upside in play" && tiles[2].v === eurTxt(upside), `${f}: upside in play ${eurTxt(upside)}, apart from the risk`, JSON.stringify(tiles[2]));
+    const nGrow = mine.filter((a) => (a.flags || []).some((x) => x.flag === "expansion")).length;
+    check(nGrow ? tiles[2].r.startsWith(`${nGrow} account`) : tiles[2].r === "no growth signal",
+      `${f}: the upside tile counts the same ${nGrow} account(s) the Growth view lists, even at €0 upside`, tiles[2].r);
+    for (const [k, want] of [["growth", (r) => r.every((x) => /Growth/.test(x) || x === "")], ["churn", (r) => !r.some((x) => /^Growth/.test(x))]]) {
+      await p.click(`#mb-port-view [data-pv=${k}]`); await p.waitForTimeout(100);
+      const groups = await p.$$eval("#mb-port tr.group td", (t) => t.map((x) => x.textContent.trim()));
+      check(want(groups) && groups.length, `${f}: the portfolio's ${k} view shows only ${k === "growth" ? "growth" : "churn"} groups`, groups.join(" | "));
+    }
     await p.close();
   }
   console.log("\nMy week (20 Nov 2026): the next N days on the owner's accounts, in value");

@@ -63,5 +63,12 @@ check(not typed, "no script reads or writes a hand-off file by a typed path", ty
 check(settings.out_sql("flags_churn").endswith("/data/flags_churn.csv") and "\\" not in settings.out_sql("flags_churn"),
       "out_sql gives DuckDB a forward-slash path under data/", settings.out_sql("flags_churn"))
 
+# the reasons read as sentences: "1 month", and a unit after "renewal in" (20 Nov 2026)
+import csv as _csv
+reasons = [r["reasons"] for f in ("flags_churn", "flags_expansion") if settings.output_file(f).exists()
+           for r in _csv.DictReader(settings.output_file(f).open(encoding="utf-8"))]
+bad = [x for x in reasons if re.search(r"\b1 months\b|renewal in \d+(;|$|,)", x)]
+check(reasons and not bad, "flag reasons say \"1 month\" and give \"renewal in\" its unit", bad[:2])
+
 print(f"\n{'All passed' if not failed else f'{failed} failed'}")
 sys.exit(1 if failed else 0)
