@@ -317,3 +317,10 @@ anyone. It shows on the in-house cockpit (Last in My work), where the team alrea
 account. A note typed in Slack never goes on the public demo site (roles.py --site drops it; site_test
 checks every page); the generator's made-up notes (source cs_history) may show there and never to a model (the MCP timeline drops it; mcp_server_test checks it). The
 meeting's outcome is a fixed label from slack_loop.OUTCOMES and may go anywhere.
+
+## 11. Research on the account page (20 Nov 2026)
+
+The account page's research (research.py) reads only the redacted documents the public search
+already carries (§6): names, emails, phones and companies are replaced before the file is
+committed. So the themes and evidence lines on any page, the public site included, are no more
+than the public search already shows.

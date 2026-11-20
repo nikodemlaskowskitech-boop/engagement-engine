@@ -279,6 +279,9 @@ button.link { font: inherit; font-size: 0.78rem; color: var(--ink-3); background
 .banner.who b { color: var(--ink); }
 .banner.who a, .banner.who button { margin-left: 4px; }
 /* About this project: in place under the strip (18 Nov 2026) */
+ul.research { list-style: none; padding: 0; margin: 6px 0 10px; display: grid; gap: 10px; }
+ul.research li { border-left: 3px solid var(--rule); padding: 2px 0 2px 10px; font-size: 0.9rem; color: var(--ink-2); }
+ul.research q { color: var(--ink-2); }
 .about { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 22px; margin: 0 0 12px;
          padding: 12px 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
 .about[hidden] { display: none; }
@@ -726,6 +729,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <div class="forecast" id="tl-forecast"></div>
       </div>
       <div class="panel" id="tl-handover" hidden></div>
+      <div class="panel" id="tl-research" hidden></div>
       <div class="grid2">
         <div class="panel">
           <h2>Usage and CS touches</h2>
@@ -899,6 +903,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const money = (v) => v == null || isNaN(v) ? "–" : Math.abs(v) >= 1e6 ? CUR + (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M"
     : Math.abs(v) >= 1000 ? CUR + Math.round(v / 1000) + "k" : CUR + Math.round(v);
   const valueOf = (f) => (f && typeof f.value === "number" ? f.value : null);
+  // set just before the main draw: a view drawn earlier (the saved-decisions loader draws Tasks
+  // and the timeline while the page is still being set up) leaves out what needs later helpers
+  let READY = false;
   // the whole book's reference figures: precomputed for a person's page (roles.book_ref), else
   // from the full export (the in-house page), with retention.py's own forecast (18 Nov 2026)
   const bookRef = () => D.book_ref || (() => { const f = (D.retention || {}).forecast || {};
@@ -1573,7 +1580,30 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     }
     close(); return h;
   }
+  // Research (20 Nov 2026, Nikodem: tickets belong to research, summarised; most don't matter
+  // to account management): what the documents say, from research.py over the redacted
+  // documents only. Possible themes with their evidence line and source, for a person to judge.
+  const KIND = { S: "Ticket", E: "Email", C: "Call note" };
+  function drawResearch(id) {
+    const host = $("tl-research");
+    if (!host || !id || !READY) { if (host) host.hidden = true; return; }
+    const R = (D.research || {})[id], days = (D.settings && D.settings.research_days) || 180;
+    host.hidden = false;
+    let x = `<h2>Research: what the documents say</h2>`;
+    if (!R) {
+      x += `<p class="note">No tickets, emails or call notes on record for this account in the last ${days} days. In the demo, documents exist for a few dozen accounts only.</p>`;
+    } else {
+      x += `<p class="finding small">${plural(R.tickets, "ticket")}${R.tickets ? ` (${R.open_tickets} open)` : ""}, ${plural(R.emails, "email")} and ${plural(R.calls, "call note")} in the last ${days} days` +
+        (R.themes.length ? `; ${plural(R.themes.length, "possible theme")} worth a look.` : "; nothing in them matches the themes the engine looks for.") + `</p>`;
+      if (R.themes.length) x += `<ul class="research">` + R.themes.map((t) =>
+        `<li><b>${esc(t.label)}</b> <small>${esc(KIND[t.kind] || t.kind)} ${esc(t.id)}, ${fmtFull(t.date)}</small><br><q>${esc(t.line)}</q></li>`).join("") + `</ul>`;
+    }
+    x += `<p class="note">Possible themes from a keyword search over the redacted documents (people and companies replaced: Customer A, CS 1), each with the line that matched: check the source before acting.` +
+      (PAGE && PAGE.sandbox ? ` <a href="search.html">Ask the documents</a>.` : "") + `</p>`;
+    host.innerHTML = x;
+  }
   function drawHandover(id) {
+    drawResearch(id);                                   // the research sits under the handover brief
     const host = $("tl-handover"), h = HANDOVER[id], a = byId[id];
     if (!h || !a) { host.hidden = true; host.innerHTML = ""; return; }
     host.hidden = false;
@@ -2346,9 +2376,6 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
   // a CSM's or pool member's page shows My work, the queue (18 Nov 2026)
   const QUEUE = !!(PAGE && (PAGE.role === "csm" || PAGE.role === "member"));
-  // set just before the main draw: a view drawn earlier (the saved-decisions loader draws Tasks
-  // while the page is still being set up) leaves out what needs later helpers (20 Nov 2026)
-  let READY = false;
   if (QUEUE && $("tab-tasks")) {                     // a CSM's page: the tab is their work, not "Tasks"
     $("tab-tasks").textContent = "My work";
     const tnote = document.querySelector("#view-tasks .panel .note");

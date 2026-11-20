@@ -44,8 +44,10 @@ from pathlib import Path
 import backtest
 import facts
 import onboarding_report
+import research
 import retention
 import roles
+import slack_loop          # the meeting outcome labels (a plain import, so engine_lambda_test sees it)
 import team_report
 from settings import SETTINGS, out_sql, output_file
 from cairnpath_db import connect
@@ -226,16 +228,19 @@ export = {
     # a hand-back to approve) is theirs; CS ops items go to the account's manager
     "tasks": facts.tasks(con),
     "handovers": handovers(),
+    # what the documents say, per account (research.py): redacted documents only (20 Nov 2026)
+    "research": research.build(as_of),
     "history": history(off),
     "retention": retention_export(con, off),
     "settings": {"reach_days": SETTINGS["journeys"]["reach_days"], "reach_days_other": SETTINGS["journeys"]["reach_days_other"],
                  "stale_task_days": SETTINGS["cockpit"]["stale_task_days"],
                  "early_days": SETTINGS["team_report"]["early_days"],
                  # the outcome labels a CSM picks in Slack, one list for both (slack_loop.py)
-                 "meeting_outcomes": __import__("slack_loop").OUTCOMES,
+                 "meeting_outcomes": slack_loop.OUTCOMES,
                  "below_median_points": SETTINGS["cockpit"]["below_median_points"],
                  "min_compare": SETTINGS["cockpit"]["min_compare"],
                  "my_week_days": SETTINGS["cockpit"]["my_week_days"],
+                 "research_days": SETTINGS["research"]["days"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"],
                  "follow_up_days": SETTINGS["follow_ups"]["after_days"],

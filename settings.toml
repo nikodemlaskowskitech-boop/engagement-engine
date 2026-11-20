@@ -477,6 +477,30 @@ site_examples = ["Which accounts are evaluating a competitor?", "Which customers
                  "Where is our main contact leaving the company?", "Which accounts have data quality problems?",
                  "Which customers need more capacity?", "Which accounts are disputing an invoice?"]
 
+[research]
+# The account page's research (20 Nov 2026, Nikodem: tickets belong to research, summarised;
+# most don't matter to account management). research.py reads only the redacted documents the
+# public search carries (search.site_documents_file), counts each account's tickets, emails and
+# call notes in the last `days`, and asks the questions below: a theme counts for an account
+# when the public search would return that account for the question, shown with its evidence
+# line and source, so the CSM judges it. Keyword search: possible themes, not verdicts.
+days = 180
+max_themes = 3
+# a theme needs at least this share of the best account's score for its question, and one piece
+# of evidence supports one theme only (its strongest): on the demo corpus, precision 40% -> 78%,
+# recall 95% -> 76% (20 Nov 2026; measured against the answer key, so optimistic)
+min_relative_score = 0.5
+[research.themes]
+competitor = ["Evaluating a competitor", "Which accounts are evaluating a competitor?"]
+budget_cut = ["Budget pressure", "Which customers are under budget pressure?"]
+champion_leaving = ["Main contact leaving", "Where is our main contact leaving the company?"]
+data_missing = ["Data quality problems", "Which accounts have data quality problems?"]
+not_rolled_out = ["Not using what they bought", "Which accounts aren't really using what they bought?"]
+more_volume = ["Needs more capacity", "Which customers need more capacity?"]
+billing_dispute = ["Invoice disputed", "Which accounts are disputing an invoice?"]
+security_review = ["Security or compliance requirements", "Which accounts have open security or compliance requirements?"]
+onboarding_stuck = ["Stuck getting started", "Which new customers are stuck getting started?"]
+
 [search.synonyms]
 # The team's vocabulary: a word in a question also searches for these. Written as a CS
 # team would list them for each concern, not copied from the documents. One word each

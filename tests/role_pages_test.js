@@ -166,6 +166,24 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       `${f}: My book carries the week in one line, and "See My work" opens it`, line);
     await p.close();
   }
+  console.log("\nResearch on the account page (20 Nov 2026): the redacted documents, the person's accounts only");
+  {
+    const m = meta("csm_anna.html"), { p } = await open("csm_anna.html", "timeline", true);
+    const pageData = await p.evaluate(() => JSON.parse(document.getElementById("views-data").textContent));
+    const mineIds = new Set(pageData.accounts.map((a) => a.account_id));
+    check(Object.keys(pageData.research || {}).every((id) => mineIds.has(id)) && Object.keys(pageData.research).length > 0,
+      `csm_anna.html: research for her own accounts only (${Object.keys(pageData.research).length} of ${Object.keys(full.research).length})`);
+    const withThemes = Object.keys(pageData.research).find((id) => pageData.research[id].themes.length);
+    await p.goto(p.url().split("#")[0] + "#" + withThemes); await p.reload(); await p.waitForTimeout(700);   // a hash alone doesn't reload
+    const txt = await p.textContent("#tl-research");
+    const R = pageData.research[withThemes];
+    check(await p.isVisible("#tl-research") && txt.includes(R.themes[0].label) && txt.includes(R.themes[0].line.slice(0, 40)) && /check the source/.test(txt),
+      `${withThemes}: its possible themes with the evidence line and a "check the source" note`, txt.slice(0, 160));
+    const none = pageData.accounts.find((a) => !pageData.research[a.account_id]);
+    if (none) { await p.goto(p.url().split("#")[0] + "#" + none.account_id); await p.reload(); await p.waitForTimeout(600);
+      check(/No tickets, emails or call notes on record/.test(await p.textContent("#tl-research")), `${none.account_id}: says plainly there are no documents`); }
+    await p.close();
+  }
   console.log("\nHandover Confirm only for the outgoing owner or their manager (stand-in database)");
   for (const [f, acc, want] of [["csm_mia.html", "acc_024", true], ["csm_lukas.html", "acc_024", false],
                                 ["mgr_sophie.html", "acc_024", true], ["leader.html", "acc_024", false],

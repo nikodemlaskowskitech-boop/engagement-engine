@@ -341,6 +341,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   answered by the real handler over the real file: chips, results citing documents in the
   file, highlights, shareable ?q=, empty, 429, no match, phone width, no script error;
   every cockpit page's banner links to it.
+- `research.py` (20 Nov 2026, Nikodem: tickets belong to research, summarised; most don't matter
+  to account management): the account page's research, from the redacted documents only (the
+  file the public search carries; in the engine Lambda bundled as site_documents.jsonl), so the
+  same code runs on the laptop and in AWS and no raw text reaches a page. Per account: tickets
+  (open apart, from the ticket title), emails and call notes in the last [research] days, and up
+  to max_themes possible themes from [research.themes] (the public search's own questions). A
+  theme counts when the public search would return the account, its best document scores at
+  least min_relative_score (0.5) of the best account's for that question, and one piece of
+  evidence supports one theme only; a greeting is never the evidence. On the demo corpus
+  precision 40% -> 78%, recall 95% -> 76% (chosen against the answer key: optimistic). The page
+  says "possible themes" and shows each evidence line and source. tests/research_test.py.
 - `mcp_server.py` (13 Nov 2026): the engine as MCP tools (mcp 2.2.0, MCPServer; pinned in
   (18 Nov 2026: timeline leaves out a meeting's free-text note, which goes to a model; the
   outcome, a fixed label, stays. mcp_server_test checks it.)
@@ -626,6 +637,10 @@ Read a file's entry before changing that file, and update the entry in the same 
   list. The tour's last step links the same CSM. site_test checks the doors, the switch, the
   list and that the phone has no side scroll. A colour the switcher named (--muted) never
   existed; it now uses --ink-3.
+  Research on the account timeline (20 Nov 2026): a panel under the handover brief, from
+  D.research (research.py; a person's page carries their accounts only): the counts, the
+  possible themes with their evidence line and source, "check the source before acting", and
+  a plain "no documents on record" for accounts without any. Drawn only once READY.
   My week (20 Nov 2026, Nikodem: "my workload with the upcoming engagements, tied to where I
   pick up"): on a CSM's or pool member's My work, a panel above the queue lists the next
   [cockpit] my_week_days (14) on the owner's accounts, by date, each with its ARR: QBRs and
