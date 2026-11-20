@@ -156,10 +156,25 @@ def peer_medians(export, owners_in):
                           "meetings": sum(1 for t in export.get("touches", []) if t["event"] == "meeting_held"
                                           and t.get("owner_id") == o and t["date"] >= since),
                           "met": sum(a["account_id"] in met for a in b) / len(b) if b else None,
+                          # the same in value (18 Nov 2026, "value, not volume"): share of the ARR met
+                          "met_value": (sum(a.get("arr") or 0 for a in b if a["account_id"] in met)
+                                        / sum(a.get("arr") or 0 for a in b)) if sum(a.get("arr") or 0 for a in b) else None,
                           "calls": statistics.median(calls) if calls else None})
-        out[kind] = {k: med([s[k] for s in stats]) for k in ("accs", "open", "meetings", "met", "calls")}
+        out[kind] = {k: med([s[k] for s in stats]) for k in ("accs", "open", "meetings", "met", "met_value", "calls")}
         out[kind]["met_all"] = med([s["met"] or 0 for s in stats])      # owners with no accounts as 0%
     return out
+
+
+def book_ref(export):
+    """The whole book's figures a page cut to one person compares with (18 Nov 2026, My book in
+    value): its ARR, and the forecast GRR of the renewals in retention.py's window, from
+    retention.py's own numbers (owners' forecasts where set, else the data's), so a CSM's
+    figure and the book's share one definition. Numbers only."""
+    f = (export.get("retention") or {}).get("forecast") or {}
+    up = f.get("up_for_renewal") or 0
+    return {"arr": sum(a.get("arr") or 0 for a in export["accounts"]),
+            "forecast_days": f.get("days"),
+            "forecast_grr": round(1 - (f.get("owner_loss") or 0) / up, 4) if up else None}
 
 
 def slice_export(export, person_id, person):
@@ -188,6 +203,7 @@ def slice_export(export, person_id, person):
     peers = everyone if cfg["scope"] == "book" or ROLES.get("peer_median", "book") == "book" \
         else [t["owner_id"] for t in export["team"] if t["manager"] == person["manager"]]
     page["peer_medians"] = {"scope": "book" if peers == everyone else "team", **peer_medians(export, peers)}
+    page["book_ref"] = book_ref(export)
     # the business case (GRR, NRR, the whole book's renewals): only on pages with its tab
     if "case" not in cfg["tabs"]:
         page["retention"] = None

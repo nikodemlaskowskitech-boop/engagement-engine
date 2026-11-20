@@ -626,6 +626,20 @@ Read a file's entry before changing that file, and update the entry in the same 
   list. The tour's last step links the same CSM. site_test checks the doors, the switch, the
   list and that the phone has no side scroll. A colour the switcher named (--muted) never
   existed; it now uses --ink-3.
+  My book in value (20 Nov 2026, Nikodem: "align top with bottom", "value, not volume"): My book
+  opens on "Where I stand", the leader's KPIs on the owner's book with the same definitions, so
+  they add up: my ARR (share of the book), ARR at risk (Act the whole ARR, Watch and Shelfware
+  the unused part; how much of the Act part was reached in time), ARR met in 30 days (by ARR,
+  against the median of the same kind of owner, also by ARR), and renewals in retention.py's
+  window kept (the owner's forecast where set, else the data's: expectedLoss / dataRisk, the
+  same as retention.py's SQL), against the book's. Amber when below the reference. The finding
+  is in value. Section 2 counts ARR met per week, not meetings: each account once a week,
+  under its most important kind of meeting (QBR, call, other); "Gone quiet" in ARR. stackChart
+  takes fmtV (money) for a chart in euros: round gridlines, no inside labels, and a total that
+  would touch its neighbour goes (the larger keeps its label; the hover keeps all).
+  roles.book_ref gives a person's page the book's ARR and forecast GRR (numbers only); the
+  peer medians add met_value. cockpit_test, role_pages_test (the tiles recomputed from the
+  whole export) and peer_median_test check it.
   My work (18 Nov 2026, Nikodem's CSM route: start on My book, pick up from the queue, know the
   account, act): on a CSM's or pool member's page the Tasks tab is "My work", the queue.
   Columns: account, ARR, at stake (the flag's value: Act the whole ARR, Watch/Shelfware the
