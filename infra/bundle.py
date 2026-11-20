@@ -32,7 +32,13 @@ ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "ingest.py", 
                 "team_report.py", "backtest.py", "onboarding_report.py", "history.py", "retention.py", "export_views.py",
                 "to_parquet.py", "views_template.html", "site_search.html", "handover.py", "llm.py", "stories",
                 "pull_clicks.py",                       # its combine() merges the Slack clicks
-                "roles.py"]                             # export_views.py builds the role pages with it
+                "roles.py",                             # export_views.py builds the role pages with it
+                "slack_loop.py",                        # export_views.py takes the meeting outcome labels from it
+                                                        # (since #194; missing until 20 Nov 2026: the AWS export failed)
+                "research.py", "search.py",             # the account page's research (20 Nov 2026), with the search...
+                "site_documents.jsonl"]                 # ...from the redacted documents the public search
+                                                        # carries: never the raw corpus (bundled from
+                                                        # [search] site_documents_file under this name)
 NEVER_BUNDLE = ["answer_key.json", "README.md"]     # stories/: the test's answer key never reaches AWS
 LAMBDA_PACKAGES = ["duckdb", "anthropic"]           # third-party libraries the engine needs, pinned in requirements.txt
 # The Lambdas' libraries, sub-dependencies included, each pinned to one file by its hash
@@ -125,8 +131,11 @@ def bundle_engine(out=None, deps=None):
     """The engine Lambda: handler + ENGINE_FILES (stories/ without its answer key) + libraries.
     deps=False (or the CAIRNPATH_SKIP_DEPS environment variable) leaves the libraries out, for tests."""
     out = _fresh(out or BUILD / "run_engine", "run_engine")
+    from settings import SETTINGS
     for name in ENGINE_FILES:
-        if (REPO / name).is_dir():
+        if name == "site_documents.jsonl":                      # the redacted file, under a flat name
+            shutil.copy(REPO / SETTINGS["search"]["site_documents_file"], out / name)
+        elif (REPO / name).is_dir():
             shutil.copytree(REPO / name, out / name, ignore=shutil.ignore_patterns(*NEVER_BUNDLE))
         else:
             shutil.copy(REPO / name, out)
