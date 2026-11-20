@@ -827,6 +827,10 @@ Read a file's entry before changing that file, and update the entry in the same 
   `tests/role_pages_test.js`: the pages in a browser (no script error, tabs, forms
   only where allowed). Run both on any PR that touches roles.py, the template,
   export_views.py or [roles]; also cockpit_test.js for the full page.
+  Three tabs for a CSM or pool member (21 Nov 2026): My book, My work, the account; the team-wide
+  tabs stay with managers and the leader. The page's code draws only the sections a role keeps
+  (the Onboarding legend was the one that didn't check: fixed). role_pages_test checks every
+  person's tabs and that each one draws with no script error.
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to

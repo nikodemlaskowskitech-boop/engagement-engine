@@ -279,14 +279,16 @@ outcomes = "by_owner"
 edit = { forecast = "team", next_step = "team", assign = "team", handback = "team", handover_confirm = "team" }
 
 [roles.csm]
-tabs = ["mybook", "tasks", "timeline", "overview", "outcomes", "team", "book", "onboarding"]
+# three places (20 Nov 2026, Nikodem's CSM route): My book (where I stand), My work (what to pick
+# up), the account (know it, act). The team-wide tabs are the manager's and the leader's.
+tabs = ["mybook", "tasks", "timeline"]
 scope = "team"
 self_service = false
 outcomes = "team_total"              # account assignment may drive commission: no per-owner results
 edit = { forecast = "own", next_step = "own", handover_confirm = "own" }
 
 [roles.member]                       # a Scale pool member: like a CSM, on the accounts named to them
-tabs = ["mybook", "tasks", "timeline", "overview", "outcomes", "team", "book", "onboarding"]
+tabs = ["mybook", "tasks", "timeline"]
 scope = "team"
 self_service = false
 outcomes = "team_total"

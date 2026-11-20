@@ -1691,7 +1691,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
   // ---------------------------------------------------------------- onboarding
   const GROUPS = [{ key: "welcomed", name: "Welcomed", color: "var(--viz-touch)" }, { key: "control (no email)", name: "Control (no email)", color: "var(--viz-other)" }];   // a baseline is a receding neutral
-  for (const g of GROUPS) { const s = document.createElement("span"); s.append(legendSwatch("circle", g.color), g.name); $("ob-legend").appendChild(s); }
+  if ($("ob-legend")) for (const g of GROUPS) { const s = document.createElement("span"); s.append(legendSwatch("circle", g.color), g.name); $("ob-legend").appendChild(s); }   // only where the Onboarding tab is on the page
   let obTier = "all";
   document.querySelectorAll("#ob-tier button").forEach((b) => b.addEventListener("click", () => {
     obTier = b.dataset.tier; document.querySelectorAll("#ob-tier button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); drawOnboarding();
