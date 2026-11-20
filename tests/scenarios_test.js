@@ -124,7 +124,9 @@ const due = (days) => new Date(Date.parse(D.as_of) + days * 864e5).toISOString()
     const p = await open(browser); await seg(p, { owner: "pm_priya" }); await tab(p, "mybook");
     const port = await text(p, "#mb-port-finding"), work = await text(p, "#mb-work");
     const live = workOf("pm_priya").filter((t) => ["Open", "Claimed"].includes(t.action_status)).length;
-    const ok = port.includes(`of ${priya.length} accounts`) && work.includes("median for pool members") && (await text(p, "#mb-finding")).includes(`${live} task`);
+    // since My book went to value (#196) the sentence is in euros; the task count is the Open + Claimed tiles
+    const n = (re) => +((work.match(re) || [])[1] ?? NaN);
+    const ok = port.includes(`of ${priya.length} accounts`) && work.includes("median for pool members") && n(/Open(\d+)/) + n(/Claimed, not done(\d+)/) === live;
     record("s07", ok, `${priya.length} accounts in her book; ${live} tasks on her plate (queue tasks on her accounts); compared with pool members`); await p.close();
   });
   await run("s08", async () => {

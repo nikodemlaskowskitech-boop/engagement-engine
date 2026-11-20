@@ -65,6 +65,7 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       JSON.stringify({ rows: rows.length, offered: rows.filter((r) => r.act).length, wrong: wrong.slice(0, 3) }));
     await p.close();
   }
+  const full = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "views_data.json"), "utf8"));   // the whole export, to recompute from
   console.log("\nMy work (18 Nov 2026): a CSM's queue, by cash at stake per day left");
   for (const f of ["csm_anna.html", "csm_tom.html", "csm_mia.html", "pm_jonas.html", "mgr_sophie.html"]) {
     const m = meta(f), { p } = await open(f, "tasks", true);
@@ -116,7 +117,6 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     await p.close();
   }
   console.log("\nMy book in value (18 Nov 2026): the leader's KPIs on the owner's book, same definitions");
-  const full = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "views_data.json"), "utf8"));
   const eurTxt = (v) => { const a = Math.abs(v); return a >= 1e6 ? "€" + (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : a >= 1e3 ? "€" + Math.round(v / 1e3) + "k" : "€" + Math.round(v); };
   for (const f of ["csm_anna.html", "csm_tom.html"]) {
     const m = meta(f), { p } = await open(f, "mybook", true);
@@ -318,7 +318,7 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     await switchTo("csm_mia.html");
     const mia = meta("csm_mia.html"), teammate = mia.accounts.find((a) => !mia.edit.forecast.includes(a));
     await pin(mia.edit.forecast[0]); await pin(teammate);
-    await p.click("#tab-book"); await p.click("#tab-tasks");
+    await p.click("#tab-mybook"); await p.click("#tab-tasks");          // a CSM has three tabs (no Book of business)
     const count = await p.textContent("#seg-count");
     const taskAccs = await p.$$eval("#tk-list [data-open]", (b) => [...new Set(b.map((x) => x.dataset.open))]);
     check((await pins()).length === 2 && count.startsWith("2 of") && taskAccs.every((a) => [mia.edit.forecast[0], teammate].includes(a)),

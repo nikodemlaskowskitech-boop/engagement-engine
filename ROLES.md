@@ -42,9 +42,10 @@ count it.
 | Set a forecast or next step | No | Team's accounts | Own accounts | Own accounts |
 | Reassign a task, approve a hand-back | No | Team's tasks | No | No |
 | Confirm a handover brief | No | Team's accounts | Own accounts (outgoing owner) | Own accounts |
-| "Did it work?" | By owner | By owner, their team | Team total, no names | Team total, no names |
+| "Did it work?" | By owner | By owner, their team | No (not a CSM tab since 21 Nov 2026) | No |
 | Leadership tab | Yes (opens here) | Yes | No | No |
 | Business case tab (GRR, NRR, the forecast) | Yes | No | No | No |
+| Tabs | Leadership, Business case, the team-wide tabs, Tasks, Account | Tasks, Leadership, the team-wide tabs, Account | My book, My work, Account | My book, My work, Account |
 | Opens on | Leadership | Tasks | My book | My book |
 | The queue | Tasks (with decisions) | Tasks (with decisions) | My work (by cash at stake, 18 Nov 2026) | My work |
 
@@ -54,6 +55,11 @@ page).
 
 ## Why each choice
 
+- **Three places for a CSM** (21 Nov 2026, Nikodem's CSM route). My book (where I
+  stand, in the leader's KPIs), My work (what to pick up, by cash at stake) and the
+  account (know it, act). Overview, Did it work?, CS team, Book of business and
+  Onboarding are team-wide views: the manager's and the leader's. The CSM still
+  sees team medians on My book, and activation work arrives in My work.
 - **Visibility inside the team, limits on actions** (6 Nov 2026). Cover,
   handovers and peer help need the whole team's picture. What goes wrong in
   practice is someone changing what isn't theirs, so that is what's limited.
