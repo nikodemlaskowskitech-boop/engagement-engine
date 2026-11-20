@@ -112,6 +112,31 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     check(nothing === noPlan, `${f}: "nothing planned" exactly where there's no next step and no QBR booked (${nothing})`, `${nothing} vs ${noPlan}`);
     await p.close();
   }
+  console.log("\nMy book in value (18 Nov 2026): the leader's KPIs on the owner's book, same definitions");
+  const full = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "views_data.json"), "utf8"));
+  const eurTxt = (v) => { const a = Math.abs(v); return a >= 1e6 ? "€" + (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : a >= 1e3 ? "€" + Math.round(v / 1e3) + "k" : "€" + Math.round(v); };
+  for (const f of ["csm_anna.html", "csm_tom.html"]) {
+    const m = meta(f), { p } = await open(f, "mybook", true);
+    await p.click("#tab-mybook"); await p.waitForTimeout(200);
+    const tiles = await p.$$eval("#mb-kpi .tile", (ts) => ts.map((t) => ({ k: t.querySelector(".k").textContent, v: t.querySelector(".v").textContent, r: t.querySelector(".ref").textContent })));
+    // recomputed here from the whole export, independently of the page
+    const mine = full.accounts.filter((a) => a.owner_id === m.person);
+    const arr = mine.reduce((t, a) => t + (a.arr || 0), 0);
+    const risk = mine.reduce((t, a) => t + (((a.flags || []).find((x) => x.flag === "churn") || {}).value || 0), 0);
+    const day = (d) => Date.parse(d + "T00:00:00Z") / 864e5, run = day(full.as_of), win = full.retention.forecast.days;
+    const fcs = {}; for (const x of full.forecasts || []) (fcs[x.account_id] = fcs[x.account_id] || []).push(x);
+    const ups = mine.filter((a) => day(a.renewal_date) > run && day(a.renewal_date) <= run + win);
+    const up = ups.reduce((t, a) => t + a.arr, 0);
+    const loss = ups.reduce((t, a) => { const fc = (fcs[a.account_id] || []).slice(-1)[0], r = ((a.flags || []).find((x) => x.flag === "churn") || {}).value || 0;
+      return t + (!fc ? r : fc.call === "churn" ? a.arr : fc.call === "downsize" && fc.amount != null ? Math.max(0, a.arr - fc.amount) : 0); }, 0);
+    const bookGrr = 1 - full.retention.forecast.owner_loss / full.retention.forecast.up_for_renewal;
+    check(tiles[0].v === eurTxt(arr) && tiles[0].r.startsWith(`${mine.length} account`), `${f}: My book ${eurTxt(arr)}, ${mine.length} accounts`, JSON.stringify(tiles[0]));
+    check(tiles[1].v === eurTxt(risk), `${f}: ARR at risk ${eurTxt(risk)} (Act whole, Watch and Shelfware the unused part)`, JSON.stringify(tiles[1]));
+    check(!up || (tiles[3].v === `${Math.round(100 * (up - loss) / up)}% kept` && tiles[3].r.includes(`the book: ${Math.round(100 * bookGrr)}%`)),
+      `${f}: renewals in ${win} days, ${up ? Math.round(100 * (up - loss) / up) + "% kept" : "none"}, against the book's ${Math.round(100 * bookGrr)}% (retention.py's own forecast)`, JSON.stringify(tiles[3]));
+    check(/median for CSMs: \d+%/.test(tiles[2].r), `${f}: met in 30 days, by ARR, against the CSMs' median by ARR`, tiles[2].r);
+    await p.close();
+  }
   console.log("\nHandover Confirm only for the outgoing owner or their manager (stand-in database)");
   for (const [f, acc, want] of [["csm_mia.html", "acc_024", true], ["csm_lukas.html", "acc_024", false],
                                 ["mgr_sophie.html", "acc_024", true], ["leader.html", "acc_024", false],

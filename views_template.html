@@ -604,9 +604,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     </section>
     <section class="view" id="view-mybook" role="tabpanel" aria-labelledby="tab-mybook" hidden>
       <p class="finding" id="mb-finding"></p>
-      <p class="sub" id="mb-sub">One owner's morning page: what's on their plate, whether they're in front of their customers, where the risk and growth sit in their book, and what's coming in the next 8 weeks. Pick an owner at the top of the page.</p>
+      <p class="sub" id="mb-sub">An owner's morning page, in value: where the book stands, what's on the plate, how much of the ARR they've met, the accounts risk first, and what's coming in the next 8 weeks.</p>
       <div id="mb-pick" class="pickers"></div>
       <div id="mb-body">
+        <div class="panel">
+          <h2>Where I stand: my book in value</h2>
+          <div class="tiles" id="mb-kpi"></div>
+          <p class="note" id="mb-kpi-note"></p>
+        </div>
         <div class="panel">
           <h2>1. Current workload</h2>
           <div class="tiles" id="mb-work"></div>
@@ -614,7 +619,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         </div>
         <div class="grid2">
           <div class="panel">
-            <h2>2. Engagement: meetings per week, looking back 13 weeks</h2>
+            <h2>2. Engagement: ARR met per week, looking back 13 weeks</h2>
             <p class="finding" style="font-size:1rem" id="mb-eng-finding"></p>
             <div id="mb-eng-chart"></div>
             <div class="legend" id="mb-eng-legend"></div>
@@ -888,6 +893,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const money = (v) => v == null || isNaN(v) ? "–" : Math.abs(v) >= 1e6 ? CUR + (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M"
     : Math.abs(v) >= 1000 ? CUR + Math.round(v / 1000) + "k" : CUR + Math.round(v);
   const valueOf = (f) => (f && typeof f.value === "number" ? f.value : null);
+  // the whole book's reference figures: precomputed for a person's page (roles.book_ref), else
+  // from the full export (the in-house page), with retention.py's own forecast (18 Nov 2026)
+  const bookRef = () => D.book_ref || (() => { const f = (D.retention || {}).forecast || {};
+    return { arr: D.accounts.reduce((t, a) => t + (a.arr || 0), 0), forecast_days: f.days,
+             forecast_grr: f.up_for_renewal ? 1 - (f.owner_loss || 0) / f.up_for_renewal : null }; })();
   // The page's database (published cockpit only). Declared up here because the
   // timeline and My book read it too, not just the Tasks tab.
   let db = null, me = null, dbState = "loading", decisions = {}, saveError = "";
@@ -2920,21 +2930,24 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // segment's count inside it only when it fits, recessive gridlines, every week labelled when
   // there's room, and a tooltip with the full breakdown in the same colours. bars: [{label,
   // tip, counts:{k:n}, onClick?}]. Returns nothing; draws into host.
-  const stackChart = (host, { bars, cats, W, H = 170, aria, unit, totals = "all" }) => {
+  // fmtV (18 Nov 2026, "value, not volume"): bars in euros, labelled with money(); counts otherwise
+  const stackChart = (host, { bars, cats, W, H = 170, aria, unit, totals = "all", fmtV = null }) => {
     host.innerHTML = "";
     W = fitW(W);                                                         // a phone draws at its own width
-    const L = 30, T = 18, B = 24, plotH = H - T - B, n = bars.length, bw = (W - L) / n, gap = Math.min(10, bw * 0.18);
+    const L = fmtV ? 46 : 30, T = 18, B = 24, plotH = H - T - B, n = bars.length, bw = (W - L) / n, gap = Math.min(10, bw * 0.18);
+    const show = (v) => (fmtV ? fmtV(v) : v);
     const total = (b) => cats.reduce((t, c) => t + (b.counts[c.k] || 0), 0);
     const max = Math.max(1, ...bars.map(total));
-    const step = max <= 4 ? 1 : max <= 10 ? 2 : Math.ceil(max / 5);            // a few round gridlines
+    const nice = (x) => { const p = 10 ** Math.floor(Math.log10(x)), m = x / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; };
+    const step = fmtV ? nice(max / 4) : max <= 4 ? 1 : max <= 10 ? 2 : Math.ceil(max / 5);   // a few round gridlines
     const top = Math.ceil(max / step) * step, yOf = (v) => T + plotH - (plotH * v) / top;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": aria, class: "stack" }, host);
     for (let v = step; v <= top; v += step) {
       el("line", { x1: L, x2: W, y1: yOf(v), y2: yOf(v), class: "grid" }, svg);
-      el("text", { x: L - 6, y: yOf(v) + 4, "text-anchor": "end" }, svg).textContent = v;
+      el("text", { x: L - 6, y: yOf(v) + 4, "text-anchor": "end" }, svg).textContent = show(v);
     }
     el("line", { x1: L, x2: W, y1: yOf(0), y2: yOf(0), class: "base" }, svg);
-    const ticks = [];
+    const ticks = [], tots = [];
     const every = bw >= 46 ? 1 : bw >= 26 ? 2 : bw >= 14 ? 3 : Math.ceil(48 / bw);   // a year of weeks: a label every ~48px
     bars.forEach((b, i) => {
       const g = el("g", { class: "bar", style: b.onClick ? "cursor:pointer" : "" }, svg), x = L + i * bw + gap / 2, w = bw - gap;
@@ -2944,20 +2957,29 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         const v = b.counts[c.k] || 0; if (!v) continue;
         const h = (plotH * v) / top;
         el("rect", { x, y: y - h + 2, width: w, height: Math.max(1, h - 2), fill: c.color, class: "fill", rx: 2 }, g);   // 2px gap below each segment
-        if (c.inside && !isPhone() && parts > 1 && h >= 16 && w >= 18) el("text", { x: x + w / 2, y: y - h / 2 + 5, "text-anchor": "middle", class: "seg" }, g).textContent = v;
+        if (c.inside && !fmtV && !isPhone() && parts > 1 && h >= 16 && w >= 18) el("text", { x: x + w / 2, y: y - h / 2 + 5, "text-anchor": "middle", class: "seg" }, g).textContent = v;
         y -= h;
       }
       const t = total(b);
-      if (t && totals === "all") el("text", { x: x + w / 2, y: y - 4, "text-anchor": "middle", class: "tot" }, g).textContent = t;
-      if (t && totals === "last" && i === n - 1) el("text", { x: x + w, y: y - 4, "text-anchor": "end", class: "tot" }, g).textContent = t;   // a long trend: today's total only
+      if (t && totals === "all") tots.push({ v: t, el: Object.assign(el("text", { x: x + w / 2, y: y - 4, "text-anchor": "middle", class: "tot" }, g), { textContent: show(t) }) });
+      if (t && totals === "last" && i === n - 1) el("text", { x: x + w, y: y - 4, "text-anchor": "end", class: "tot" }, g).textContent = show(t);   // a long trend: today's total only
       el("rect", { x: L + i * bw, y: T - 14, width: bw, height: plotH + 14, fill: "transparent" }, g);    // hit target: the whole column
       if ((n - 1 - i) % every === 0) { const lastOne = i === n - 1;     // counted from today, so the latest week always has its label (end-anchored, never cut)
         const tk = el("text", { x: lastOne ? Math.min(W, L + i * bw + bw / 2 + 20) : L + i * bw + bw / 2, y: H - 6, "text-anchor": lastOne ? "end" : "middle" }, svg);
         tk.textContent = b.label; ticks.push(tk); }
-      hover(g, `<b>${b.tip}</b>` + [...cats].reverse().map((c) => `<div class="row"><span class="sw" style="background:${c.color}"></span><span>${c.name}</span><b>${b.counts[c.k] || 0}</b></div>`).join("") +
-        `<div class="row tot"><span></span><span>Total</span><b>${plural(t, unit)}</b></div>` + (b.onClick ? '<div class="muted">Click to list them</div>' : ""));
+      hover(g, `<b>${b.tip}</b>` + [...cats].reverse().map((c) => `<div class="row"><span class="sw" style="background:${c.color}"></span><span>${c.name}</span><b>${show(b.counts[c.k] || 0)}</b></div>`).join("") +
+        `<div class="row tot"><span></span><span>Total</span><b>${fmtV ? show(t) : plural(t, unit)}</b></div>` + (b.onClick ? '<div class="muted">Click to list them</div>' : ""));
       if (b.onClick) g.addEventListener("click", b.onClick);
     });
+    // totals that would touch the one before (euros are wider than counts) go; the hover keeps the value
+    // the larger value keeps its label
+    let prev = null;
+    for (const t of tots) {
+      const bx = t.el.getBBox();
+      if (prev && bx.width && prev.bx.x + prev.bx.width + 3 > bx.x && Math.abs(prev.bx.y - bx.y) < bx.height) {
+        if (t.v > prev.v) { prev.el.remove(); prev = { ...t, bx }; } else t.el.remove();
+      } else prev = { ...t, bx };
+    }
     // the latest week's label is end-anchored at the edge: if it would touch the one before, that one goes
     if (ticks.length > 1) { const a = ticks[ticks.length - 2].getBBox(), z = ticks[ticks.length - 1].getBBox();
       if (a.width && a.x + a.width + 4 > z.x) ticks[ticks.length - 2].remove(); }
@@ -3182,15 +3204,44 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const peers = peersOf(o), okind = (teamById[o] || {}).owner_type, kind = kindName(okind) + (PM_TEAM ? " in the team" : "");
     const med = (f) => { const m = median(peers.map(f)); return m == null ? "–" : Math.round(m * 10) / 10; };
 
+    // 0. where I stand, in value (18 Nov 2026, Nikodem: the leader's KPIs are the CSM's, on their
+    // own book, same definitions, so the numbers roll up; value, not volume; ARR a fact, never
+    // the only driver). The book's figures are the reference.
+    const ref = bookRef(), fdays = ref.forecast_days || 180;
+    const kAccs = accountsOf(o), kArr = kAccs.reduce((t, a) => t + (a.arr || 0), 0);
+    const churnOf = (a) => a.flags.find((x) => x.flag === "churn");
+    const kRisk = kAccs.reduce((t, a) => t + (valueOf(churnOf(a)) || 0), 0);
+    const kAct = kAccs.filter((a) => (churnOf(a) || {}).status === "Act");
+    const kActArr = kAct.reduce((t, a) => t + (valueOf(churnOf(a)) || 0), 0);
+    const kReached = kAct.filter((a) => { const s = reachOf(a.account_id, "churn"); return s && s.reached; })
+      .reduce((t, a) => t + (valueOf(churnOf(a)) || 0), 0);
+    const metArr = (as) => as.filter((a) => met30(a.account_id)).reduce((t, a) => t + (a.arr || 0), 0);
+    const kMet = metArr(kAccs);
+    const medMetV = peerMed(okind, "met_value", () => median(peers.map((p) => { const as = accountsOf(p), t = as.reduce((s, a) => s + (a.arr || 0), 0);
+      return t ? metArr(as) / t : null; }).filter((x) => x != null)));
+    const ups = kAccs.filter((a) => a.renewal_date && day(a.renewal_date) > RUN && day(a.renewal_date) <= RUN + fdays);
+    const upArr = ups.reduce((t, a) => t + (a.arr || 0), 0);
+    const loss = ups.reduce((t, a) => { const fc = (forecasts[a.account_id] || []).slice(-1)[0]; return t + (fc ? expectedLoss(a, fc) : dataRisk(a)); }, 0);
+    const grr = upArr ? (upArr - loss) / upArr : null;
+    const p100 = (x) => (x == null ? "–" : `${Math.round(100 * x)}%`);
+    $("mb-kpi").innerHTML =
+      tile("My book", money(kArr), `${plural(kAccs.length, "account")}${ref.arr ? ` · ${pct(kArr, ref.arr)}% of the book` : ""}`, false) +
+      tile("ARR at risk", money(kRisk), `${kArr ? pct(kRisk, kArr) : 0}% of my ARR` +
+        (kActArr ? ` · ${money(kReached)} of ${money(kActArr)} at Act reached in time` : " · none at Act"), kActArr > kReached) +
+      tile("ARR met in 30 days", p100(kArr ? kMet / kArr : null), `${money(kMet)} of ${money(kArr)} · median for ${kind}: ${p100(medMetV)}`,
+        medMetV != null && kArr && kMet / kArr < medMetV) +
+      tile(`Renewals, next ${fdays} days`, grr == null ? "–" : `${p100(grr)} kept`,
+        upArr ? `forecast: ${money(upArr - loss)} of ${money(upArr)} · the book: ${p100(ref.forecast_grr)}` : "no renewal in the window",
+        grr != null && ref.forecast_grr != null && grr < ref.forecast_grr);
+    $("mb-kpi-note").textContent = `The leader's numbers, on this book, with the same definitions: they add up to the book's. At risk: Act counts the whole ARR, Watch and Shelfware the unused part. Met: a meeting in the last 30 days, counted by the account's ARR, not by the number of meetings. Renewals: the owner's forecast where set, else the data's, as on Business case.`;
+
     // 1. workload
     const mine = (p) => workOf(p).filter(LIVE);
     const live = mine(o).sort((a, b) => b.age_days - a.age_days);
     const open = live.filter((t) => t.action_status === "Open");
     const old = live.filter((t) => t.age_days >= REACH(tierOf(t.account_id))), given = live.filter((t) => t.assigned_from);
     const qbr30 = accountsOf(o).filter((a) => a.next_qbr_date && day(a.next_qbr_date) >= RUN && day(a.next_qbr_date) < RUN + 30);
-    $("mb-finding").textContent = !live.length ? `${name}: nothing on the plate right now.`
-      : live[0].age_days ? `${name}: ${plural(live.length, "task")} on the plate; the oldest has waited ${plural(live[0].age_days, "day")}.`
-      : `${name}: ${plural(live.length, "task")} on the plate, all sent today.`;
+    $("mb-finding").textContent = `${name}: ${money(kArr)} ARR, ${money(kRisk)} of it at risk; ${p100(kArr ? kMet / kArr : null)} of the ARR met in the last 30 days.`;
     $("mb-work").innerHTML =
       tile("Open", open.length, `median for ${kind}: ${PM ? (peerMed(okind, "open") ?? "–") : med((p) => mine(p).filter((t) => t.action_status === "Open").length)}`, false) +
       tile("Claimed, not done", live.length - open.length, "taken in Slack, no meeting yet", false) +
@@ -3208,15 +3259,21 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const accs = accountsOf(o), ids = new Set(accs.map((a) => a.account_id));
     const share = (p) => { const as = accountsOf(p); return as.length ? as.filter((a) => met30(a.account_id)).length / as.length : null; };
     const m30 = accs.filter((a) => met30(a.account_id)).length;
-    $("mb-eng-finding").textContent = `${name} met ${m30} of ${plural(accs.length, "account")} (${pct(m30, accs.length)}%) in the last 30 days; the median for ${kind} is ${Math.round(100 * (peerMed(okind, "met", () => median(peers.map(share).filter((x) => x != null))) || 0))}%.`;
+    $("mb-eng-finding").textContent = `${name} met ${money(kMet)} of ${money(kArr)} ARR (${p100(kArr ? kMet / kArr : null)}) in the last 30 days, ${m30} of ${plural(accs.length, "account")}; the median for ${kind} is ${p100(medMetV)}.`;
+    // each week: the ARR of the accounts met, each account once, under its most important kind
+    // of meeting that week (QBR, then a call, then anything else): value, not a count of meetings
+    const RANK = { qbr: 0, call: 1, other: 2 };
     const weeks = D.week_ends, counts = weeks.map((we) => {
+      const best = {};
+      for (const t of D.touches) if (t.event === "meeting_held" && ids.has(t.account_id) && day(t.date) > day(we) - 7 && day(t.date) <= day(we)) {
+        const k = MEET_KIND(t.topic); if (!(t.account_id in best) || RANK[k] < RANK[best[t.account_id]]) best[t.account_id] = k; }
       const c = { qbr: 0, call: 0, other: 0 };
-      for (const t of D.touches) if (t.event === "meeting_held" && ids.has(t.account_id) && day(t.date) > day(we) - 7 && day(t.date) <= day(we)) c[MEET_KIND(t.topic)]++;
+      for (const id in best) c[best[id]] += (byId[id] || {}).arr || 0;
       return c;
     });
     const start = (we) => new Date((day(we) - 6) * 864e5).toISOString().slice(0, 10);
     const meetingsIn = (we) => D.touches.filter((t) => t.event === "meeting_held" && ids.has(t.account_id) && day(t.date) > day(we) - 7 && day(t.date) <= day(we)).sort((a, b) => a.date.localeCompare(b.date));
-    stackChart($("mb-eng-chart"), { W: 560, cats: MEET, unit: "meeting", aria: `Meetings per week for ${name}`,
+    stackChart($("mb-eng-chart"), { W: 560, cats: MEET, unit: "meeting", fmtV: money, totals: isPhone() ? "last" : "all", aria: `ARR met per week for ${name}`,
       bars: weeks.map((we, i) => ({ label: fmt(start(we)), tip: `Week commencing ${fmt(start(we))}`, counts: counts[i],
         onClick: () => accountList($("mb-eng-list"), $("mb-eng-title"), `Week commencing ${fmt(start(we))}`, meetingsIn(we), MEETING_COLS, false, "meeting") })) });
     $("mb-eng-title").textContent = "Click a week to list its meetings"; $("mb-eng-list").innerHTML = "";
@@ -3228,7 +3285,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const teamCalls = (p) => median(D.time_to_action.filter((r) => r.routed_to === p && r.call_date).map((r) => r.days_to_call));
     const callsMed = PM ? (peerMed(okind, "calls") ?? "–") : (() => { const m = median(peers.map(teamCalls).filter((x) => x != null)); return m == null ? "–" : Math.round(m * 10) / 10; })();
     $("mb-eng-tiles").innerHTML =
-      tile("Gone quiet", quiet.length, `of ${plural(accs.length, "account")}`, quiet.length > 0) +
+      tile("Gone quiet", money(quiet.reduce((t, a) => t + (a.arr || 0), 0)), `of ARR: ${quiet.length} of ${plural(accs.length, "account")}`, quiet.length > 0) +
       tile("Days from signal to call", myCalls.length ? median(myCalls) : "–", `median for ${kind}: ${callsMed}`, false);
     shortList($("mb-quiet"), quiet, [
       { label: "Account", get: (a) => esc(a.account_name) },

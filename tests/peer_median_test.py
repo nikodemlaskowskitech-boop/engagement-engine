@@ -57,5 +57,15 @@ pm_lead = roles.slice_export(export, "leader", {"role": "leader", "name": "x", "
 check(pm_lead["scope"] == "book" and pm_lead["csm"] == book["csm"], "the leader (whole book) always gets the book's medians")
 roles.ROLES["peer_median"] = real
 
+print("\nMy book in value (18 Nov 2026): the value median and the book's reference")
+check(all(0 <= book[k]["met_value"] <= 1 for k in book if book[k].get("met_value") is not None) and book["csm"]["met_value"] is not None,
+      "a median of the share of ARR met in 30 days, beside the share of accounts")
+f = export["retention"]["forecast"]
+ref = roles.slice_export(export, "csm_mia", mia)[0]["book_ref"]
+check(ref["arr"] == sum(a.get("arr") or 0 for a in export["accounts"]) and ref["forecast_days"] == f["days"]
+      and abs(ref["forecast_grr"] - (1 - f["owner_loss"] / f["up_for_renewal"])) < 1e-4,
+      "every page gets the whole book's ARR and forecast GRR, from retention.py's own numbers", ref)
+check(set(ref) == {"arr", "forecast_days", "forecast_grr"}, "...numbers only, no account or name")
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)

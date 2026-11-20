@@ -498,14 +498,24 @@ const segment = async (page, values) => {
   {
     const { page, errors } = await open(browser);
     const n = (txt) => +((txt.match(/: (\d+) /) || [])[1] ?? -1);
-    // My book meetings: the busiest week's bar lists exactly its total
+    // My book engagement, in value since 18 Nov 2026: the week with the most ARR met lists its
+    // meetings, and its euro total is the ARR of the distinct accounts met that week
     await segment(page, { owner: "csm_mia" }); await tab(page, "mybook");
+    const eur = (s) => { const m = String(s).match(/€([\d.]+)([kM]?)/); return m ? +m[1] * (m[2] === "M" ? 1e6 : m[2] === "k" ? 1e3 : 1) : 0; };
     const bars = await page.$$("#mb-eng-chart g.bar");
     let best = null, bestT = -1;
-    for (const b of bars) { const t = +(await b.$eval("text.tot", (x) => x.textContent).catch(() => 0)); if (t > bestT) { bestT = t; best = b; } }
+    for (const b of bars) { const t = eur(await b.$eval("text.tot", (x) => x.textContent).catch(() => "")); if (t > bestT) { bestT = t; best = b; } }
     await best.click(); await page.waitForTimeout(100);
-    const mt = await page.textContent("#mb-eng-title"), mr = await page.$$eval("#mb-eng-list tbody tr", (r) => r.length);
-    check(bestT > 0 && n(mt) === bestT && mr === bestT, `My book: a week of ${bestT} meetings lists ${bestT}`, `${mt} / ${mr} rows`);
+    const mt = await page.textContent("#mb-eng-title");
+    const names = await page.$$eval("#mb-eng-list tbody tr td:first-child", (r) => r.map((x) => x.textContent.trim()));
+    const arrBy = Object.fromEntries(D.accounts.map((a) => [a.account_name, a.arr || 0]));
+    const sumArr = [...new Set(names)].reduce((t, nm) => t + (arrBy[nm] || 0), 0);
+    check(bestT > 0 && n(mt) === names.length && names.length > 0 && Math.abs(sumArr - bestT) <= 0.05 * bestT + 1000,
+      `My book: the week with the most ARR met (€${Math.round(bestT / 1000)}k) lists its ${names.length} meetings, the ARR of its accounts`, `${mt} / ${names.length} rows / ${sumArr}`);
+    const head = await page.textContent("#view-mybook .panel h2");
+    const kpi = await page.$$eval("#mb-kpi .tile .k", (k) => k.map((x) => x.textContent));
+    check(head.startsWith("Where I stand") && kpi.join() === "My book,ARR at risk,ARR met in 30 days,Renewals, next 180 days",
+      "My book opens on where the owner stands, in value: book, at risk, met in 30 days, renewals kept", kpi.join(" | "));
     // CS team heatmap: a cell lists that person's meetings that week
     await segment(page, {}); await tab(page, "team");
     // the first person's last week, counted independently from the export
