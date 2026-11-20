@@ -223,6 +223,7 @@ max_text = 200        # notes and reasons are cut to this many characters (the p
 open_no_flags_up_to = 15   # My book: "No flags" accounts listed open when the book is this small or smaller (else folded, risk first)
 stale_task_days = 14      # Tasks: an Open task turns amber (needs attention) once it has waited this long; before that it's neutral
 below_median_points = 10  # Leadership: "book met" turns red only this many points below the median (one point on a book of 7 is noise)
+my_week_days = 14         # My work's "next N days": QBRs, renewals, next steps and reach deadlines coming up (20 Nov 2026)
 min_compare = 10          # a with/without comparison shows rates only when each group has this many accounts; fewer = "too few to tell" (16 Nov 2026: "3 of 5 vs 0 of 1" read as "calls don't work")
 
 [demo]

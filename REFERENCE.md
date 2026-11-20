@@ -626,6 +626,15 @@ Read a file's entry before changing that file, and update the entry in the same 
   list. The tour's last step links the same CSM. site_test checks the doors, the switch, the
   list and that the phone has no side scroll. A colour the switcher named (--muted) never
   existed; it now uses --ink-3.
+  My week (20 Nov 2026, Nikodem: "my workload with the upcoming engagements, tied to where I
+  pick up"): on a CSM's or pool member's My work, a panel above the queue lists the next
+  [cockpit] my_week_days (14) on the owner's accounts, by date, each with its ARR: QBRs and
+  renewals from the CRM, the owner's next steps, and Act tasks' reach deadlines; the finding in
+  value ("€153k of ARR has something booked or due"). It shows with an empty queue too. My book
+  carries it in one line with "See My work". The panel waits for READY (set just before the
+  main draw): the saved-decisions loader draws Tasks while the page is still being set up,
+  before RUN and accountsOf exist. An empty queue says "nothing to pick up", not the manager's
+  sentence. role_pages_test recomputes the week from the whole export.
   My book in value (20 Nov 2026, Nikodem: "align top with bottom", "value, not volume"): My book
   opens on "Where I stand", the leader's KPIs on the owner's book with the same definitions, so
   they add up: my ARR (share of the book), ARR at risk (Act the whole ARR, Watch and Shelfware

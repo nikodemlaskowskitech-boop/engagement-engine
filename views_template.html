@@ -616,6 +616,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <h2>1. Current workload</h2>
           <div class="tiles" id="mb-work"></div>
           <div class="examples tablewrap" id="mb-work-list"></div>
+          <p class="note" id="mb-week" hidden></p>
         </div>
         <div class="grid2">
           <div class="panel">
@@ -656,6 +657,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <p class="banner" id="tk-banner" hidden></p>
       <div class="controls">
         <div class="chips" id="tk-status" aria-label="Status"></div>
+      </div>
+      <div class="panel" id="tk-week-panel" hidden>
+        <h2 id="tk-week-title">Next 14 days</h2>
+        <p class="finding" style="font-size:1rem" id="tk-week-finding"></p>
+        <div class="tablewrap" id="tk-week"></div>
       </div>
       <div class="panel">
         <h2 id="tk-title">Tasks</h2>
@@ -2340,6 +2346,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
   // a CSM's or pool member's page shows My work, the queue (18 Nov 2026)
   const QUEUE = !!(PAGE && (PAGE.role === "csm" || PAGE.role === "member"));
+  // set just before the main draw: a view drawn earlier (the saved-decisions loader draws Tasks
+  // while the page is still being set up) leaves out what needs later helpers (20 Nov 2026)
+  let READY = false;
   if (QUEUE && $("tab-tasks")) {                     // a CSM's page: the tab is their work, not "Tasks"
     $("tab-tasks").textContent = "My work";
     const tnote = document.querySelector("#view-tasks .panel .note");
@@ -2372,6 +2381,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const items = T.filter((t) => tkShow.has(t.action_status));
     $("tk-title").textContent = `Tasks: ${items.length}`;
     const host = $("tk-list");
+    if (QUEUE) drawWeek();                            // the week ahead shows even with nothing to pick up
+    if (QUEUE && !items.length) {                     // an empty queue: My work's own words, not the manager's
+      $("tk-title").textContent = "My work: 0";
+      $("tk-finding").textContent = `${segName()}: nothing to pick up.`;
+    }
     if (!items.length) { host.innerHTML = '<p class="note">No tasks here.</p>'; return; }
     if (QUEUE) return drawQueue(items, host);        // a CSM's or pool member's page: My work
     const ownerCell = (t) => esc(ownerName[t.routed_to] || t.routed_to) +
@@ -2419,6 +2433,51 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     return `<b>Last: ${esc(kindOf(x))}, ${fmt(x.date)}</b> · ${esc(ownerName[x.owner_id] || x.owner_id || "—")}` +
       `<br>Outcome: ${x.outcome ? esc(OUT[x.outcome] || x.outcome) : '<span class="muted">none logged</span>'}` +
       (x.note ? `<br>${esc(x.note)}` : ' · <span class="muted">no note logged</span>');
+  }
+  // My week (20 Nov 2026, Nikodem: "my current workload with the upcoming engagements, tied to
+  // the view where I pick up"): what's coming in the next [cockpit] my_week_days days on the
+  // owner's accounts, by date, each with its ARR: QBRs and renewals from the CRM, the owner's
+  // next steps, and Act tasks' reach deadlines. In value, like the rest of the CSM side.
+  const WEEK_DAYS = (D.settings && D.settings.my_week_days) || 14;
+  function weekAhead(o) {
+    // the owner's accounts, looked up here: this runs in the first draw, before accountsOf exists
+    const isPool = (teamById[o] || {}).owner_type === "pool";
+    const accs = D.accounts.filter((a) => (isPool ? a.pool : a.owner_id) === o), out = [], inWin = (d) => d && day(d) > RUN && day(d) <= RUN + WEEK_DAYS;
+    for (const a of accs) {
+      if (inWin(a.next_qbr_date)) out.push({ date: a.next_qbr_date, what: "QBR", a });
+      if (inWin(a.renewal_date)) out.push({ date: a.renewal_date, what: "Renewal", a });
+      const s = (nextSteps[a.account_id] || []).slice(-1)[0];
+      if (s && inWin(s.due)) out.push({ date: s.due, what: STEP_TYPES[s.type] || s.type, a, note: s.note });
+    }
+    for (const t of (D.tasks || []).filter((t) => liveT(t) && t.status === "Act" && accs.some((a) => a.account_id === t.account_id))) {
+      const s = reachOf(t.account_id, t.flag);
+      if (s && !s.reached && s.left >= 0 && s.left <= WEEK_DAYS) {
+        const d = new Date((RUN + Math.max(1, s.left)) * 864e5).toISOString().slice(0, 10);
+        out.push({ date: d, what: `Reach by (${t.flag} Act)`, a: byId[t.account_id] || { account_id: t.account_id, arr: 0 } });
+      }
+    }
+    return out.sort((x, y) => x.date.localeCompare(y.date) || (y.a.arr || 0) - (x.a.arr || 0));
+  }
+  function drawWeek() {
+    const o = READY ? segOwner() : null, panel = $("tk-week-panel");
+    if (!panel || !o) { if (panel) panel.hidden = true; return; }
+    const w = weekAhead(o), arrIn = new Set(w.map((x) => x.a.account_id));
+    const arr = [...arrIn].reduce((t, id) => t + ((byId[id] || {}).arr || 0), 0);
+    panel.hidden = false;
+    $("tk-week-title").textContent = `Next ${WEEK_DAYS} days: ${w.length}`;
+    const n = (k) => w.filter((x) => x.what === k).length;
+    $("tk-week-finding").textContent = !w.length ? `Nothing booked or due in the next ${WEEK_DAYS} days.`
+      : `${money(arr)} of ARR has something booked or due: ${[["QBR", "QBR"], ["Renewal", "renewal"]].filter(([k]) => n(k)).map(([k, l]) => plural(n(k), l)).concat(
+          w.some((x) => x.what.startsWith("Reach by")) ? [plural(w.filter((x) => x.what.startsWith("Reach by")).length, "reach deadline")] : [],
+          w.some((x) => !["QBR", "Renewal"].includes(x.what) && !x.what.startsWith("Reach by")) ? [plural(w.filter((x) => !["QBR", "Renewal"].includes(x.what) && !x.what.startsWith("Reach by")).length, "next step")] : []).join(", ")}.`;
+    shortList($("tk-week"), w, [
+      { label: "When", get: (x) => `${fmt(x.date)}<small><br>in ${Math.round(day(x.date) - RUN)} d</small>` },
+      { label: "What", get: (x) => `${esc(x.what)}${x.note ? `<small><br>${esc(x.note)}</small>` : ""}` },
+      { label: "Account", get: (x) => `<button class="link" data-open="${esc(x.a.account_id)}">${nameOf(x.a.account_id)}</button>` },
+      { label: "ARR", r: true, get: (x) => money(x.a.arr) },
+    ], "", 5);
+    if (!w.length) $("tk-week").innerHTML = "";        // the finding already says so
+    $("tk-week").querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
   }
   function drawQueue(items, host) {
     const Q = items.slice().sort((x, y) => urgency(y) - urgency(x)
@@ -3254,6 +3313,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       { label: "Status", get: (t) => badge(t) },
       { label: "Age", r: true, get: (t) => `${t.age_days} d` },
     ], "No open or claimed tasks.");
+    // the week ahead in one line, on a CSM's page (the full list is in My work)
+    if (QUEUE && READY && $("mb-week")) {
+      const w = weekAhead(o), warr = [...new Set(w.map((x) => x.a.account_id))].reduce((t, id) => t + ((byId[id] || {}).arr || 0), 0);
+      $("mb-week").hidden = false;
+      $("mb-week").innerHTML = (w.length ? `Next ${WEEK_DAYS} days: ${plural(w.length, "item")} on ${money(warr)} of ARR (${[...new Set(w.map((x) => x.what.startsWith("Reach by") ? "reach deadline" : x.what))].join(", ")}). `
+        : `Nothing booked or due in the next ${WEEK_DAYS} days. `) + '<button class="link" id="mb-week-go">See My work</button>';
+      $("mb-week-go").addEventListener("click", () => $("tab-tasks").click());
+    }
 
     // 2. engagement
     const accs = accountsOf(o), ids = new Set(accs.map((a) => a.account_id));
@@ -3374,6 +3441,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   drawPicks();
   const firstPick = picks.length ? picks[0].id : D.accounts[0].account_id;
   sel.value = firstPick; drawTimeline(firstPick);
+  READY = true;
   redraw();
   const relayout = () => { redraw(); if (sel.value) drawTimeline(sel.value); };
   if (PHONE_MQ.addEventListener) PHONE_MQ.addEventListener("change", relayout); else if (PHONE_MQ.addListener) PHONE_MQ.addListener(relayout);

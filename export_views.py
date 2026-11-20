@@ -235,6 +235,7 @@ export = {
                  "meeting_outcomes": __import__("slack_loop").OUTCOMES,
                  "below_median_points": SETTINGS["cockpit"]["below_median_points"],
                  "min_compare": SETTINGS["cockpit"]["min_compare"],
+                 "my_week_days": SETTINGS["cockpit"]["my_week_days"],
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"],
                  "follow_up_days": SETTINGS["follow_ups"]["after_days"],
