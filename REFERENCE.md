@@ -673,6 +673,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   the tile and the Growth list agree. It never nets against the risk. The portfolio has All |
   Churn | Growth chips (mbPortView): Churn keeps the risk groups, Growth lists the expansion
   accounts by upside, each view with its own finding. role_pages_test checks both.
+  Insights beside "Why" (20 Nov 2026, Nikodem: "we treat them as insights rather than forecasts";
+  e.g. the main contact leaving): My book's portfolio and My work show the account's first theme
+  from research.py under the flag, tagged "Insight", with its source and date (the evidence line on
+  hover). On a growth row a growth theme comes first ([research] growth_themes), on any other row
+  a risk theme. It never changes a status, a value or the sort; a click opens the account at its
+  research. "No flags" counts how many have an insight, the accounts a flag can't see yet.
+  role_pages_test recomputes each row's insight from the export and checks the status is untouched.
   My work (18 Nov 2026, Nikodem's CSM route: start on My book, pick up from the queue, know the
   account, act): on a CSM's or pool member's page the Tasks tab is "My work", the queue.
   Columns: account, ARR, at stake (the flag's value: Act the whole ARR, Watch/Shelfware the

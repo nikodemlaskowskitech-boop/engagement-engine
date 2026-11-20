@@ -107,6 +107,9 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       check(/^Last: .+, \d+ \w+/.test(det) && /Outcome:/.test(det) && !(await p.$("table.queue tr.detail")),
         `${f}: Last opens that engagement under its row (kind, date, outcome) and a second click closes it`, det.slice(0, 90));
     }
+    const qIns = await p.$$eval("table.queue tbody tr:not(.detail)", (trs) => trs.map((tr) => [tr.querySelector("[data-open]").dataset.open, tr.querySelectorAll("[data-insight]").length]));
+    const qBad = qIns.filter(([id, n]) => n !== ((((full.research || {})[id] || {}).themes || []).length ? 1 : 0));
+    check(!qBad.length, `${f}: the queue shows an insight beside "Why" where the account's documents have a theme (${qIns.filter(([, n]) => n).length} of ${qIns.length})`, JSON.stringify(qBad));
     const nothing = await p.$$eval("table.queue .badge.nothing", (b) => b.length);
     const noPlan = rows.filter((id) => { const a = byId[id] || {}; return !(data.next_steps || []).some((s) => s.account_id === id) && !(a.next_qbr_date > data.as_of); }).length;
     check(nothing === noPlan, `${f}: "nothing planned" exactly where there's no next step and no QBR booked (${nothing})`, `${nothing} vs ${noPlan}`);
@@ -140,6 +143,29 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     const nGrow = mine.filter((a) => (a.flags || []).some((x) => x.flag === "expansion")).length;
     check(nGrow ? tiles[2].r.startsWith(`${nGrow} account`) : tiles[2].r === "no growth signal",
       `${f}: the upside tile counts the same ${nGrow} account(s) the Growth view lists, even at €0 upside`, tiles[2].r);
+    // insights beside "Why": the first theme from the account's documents, risk first on a churn row, growth
+    // first on a growth row; none without documents; the flag's status is the export's, untouched
+    await p.click("#mb-port-view [data-pv=all]"); await p.waitForTimeout(100);
+    const showRest = await p.$("#mb-port [data-rest]"); if (showRest && (await showRest.textContent()) === "show") { await showRest.click(); await p.waitForTimeout(100); }
+    const rows = await p.$$eval("#mb-port tr.click", (rs) => rs.map((r) => ({ id: r.dataset.id, group: (() => { let g = r.previousElementSibling; while (g && !g.classList.contains("group")) g = g.previousElementSibling; return g ? g.textContent.trim() : ""; })(),
+      pill: (r.querySelector(".flag .pill") || {}).textContent || null, ins: [...r.querySelectorAll("[data-insight]")].map((b) => b.textContent) })));
+    const grow = new Set(full.settings.research_growth_themes), R = full.research || {};
+    let bad = [], seen = 0;
+    for (const r of rows) {
+      const a = mine.find((x) => x.account_id === r.id), side = /^Growth/.test(r.group) ? "expansion" : /^Churn/.test(r.group) ? "churn" : null;
+      const th = ((R[r.id] || {}).themes || []).slice().sort((x, y) => side === "expansion" ? grow.has(y.theme) - grow.has(x.theme) : grow.has(x.theme) - grow.has(y.theme));
+      const flag = side && (a.flags || []).find((x) => x.flag === side);
+      if (th.length) seen++;
+      if (r.ins.length !== (th.length ? 1 : 0) || (th.length && !r.ins[0].startsWith("Insight" + th[0].label))) bad.push(`${r.id}: ${JSON.stringify(r.ins)} vs ${th.map((t) => t.label)}`);
+      if (flag && r.pill !== flag.status) bad.push(`${r.id}: status ${r.pill} vs ${flag.status}`);
+    }
+    check(!bad.length, `${f}: ${seen} row(s) carry an insight from their documents, one each, the flag's status untouched`, bad.join("; "));
+    if (seen) {
+      await p.click("#mb-port [data-insight]"); await p.waitForTimeout(250);
+      check((await p.getAttribute("#tab-timeline", "aria-selected")) === "true" && !(await p.$eval("#tl-research", (e) => e.hidden)),
+        `${f}: an insight opens the account at its research`, "");
+      await p.click("#tab-mybook"); await p.waitForTimeout(150);
+    }
     for (const [k, want] of [["growth", (r) => r.every((x) => /Growth/.test(x) || x === "")], ["churn", (r) => !r.some((x) => /^Growth/.test(x))]]) {
       await p.click(`#mb-port-view [data-pv=${k}]`); await p.waitForTimeout(100);
       const groups = await p.$$eval("#mb-port tr.group td", (t) => t.map((x) => x.textContent.trim()));

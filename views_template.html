@@ -138,6 +138,9 @@ dl.facts dd { margin: 0; }
 .flag.serious { border-color: var(--serious); } .flag.serious .pill { background: var(--serious-bg); color: var(--serious-ink); }
 .flag.neutral .pill { background: var(--accent-soft); color: var(--accent); }
 .flag p { margin: 2px 0 0; color: var(--ink-2); }
+/* an insight from the documents: context beside "Why", never a status */
+.insight { display: block; margin-top: 4px; font-size: 0.8rem; color: var(--ink-2); text-align: left; }
+.insight .pill { display: inline-block; font: 600 0.66rem var(--font-body); letter-spacing: 0.03em; text-transform: uppercase; border-radius: 4px; padding: 0 5px; margin-right: 5px; background: var(--accent-soft); color: var(--accent); }
 
 /* charts */
 svg { display: block; width: 100%; height: auto; overflow: visible; }
@@ -641,7 +644,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <div class="chips" id="mb-port-view" aria-label="Show"></div>
           <p class="finding" style="font-size:1rem" id="mb-port-finding"></p>
           <div class="tablewrap" id="mb-port"></div>
-          <p class="note">Sorted by value at stake. At risk: the whole ARR at Act (they may leave), the unused part at Watch and Shelfware (customers cut their commitment to what they use). Upside: forecast usage above the contract at renewal. "≠ data" marks a forecast a quarter of the ARR away from the data's number. Value guides the work; it isn't anyone's credit. Action planned: the owner's next step with a date (set it on the account's timeline), or a QBR booked in the CRM; overdue when the date passes with no meeting.</p>
+          <p class="note">Sorted by value at stake. At risk: the whole ARR at Act (they may leave), the unused part at Watch and Shelfware (customers cut their commitment to what they use). Upside: forecast usage above the contract at renewal. "≠ data" marks a forecast a quarter of the ARR away from the data's number. Value guides the work; it isn't anyone's credit. Action planned: the owner's next step with a date (set it on the account's timeline), or a QBR booked in the CRM; overdue when the date passes with no meeting. Insight: a possible theme from the account's tickets, emails or call notes (a keyword search over the redacted documents), with its source; context for the owner, it changes no status or value until someone acts on it.</p>
         </div>
         <div class="panel">
           <h2>4. Engagement pipeline: looking forward 8 weeks</h2>
@@ -1585,6 +1588,27 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // to account management): what the documents say, from research.py over the redacted
   // documents only. Possible themes with their evidence line and source, for a person to judge.
   const KIND = { S: "Ticket", E: "Email", C: "Call note" };
+  // Insights beside "Why" (20 Nov 2026, Nikodem: "we treat them as insights rather than forecasts"):
+  // the account's first possible theme from its documents, growth themes first on a growth row,
+  // risk themes first otherwise. Context for the owner: it never changes a status or a value.
+  function insightsOf(id, side) {
+    const R = (D.research || {})[id]; if (!R) return [];
+    const g = new Set((D.settings && D.settings.research_growth_themes) || []), up = (t) => (g.has(t.theme) ? 1 : 0);
+    return R.themes.slice().sort((x, y) => (side === "expansion" ? up(y) - up(x) : up(x) - up(y)));
+  }
+  function insightHtml(id, side) {
+    const ts = READY ? insightsOf(id, side) : []; if (!ts.length) return "";
+    const t = ts[0], more = ts.length - 1;
+    return `<button class="link insight" data-insight="${esc(id)}" title="${esc(`${KIND[t.kind] || t.kind} ${t.id}: ${t.line}`)}">` +
+      `<span class="pill">Insight</span>${esc(t.label)}<small> · ${esc((KIND[t.kind] || t.kind).toLowerCase())}, ${fmt(t.date)}${more ? ` · +${more} more` : ""}</small></button>`;
+  }
+  // an insight opens the account at its research
+  function wireInsights(host) {
+    host.querySelectorAll("[data-insight]").forEach((b) => b.addEventListener("click", (e) => {
+      e.stopPropagation(); openAccount(b.dataset.insight);
+      const r = $("tl-research"); if (r && !r.hidden) r.scrollIntoView({ block: "start" });
+    }));
+  }
   function drawResearch(id) {
     const host = $("tl-research");
     if (!host || !id || !READY) { if (host) host.hidden = true; return; }
@@ -2524,13 +2548,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         return `<tr data-row="${i}"><td><button class="link" data-open="${esc(t.account_id)}">${nameOf(t.account_id)}</button><small><br>${esc(a.tier || "not in the CRM")}</small></td>` +
           `<td class="r num">${a.arr ? money(a.arr) : "—"}</td>` +
           `<td class="r num">${st.v ? money(st.v) : "—"}<small><br>${esc(st.up ? "upside" : st.basis.toLowerCase())}</small></td>` +
-          `<td>${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small>${nowAsk(t)}</td>` +
+          `<td>${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small>${nowAsk(t)}${insightHtml(t.account_id, t.flag)}</td>` +
           `<td>${s ? reachBadge(s) : a.renewal_date ? `<small>renewal ${fmt(a.renewal_date)}</small>` : "–"}</td>` +
           `<td>${last ? `<button class="link" data-last="${i}" aria-expanded="false">${fmt(last.date)}<small><br>${esc(kindOf(last))}</small></button>` : '<span class="muted">none on record</span>'}</td>` +
           `<td>${plan ? `<button class="link" data-next="${i}" aria-expanded="false">${esc(plan.type)}<small><br>${fmt(plan.due)}</small></button>` : '<span class="badge nothing">nothing planned</span>'}</td>` +
           `<td>${badge(t)}</td></tr>`;
       }).join("") + "</tbody></table>";
     host.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
+    wireInsights(host);
     // Last / Next: the engagement opens in a row under its task, a second click closes it
     host.querySelectorAll("[data-last], [data-next]").forEach((b) => b.addEventListener("click", () => {
       const i = Number(b.dataset.last ?? b.dataset.next), t = Q[i], tr = b.closest("tr"), open = tr.nextElementSibling;
@@ -3425,12 +3450,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         (fc ? `<br>${fc.role === "manager" ? "Manager" : "Owner"}: ${esc(callText(fc))}${gap ? ' <span class="bad">≠ data</span>' : ""}` : "") + "</small>";
       return `<tr class="click" tabindex="0" data-id="${esc(a.account_id)}"><td>${esc(a.account_name)}<small><br>${esc(a.tier)}</small></td><td class="num">${valueCell}</td><td>${spark(a.util)}</td>` +
         `<td>${fmtFull(a.renewal_date)}<small><br>in ${Math.round(day(a.renewal_date) - RUN)} d</small></td>` +
-        `<td>${flag ? `<div class="flag ${sev}"><span class="pill">${esc(flag.status)}</span><p>${esc(flag.reasons)}</p></div>` : '<span class="muted">no flags</span>'}</td>` +
+        `<td>${flag ? `<div class="flag ${sev}"><span class="pill">${esc(flag.status)}</span><p>${esc(flag.reasons)}</p></div>` : '<span class="muted">no flags</span>'}${insightHtml(a.account_id, f)}</td>` +
         `<td>${lastActionCell(a.account_id)}${f && !m ? `<small class="muted"><br>no ${f === "churn" ? "churn" : "growth"} call or QBR yet</small>` : ""}</td>` +
         `<td>${(() => { const p = planOf(a); if (p) return planText(a, p) + (p.note ? `<small><br>${esc(p.note)}</small>` : "");
           return f ? `<span class="${flag && flag.status === "Act" ? "bad" : "muted"}">no next step recorded</span>` : ""; })()}</td></tr>`;
     };
-    let restOpen = accs.length <= (D.settings.open_no_flags_up_to ?? 15);   // a small book: every account in sight
+    let restOpen = accs.length <= (D.settings.open_no_flags_up_to ?? 15);
+    const restIns = rest.filter((a) => insightsOf(a.account_id).length).length;   // no flag, but the documents say something   // a small book: every account in sight
     // All | Churn | Growth (20 Nov 2026, Nikodem: the leader reports growth and churn apart)
     const PV = [["all", "All"], ["churn", "Churn"], ["growth", "Growth"]];
     const upAll = sumOf(growth, (a) => valueOf(fl(a, "expansion"))) + sumOf(churn, (a) => valueOf(fl(a, "expansion")));
@@ -3448,8 +3474,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         // Growth view: every account with an expansion signal, including those also at churn risk
         (mbPortView !== "churn" ? `<tr class="group"><td colspan="7">Growth (${mbPortView === "growth" ? accs.filter((a) => fl(a, "expansion")).length : growth.length})</td></tr>` +
           (mbPortView === "growth" ? accs.filter((a) => fl(a, "expansion")).sort(byValue("expansion")) : growth).map((a) => row(a, "expansion", ["growth_call", "qbr"])).join("") : "") +
-        (mbPortView === "all" ? `<tr class="group"><td colspan="7">No flags (${rest.length}) <button class="link" data-rest>${restOpen ? "hide" : "show"}</button></td></tr>` + (restOpen ? rest.map((a) => row(a, null)).join("") : "") : "") +
+        (mbPortView === "all" ? `<tr class="group"><td colspan="7">No flags (${rest.length})${restIns ? ` · ${restIns} with an insight` : ""} <button class="link" data-rest>${restOpen ? "hide" : "show"}</button></td></tr>` + (restOpen ? rest.map((a) => row(a, null)).join("") : "") : "") +
         "</tbody></table>";
+      wireInsights($("mb-port"));
       $("mb-port").querySelectorAll("tr.click").forEach((tr) => { tr.addEventListener("click", () => openAccount(tr.dataset.id)); tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openAccount(tr.dataset.id); }); });
       const b = $("mb-port").querySelector("[data-rest]"); if (b) b.addEventListener("click", (e) => { e.stopPropagation(); restOpen = !restOpen; drawPort(); });
     };

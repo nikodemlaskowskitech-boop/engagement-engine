@@ -490,6 +490,9 @@ max_themes = 3
 # of evidence supports one theme only (its strongest): on the demo corpus, precision 40% -> 78%,
 # recall 95% -> 76% (20 Nov 2026; measured against the answer key, so optimistic)
 min_relative_score = 0.5
+# themes that point to growth, not risk: on a growth row they come first, on a churn row last
+# (My book and My work show the first theme beside "Why" as an insight, never as a status)
+growth_themes = ["more_volume"]
 [research.themes]
 competitor = ["Evaluating a competitor", "Which accounts are evaluating a competitor?"]
 budget_cut = ["Budget pressure", "Which customers are under budget pressure?"]
