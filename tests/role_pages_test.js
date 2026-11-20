@@ -137,6 +137,35 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     check(/median for CSMs: \d+%/.test(tiles[2].r), `${f}: met in 30 days, by ARR, against the CSMs' median by ARR`, tiles[2].r);
     await p.close();
   }
+  console.log("\nMy week (20 Nov 2026): the next N days on the owner's accounts, in value");
+  for (const f of ["csm_anna.html", "csm_tom.html", "csm_mia.html"]) {
+    const m = meta(f), { p } = await open(f, "tasks", true);
+    await p.click("#tab-tasks"); await p.waitForTimeout(200);
+    const win = full.settings.my_week_days, day = (d) => Date.parse(d + "T00:00:00Z") / 864e5, run = day(full.as_of) + 1;
+    const inWin = (d) => d && day(d) > run && day(d) <= run + win;
+    const mine = full.accounts.filter((a) => a.owner_id === m.person);
+    const steps = {}; for (const x of full.next_steps || []) steps[x.account_id] = x;      // the export is oldest first
+    const want = [];
+    for (const a of mine) {
+      if (inWin(a.next_qbr_date)) want.push(["QBR", a.account_id]);
+      if (inWin(a.renewal_date)) want.push(["Renewal", a.account_id]);
+      if (steps[a.account_id] && inWin(steps[a.account_id].due)) want.push(["step", a.account_id]);
+    }
+    const title = await p.textContent("#tk-week-title"), fnd = await p.textContent("#tk-week-finding");
+    const shown = +((title.match(/: (\d+)$/) || [])[1] ?? -1);
+    const calendar = want.length, deadlines = shown - calendar;      // the rest are reach deadlines (Act tasks)
+    const arr = [...new Set(want.map(([, id]) => id))].reduce((t, id) => t + (full.accounts.find((a) => a.account_id === id).arr || 0), 0);
+    check(await p.isVisible("#tk-week-panel") && title.startsWith(`Next ${win} days`) && deadlines >= 0,
+      `${f}: "Next ${win} days" above the queue: ${calendar} QBRs, renewals and next steps from the data, plus ${deadlines} reach deadline(s)`, `${title} | want ${JSON.stringify(want)}`);
+    check(shown === 0 ? /Nothing booked or due/.test(fnd) : (deadlines > 0 || fnd.startsWith(eurTxt(arr))),
+      `${f}: the finding is in value (${shown ? eurTxt(arr) + " of ARR" : "nothing booked"})`, fnd);
+    await p.click("#tab-mybook"); await p.waitForTimeout(150);
+    const line = await p.textContent("#mb-week");
+    await p.click("#mb-week-go"); await p.waitForTimeout(150);
+    check(/Next \d+ days|Nothing booked/.test(line) && (await p.getAttribute("#tab-tasks", "aria-selected")) === "true",
+      `${f}: My book carries the week in one line, and "See My work" opens it`, line);
+    await p.close();
+  }
   console.log("\nHandover Confirm only for the outgoing owner or their manager (stand-in database)");
   for (const [f, acc, want] of [["csm_mia.html", "acc_024", true], ["csm_lukas.html", "acc_024", false],
                                 ["mgr_sophie.html", "acc_024", true], ["leader.html", "acc_024", false],
