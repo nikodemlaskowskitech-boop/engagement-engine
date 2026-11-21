@@ -513,8 +513,8 @@ Read a file's entry before changing that file, and update the entry in the same 
   reports' SQL through `team_report.add_views(con)` and
   `onboarding_report.add_views(con)`, so the page and the reports agree.
   Counts only, never real user IDs. Also builds `data/views.html` from
-  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): nine
-  tabs. Overview (the engagement sieve: churn signals stage by stage, and
+  `views_template.html` (the data goes into its `__VIEWS_DATA__` slot): eight
+  tabs since 21 Nov 2026 (Business case folded into Leadership). Overview (the engagement sieve: churn signals stage by stage, and
   renewals in the next 180 days by today's flag), Leadership (the one-pager:
   ARR at risk with action taken, renewal, action planned and forecast, biggest
   first; growth by upside; Act accounts called and planned; forecasts ≠ data;
@@ -818,6 +818,12 @@ Read a file's entry before changing that file, and update the entry in the same 
   role="alert". run_all runs "handover.py --dry-run" then export_views.py again, so a
   brief whose context moved on shows "Out of date" on the laptop too (a warning if it
   fails, like in AWS).
+  Leadership opens on Performance (21 Nov 2026, the leadership assessment, step 1 of "Now"):
+  the Business case tab is folded into the top of Leadership as a band (#ld-perf: GRR, NRR, where
+  the year's ARR went, the next two quarters, what calling in time is worth), then "Exposure and
+  the team" (the page as it was); the method sits at the end. Leader only: [roles.leader]
+  retention = true puts the data on the page (roles.py), and the band hides without it, so a
+  manager's Leadership tab is unchanged. DEMO.md's leader section follows the new order.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;

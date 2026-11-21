@@ -191,8 +191,9 @@ print(json.dumps(r))`;
     check(await p.isHidden("#tour") && !errors.length, "...and it closes, with no script errors", errors.join(" | "));
     const ph = await ctx.newPage(); await ph.setViewportSize({ width: 390, height: 844 });
     await ph.goto(base + "index.html"); await ph.waitForTimeout(500);
-    const top = await ph.$eval("#ld-finding", (e) => e.getBoundingClientRect().top);
-    check(top < 844 - 60, `phone: the Leadership headline is in the first screen (top ${Math.round(top)} px of 844)`);
+    // the page's headline since 21 Nov 2026 is the Performance band's (GRR and NRR), first on the page
+    const top = await ph.$eval("#cs-finding", (e) => e.getBoundingClientRect().top);
+    check(top < 844 - 60, `phone: the Leadership headline (GRR and NRR) is in the first screen (top ${Math.round(top)} px of 844)`);
     await ph.close();
     // a meeting's free-text note is typed in Slack and may hold anything: never on the public site (18 Nov 2026)
     const notes = [];

@@ -267,7 +267,10 @@ peer_median = "book"                 # "against the median" compares with: "book
 # edit: what the person may change, and on which accounts ("own" or "team"); missing = can't
 # outcomes: "Did it work?" by owner (names) or as a team total (no names)
 [roles.leader]
-tabs = ["lead", "case", "overview", "outcomes", "team", "book", "tasks", "timeline", "onboarding"]
+tabs = ["lead", "overview", "outcomes", "team", "book", "tasks", "timeline", "onboarding"]
+# GRR, NRR, the ARR bridge and the renewals ahead: the Performance band on Leadership (21 Nov 2026,
+# Business case folded in); leader only
+retention = true
 scope = "book"
 self_service = true
 outcomes = "by_owner"
