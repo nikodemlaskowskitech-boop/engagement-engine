@@ -696,6 +696,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   a risk theme. It never changes a status, a value or the sort; a click opens the account at its
   research. "No flags" counts how many have an insight, the accounts a flag can't see yet.
   role_pages_test recomputes each row's insight from the export and checks the status is untouched.
+  The account page in the CSM's order (21 Nov 2026, the CSM's route: "do I know this account,
+  what do I do?"): Why now under the header (each flag's reasons, money and the rules' to-do, and
+  up to two insights from the documents with their lines), then the plan and forecast, then the
+  history (three rows, each meeting with its outcome and note), research, usage and the facts.
+  A healthy account gets one calm line on its usage; "No next step planned" is red only with an
+  open flag, a renewal within 90 days or 60+ days without a customer action. An account with no
+  documents gets one line, not a method note. role_pages_test checks the order, the content and the calm.
   My work (18 Nov 2026, Nikodem's CSM route: start on My book, pick up from the queue, know the
   account, act): on a CSM's or pool member's page the Tasks tab is "My work", the queue.
   Columns: account, ARR, at stake (the flag's value: Act the whole ARR, Watch/Shelfware the

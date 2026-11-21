@@ -215,9 +215,20 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     const R = pageData.research[withThemes];
     check(await p.isVisible("#tl-research") && txt.includes(R.themes[0].label) && txt.includes(R.themes[0].line.slice(0, 40)) && /check the source/.test(txt),
       `${withThemes}: its possible themes with the evidence line and a "check the source" note`, txt.slice(0, 160));
+    // the account page in the CSM's order (21 Nov 2026): why now, then what to do, then the history
+    const order = await p.$$eval("#view-timeline > .panel:not([hidden]), #view-timeline > .grid2", (els) => els.map((e) => e.id || e.className));
+    check(order[0] === "tl-why" && /tl-plan/.test(order[1]), `${withThemes}: Why now comes first, then the plan and forecast`, JSON.stringify(order));
+    const fA = pageData.accounts.find((a) => a.account_id === withThemes).flags;
+    const why = await p.textContent("#tl-why");
+    check(fA.every((f) => why.includes(f.status) && why.includes(f.reasons.slice(0, 30)) && (!f.action || why.includes(f.action.slice(0, 30)))) && why.includes(R.themes[0].label),
+      `${withThemes}: Why now has every flag's reasons and to-do, and the insight from documents`, why.slice(0, 200));
+    const calm = pageData.accounts.find((a) => !a.flags.length && (new Date(a.renewal_date) - new Date(pageData.as_of)) / 864e5 > 120);
+    if (calm) { await p.goto(p.url().split("#")[0] + "#" + calm.account_id); await p.reload(); await p.waitForTimeout(600);
+      check(/No open flags/.test(await p.textContent("#tl-why")) && !(await p.$("#tl-sum-line .bad")),
+        `${calm.account_id}: a healthy account far from renewal reads calm: no alarm in red`, await p.textContent("#tl-sum-line")); }
     const none = pageData.accounts.find((a) => !pageData.research[a.account_id]);
     if (none) { await p.goto(p.url().split("#")[0] + "#" + none.account_id); await p.reload(); await p.waitForTimeout(600);
-      check(/No tickets, emails or call notes on record/.test(await p.textContent("#tl-research")), `${none.account_id}: says plainly there are no documents`); }
+      check(/No tickets, emails or call notes in the last/.test(await p.textContent("#tl-research")), `${none.account_id}: says plainly there are no documents`); }
     await p.close();
   }
   console.log("\nHandover Confirm only for the outgoing owner or their manager (stand-in database)");
