@@ -18,24 +18,25 @@ had."
 
 ## 2. The leader's view (60 s)
 
-[Leadership tab]
+[Leadership tab, top: Performance]
 
-"€1.5M of the €12.3M Enterprise and Scale ARR is at risk (€325k of it has no owner yet; the whole book is €14.7M),
-across 12 accounts at Act. 10 of those 12 have had a call (a churn call, or a QBR
-held in the 30 days after the signal: the same rule on every tab), but only 3
-have a next step planned. That gap is the conversation
-I'd have with my managers this week. Everything is sorted by value, and value
-guides the work. It's never anyone's credit."
+"The page opens the way a CFO asks: are we keeping the revenue we have? GRR
+88.6%, up from 87% the year before; NRR 103%. One point of GRR is worth €147k
+here, so that's the yardstick for any budget request. The next two quarters put
+€1.1M at risk, about 7 points. Accounts we reached in time (7 days for
+Enterprise, 14 for Scale) kept 72% of their ARR at renewal, against 37%: a clear
+gap, but on only 13 against 16 accounts. That's why the page shows the method
+and never claims we saved anything; a CFO trusts that more."
 
-[Business case tab]
+[Scroll: Exposure and the team]
 
-"And this is the page for the CFO, in their words. GRR 88.6%, up from 87% the
-year before; NRR 103%. One point of GRR is worth €147k here, so that's the
-yardstick for any budget request. The next two quarters put €1.1M at risk,
-about 7 points. Accounts we reached in time (7 days for Enterprise, 14 for
-Scale) kept 72% of their ARR at renewal, against 37%: a clear gap, but on only
-13 against 16 accounts. That's why this page
-shows the method and never claims we saved anything; a CFO trusts that more."
+"Then what's at stake now. €1.5M of the €12.3M Enterprise and Scale ARR is at
+risk (€325k of it has no owner yet; the whole book is €14.7M), across 12
+accounts at Act. 10 of those 12 have had a call (a churn call, or a QBR held in
+the 30 days after the signal: the same rule on every tab), but only 3 have a
+next step planned. That gap is the conversation I'd have with my managers this
+week. Everything is sorted by value, and value guides the work. It's never
+anyone's credit."
 
 ## 3. Did it work? (30 s)
 

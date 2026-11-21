@@ -313,6 +313,8 @@ ul.research q { color: var(--ink-2); }
 .tour { max-height: calc(100vh - 40px); overflow-y: auto; }
 .tour .row .end { margin-left: auto; }
 body.touring { padding-bottom: 50vh; }   /* room to scroll a lit part above the panel */
+#ld-perf:not([hidden]) { display: grid; gap: 20px; }   /* the band keeps the view's rhythm (.sub tucks under its finding) */
+.band { font: 600 0.78rem var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin: 12px 0 0; }
 .tour-focus { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 6px; scroll-margin: 90px; }
 @media (max-width: 640px) { .tour { right: 16px; bottom: 16px; } }
 .banner { font-size: 0.88rem; border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 8px 12px; border-radius: 4px; margin: 0; }
@@ -467,7 +469,6 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     <nav role="tablist" aria-label="Views">
       <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
       <button role="tab" id="tab-lead" data-view="lead" aria-selected="false">Leadership</button>
-      <button role="tab" id="tab-case" data-view="case" aria-selected="false">Business case</button>
       <button role="tab" id="tab-mybook" data-view="mybook" aria-selected="false">My book</button>
       <button role="tab" id="tab-tasks" data-view="tasks" aria-selected="false">Tasks</button>
       <button role="tab" id="tab-outcomes" data-view="outcomes" aria-selected="false">Did it work?</button>
@@ -521,7 +522,42 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     </section>
 
     <section class="view" id="view-lead" role="tabpanel" aria-labelledby="tab-lead" hidden>
-      <p class="voice">Leadership always asked me two things: what's red and what are we doing about it, and is the team in front of customers. This page answers both.</p>
+      <p class="voice">Leadership always asked me three things: are we keeping the revenue we have, what's red and what are we doing about it, and is the team in the right places. This page answers them in that order.</p>
+      <!-- Performance first (21 Nov 2026, the leadership assessment): Business case folded into this
+           page. Leader only: the band shows where the page carries the retention data (roles.py). -->
+      <div id="ld-perf" hidden>
+        <h2 class="band">Performance: how did we do?</h2>
+        <p class="finding" id="cs-finding"></p>
+        <p class="sub" id="cs-sub"></p>
+        <div class="tiles" id="cs-tiles"></div>
+        <p class="note" id="cs-recon"></p>
+        <div class="grid2 even">
+          <div class="panel">
+            <h2>Where the year's ARR went</h2>
+            <p class="finding small" id="cs-bridge-finding"></p>
+            <div id="cs-bridge"></div>
+            <p class="note" id="cs-bridge-note"></p>
+          </div>
+          <div class="panel">
+            <h2>The next two quarters</h2>
+            <p class="finding small" id="cs-fc-finding"></p>
+            <div id="cs-fc"></div>
+            <p class="note" id="cs-fc-note"></p>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>What calling in time is worth</h2>
+          <p class="finding small" id="cs-call-finding"></p>
+          <div id="cs-call"></div>
+          <button class="link" id="cs-call-waiting" hidden></button>
+          <p class="note" id="cs-call-note"></p>
+        </div>
+        <div class="panel" id="cs-list-panel" hidden>
+          <h2 id="cs-list-title"></h2>
+          <div class="tablewrap" id="cs-list"></div>
+        </div>
+        <h2 class="band">Exposure and the team: what's at stake now</h2>
+      </div>
       <p class="finding" id="ld-finding"></p>
       <p class="sub">Sorted by value, which guides the work and is never anyone's credit. The segment bar applies; every number opens its accounts.</p>
       <div id="ld-tiles"></div>
@@ -579,44 +615,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <div class="tablewrap"><table id="ld-team"></table></div>
         <p class="note">Meetings held in the last 30 days and the share of each owner's accounts met in that time, against the median of owners of the same kind (CSMs with CSMs, pool members with pool members). Counts, not hours: the data has no meeting length. Pools are queues, not people, so they aren't listed.</p>
       </div>
-    </section>
-
-    <section class="view" id="view-case" role="tabpanel" aria-labelledby="tab-case" hidden>
-      <p class="voice">A CFO asks one thing first: are we keeping the revenue we already have? This page answers in GRR and NRR, this year against the one before, then what the next two quarters hold and what calling in time is worth.</p>
-      <p class="finding" id="cs-finding"></p>
-      <p class="sub" id="cs-sub"></p>
-      <div class="tiles" id="cs-tiles"></div>
-      <p class="note" id="cs-recon"></p>
-      <div class="grid2 even">
-        <div class="panel">
-          <h2>Where the year's ARR went</h2>
-          <p class="finding small" id="cs-bridge-finding"></p>
-          <div id="cs-bridge"></div>
-          <p class="note" id="cs-bridge-note"></p>
-        </div>
-        <div class="panel">
-          <h2>The next two quarters</h2>
-          <p class="finding small" id="cs-fc-finding"></p>
-          <div id="cs-fc"></div>
-          <p class="note" id="cs-fc-note"></p>
-        </div>
-      </div>
-      <div class="panel">
-        <h2>What calling in time is worth</h2>
-        <p class="finding small" id="cs-call-finding"></p>
-        <div id="cs-call"></div>
-        <button class="link" id="cs-call-waiting" hidden></button>
-        <p class="note" id="cs-call-note"></p>
-      </div>
-      <div class="panel" id="cs-list-panel" hidden>
-        <h2 id="cs-list-title"></h2>
-        <div class="tablewrap" id="cs-list"></div>
-      </div>
-      <div class="panel">
+      <div class="panel" id="cs-method-panel">
         <h2>How these numbers are worked out</h2>
         <ul class="method" id="cs-method"></ul>
       </div>
     </section>
+
     <section class="view" id="view-mybook" role="tabpanel" aria-labelledby="tab-mybook" hidden>
       <p class="finding" id="mb-finding"></p>
       <p class="sub" id="mb-sub">An owner's morning page, in value: where the book stands, what's on the plate, how much of the ARR they've met, the accounts risk first, and what's coming in the next 8 weeks.</p>
@@ -1113,7 +1117,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
 
   // tabs, with a bookmarkable #token per view
-  const views = PAGE ? PAGE.tabs.slice() : ["overview", "lead", "case", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
+  const views = PAGE ? PAGE.tabs.slice() : ["overview", "lead", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
   // counted, never typed: "Ten views" stayed after a tab moved to its own page (16 Nov 2026 review)
   $("n-views").textContent = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"][views.length - 1] || String(views.length);
   if (PAGE) {                                    // tabs this role doesn't have aren't in the file at all (roles.py)
@@ -2786,7 +2790,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     }
   }
   function drawCase() {
-    if (!$("view-case") || !RET) return;
+    if ($("ld-perf")) $("ld-perf").hidden = $("cs-method-panel").hidden = !RET;   // leader only: managers' pages carry no retention data
+    if (!$("ld-perf") || !RET) return;
     const y = RET.year || {}, prior = RET.prior, fc = RET.forecast || {}, segd = segOn();
     // this year, for the segment: the cohort's accounts that are in it
     const cohort = (RET.cohort || []).filter((r) => inSegAny(r[0]));
@@ -3399,7 +3404,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       tile(`Renewals, next ${fdays} days`, grr == null ? "–" : `${p100(grr)} kept`,
         upArr ? `forecast: ${money(upArr - loss)} of ${money(upArr)} · the book: ${p100(ref.forecast_grr)}` : "no renewal in the window",
         grr != null && ref.forecast_grr != null && grr < ref.forecast_grr);
-    $("mb-kpi-note").textContent = `The leader's numbers, on this book, with the same definitions: they add up to the book's. At risk: Act counts the whole ARR, Watch and Shelfware the unused part. Met: a meeting in the last 30 days, counted by the account's ARR, not by the number of meetings. Renewals: the owner's forecast where set, else the data's, as on Business case.`;
+    $("mb-kpi-note").textContent = `The leader's numbers, on this book, with the same definitions: they add up to the book's. At risk: Act counts the whole ARR, Watch and Shelfware the unused part. Met: a meeting in the last 30 days, counted by the account's ARR, not by the number of meetings. Renewals: the owner's forecast where set, else the data's, as on the leader's page.`;
 
     // 1. workload
     const mine = (p) => workOf(p).filter(LIVE);

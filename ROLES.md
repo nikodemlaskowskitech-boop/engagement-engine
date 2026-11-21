@@ -44,8 +44,8 @@ count it.
 | Confirm a handover brief | No | Team's accounts | Own accounts (outgoing owner) | Own accounts |
 | "Did it work?" | By owner | By owner, their team | No (not a CSM tab since 21 Nov 2026) | No |
 | Leadership tab | Yes (opens here) | Yes | No | No |
-| Business case tab (GRR, NRR, the forecast) | Yes | No | No | No |
-| Tabs | Leadership, Business case, the team-wide tabs, Tasks, Account | Tasks, Leadership, the team-wide tabs, Account | My book, My work, Account | My book, My work, Account |
+| Performance on Leadership (GRR, NRR, the forecast; was the Business case tab) | Yes | No | No | No |
+| Tabs | Leadership (Performance first), the team-wide tabs, Tasks, Account | Tasks, Leadership, the team-wide tabs, Account | My book, My work, Account | My book, My work, Account |
 | Opens on | Leadership | Tasks | My book | My book |
 | The queue | Tasks (with decisions) | Tasks (with decisions) | My work (by cash at stake, 18 Nov 2026) | My work |
 

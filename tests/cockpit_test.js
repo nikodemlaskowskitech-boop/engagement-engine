@@ -15,7 +15,7 @@ const { chromium } = require("playwright");
 const ROOT = path.resolve(__dirname, "..");
 const PAGE = "file://" + path.join(ROOT, "data", "views.html");
 const D = JSON.parse(fs.readFileSync(path.join(ROOT, "data", "views_data.json"), "utf8"));
-const TABS = ["overview", "lead", "case", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
+const TABS = ["overview", "lead", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
 
 let passed = 0, failed = 0;
 const check = (ok, name, detail = "") => {
@@ -362,7 +362,7 @@ const segment = async (page, values) => {
     const { page, errors } = await open(browser);
     // colour groups: no chart mark uses the brand accent or the retired --s1..--s4 colours
     const bad = [];
-    for (const t of ["overview", "lead", "case", "mybook", "outcomes", "timeline", "onboarding", "team", "book"]) {
+    for (const t of ["overview", "lead", "mybook", "outcomes", "timeline", "onboarding", "team", "book"]) {
       if (t === "mybook") await segment(page, { owner: "csm_mia" }); else await segment(page, {});
       await tab(page, t);
       bad.push(...await page.$$eval("main svg [fill], main svg [stroke]", (els) => els.flatMap((e) =>
@@ -837,7 +837,7 @@ const segment = async (page, values) => {
     check(Y.grr <= 1 && Y.grr > 0.8 && Y.nrr > Y.grr, `retention: GRR under 100% and NRR above it (${p1(Y.grr)}, ${p1(Y.nrr)})`);
     check(!R.cohort.some((r) => /^acc_/.test(r[0]) && r[3] === 0), "retention: a churned account travels as an ob_ key, never its id");
     const { page, errors } = await open(browser);
-    await tab(page, "case");
+    await tab(page, "lead");
     const fnd = await page.textContent("#cs-finding");
     check(fnd.includes(`GRR ${p1(Y.grr)}`) && fnd.includes(`NRR ${p1(Y.nrr)}`) && (!P || fnd.includes(p1(P.grr))),
       "business case: the headline says this year's GRR and NRR and the year before's", fnd);
@@ -918,7 +918,7 @@ const segment = async (page, values) => {
     check(esArr === ownedArr || lf.includes(`${money(esArr - ownedArr)} of it has no owner yet`), `...and the part with no owner (${money(esArr - ownedArr)}), so it reconciles with the owned ARR`, lf);
     check(/churn Act accounts have/.test(lf), "Leadership says churn Act, not just Act", lf);
     if (D.retention) {
-      await tab(page, "case");
+      await tab(page, "lead");
       const rec = await page.textContent("#cs-recon");
       check(rec.startsWith(`Book ${money(whole)} =`) && rec.includes(`${money(ownedArr)} with a named CSM or pool member`), "Business case reconciles the book: owned + Self-service", rec);
     }
