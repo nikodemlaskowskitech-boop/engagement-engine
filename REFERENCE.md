@@ -641,6 +641,12 @@ Read a file's entry before changing that file, and update the entry in the same 
   account, step 1 is the account with the most ARR at risk, as before. The intro counts the page's
   tabs ("Nine views"), never a typed number. site_test checks the strip, the count and the
   tour, and that the laptop's pages have no strip.
+  A walkthrough on a CSM's page too (21 Nov 2026, Nikodem: "a popup walkthrough for the CSM and
+  leader page"): "Take the 2-minute tour", six steps on the CSM's route (where I stand, every
+  account by value, what's coming, what to pick up, know the account, it rolls up to the leader's
+  page). Each step lights up the part it explains (.tour-focus) and the page gets room below so
+  that part scrolls clear of the panel. The account shown: the biggest flagged one with documents.
+  The leader's tour is rewritten with the leader's page (the assessment's "Now" list).
   Two doors (18 Nov 2026, instead of a landing page: an extra page in front of the cockpit
   loses visitors): on the public site the top-left is Leader | CSM (the leader's page on
   Leadership, and [demo] csm's book, Tom Brennan: an expansion at Act, a churn Watch task

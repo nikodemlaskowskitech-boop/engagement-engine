@@ -239,8 +239,26 @@ print(json.dumps(r))`;
     const wide = await pw.evaluate(() => document.documentElement.scrollWidth);
     check(await pw.isVisible("#doors") && wide <= 390, `phone: the doors fit, no side scroll (${wide} px)`);
     await pw.close();
-    const p2 = await ctx.newPage(); await p2.goto(base + "csm_anna.html"); await p2.waitForTimeout(500);
-    check(await p2.isVisible("#who-strip") && !(await p2.$("#tour-start")), "a CSM's page: who built it, but no tour (it walks the leader's page)");
+    // a CSM's page has its own walkthrough (21 Nov 2026): where I stand, what's coming, what to pick
+    // up, the account, then the leader's page it rolls up to; each step lights up its part
+    const p2 = await ctx.newPage(); const e2 = []; p2.on("pageerror", (e) => e2.push(e.message));
+    await p2.setViewportSize({ width: 1280, height: 900 });
+    await p2.goto(base + csmDoor); await p2.waitForTimeout(600);
+    check(await p2.isVisible("#who-strip") && (await p2.textContent("#tour-start")) === "Take the 2-minute tour", "a CSM's page: who built it, and its own tour");
+    await p2.click("#tour-start"); await p2.waitForTimeout(400);
+    const cs = [];
+    for (let i = 0; i < 10; i++) {
+      cs.push(await p2.evaluate(() => [document.querySelector("#tour .step").textContent, document.querySelector("nav [aria-selected=true]").dataset.view,
+        [...document.querySelectorAll(".tour-focus")].map((e) => e.id + (e.offsetParent ? "" : ":hidden")).join()]));
+      const n = await p2.$('[data-tour="next"]'); if (!n) break; await n.click(); await p2.waitForTimeout(300);
+    }
+    const cviews = cs.map((x) => x[1]).join(">"), lit = cs.map((x) => x[2]);
+    check(cs.length === 6 && cviews.startsWith("mybook>mybook>tasks>tasks>timeline") && lit.slice(0, 5).every((x) => x && !/hidden/.test(x)),
+      "...6 steps: My book (twice), My work (twice), the account, each lighting up a visible part", JSON.stringify(cs));
+    const l2 = await p2.$$eval("#tour a", (as) => as.map((a) => a.getAttribute("href")));
+    check(l2.includes("leader.html") && l2.includes("search.html"), "...and ends on the leader's page it rolls up to, and the documents", JSON.stringify(l2));
+    await p2.click('[data-tour="close"]');
+    check(await p2.isHidden("#tour") && !(await p2.$(".tour-focus")) && !e2.length, "...it closes, the highlight goes, no script errors", e2.join(" | "));
     await ctx.close();
   }
 
