@@ -824,6 +824,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   the team" (the page as it was); the method sits at the end. Leader only: [roles.leader]
   retention = true puts the data on the page (roles.py), and the band hides without it, so a
   manager's Leadership tab is unchanged. DEMO.md's leader section follows the new order.
+  Exposure (21 Nov 2026, step 2): under the trail, how concentrated the risk is (the 10 biggest
+  of the Enterprise and Scale accounts at risk, their share, the list one click away) and what
+  moved over 13 weeks, worse and better side by side, from history.py (Act 2, Watch or Shelfware
+  1, no flag 0; accounts not live 13 weeks ago are new, not "worse"). First run: 13 worse, 0
+  better. That's the generator, not the method: its dips pile up near the end of the year (churn
+  flags 29 in July, 74 now), so recoveries fall earlier (32 better over 20 weeks). A data-lab
+  item. cockpit_test recomputes both panels from the export.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;
