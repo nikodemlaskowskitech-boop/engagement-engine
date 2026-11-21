@@ -825,6 +825,31 @@ const segment = async (page, values) => {
     }
   }
 
+  // --- Exposure on Leadership (21 Nov 2026): concentration and movements, recomputed here ---
+  {
+    const { page, errors } = await open(browser);
+    await tab(page, "lead");
+    const person = D.accounts.filter((a) => a.tier !== "Self-service");
+    const cv = (a) => { const f = a.flags.find((x) => x.flag === "churn"); return f && typeof f.value === "number" ? f.value : 0; };
+    const churn = person.filter((a) => a.flags.some((f) => f.flag === "churn")).sort((a, b) => cv(b) - cv(a));
+    const all = churn.reduce((t, a) => t + cv(a), 0), top = churn.slice(0, 10).reduce((t, a) => t + cv(a), 0);
+    const conc = await page.textContent("#ld-conc-finding");
+    check(churn.length > 10 ? conc.includes(`The 10 biggest of ${churn.length}`) && conc.includes(`(${Math.round(100 * top / all)}%)`) : conc.includes(`All ${churn.length}`),
+      `exposure: the 10 biggest risks carry ${Math.round(100 * top / all)}% of the ARR at risk`, conc);
+    const H = D.history, last = H.weeks.length - 1, base = last - 13, RK = { Act: 2, Watch: 1, Shelfware: 1 }, rk = {};
+    for (const [w, id, f, st] of H.flags) if (f === "churn" && (w === base || w === last)) (rk[id] = rk[id] || {})[w] = RK[st] || 0;
+    const ui = D.util_dates.findIndex((d) => d >= H.weeks[base]);
+    const mv = person.filter((a) => a.util[ui] != null).map((a) => ((rk[a.account_id] || {})[last] || 0) - ((rk[a.account_id] || {})[base] || 0));
+    const worse = mv.filter((d) => d > 0).length, better = mv.filter((d) => d < 0).length;
+    const heads = await page.$$eval("#ld-move h3", (h) => h.map((x) => x.textContent));
+    check(heads[0].startsWith(`Got worse: ${worse} `) && heads[1].startsWith(`Got better: ${better} `),
+      `exposure: ${worse} got worse and ${better} got better over 13 weeks, both shown side by side`, JSON.stringify(heads));
+    await page.click("#ld-conc-list"); await page.waitForTimeout(80);
+    const n = await page.$$eval("#ld-trail-list tbody tr", (r) => r.length);
+    check(n === Math.min(10, churn.length) && !errors.length, "exposure: List the 10 opens exactly those accounts, no script errors", `${n} rows`);
+    await page.close();
+  }
+
   // --- Business case: GRR and NRR, standard definitions, 12 Nov 2026 ---
   {
     const R = D.retention, Y = R.year, P = R.prior, F = R.forecast;

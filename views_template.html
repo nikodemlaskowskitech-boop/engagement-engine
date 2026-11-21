@@ -561,6 +561,21 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <p class="finding" id="ld-finding"></p>
       <p class="sub">Sorted by value, which guides the work and is never anyone's credit. The segment bar applies; every number opens its accounts.</p>
       <div id="ld-tiles"></div>
+      <!-- Exposure (21 Nov 2026, the leadership assessment, step 2): how concentrated the risk is,
+           and what moved this quarter, both ways -->
+      <div class="grid2 even" id="ld-exposure">
+        <div class="panel">
+          <h2>How concentrated the risk is</h2>
+          <p class="finding small" id="ld-conc-finding"></p>
+          <button class="link" id="ld-conc-list" hidden></button>
+          <p class="note">Churn ARR at risk on Enterprise and Scale accounts, by value (Act: the whole ARR; Watch and Shelfware: the unused part). A few big accounts carrying most of it is a case for executive sponsorship, not more calls.</p>
+        </div>
+        <div class="panel">
+          <h2 id="ld-move-title">What moved this quarter</h2>
+          <div class="sum-cols" id="ld-move"></div>
+          <p class="note" id="ld-move-note"></p>
+        </div>
+      </div>
       <div class="panel" id="ld-trail-panel" hidden>
         <h2 id="ld-trail-title"></h2>
         <div class="tablewrap" id="ld-trail-list"></div>
@@ -2924,6 +2939,54 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       "<b>All licence revenue</b>: committed volume and paid add-ons. Services would be reported apart, as licence is what retention protects.",
     ].map((t) => `<li>${t}</li>`).join("");
   }
+  // Exposure, step 2 of the leadership assessment (21 Nov 2026): the risk's concentration, and the
+  // accounts whose churn status moved over the last 13 weeks, worse and better side by side (good
+  // news gets the same weight). From the weekly replay (history.py); an account not yet live 13
+  // weeks ago is new, not "worse", and is left out.
+  const MOVE_WEEKS = 13;
+  function drawExposure(churn, atRisk, pool) {
+    if (!$("ld-exposure")) return;
+    const showList = (title, items) => {
+      $("ld-trail-panel").hidden = false;
+      accountList($("ld-trail-list"), $("ld-trail-title"), title, items, TRAIL_COLS, false);
+      $("ld-trail-panel").scrollIntoView({ block: "nearest" });
+    };
+    // concentration
+    const top = churn.slice(0, 10), topV = top.reduce((t, a) => t + (valueOf(a.flags.find((f) => f.flag === "churn")) || 0), 0);
+    const b = $("ld-conc-list");
+    if (!churn.length) { $("ld-conc-finding").textContent = "No Enterprise or Scale account at churn risk."; b.hidden = true; }
+    else {
+      $("ld-conc-finding").textContent = churn.length <= 10
+        ? `All ${churn.length} accounts at risk carry ${money(atRisk)}; the biggest, ${churn[0].account_name}, ${Math.round(100 * (valueOf(churn[0].flags.find((f) => f.flag === "churn")) || 0) / atRisk)}% of it.`
+        : `The 10 biggest of ${churn.length} accounts at risk carry ${money(topV)} of ${money(atRisk)} (${Math.round(100 * topV / atRisk)}%).`;
+      b.hidden = false; b.textContent = `List the ${Math.min(10, churn.length)}`;
+      b.onclick = () => showList(`The ${Math.min(10, churn.length)} biggest risks`, top);
+    }
+    // movements: Act 2, Watch or Shelfware 1, no churn flag 0
+    const W = HIST.weeks || [], last = W.length - 1, base = last - MOVE_WEEKS;
+    const host = $("ld-move");
+    if (base < 0) { host.innerHTML = '<p class="note">Fewer than 13 weeks of history yet.</p>'; $("ld-move-note").textContent = ""; return; }
+    const rank = {}, RANKS = { Act: 2, Watch: 1, Shelfware: 1 };
+    for (const [w, id, f, st] of HIST.flags) if (f === "churn" && (w === base || w === last)) (rank[id] = rank[id] || {})[w] = RANKS[st] || 0;
+    const baseDay = W[base], ui = D.util_dates.findIndex((d) => d >= baseDay);
+    const live = (a) => ui >= 0 && a.util[ui] != null;
+    const r = (a, w) => ((rank[a.account_id] || {})[w]) || 0;
+    const moved = pool.filter(live).map((a) => ({ a, d: r(a, last) - r(a, base) })).filter((x) => x.d);
+    const worse = moved.filter((x) => x.d > 0).map((x) => x.a).sort((x, y) => y.arr - x.arr);
+    const better = moved.filter((x) => x.d < 0).map((x) => x.a).sort((x, y) => y.arr - x.arr);
+    const WORD = ["no flag", "Watch", "Act"];
+    const statusAt = (a, w) => { const v = r(a, w); if (v !== 1) return WORD[v];
+      const row = HIST.flags.find((x) => x[0] === w && x[1] === a.account_id && x[2] === "churn"); return row ? row[3] : "Watch"; };
+    const col = (title, xs, key) => `<div><h3 class="mini">${title}: ${xs.length} · ${money(xs.reduce((t, a) => t + a.arr, 0))} ARR</h3><ul class="sum-list">` +
+      (xs.length ? xs.slice(0, 3).map((a) => `<li><span class="when">${money(a.arr)}</span><span><b>${esc(a.account_name)}</b><br><small>${esc(statusAt(a, base))} → ${esc(statusAt(a, last))} · ${esc(a.tier)}</small></span></li>`).join("") +
+        (xs.length > 3 ? `<li><span></span><button class="link" data-move="${key}">View all (${xs.length})</button></li>` : "")
+        : '<li><span></span><span class="muted">None.</span></li>') + `</ul></div>`;
+    $("ld-move-title").textContent = `What moved since ${fmt(baseDay)}`;
+    host.innerHTML = col("Got worse", worse, "worse") + col("Got better", better, "better");
+    host.querySelectorAll("[data-move]").forEach((x) => x.addEventListener("click", () =>
+      showList(x.dataset.move === "worse" ? `Got worse since ${fmt(baseDay)}` : `Got better since ${fmt(baseDay)}`, x.dataset.move === "worse" ? worse : better)));
+    $("ld-move-note").textContent = `Churn status ${MOVE_WEEKS} weeks ago against today, from the weekly replay of the flags: Act above Watch and Shelfware above no flag. Enterprise and Scale only; accounts not yet live ${MOVE_WEEKS} weeks ago are new, not "worse", and are left out. Better is not saved: the renewal decides.`;
+  }
   function drawLeadership() {
     if (!$("view-lead")) return;                     // not on this person's page
     const accs = D.accounts.filter(inSeg), person = (a) => a.tier !== "Self-service";
@@ -3018,6 +3081,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       tile("Upside", money(upside), `${growth.length} accounts with an expansion flag`, false) +
       tile("Forecast ≠ data", gaps.length, "owner's forecast a quarter of the ARR from the data", gaps.length > 0) + `</div>`;
     $("ld-trail-panel").hidden = true;
+    drawExposure(churn, atRisk, accs.filter(person));
     $("ld-tiles").querySelectorAll(".wp").forEach((b) => b.addEventListener("click", () => {
       const st = leadStages.find((x) => x.key === b.dataset.stage);
       const items = st.gap && st.gap.length ? st.gap : st.list;           // the stages that fall short list who's missing
