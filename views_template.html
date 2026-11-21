@@ -138,6 +138,13 @@ dl.facts dd { margin: 0; }
 .flag.serious { border-color: var(--serious); } .flag.serious .pill { background: var(--serious-bg); color: var(--serious-ink); }
 .flag.neutral .pill { background: var(--accent-soft); color: var(--accent); }
 .flag p { margin: 2px 0 0; color: var(--ink-2); }
+/* the account's "why now": each flag with its reasons, money and what to do */
+.why .wn { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 28px; }
+.why .wn > div { min-width: 0; }
+.why .wn p { margin: 4px 0 0; color: var(--ink-2); }
+.why .todo { color: var(--ink); }
+.why .todo b { font-weight: 600; }
+@media (max-width: 720px) { .why .wn { grid-template-columns: 1fr; } }
 /* an insight from the documents: context beside "Why", never a status */
 .insight { display: block; margin-top: 4px; font-size: 0.8rem; color: var(--ink-2); text-align: left; }
 .insight .pill { display: inline-block; font: 600 0.66rem var(--font-body); letter-spacing: 0.03em; text-transform: uppercase; border-radius: 4px; padding: 0 5px; margin-right: 5px; background: var(--accent-soft); color: var(--accent); }
@@ -722,6 +729,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <div class="chips" id="tl-picks" aria-label="Accounts worth a look"></div>
       </div>
       <div class="acc-head" id="tl-head" aria-live="polite"></div>
+      <!-- the account page in the CSM's order (21 Nov 2026): why now, what to do, what happened -->
+      <div class="panel why" id="tl-why"></div>
+      <div class="panel grid2 tl-plan">
+        <div class="forecast" id="tl-next"></div>
+        <div class="forecast" id="tl-forecast"></div>
+      </div>
       <div class="panel">
         <h2>Summary: what was done, what's next</h2>
         <p class="finding small" id="tl-sum-line"></p>
@@ -729,10 +742,6 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <div><h3 class="mini">Done, newest first</h3><ul class="sum-list" id="tl-done"></ul></div>
           <div><h3 class="mini">Coming up</h3><ul class="sum-list" id="tl-coming"></ul></div>
         </div>
-      </div>
-      <div class="panel grid2 tl-plan">
-        <div class="forecast" id="tl-next"></div>
-        <div class="forecast" id="tl-forecast"></div>
       </div>
       <div class="panel" id="tl-handover" hidden></div>
       <div class="panel" id="tl-research" hidden></div>
@@ -746,7 +755,6 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <div class="panel">
           <h2>Account</h2>
           <dl class="facts" id="tl-facts"></dl>
-          <div class="flags" id="tl-flags"></div>
         </div>
       </div>
     </section>
@@ -1367,12 +1375,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("tl-facts").innerHTML = facts.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
     const t = tta[id];
     if (t) $("tl-facts").innerHTML += `<dt>Time to call</dt><dd>${t.call_date ? (t.called_early ? "Called before the signal" : t.days_to_call + " days after the signal") : '<span class="bad">No call since ' + fmt(t.signal_date) + "</span>"}</dd>`;
-    $("tl-flags").innerHTML = a.flags.length
-      ? a.flags.map((f) => `<div class="flag ${severity(f)}"><span class="pill">${esc(f.flag)} · ${esc(f.status)}</span><p>${esc(f.reasons)}</p>` +
-          (valueOf(f) != null ? `<p><b>${money(valueOf(f))} ${f.flag === "churn" ? "ARR at risk" : "upside"}</b> · ${esc(f.value_basis)}</p>` : "") + `</div>`).join("")
-      : '<p class="note">No open flags.</p>';
     // the account at a glance, above everything else
     const RANK = { critical: 4, serious: 3, warning: 2, good: 1 };
+    drawWhy(a, RANK);
     const topFlag = a.flags.slice().sort((x, y) => (RANK[severity(y)] || 0) - (RANK[severity(x)] || 0))[0];
     const days = day(a.renewal_date) - (day(D.as_of) + 1);
     $("tl-head").innerHTML = `<h2>${esc(a.account_name)}</h2>` +
@@ -1387,6 +1392,36 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     drawHandover(id);
     $("tl-find").placeholder = `${a.account_name} (${a.account_id}): search another account`;
     $("tl-finding").textContent = (segOn() && !inSeg(a) ? `Outside ${segName()}: ` : "") + `${a.account_name}: ${a.flags.length ? a.flags.length + " open flag" + (a.flags.length > 1 ? "s" : "") : "no open flags"}, ${tc} CS touch${tc === 1 ? "" : "es"} in ${TL_DAYS} days.`;
+  }
+  // Why now (21 Nov 2026, the CSM's route: "do I know this account?"): before the history, each
+  // open flag in words with its money and what the rules say to do, then what the documents say
+  // (an insight, never a status). A healthy account gets one calm line on its usage instead.
+  function drawWhy(a, RANK) {
+    const fl = a.flags.slice().sort((x, y) => (RANK[severity(y)] || 0) - (RANK[severity(x)] || 0));
+    const ins = insightsOf(a.account_id, (fl[0] || {}).flag).slice(0, 2);
+    const insHtml = ins.length ? `<div><span class="flag neutral inline"><span class="pill">Insight</span></span>` +
+      ins.map((t) => `<p><b>${esc(t.label)}</b> · ${esc((KIND[t.kind] || t.kind).toLowerCase())} ${esc(t.id)}, ${fmt(t.date)}<br><small>"${esc(t.line)}"</small></p>`).join("") +
+      `<p><small>From the documents: context to check, not a forecast. <button class="link" data-goto-research>See the research</button></small></p></div>` : "";
+    let body;
+    if (fl.length) {
+      body = fl.map((f) => `<div><span class="flag ${severity(f)} inline"><span class="pill">${esc(f.flag)} · ${esc(f.status)}</span></span>` +
+        `<p>${esc(f.reasons)}</p>` +
+        (valueOf(f) != null ? `<p><b>${money(valueOf(f))} ${f.flag === "churn" ? "ARR at risk" : "upside"}</b> · ${esc(f.value_basis)}</p>` : "") +
+        (f.action ? `<p class="todo"><b>To do:</b> ${esc(f.action)}</p>` : "") + `</div>`).join("") + insHtml;
+    } else {
+      // last value against 30 days before, from the chart's own series
+      const last = (xs) => { for (let i = xs.length - 1; i >= 0; i--) if (xs[i] != null) return [xs[i], i]; return [null, -1]; };
+      const [u, ui] = last(a.util || []), [w, wi] = last(a.wau || []);
+      const u30 = ui >= 0 ? (a.util || []).slice(0, Math.max(0, ui - 29)).filter((v) => v != null).slice(-1)[0] : null;
+      const wAvg = (a.wau || []).filter((v) => v != null).slice(-13); const wMean = wAvg.length ? wAvg.reduce((x, y) => x + y, 0) / wAvg.length : null;
+      const trend = (now, then) => (now == null || then == null ? "" : Math.abs(now - then) < 5 ? ", steady" : now > then ? ", rising" : ", falling");
+      body = `<div><span class="flag good inline"><span class="pill">No open flags</span></span>` +
+        `<p>${u != null ? `Utilisation ${Math.round(u)}%${trend(u, u30)}` : "No usage data yet"}${w != null ? `; ${Math.round(w)} weekly active users${wMean != null ? (Math.abs(w - wMean) < Math.max(1, wMean * 0.1) ? ", steady" : w > wMean ? ", above their average" : ", below their average") : ""}` : ""}.</p>` +
+        `<p class="todo"><b>To do:</b> nothing flagged. Keep the cadence and set a renewal forecast before the renewal.</p></div>` + insHtml;
+    }
+    $("tl-why").innerHTML = `<h2>Why now</h2><div class="wn">${body}</div>`;
+    const r = $("tl-why").querySelector("[data-goto-research]");
+    if (r) r.addEventListener("click", () => { const x = $("tl-research"); if (x && !x.hidden) x.scrollIntoView({ behavior: "smooth", block: "start" }); });
   }
   // Next step ("action planned"): what the owner will do next and by when.
   // Overdue when the date passes with no meeting since it was set. A QBR
@@ -1425,16 +1460,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const k = [t.date, t.event, t.topic, t.owner_id].join("|");
       if (same[k]) { same[k].n++; same[k].what = same[k].base + ` · ${same[k].n} people`; continue; }
       const [what, who, customer] = f(t);
-      done.push(same[k] = { date: t.date, at: t.date, what, base: what, n: 1, who, customer });
+      const OUT = (D.settings && D.settings.meeting_outcomes) || {};
+      const said = t.event === "meeting_held" && (t.outcome || t.note)                 // what came of it, when logged
+        ? [t.outcome ? (OUT[t.outcome] || t.outcome) : "", t.note || ""].filter(Boolean).join(" · ") : "";
+      done.push(same[k] = { date: t.date, at: t.date, what, base: what, n: 1, who: [who, said].filter(Boolean).join(" · "), customer });
     }
     for (const t of TASKS.filter((x) => x.account_id === id && x.sent_on))
       done.push({ date: t.sent_on, at: t.sent_on, what: `Task sent: ${t.flag} ${t.status}`, who: `${ownerName[t.routed_to] || t.routed_to} · now ${t.action_status}`, customer: false });
     for (const s of nextSteps[id] || []) done.push({ date: String(s.decided_at).slice(0, 10), at: String(s.decided_at), what: `Next step planned: ${STEP_TYPES[s.type] || s.type} by ${fmt(s.due)}`, who: s.role === "manager" ? managerName(s.by) + " (manager)" : ownerName[s.by] || s.by, customer: false });
     for (const f of forecasts[id] || []) done.push({ date: String(f.decided_at).slice(0, 10), at: String(f.decided_at), what: `Forecast: ${callText(f)}`, who: (f.role === "manager" ? managerName(f.by) + " (manager)" : ownerName[f.by] || f.by) + (f.reason ? ` · ${f.reason}` : ""), customer: false });
     done.sort((x, y) => y.at.localeCompare(x.at));       // full timestamps: two saves on one day stay in order
-    const shown = sumAll ? done : done.slice(0, 6);
+    const SHORT = 3;                                     // the history comes after why now and what to do: three rows, then View all
+    const shown = sumAll ? done : done.slice(0, SHORT);
     $("tl-done").innerHTML = done.length ? shown.map((d) => `<li><span class="when">${fmt(d.date)}<br>${ago(d.date)}</span><span>${d.customer ? "<b>" + esc(d.what) + "</b>" : esc(d.what)}${d.who ? `<br><small>${esc(d.who)}</small>` : ""}</span></li>`).join("") +
-      (done.length > 6 ? `<li><span></span><button class="link" id="tl-done-all">${sumAll ? "Show fewer" : `View all (${done.length})`}</button></li>` : "")
+      (done.length > SHORT ? `<li><span></span><button class="link" id="tl-done-all">${sumAll ? "Show fewer" : `View all (${done.length})`}</button></li>` : "")
       : '<li><span></span><span class="muted">Nothing on record in the last 90 days.</span></li>';
     const b = $("tl-done-all"); if (b) b.addEventListener("click", () => { sumAll = !sumAll; drawSummary(id); });
     // coming up: the plan, a booked QBR, the renewal and the forecast for it
@@ -1446,8 +1485,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("tl-coming").innerHTML = up.map((u) => `<li><span class="when">${fmt(u.date)}<br><span class="${u.overdue ? "bad" : ""}">${u.overdue ? (planStatus(a, p) || {}).text : ahead(u.date)}</span></span><span><b>${esc(u.what)}</b>${u.who ? `<br><small>${esc(u.who)}</small>` : ""}</span></li>`).join("");
     const lastC = done.find((d) => d.customer);
     const noPlan = !p && a.tier !== "Self-service";
+    // red only when a missing plan matters: an open flag, a renewal within 90 days, or 60+ days
+    // without a customer action; otherwise a plain note (21 Nov 2026: a healthy account read as an alarm)
+    const urgent = a.flags.length || day(a.renewal_date) - TODAY <= 90 || !lastC || TODAY - day(lastC.date) >= 60;
     $("tl-sum-line").innerHTML = `${lastC ? `Last customer action: ${esc(lastC.what.replace(/^./, (c) => c.toLowerCase()))}, ${ago(lastC.date)}.` : "No customer action in 90 days."} ` +
-      (p ? `Next: ${esc(p.type.toLowerCase())} on ${fmt(p.due)} (${(planStatus(a, p) || {}).text}).` : noPlan ? '<span class="bad">No next step planned.</span>' : "");
+      (p ? `Next: ${esc(p.type.toLowerCase())} on ${fmt(p.due)} (${(planStatus(a, p) || {}).text}).` : noPlan ? (urgent ? '<span class="bad">No next step planned.</span>' : '<span class="muted">No next step planned yet.</span>') : "");
   }
 
   // Who may plan or forecast is read from the segment bar (in a real tool:
@@ -1618,7 +1660,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     host.hidden = false;
     let x = `<h2>Research: what the documents say</h2>`;
     if (!R) {
-      x += `<p class="note">No tickets, emails or call notes on record for this account in the last ${days} days. In the demo, documents exist for a few dozen accounts only.</p>`;
+      // nothing on record: one line, no method note (21 Nov 2026: an empty box at full size)
+      host.innerHTML = x + `<p class="note">No tickets, emails or call notes in the last ${days} days. In the demo, documents exist for a few dozen accounts only.</p>`;
+      return;
     } else {
       x += `<p class="finding small">${plural(R.tickets, "ticket")}${R.tickets ? ` (${R.open_tickets} open)` : ""}, ${plural(R.emails, "email")} and ${plural(R.calls, "call note")} in the last ${days} days` +
         (R.themes.length ? `; ${plural(R.themes.length, "possible theme")} worth a look.` : "; nothing in them matches the themes the engine looks for.") + `</p>`;
@@ -3651,7 +3695,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       { v: "mybook", el: "mb-port-view", h: "Every account, by value at stake", p: "Why each one is flagged, in words; the last and next CS engagement; and an insight from its tickets, emails or call notes. Churn and growth apart, as the leader reports them. An insight is context: it never changes a status." },
       { v: "tasks", el: "tk-week-panel", h: "What's coming", p: "The next 14 days, in value: QBRs, renewals and tasks due, so nothing arrives as a surprise." },
       { v: "tasks", el: "tk-list", h: "What to pick up", p: "The queue, sorted by cash at stake per day left: a big renewal next month comes before a small one this week. Each row says what to do now, and shows the last and next engagement in place." },
-      mine && { v: "timeline", acc: mine.account_id, el: "tl-head", h: `Know the account: ${mine.account_name}`, p: "Before acting: usage and every CS touch, why it's flagged, the forecast and the next step, and the research: tickets summarised and themes from the documents, each with its source." },
+      mine && { v: "timeline", acc: mine.account_id, el: "tl-why", h: `Know the account: ${mine.account_name}`, p: "Why now comes first: each flag in words, the money at stake and what to do, beside what the documents say. Then the plan and the renewal forecast, the history with what came of each meeting, the research and the usage." },
       { h: "It rolls up", p: `What ${me} does here is what the leader's page reports: same measures, same accounts. Open it, or ask the documents in plain words.`,
         links: [DEMO.leader_page && ["The leader's page", DEMO.leader_page], ["Ask the documents", "search.html"]].filter(Boolean) },
     ].filter(Boolean);
