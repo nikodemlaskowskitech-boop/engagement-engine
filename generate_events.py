@@ -23,6 +23,7 @@ Run:  python generate_events.py
 import csv
 import json
 import random
+import zlib
 import uuid
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -146,6 +147,15 @@ EPISODE_TIER_WEIGHTS = {"Enterprise": 0.12, "Scale": 0.33, "Self-service": 0.55}
 DIP_BOTTOM = 0.30          # usage and activity fall to this share of normal...
 DIP_DAYS = 30              # ...over this many days
 RECOVER_DAYS = 40          # and climb back over this many, once recovery starts
+
+# A planted trend, for the leader's Signals band (21 Nov 2026, Nikodem: "this is a demo, we are
+# telling a story and we want these points to appear"). The brief's own example: new customers
+# ramp worse than the book. Among new logos signed 60 to 200 days before the end of the data
+# (live long enough for the Shelfware rule), about half of the healthy ones become shelfware:
+# they go live, ramp a little, and never roll out. Chosen by a hash of the account ID, not a
+# random draw. It is written to the answer key's "planted" column, check_flags.py tests that
+# the engine finds it, and the page says it was planted. Set share to 0 to turn it off.
+PLANTED_TREND = dict(name="new-cohort shelfware", signed_days_ago=(60, 200), share=0.5)
 
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
 # An Enterprise deal is never missing from the CRM, and a silent Enterprise
@@ -409,6 +419,7 @@ def build_accounts():
     for acc in new_enterprise[:2]:
         acc["csm"] = ""
     set_customer_since(accounts)
+    plant_cohort_trend(accounts)
     set_qbr_dates(accounts)
     set_champions(accounts)
     set_welcome_group(accounts)
@@ -477,6 +488,18 @@ def set_customer_since(accounts):
         acc["first_year"] = (not new and start > START_DATE + timedelta(days=7)
                              and rng.random() < FIRST_YEAR_SHARE)
         acc["since"] = start if (new or acc["first_year"]) else start - timedelta(days=365 * rng.randint(1, 3))
+
+
+def plant_cohort_trend(accounts):
+    """PLANTED_TREND: some healthy new logos of the recent cohort become shelfware."""
+    lo, hi = PLANTED_TREND["signed_days_ago"]
+    for acc in accounts:
+        acc["planted"] = ""
+        days = (END_DATE - acc["since"]).days
+        if (acc["first_year"] and acc["personality"] == "healthy" and acc["id"] not in STORY_ACCOUNTS
+                and lo <= days <= hi and zlib.crc32(acc["id"].encode()) % 100 < PLANTED_TREND["share"] * 100):
+            acc["personality"], acc["planted"] = "shelfware", PLANTED_TREND["name"]
+            acc["users_end"] = acc["users_start"]             # shelfware's users don't grow
 
 
 def dip_level(dip, i):
@@ -1216,14 +1239,15 @@ def write_answer_key(accounts):
     path = OUT_DIR / "answer_key.csv"
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["account_id", "tier", "personality", "has_champion", "welcome_group", "history", "called_in_time"])
+        writer.writerow(["account_id", "tier", "personality", "has_champion", "welcome_group", "history", "called_in_time", "planted"])
         for acc in accounts:
             group = "welcomed" if acc["welcomed"] else "control" if acc["control"] else ""
             dip = acc["dip"]
             history = ("dip, recovered" if dip and dip["outcome"] == "recovered" else "dip, churned" if dip else
                        "new logo this year" if acc["first_year"] else "")
             writer.writerow([acc["id"], acc["tier"], "churned" if acc["lost"] else acc["personality"],
-                             acc["has_champion"], group, history, bool(dip and dip["in_time"]) if dip else ""])
+                             acc["has_champion"], group, history, bool(dip and dip["in_time"]) if dip else "",
+                             acc.get("planted", "")])
     return path
 
 

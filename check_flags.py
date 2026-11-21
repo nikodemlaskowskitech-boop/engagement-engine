@@ -19,6 +19,7 @@ Run flags.py first, then:  python check_flags.py
 """
 
 import csv
+from datetime import date
 import sys
 from collections import Counter
 from pathlib import Path
@@ -145,6 +146,31 @@ for label, flag, statuses, wrong in FALSE_ALARMS:
     for r in rows:
         problems.append((label, f"false alarm ({personality(r['account_id'])})",
                          r["account_id"], f"{r['status']}: {r['reasons']}"))
+
+# The planted trend (generate_events.PLANTED_TREND, 21 Nov 2026): the engine must see that new
+# logos of the recent cohort are shelfware far more often than the rest of the book. Rates come
+# from the flags, never from the answer key; the key only says which accounts were planted.
+planted = [a for a, r in key.items() if r.get("planted")]
+if planted:
+    from generate_events import PLANTED_TREND, END_DATE
+    crm = {r["account_id"]: r for r in read("crm_accounts.csv") if r.get("status") != "churned"}
+    lo, hi = PLANTED_TREND["signed_days_ago"]
+    def days_ago(a):
+        return (END_DATE - date.fromisoformat(crm[a]["customer_since"])).days
+    shelf = {r["account_id"] for r in flags["churn"] if r["status"] == "Shelfware"}
+    cohort = [a for a in crm if lo <= days_ago(a) <= hi]
+    rest = [a for a in crm if days_ago(a) > hi]
+    c_hit, r_hit = sum(a in shelf for a in cohort), sum(a in shelf for a in rest)
+    c_rate, r_rate = c_hit / max(1, len(cohort)), r_hit / max(1, len(rest))
+    found = sum(a in shelf for a in planted)
+    ok = c_rate >= 3 * r_rate and found >= 0.8 * len(planted)
+    print(f"  {'PASS ' if ok else 'CHECK'}  Planted trend ({PLANTED_TREND['name']}): signed {lo}-{hi} days ago "
+          f"{c_hit} of {len(cohort)} Shelfware ({share(c_hit, len(cohort))}) against {r_hit} of {len(rest)} "
+          f"({share(r_hit, len(rest))}) for the book signed earlier, target 3x; "
+          f"{found} of {len(planted)} planted accounts flagged")
+    for a in planted:
+        if a not in shelf:
+            problems.append(("Planted trend", "missed", a, ""))
 
 # --- 3. Every miss and false alarm, by name -------------------------------------
 

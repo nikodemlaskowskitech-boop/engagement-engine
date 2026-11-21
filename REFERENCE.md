@@ -142,6 +142,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   exports closed renewals from the CRM).
   Also writes `data/answer_key.csv` (each account's personality and
   welcome group): for testing only, the flags must never read it.
+  A planted trend (21 Nov 2026, Nikodem: "this is a demo, we are telling a story and we want these
+  points to appear"): PLANTED_TREND turns about half of the healthy new logos signed 60 to 200 days
+  before the end of the data into shelfware (by a hash of the ID, no random draw). The leadership
+  brief's own example: new customers ramping worse than the book. The answer key's "planted"
+  column names them; the page must say the trend was planted. share = 0 turns it off. The
+  regenerate moved some numbers (DEMO.md checked: reached in time 72% vs 37% on 13 and 16
+  accounts; Yarrow Studio's users -63%).
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
   with the views events (schema declared explicitly), engagement (the CS
   history, same schema), crm (today's book: churned accounts left out), crm_all
@@ -449,6 +456,9 @@ Read a file's entry before changing that file, and update the entry in the same 
 - `check_flags.py`: tests the flags against the answer key (run `flags.py`
   first): share of each personality found, false alarms, and every miss by
   name. Re-run it after any change to a flag rule.
+  The planted trend (21 Nov 2026): Shelfware among accounts signed 60 to 200 days ago must be 3x+
+  the rate of the book signed earlier, from the flags (never the key), and 80%+ of the planted
+  accounts flagged. First run: 11 of 30 (37%) against 20 of 423 (5%); 9 of 9 found.
 - `backtest.py`: did the churn flags see it coming? (run `flags.py` first)
   Against `data/renewal_outcomes.csv` (what happened at each renewal in the
   180 days after the data: renewed, expanded, downsized, churned; written by
