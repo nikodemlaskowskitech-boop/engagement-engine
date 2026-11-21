@@ -33,8 +33,8 @@ guides the work. It's never anyone's credit."
 year before; NRR 103%. One point of GRR is worth €147k here, so that's the
 yardstick for any budget request. The next two quarters put €1.1M at risk,
 about 7 points. Accounts we reached in time (7 days for Enterprise, 14 for
-Scale) kept 60% of their ARR at renewal, against 43%: a clear gap, but on only
-14 against 15 accounts. That's why this page
+Scale) kept 72% of their ARR at renewal, against 37%: a clear gap, but on only
+13 against 16 accounts. That's why this page
 shows the method and never claims we saved anything; a CFO trusts that more."
 
 ## 3. Did it work? (30 s)
@@ -52,7 +52,7 @@ run."
 [Leadership: click Yarrow Studio]
 
 "Yarrow Studio, Mia's account. Utilisation went from 48% to 36% to 26%, and
-weekly users are down 55%. Both signals, so it's Act and the whole €234k ARR is
+weekly users are down 63%. Both signals, so it's Act and the whole €234k ARR is
 at risk. Mia has forecast a downsize to €134k, and the cockpit flags that gap
 for the forecast call. There's also an AI handover brief, built from support
 cases, emails and calls. Names are removed before the model sees anything, and
