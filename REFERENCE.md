@@ -841,6 +841,9 @@ Read a file's entry before changing that file, and update the entry in the same 
   tabs stay with managers and the leader. The page's code draws only the sections a role keeps
   (the Onboarding legend was the one that didn't check: fixed). role_pages_test checks every
   person's tabs and that each one draws with no script error.
+  The CSM door opens on Anna Whitfield (21 Nov 2026, was Tom: 7 of 9 accounts gone quiet, a poor
+  first impression): a queue, risk at Act and Shelfware, insights, renewals below the book's rate.
+  Re-check after a regenerate ([demo] csm).
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to

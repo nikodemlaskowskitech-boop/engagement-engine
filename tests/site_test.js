@@ -214,9 +214,10 @@ print(json.dumps(r))`;
     d = await door(p);
     check(new URL(p.url()).pathname.endsWith(csmDoor) && d.current.join() === "door-csm" && d.first === "More people\u2026",
       "...the CSM door opens that CSM's book, marked current", `${p.url()} ${JSON.stringify(d)}`);
-    await p.selectOption("#page-switch", "csm_anna.html"); await p.waitForTimeout(600);
+    const other = csmDoor === "csm_mia.html" ? ["csm_tom.html", /Tom/] : ["csm_mia.html", /Mia/];   // anyone but the door person
+    await p.selectOption("#page-switch", other[0]); await p.waitForTimeout(600);
     d = await door(p);
-    check(new URL(p.url()).pathname.endsWith("csm_anna.html") && !d.current.length && /Anna/.test(d.first) && (await p.textContent("#page-switch-label")) === "Viewing as",
+    check(new URL(p.url()).pathname.endsWith(other[0]) && !d.current.length && other[1].test(d.first) && (await p.textContent("#page-switch-label")) === "Viewing as",
       '..."More people" opens anyone else: no door current, "Viewing as" that person', `${p.url()} ${JSON.stringify(d)}`);
     // About this project (18 Nov 2026, recruiter review): in place, from settings [demo.about]
     const pa = await ctx.newPage(); await pa.goto(base + "index.html"); await pa.waitForTimeout(500);
