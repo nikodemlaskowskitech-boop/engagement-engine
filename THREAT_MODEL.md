@@ -22,7 +22,9 @@ address, a new secret, a new place data goes).
 1. **Internet → API Gateway → Slack listener**: a public address that accepts
    input (signed by Slack). The public search (8) is the other one.
 2. **Laptop → AWS**: `aws login` (admin role), upload.py, cdk deploy.
-3. **AWS / laptop → Anthropic API**: redacted text leaves for the model.
+3. **AWS / laptop → Anthropic API**: redacted text leaves for the model. The laptop also
+   sends the redacted documents and search questions to Titan embeddings on Bedrock, in our
+   own account (22 Nov 2026, PRIVACY.md §13).
 4. **Text written by outsiders → the model**: customer emails, call
    transcripts and support cases are read by the model (prompt injection).
 5. **Public GitHub repo**: anyone can read the code; a pushed secret is public.

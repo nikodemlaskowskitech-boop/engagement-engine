@@ -96,7 +96,7 @@ def build(as_of, docs=None):
     found = {}                                                # (account, document) -> its strongest theme
     for theme, (label, question) in CONF["themes"].items():   # in settings order: no ties
         top = None
-        for hit in search.accounts(con, question):            # what the public search would return
+        for hit in search.accounts(con, question, mode="keywords"):   # what the public search returns (keywords: no model call)
             acc = hit["account_id"]
             best = search.search(con, question, k=1, account_id=acc)
             if not best or best[0]["date"] < since or acc not in out:

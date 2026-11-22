@@ -47,7 +47,7 @@ def recall_table(synonyms):
     """Per question: the right accounts in the top k, how many of the top are right, traps."""
     out = []
     for q in key["questions"]:
-        top = [a["account_id"] for a in search.accounts(con, q["question"], k, synonyms=synonyms)]
+        top = [a["account_id"] for a in search.accounts(con, q["question"], k, synonyms=synonyms, mode="keywords")]
         out.append({"right": [a for a in top if a in q["accounts"]], "top": top,
                     "traps": [a for a in top if a in q["traps"]]})
     return out
@@ -86,7 +86,7 @@ print(f"\n  {'question (as asked)':<70} {'keywords':>9} {'+ synonyms':>11}")
 for q, text in asks:
     row = []
     for syn in (False, True):
-        top = [a["account_id"] for a in search.accounts(con_h, text, k, synonyms=syn)]
+        top = [a["account_id"] for a in search.accounts(con_h, text, k, synonyms=syn, mode="keywords")]
         right = len([a for a in top if a in q["accounts"]])
         found[syn] += right
         row.append(f"{right}/{len(q['accounts'])}")
@@ -99,7 +99,7 @@ print(f"  Held-out recall, with synonyms:  {found[True]} of {wanted_h} ({h_wide:
 site_k = int(CONF["site_top_k"])
 first = top_site = 0
 for q, text in asks:
-    top = [a["account_id"] for a in search.accounts(con_h, text, site_k)]
+    top = [a["account_id"] for a in search.accounts(con_h, text, site_k, mode="keywords")]
     first += bool(top) and top[0] in q["accounts"]
     top_site += len([a for a in top if a in q["accounts"]])
 print(f"  The demo site's view: first result right for {first} of {len(asks)} questions; "
@@ -107,6 +107,38 @@ print(f"  The demo site's view: first result right for {first} of {len(asks)} qu
 check(h_wide >= h_exact, "on the held-out set too, synonyms find at least what keywords find")
 check(h_wide >= float(CONF["min_heldout_recall"]),
       f"held-out recall {h_wide:.0%} at least [search] min_heldout_recall ({float(CONF['min_heldout_recall']):.0%})")
+
+print("\nMeaning (vectors, 22 Nov 2026): keywords, meaning and both, side by side")
+# Only with the real model's vectors (python embed.py on the laptop, signed in to AWS): the
+# stand-in's vectors measure nothing. Each question is one small Bedrock call. The held-out
+# documents get vectors of their own, from their redacted text, in their own file.
+import embed                                          # noqa: E402
+from settings import output_file                      # noqa: E402
+real = [r for r in embed.load().values() if r["model"] == SETTINGS["embed"]["model"]]
+if SETTINGS["embed"]["provider"] != "bedrock" or not real:
+    print("  skipped: no vectors from the real model here (on the laptop: python embed.py, then this test)")
+else:
+    every_h = [{"account_id": a, "id": i, "kind": kd, "date": str(d), "title": t, "line": ""}
+               for a, i, kd, d, t in con_h.sql("SELECT account_id, id, kind, date, title FROM documents").fetchall()]
+    red_h, held_h = search.redacted(con_h, every_h)
+    held_path = output_file("vectors").with_name("vectors_heldout.jsonl")
+    embed.build(path=held_path, docs=[{f: d[f] for f in ("account_id", "id", "title", "text")} for d in red_h])
+    rows = []
+    for label, con_m, qs, path in (("corpus", con, [(q, q["question"]) for q in key["questions"]], None),
+                                   ("held-out", con_h, asks, held_path)):
+        search.VECTORS_FILE = path
+        con_m.sql("DROP TABLE IF EXISTS doc_vectors")
+        got = {}
+        for mode in ("keywords", "meaning", "hybrid"):
+            got[mode] = sum(len([a for a in (x["account_id"] for x in search.accounts(con_m, text, k, mode=mode))
+                                 if a in q["accounts"]]) for q, text in qs)
+        want = sum(len(q["accounts"]) for q, _ in qs)
+        rows.append((label, want, got))
+        print(f"  {label:<9} keywords {got['keywords']}/{want} ({got['keywords'] / want:.0%})   "
+              f"meaning {got['meaning']}/{want} ({got['meaning'] / want:.0%})   "
+              f"hybrid {got['hybrid']}/{want} ({got['hybrid'] / want:.0%})")
+    search.VECTORS_FILE = None
+    print(f"  ([embed] mode today: {SETTINGS['embed']['mode']}; held back by the leak check, held-out: {len(held_h)})")
 
 print("\nRedacted results: the only form that may leave the laptop")
 import csv as _csv                                   # noqa: E402

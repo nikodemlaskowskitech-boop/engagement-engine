@@ -392,6 +392,21 @@ Read a file's entry before changing that file, and update the entry in the same 
   the leader's facts equal the cockpit's; as a CSM, another team's account refused and none
   in at_risk or search; search results without contact names, emails, phones, companies;
   a real stdio round trip started from another folder.
+- `embed.py` (22 Nov 2026): search by meaning. One vector per document of the committed
+  redacted file (search_export.py), never the raw text: Amazon Titan Text Embeddings V2 on
+  Bedrock ([embed] model, dimensions 512, in our account, [aws] region and profile), or the
+  stand-in (a made-up vector from the words, for tests). Each row keeps its text's hash, the
+  model and the size: a run embeds only what's new or changed, or everything after a model or
+  size change, and drops documents gone from the file. Vectors in data/<[outputs] vectors>
+  (git-ignored, no text). Every call checks the "embed" budget (laptop only) and writes a ledger
+  row at [embed] price_per_million (llm.check_budget, llm.record_usage). search.py: meaning()
+  ranks by cosine (DuckDB list_cosine_similarity), ranked() by [embed] mode: keywords (search(),
+  unchanged), meaning, or hybrid (reciprocal rank fusion, rrf_k 60); accounts() follows it.
+  The public search, research.py and the Lambda stay on keywords (no model call there). Why
+  (22 Nov 2026): growing the corpus to 45 accounts crowded the top 10 and keyword recall fell
+  to 89%; meaning is the fix to measure before the corpus grows. tests/embed_test.py checks
+  the plumbing; tests/search_test.py's meaning section measures keywords, meaning and hybrid
+  on the corpus and held-out set, on the laptop once `python embed.py` has run.
 - `ask.py` (14 Nov 2026): one question about one account, answered in at most 150 words, every
   sentence citing [DATA] or a document ID. RAG on the laptop: search.search picks the
   account's [ask] top_k documents for the question (BM25 with the vocabulary; doc_folders says

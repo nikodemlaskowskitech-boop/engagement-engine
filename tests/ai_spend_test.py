@@ -139,8 +139,14 @@ llm._BUDGETS = real
 places = {p: llm.budgets_here(p) for p in ("laptop", "aws")}
 check(all({"qbr_brief", "handover"} <= set(b) for b in places.values()),
       "settings.toml gives the laptop and AWS a budget for the briefs (QBR and handover)", places)
-check(set(places["laptop"]) - set(places["aws"]) == {"ask_account"} and set(places["aws"]) <= set(places["laptop"]),
-      "ask_account is the laptop's only: AWS has no budget for it, so it can't run there (14 Nov 2026)", places)
+check(set(places["laptop"]) - set(places["aws"]) == {"ask_account", "embed"} and set(places["aws"]) <= set(places["laptop"]),
+      "ask_account and embed are the laptop's only: AWS has no budget for them, so they can't run there (14 and 22 Nov 2026)", places)
+# the embeddings' ledger row (22 Nov 2026): their own price, no output tokens
+was, llm.LEDGER = llm.LEDGER, tmp / "embed_ledger.csv"      # a file of its own, in the test's folder
+row = llm.record_usage("embed", "acc_x", "bedrock", "amazon.titan-embed-text-v2:0", 1000, 0, 1000 * 0.02 / 1e6, 0.1)
+check(row["cost_usd"] == "0.000020" and row["output_tokens"] == 0 and row["feature"] == "embed",
+      "an embedding call is one ledger row at the [embed] price (1,000 tokens = $0.00002)", row)
+llm.LEDGER = was
 total = sum(v for b in places.values() for v in b.values())
 check(total <= 10, f"both places together (${total:.2f}) stay under the $10 Anthropic spend limit")
 

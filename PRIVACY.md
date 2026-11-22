@@ -331,3 +331,15 @@ A promise typed by a person (in Slack's call form or the cockpit), and the note 
 recommendation or an outcome check, never reach the public site: roles.py --site replaces them.
 A commitment tracked from a document keeps its text, because that text is the redacted line the
 public search already shows. Possible promises are found only in the redacted documents file.
+
+## 13. Search by meaning: embeddings (22 Nov 2026)
+
+embed.py turns each document into a vector with Amazon Titan Text Embeddings V2, on Bedrock in our
+own AWS account and region (eu-north-1, the [aws] profile; no API key). What it sends is only the
+redacted documents file (§6): the same text the public search already carries, so no name, email,
+phone or company leaves the laptop for this. The vectors file (data/, git-ignored) holds IDs,
+the model, a hash and the numbers: no text. A question asked by meaning is sent to the same model
+as typed, so it should be worded like any search ("who needs more capacity?"), not with a
+customer's personal details. AWS states that Bedrock doesn't store or use the inputs to train
+models; the call is logged in our AI spend ledger like every other model call.
+
