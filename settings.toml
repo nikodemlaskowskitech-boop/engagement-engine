@@ -285,6 +285,7 @@ edit = {}                            # read-only: a leader never overrides someo
 [roles.manager]
 tabs = ["tasks", "lead", "outcomes", "book", "timeline", "onboarding"]   # Overview's sieve is Operational's funnel now
 fold = ["team"]
+retention = true                     # their own team's GRR and NRR, by person (22 Nov 2026, Nikodem)
 scope = "team"
 self_service = true
 outcomes = "by_owner"

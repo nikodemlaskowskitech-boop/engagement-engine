@@ -208,6 +208,20 @@ def slice_export(export, person_id, person):
     # the business case (GRR, NRR, the whole book's renewals): only where the role has it ([roles.*] retention)
     if not cfg.get("retention"):
         page["retention"] = None
+    elif cfg["scope"] != "book" and page.get("retention"):
+        # a manager's own team (22 Nov 2026, Nikodem: drill down from the book to a team to a
+        # CSM): the accounts in scope only, and none of the book's own totals (the year before,
+        # finance's bridge, the book-wide forecast and call comparison)
+        ret = page["retention"]
+        page["retention"] = {
+            **ret,
+            "year": {k: (ret.get("year") or {}).get(k) for k in ("period_start", "period_end")},
+            "prior": None, "this_bridge": None, "calls": None, "call_value": None,
+            "forecast": {"days": (ret.get("forecast") or {}).get("days")},
+            "cohort": [r for r in ret.get("cohort", []) if r[0] in keep],
+            "renewals_ahead": [r for r in ret.get("renewals_ahead", []) if r[0] in keep],
+            "call_accounts": [r for r in ret.get("call_accounts", []) if r[0] in keep],
+            "call_waiting": [i for i in ret.get("call_waiting", []) if i in keep]}
     if cfg["outcomes"] == "team_total":                   # totals only: no row per account
         page["outcomes_total"] = outcomes_total(page["renewals"], export["settings"]["too_late_days"])
         page["renewals"] = []

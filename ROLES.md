@@ -45,7 +45,7 @@ count it.
 | Confirm a handover brief | No | Team's accounts | Own accounts (outgoing owner) | Own accounts |
 | "Did it work?" | By owner | By owner, their team | No (not a CSM tab since 21 Nov 2026) | No |
 | Leadership tab | Yes (opens here) | Yes | No | No |
-| Performance on Leadership (GRR, NRR, the forecast; was the Business case tab) | Yes | No | No | No |
+| Performance on Leadership (GRR, NRR, the forecast; was the Business case tab) | Yes, by team, then by person | Their team, by person | No | No |
 | Tabs | Leadership (Performance first), Operational (CS team inside), Did it work? (the rules), Account, Programmes | Operational (CS team inside), Leadership, Did it work? (the rules), Book of business, Account, Programmes | My book, My work, Account | My book, My work, Account |
 | Opens on | Leadership | Operational | My book | My book |
 | The queue | Operational: the funnel per team, the backlog by team, read-only | Operational: the funnel per person, the backlog with decisions | My work (by cash at stake, 18 Nov 2026) | My work |
@@ -55,6 +55,15 @@ Every change is checked twice: the page offers only what the role allows, and
 page).
 
 ## Why each choice
+
+- **Retention drills down: book, team, person** (22 Nov 2026, Nikodem: "I should be
+  able to drill down to individual CSM metrics as well as have a view of team or
+  total book"). The leader sees GRR and NRR by team and, one click further, by
+  person; a manager sees their own team by person. A manager's page holds only
+  their team's accounts and none of the book's totals. A person's rates on under 10
+  customers are greyed (one account moves them 10 points or more), and the finding
+  names the money lost, not a rank. A CSM's own page stays team totals: commission
+  can ride on account assignment.
 
 - **Operational replaces Overview and Tasks** (22 Nov 2026, the leadership design).
   One place to run the work: the funnel from "a person is needed" to the right

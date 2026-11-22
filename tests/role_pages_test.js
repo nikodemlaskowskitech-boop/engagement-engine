@@ -80,6 +80,17 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       "leader.html: GRR and NRR by team; a team name zooms the page and Operational follows", JSON.stringify({ teams, mgr, name, head, errors }));
     await p.close();
   }
+  {   // a manager: their team's retention by person; a person zooms to their book (22 Nov 2026)
+    const { p, errors } = await open("mgr_james.html", "lead");
+    const people = await p.$$eval("#cs-teams tbody tr", (trs) => trs.map((tr) => [tr.cells[0].textContent, +tr.cells[1].textContent]));
+    const head = await p.$$eval("#cs-teams thead th", (ths) => ths[0].textContent.replace(/[▲▼↕]/g, "").trim());
+    const total = +((await p.textContent("#cs-sub")).match(/^(\d+) customers/) || [])[1];
+    await p.click("#cs-teams [data-zoom]"); await p.waitForTimeout(250);
+    const who = (await p.textContent("#cs-finding")).split(":")[0];
+    check(head === "Person" && people.length >= 3 && people.reduce((t, [, n]) => t + n, 0) <= total && who === people[0][0] && !errors.length,
+      "mgr_james.html: the team's GRR and NRR by person, a person zooms to their book", JSON.stringify({ head, people, total, who, errors }));
+    await p.close();
+  }
   {   // the leader: Operational per team, the backlog grouped by team, no decisions (22 Nov 2026)
     const { p } = await open("leader.html", "lead", true);
     await p.click("#tab-tasks"); await p.waitForTimeout(200);

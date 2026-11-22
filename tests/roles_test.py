@@ -449,6 +449,15 @@ def test_views_data(label, parser, meta, cfg, scope):
     if not cfg.get("retention"):
         check(f"{label}: no business case data (leader only)", not data.get("retention"),
               "retention is on the page")
+    elif cfg["scope"] != "book":
+        # a manager's own team only (22 Nov 2026): every account id in scope, no book totals
+        ret = data.get("retention") or {}
+        inside = {a["account_id"] for a in data.get("accounts", [])} | {o["account_id"] for o in (data.get("history") or {}).get("off_book", [])}
+        ids = [r[0] for k in ("cohort", "renewals_ahead", "call_accounts") for r in ret.get(k) or []] + list(ret.get("call_waiting") or [])
+        stray = [i for i in ids if i not in inside]
+        check(f"{label}: retention holds the team's accounts only, no book totals",
+              ret and not stray and not ret.get("prior") and not ret.get("calls") and "start_arr" not in (ret.get("year") or {})
+              and set((ret.get("forecast") or {}).keys()) <= {"days"}, f"stray={stray[:5]} keys={list(ret.keys())}")
     renewals = data.get("renewals")
     if cfg["outcomes"] == "team_total":
         check(f"{label}: renewals list is empty (no row per account)",
