@@ -708,6 +708,20 @@ Read a file's entry before changing that file, and update the entry in the same 
   A healthy account gets one calm line on its usage; "No next step planned" is red only with an
   open flag, a renewal within 90 days or 60+ days without a customer action. An account with no
   documents gets one line, not a method note. role_pages_test checks the order, the content and the calm.
+  Operational (22 Nov 2026, the leadership design, PR1): for the leader and managers the Tasks
+  view is "Operational", one place to run the work; Overview's sieve and the leader's Book of
+  business left their pages. An opening line (open, claimed, late, in a pool queue), then "From
+  signal to outcome": a funnel of the tasks sent to a person, each stage a subset of the one above
+  (a task counts at the furthest stage it reached): needed, a named owner (sent to a person, not
+  a pool queue, or reassigned), picked up (claimed), met the customer (any meeting since it was
+  sent), done (team_report's rule: the right meeting). "Aim checked" (an outcome_checked event
+  since the task) is a share of Done, not a stage. Resolved tasks leave the funnel and are
+  counted in the note. Per team at book level (no decisions: the director acts through the team
+  lead), per person under a manager (a pool-queue task counts on its account's member). A stage
+  click lists the tasks that stopped just before it. The backlog is in the CSM's order (cash at
+  stake per day left, ARR breaks ties), grouped by team at book level. The Leadership ops line
+  links here. role_pages_test checks the narrowing, the rows adding up, the stage list, the
+  leader's grouping and the ops-line link.
   My work (18 Nov 2026, Nikodem's CSM route: start on My book, pick up from the queue, know the
   account, act): on a CSM's or pool member's page the Tasks tab is "My work", the queue.
   Columns: account, ARR, at stake (the flag's value: Act the whole ARR, Watch/Shelfware the

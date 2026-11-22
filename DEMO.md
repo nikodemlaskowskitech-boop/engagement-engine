@@ -38,6 +38,13 @@ next step planned. That gap is the conversation I'd have with my managers this
 week. Everything is sorted by value, and value guides the work. It's never
 anyone's credit."
 
+[Optional, 15 s: Operational tab]
+
+"And is the work moving? Of 61 tasks that needed a person, 48 (79%) ended in
+the right meeting. The biggest drop is the first one: 9 sit in a pool queue
+with nobody named. Per team, James's team is at 68% against Sophie's 90%, so
+that's the team lead I'd talk to: as director I act through them."
+
 ## 3. Did it work? (30 s)
 
 [Did it work? tab]

@@ -267,7 +267,9 @@ peer_median = "book"                 # "against the median" compares with: "book
 # edit: what the person may change, and on which accounts ("own" or "team"); missing = can't
 # outcomes: "Did it work?" by owner (names) or as a team total (no names)
 [roles.leader]
-tabs = ["lead", "overview", "outcomes", "team", "book", "tasks", "timeline", "onboarding"]
+# four places (22 Nov 2026, the leadership design): Leadership (report up), Operational (the "tasks"
+# view: run the work), Did it work?, the account; CS team until Operational PR2, Onboarding until PR3
+tabs = ["lead", "tasks", "outcomes", "team", "timeline", "onboarding"]
 # GRR, NRR, the ARR bridge and the renewals ahead: the Performance band on Leadership (21 Nov 2026,
 # Business case folded in); leader only
 retention = true
@@ -280,7 +282,7 @@ outcomes = "by_owner"
 edit = {}                            # read-only: a leader never overrides someone's forecast
 
 [roles.manager]
-tabs = ["tasks", "lead", "overview", "outcomes", "team", "book", "timeline", "onboarding"]
+tabs = ["tasks", "lead", "outcomes", "team", "book", "timeline", "onboarding"]   # Overview's sieve is Operational's funnel now
 scope = "team"
 self_service = true
 outcomes = "by_owner"
