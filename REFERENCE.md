@@ -149,6 +149,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   column names them; the page must say the trend was planted. share = 0 turns it off. The
   regenerate moved some numbers (DEMO.md checked: reached in time 72% vs 37% on 13 and 16
   accounts; Yarrow Studio's users -63%).
+  The data lab (22 Nov 2026): every story used to start 90 days before the end, so the flags piled
+  up at the year's end and nothing got better. Now a declining, slipping or power-user account's
+  story lasts its own STORY_DAYS (45 to 150, by a hash of its ID; the handover stories' accounts
+  keep 90), and RECOVERY plants about 7% of healthy Enterprise and Scale accounts (not new, no dip)
+  that sat at 30% of their contract all year and recover to about 66% over the last 90 days:
+  Shelfware three months ago, no flag today. The answer key keeps them "healthy" with planted =
+  "recovered"; check_flags checks they carry no churn flag, role_pages_test that Leadership's What
+  moved has both sides. renewal_outcomes.csv gains a reason (LOSS_REASONS: the closed-lost reason
+  its story makes likely, by a hash) on churned and downsized rows; backtest carries it and Did
+  it work? shows "Why they left, and what the flags saw". The regenerate moved some numbers
+  (DEMO.md checked: reached in time 60% vs 43% on 14 and 15 accounts; the backtest caught 32 of 50).
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
   with the views events (schema declared explicitly), engagement (the CS
   history, same schema), crm (today's book: churned accounts left out), crm_all

@@ -91,6 +91,13 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       "mgr_james.html: the team's GRR and NRR by person, a person zooms to their book", JSON.stringify({ head, people, total, who, errors }));
     await p.close();
   }
+  {   // the data lab (22 Nov 2026): accounts recover as well as slip, so "What moved" has both sides
+    const { p } = await open("leader.html", "lead");
+    const heads = await p.$$eval("#ld-move h3", (hs) => hs.map((h) => h.textContent));
+    const n = (k) => +((heads.find((h) => h.startsWith(k)) || "").match(/: (\d+)/) || [])[1] || 0;
+    check(n("Got worse") > 0 && n("Got better") > 0, `leader.html: What moved has accounts that got worse (${n("Got worse")}) and better (${n("Got better")})`, JSON.stringify(heads));
+    await p.close();
+  }
   {   // the leader: Operational per team, the backlog grouped by team, no decisions (22 Nov 2026)
     const { p } = await open("leader.html", "lead", true);
     await p.click("#tab-tasks"); await p.waitForTimeout(200);
@@ -119,6 +126,12 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       const m = bar.match(/^(\d+)%\+$/), le = bar.match(/^(\d+)% or less$/), band = bar.match(/^(\d+)–(\d+)%$/);
       return ok === (m ? got >= +m[1] : le ? got <= +le[1] : band ? got >= +band[1] && got <= +band[2] : ok);
     });
+    // why they left (22 Nov 2026): each reason's accounts and flagged counts add up to the page's own losses
+    const why = await p.$$eval("#oc-why tbody tr", (trs) => trs.map((tr) => [+tr.cells[1].textContent, +tr.cells[3].textContent.split(" of ")[0]]));
+    const lostN = +((await p.textContent("#oc-finding")).match(/of the (\d+) accounts/) || [])[1];
+    const caught = +((await p.textContent("#oc-finding")).match(/caught (\d+) of/) || [])[1];
+    check(why.length >= 3 && why.reduce((t, r) => t + r[0], 0) === lostN && why.reduce((t, r) => t + r[1], 0) === caught,
+      "leader.html: why they left adds up to the losses and the caught ones on Did it work?", JSON.stringify({ why, lostN, caught }));
     check(rules.length === 3 && agree && !(await p.$("#view-outcomes #oc-calls-panel")), "leader.html: Did it work? gives each rule keep or change, matching its evidence and bar", JSON.stringify(rules));
     await p.click("#tab-lead"); await p.waitForTimeout(100);
     const go = await p.$("#ld-ops-go");

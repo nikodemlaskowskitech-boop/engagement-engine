@@ -156,6 +156,17 @@ RECOVER_DAYS = 40          # and climb back over this many, once recovery starts
 # random draw. It is written to the answer key's "planted" column, check_flags.py tests that
 # the engine finds it, and the page says it was planted. Set share to 0 to turn it off.
 PLANTED_TREND = dict(name="new-cohort shelfware", signed_days_ago=(60, 200), share=0.5)
+# The data lab (22 Nov 2026, Operational and the Signals band read flat): every decline started
+# the same day, 90 days before the end, so the flags piled up at the year's end and nothing ever
+# got better. Two fixes, both chosen by a hash of the account ID (no random draw moves):
+# - each declining, slipping or power-user account's story lasts its own length, STORY_DAYS
+#   (the handover stories' accounts keep 90), so signals fire across the autumn;
+# - RECOVERY: a share of healthy Enterprise and Scale accounts sat far below their contract
+#   all year and recover over the last 90 days (an adoption push that worked): Shelfware or
+#   Watch three months ago, no flag today. The answer key keeps them "healthy" (their flags
+#   today) and marks them "recovered" in the planted column.
+STORY_DAYS = (45, 150)
+RECOVERY = dict(name="recovered", share=0.07, util=(0.30, 0.66), activity=(0.35, 0.6))
 
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
 # An Enterprise deal is never missing from the CRM, and a silent Enterprise
@@ -270,16 +281,32 @@ NAME_SECOND = ["Retail", "Media", "Logistics", "Health", "Apps", "Fintech", "Stu
 
 # --- Helpers -----------------------------------------------------------------
 
-def arc(day_index):
-    """How far into the current story (0..1): 0 until the last ARC_DAYS, then a straight line."""
-    return max(0, day_index - (DAYS - ARC_DAYS)) / (ARC_DAYS - 1)
+def story_days(acc):
+    """How long this account's current story lasts (STORY_DAYS, the data lab): its own
+    length for a declining, slipping or power-user account, ARC_DAYS for the rest."""
+    if not acc or acc["id"] in STORY_ACCOUNTS or acc["personality"] not in ("declining", "slipping", "power_user"):
+        return ARC_DAYS
+    lo, hi = STORY_DAYS
+    return lo + zlib.crc32(("story" + acc["id"]).encode()) % (hi - lo + 1)
 
 
-def lerp(pair, day_index):
+def arc(day_index, acc=None):
+    """How far into the current story (0..1): 0 until its last days, then a straight line."""
+    n = story_days(acc)
+    return min(1.0, max(0, day_index - (DAYS - n)) / (n - 1))
+
+
+def lerp(pair, day_index, acc=None):
     """The personality's value on a day: its start value until the current story
     begins, then a straight line to its end value on the last day."""
     start, end = pair
-    return start + (end - start) * arc(day_index)
+    return start + (end - start) * arc(day_index, acc)
+
+
+def persona(acc):
+    """The account's personality, with a recovered account's own story on top (RECOVERY)."""
+    p = PERSONALITIES[acc["personality"]]
+    return {**p, "util": RECOVERY["util"], "activity": RECOVERY["activity"]} if acc.get("planted") == RECOVERY["name"] else p
 
 
 def new_id():
@@ -428,6 +455,7 @@ def build_accounts():
     for acc in accounts:
         acc["contract"] = round(CONTRACT_SIZE[acc["tier"]] * 2 ** size_rng.uniform(-1, 1), -6)
     plan_episodes(accounts, names)
+    plant_recoveries(accounts)
     set_csm_since(accounts)
     set_renewal_changes(accounts)
     return accounts
@@ -502,6 +530,16 @@ def plant_cohort_trend(accounts):
             acc["users_end"] = acc["users_start"]             # shelfware's users don't grow
 
 
+def plant_recoveries(accounts):
+    """RECOVERY: some healthy Enterprise and Scale accounts recover over the last 90 days."""
+    for acc in accounts:
+        if (acc["personality"] == "healthy" and acc["tier"] != "Self-service" and acc["in_crm"]
+                and not acc.get("lost") and not acc.get("dip") and not acc["planted"] and not acc["first_year"]
+                and acc["id"] not in STORY_ACCOUNTS
+                and zlib.crc32(("recover" + acc["id"]).encode()) % 100 < RECOVERY["share"] * 100):
+            acc["planted"] = RECOVERY["name"]
+
+
 def dip_level(dip, i):
     """Share of normal usage on day i of a dip: falls to DIP_BOTTOM over DIP_DAYS,
     then (if it recovers) climbs back over RECOVER_DAYS from wherever it was."""
@@ -523,16 +561,16 @@ def onboard_day_of(acc):
 def util_plan(acc, day_index):
     """Share of the contract the account sends on a day, before daily noise: the
     personality's story, a new account's ramp-up and any dip during the year."""
-    p = PERSONALITIES[acc["personality"]]
+    p = persona(acc)
     day = START_DATE + timedelta(days=day_index)
     ramp_days = p.get("ramp_days") or (30 if acc.get("first_year") else None)
     if ramp_days:
         # new customers ramp up: more data sources and teams come on over the first month
         ramp = min(1.0, max(0, (day - onboard_day_of(acc)).days) / ramp_days)
-        lo, hi = (p["util"] if p.get("ramp_days") else (0.2 * p["util"][0], lerp(p["util"], day_index)))
+        lo, hi = (p["util"] if p.get("ramp_days") else (0.2 * p["util"][0], lerp(p["util"], day_index, acc)))
         planned = lo + (hi - lo) * ramp
     else:
-        planned = lerp(p["util"], day_index)
+        planned = lerp(p["util"], day_index, acc)
     return min(1.2, planned * acc["util_factor"] * dip_level(acc.get("dip"), day_index))   # cap at 120% (overage)
 
 
@@ -689,7 +727,7 @@ def write_crm(accounts):
 
 def events_for_day(acc, day_index, day, pool):
     """All events one account produces on one day."""
-    p = PERSONALITIES[acc["personality"]]
+    p = persona(acc)
     if p.get("silent"):
         return []                                   # never onboarded: silence
 
@@ -709,7 +747,7 @@ def events_for_day(acc, day_index, day, pool):
     if p["lifecycle"] == "new":
         target = min(acc["users_end"], 1 + round((acc["users_start"] - 1) * days_live / 10))
     else:
-        target = round(acc["users_start"] + (acc["users_end"] - acc["users_start"]) * arc(day_index))
+        target = round(acc["users_start"] + (acc["users_end"] - acc["users_start"]) * arc(day_index, acc))
         if acc["first_year"]:                       # a new logo's team joins over its first ten days
             target = min(target, 1 + round((acc["users_start"] - 1) * days_live / 10))
     invited_today = set()
@@ -722,7 +760,7 @@ def events_for_day(acc, day_index, day, pool):
 
     # Product activity: each user is active with today's probability
     # (a dip thins the team out faster than the volume: people stop logging in first)
-    activity = lerp(p["activity"], day_index) * dip_level(acc["dip"], day_index) ** 2
+    activity = lerp(p["activity"], day_index, acc) * dip_level(acc["dip"], day_index) ** 2
     for user in pool:
         champion = acc["has_champion"] and user == pool[0]
         # the champion turns up almost daily (if the account is active at all)
@@ -743,7 +781,7 @@ def events_for_day(acc, day_index, day, pool):
                      properties={"event_count": volume}))
 
     # System: ingestion errors
-    if random.random() < lerp(p["errors"], day_index):
+    if random.random() < lerp(p["errors"], day_index, acc):
         for _ in range(random.randint(1, 5)):
             out.append(event("ingestion_error", "system", day, acc["id"],
                              properties={"error_code": random.choice(
@@ -834,7 +872,7 @@ def visible_day(acc, below=None, above=None, story_only=False):
     this, so "time to action" in the reports measures something real."""
     # story_only: the personality's own story (declining, power user...) starts with the
     # last ARC_DAYS; an account that sat above 80% all year didn't become a growth case in November
-    for i in range(DAYS - ARC_DAYS if story_only else 0, DAYS):
+    for i in range(DAYS - story_days(acc) if story_only else 0, DAYS):
         util = util_plan(acc, i)
         if i < (onboard_day_of(acc) - START_DATE).days + 30:
             continue                              # a ramp-up isn't a problem: 30 days live first
@@ -901,7 +939,7 @@ def engagement_for_account(rng, acc):
         for day in workshop_days(region, START_DATE):
             rate = ADVANCED_WORKSHOP_RATE[acc["personality"]]
             if acc["personality"] == "declining":
-                rate *= 1 - arc((day - START_DATE).days)       # interest fades as usage falls
+                rate *= 1 - arc((day - START_DATE).days, acc)  # interest fades as usage falls
             if rng.random() < rate:
                 for n in range(1, rng.randint(1, 2) + 1):
                     out.append(cs_event(rng, "workshop_attended", local_time(rng, day, region, 14),
@@ -1109,6 +1147,23 @@ OUTCOME_ODDS = {                      # renewed, expanded, downsized, churned
     "declining_called": (0.40, 0.00, 0.30, 0.30),   # a churn call happened
 }
 OUTCOMES = ("renewed", "expanded", "downsized", "churned")
+# Why a renewal was lost, as a CRM's closed-lost reason would say (the data lab, 22 Nov 2026).
+# Picked by a hash of the account ID among the reasons its story makes likely, so no random draw
+# moves. "Acquired" and a budget cut can hit a healthy account: no usage signal sees those coming.
+LOSS_REASONS = {
+    "declining": ["moved to a competitor", "champion left", "budget cut"],
+    "declining_called": ["moved to a competitor", "champion left", "budget cut"],
+    "shelfware": ["never rolled out", "never rolled out", "budget cut"],
+    "slipping": ["smaller scope", "smaller scope", "budget cut"],
+    "power_user": ["acquired", "budget cut"],
+    "healthy": ["acquired", "budget cut", "smaller scope"],
+}
+
+
+def loss_reason(acc, kind):
+    """The closed-lost reason for a churned or downsized renewal (LOSS_REASONS)."""
+    options = LOSS_REASONS.get(kind, LOSS_REASONS["healthy"])
+    return options[zlib.crc32(("reason" + acc["id"]).encode()) % len(options)]
 
 
 def arr_of(acc):
@@ -1137,7 +1192,7 @@ def write_renewal_outcomes(accounts, called):
     path = OUT_DIR / "renewal_outcomes.csv"
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["account_id", "renewal_date", "outcome", "renewal_arr"])
+        writer.writerow(["account_id", "renewal_date", "outcome", "renewal_arr", "reason"])
         for acc in accounts:
             renewal = acc["contract_start"] + timedelta(days=365)
             if not acc["in_crm"] or not (END_DATE < renewal <= END_DATE + timedelta(days=OUTCOME_HORIZON_DAYS)):
@@ -1147,7 +1202,8 @@ def write_renewal_outcomes(accounts, called):
                 kind = "declining_called"
             odds = OUTCOME_ODDS.get(kind, OUTCOME_ODDS["healthy"])
             outcome = rng.choices(OUTCOMES, weights=odds)[0]
-            writer.writerow([acc["id"], renewal.isoformat(), outcome, renewal_value(acc, outcome)])
+            reason = loss_reason(acc, kind) if outcome in ("churned", "downsized") else ""
+            writer.writerow([acc["id"], renewal.isoformat(), outcome, renewal_value(acc, outcome), reason])
     return path
 
 
