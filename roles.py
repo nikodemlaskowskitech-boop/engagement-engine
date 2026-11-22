@@ -212,6 +212,7 @@ def slice_export(export, person_id, person):
         page["outcomes_total"] = outcomes_total(page["renewals"], export["settings"]["too_late_days"])
         page["renewals"] = []
     meta = {"person": person_id, "role": person["role"], "name": person["name"], "tabs": cfg["tabs"],
+            "ops_lists": cfg.get("ops_lists", True),   # the managers' queues in full (the leader: one line)
             "accounts": sorted(ids), "edit": edit_rights(person, ids, own, accounts),
             "outcomes": cfg["outcomes"]}
     return page, meta

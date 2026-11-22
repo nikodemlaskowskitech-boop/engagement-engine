@@ -831,6 +831,12 @@ Read a file's entry before changing that file, and update the entry in the same 
   better. That's the generator, not the method: its dips pile up near the end of the year (churn
   flags 29 in July, 74 now), so recoveries fall earlier (32 better over 20 weeks). A data-lab
   item. cockpit_test recomputes both panels from the export.
+  The managers' queues (21 Nov 2026, step 3): Not reached, Not picked up and No CSM stay in full
+  on a manager's Leadership tab; the leader's page ([roles.leader] ops_lists = false) shows one
+  line instead, "Where a manager is needed": only what is past its line (Act past the reach
+  deadline, tasks waiting stale_task_days+, Enterprise with no CSM) and whose team holds most of
+  it. Nikodem's Operational Effectiveness direction (22 Nov) gives the lists a leader's page of
+  their own next. site_test checks both pages.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;

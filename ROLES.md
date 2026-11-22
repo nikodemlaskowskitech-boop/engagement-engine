@@ -55,6 +55,9 @@ page).
 
 ## Why each choice
 
+- **The leader sees where a manager is needed, not the queues** (21 Nov 2026).
+  Not reached, Not picked up and No CSM are a manager's work lists; the leader's
+  page has one line naming the team that holds most of what's late.
 - **Three places for a CSM** (21 Nov 2026, Nikodem's CSM route). My book (where I
   stand, in the leader's KPIs), My work (what to pick up, by cash at stake) and the
   account (know it, act). Overview, Did it work?, CS team, Book of business and
