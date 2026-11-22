@@ -271,6 +271,9 @@ tabs = ["lead", "overview", "outcomes", "team", "book", "tasks", "timeline", "on
 # GRR, NRR, the ARR bridge and the renewals ahead: the Performance band on Leadership (21 Nov 2026,
 # Business case folded in); leader only
 retention = true
+# the managers' work queues (Not reached, Not picked up, No CSM): the leader gets one line on
+# where a manager is needed, not the lists (21 Nov 2026, the leadership assessment, step 3)
+ops_lists = false
 scope = "book"
 self_service = true
 outcomes = "by_owner"

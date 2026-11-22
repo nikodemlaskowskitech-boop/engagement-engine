@@ -240,6 +240,19 @@ print(json.dumps(r))`;
     const wide = await pw.evaluate(() => document.documentElement.scrollWidth);
     check(await pw.isVisible("#doors") && wide <= 390, `phone: the doors fit, no side scroll (${wide} px)`);
     await pw.close();
+    // the managers' queues (21 Nov 2026, the leadership assessment, step 3): the leader gets one
+    // line on where a manager is needed, a manager's page keeps the lists
+    {
+      const q = await ctx.newPage(); const eq = []; q.on("pageerror", (e) => eq.push(e.message));
+      await q.goto(base + "leader.html#lead"); await q.waitForTimeout(800);
+      const L = await q.evaluate(() => ({ line: document.getElementById("ld-ops-line").hidden ? "" : document.getElementById("ld-ops-finding").textContent,
+        lists: !document.getElementById("ld-ops-reach").hidden || !document.getElementById("ld-ops-grid").hidden }));
+      check(!L.lists && /past their reach deadline|waiting \d+\+ days|with no CSM/.test(L.line), "the leader: no queue lists, one line on where a manager is needed", L.line);
+      await q.goto(base + "mgr_james.html#lead"); await q.waitForTimeout(800);
+      const M = await q.evaluate(() => ({ line: !document.getElementById("ld-ops-line").hidden, reach: !document.getElementById("ld-ops-reach").hidden, grid: !document.getElementById("ld-ops-grid").hidden }));
+      check(!M.line && M.reach && M.grid && !eq.length, "a manager: the full queue lists, no summary line, no script errors", JSON.stringify(M) + eq.join(" | "));
+      await q.close();
+    }
     // a CSM's page has its own walkthrough (21 Nov 2026): where I stand, what's coming, what to pick
     // up, the account, then the leader's page it rolls up to; each step lights up its part
     const p2 = await ctx.newPage(); const e2 = []; p2.on("pageerror", (e) => e2.push(e.message));

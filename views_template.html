@@ -580,13 +580,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <h2 id="ld-trail-title"></h2>
         <div class="tablewrap" id="ld-trail-list"></div>
       </div>
-      <div class="panel">
+      <!-- the managers' work queues (21 Nov 2026, the leadership assessment, step 3): on a manager's
+           page in full; the leader gets one line, naming the team, only when a queue needs a manager -->
+      <div class="panel" id="ld-ops-line" hidden>
+        <h2>Where a manager is needed</h2>
+        <p class="finding small" id="ld-ops-finding"></p>
+        <p class="note">Each manager's page lists the accounts and tasks. The leader sees the pattern, not the queue.</p>
+      </div>
+      <div class="panel" id="ld-ops-reach">
         <h2>Not reached: accounts at Act past their deadline</h2>
         <p class="finding small" id="ld-reach-finding"></p>
         <div class="examples tablewrap" id="ld-reach"></div>
         <p class="note">Every account at churn or expansion Act with a CSM or a pool, judged on the account: reached means a call or meeting logged since its signal (or up to <span id="ld-reach-early"></span> days before it), within its tier's days (<span id="ld-reach-days"></span>). A task claimed in Slack doesn't count, and an account still counts when its task is missing.</p>
       </div>
-      <div class="grid2">
+      <div class="grid2" id="ld-ops-grid">
         <div class="panel">
           <h2>Not picked up: work waiting for someone</h2>
           <p class="finding small" id="ld-queue-finding"></p>
@@ -2987,6 +2994,27 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       showList(x.dataset.move === "worse" ? `Got worse since ${fmt(baseDay)}` : `Got better since ${fmt(baseDay)}`, x.dataset.move === "worse" ? worse : better)));
     $("ld-move-note").textContent = `Churn status ${MOVE_WEEKS} weeks ago against today, from the weekly replay of the flags: Act above Watch and Shelfware above no flag. Enterprise and Scale only; accounts not yet live ${MOVE_WEEKS} weeks ago are new, not "worse", and are left out. Better is not saved: the renewal decides.`;
   }
+  // The leader's one line on the managers' queues (step 3): only what is past its line (Act
+  // accounts past their reach deadline, tasks waiting STALE+ days, Enterprise accounts with no
+  // CSM), and whose team holds most of it. Pages with ops_lists keep the full panels instead.
+  function drawOpsLine(late, stale, noCsm, STALE) {
+    const full = !PAGE || PAGE.ops_lists !== false;
+    $("ld-ops-reach").hidden = $("ld-ops-grid").hidden = !full;
+    const line = $("ld-ops-line"); line.hidden = full || !(late.length || stale.length || noCsm.length);
+    if (line.hidden) return;
+    const mgrOf = (id) => (teamById[id] || {}).manager;
+    const tally = {};
+    for (const r of late) { const m = mgrOf(r.routed_to); if (m) tally[m] = (tally[m] || 0) + 1; }
+    for (const t of stale) { const m = mgrOf(t.routed_to); if (m) tally[m] = (tally[m] || 0) + 1; }
+    const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+    const total = late.length + stale.length;
+    const bits = [];
+    if (late.length) bits.push(`${plural(late.length, "account")} at Act past ${late.length === 1 ? "its" : "their"} reach deadline`);
+    if (stale.length) bits.push(`${plural(stale.length, "task")} waiting ${STALE}+ days`);
+    if (noCsm.length) bits.push(`${plural(noCsm.length, "Enterprise account")} with no CSM (${money(noCsm.reduce((t, a) => t + a.arr, 0))} ARR)`);
+    $("ld-ops-finding").textContent = bits.join("; ") + "." +
+      (top && total ? ` ${top[1]} of the ${total} late items sit with ${(ownerName[top[0]] || top[0]).replace(/ \(manager\)$/, "")}'s team.` : "");
+  }
   function drawLeadership() {
     if (!$("view-lead")) return;                     // not on this person's page
     const accs = D.accounts.filter(inSeg), person = (a) => a.tier !== "Self-service";
@@ -3054,6 +3082,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       { label: "ARR", r: true, get: (a) => money(a.arr) },
     ], "Every Enterprise account in this segment has a CSM.", 5);
     drawLeadTrends(STALE, who);
+    drawOpsLine(late, stale, noCsm, STALE);
     // the trail: four stages, each a cairn whose colour and height say how urgent it is
     const pct = (n, d) => d ? `${n} of ${d} (${Math.round(100 * n / d)}%)` : `${n}`;
     const notCalled = act.filter((a) => !called(a)), noPlan = act.filter((a) => !planned(a));
