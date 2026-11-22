@@ -747,6 +747,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   filters, so teams compare. A team name zooms the whole page (seg.manager); Operational's
   per-team funnel rows zoom the same way. role_pages_test checks the rows, the zoom and that
   Operational follows (per person).
+  By person (22 Nov 2026, Nikodem): zoomed to a team (or on a manager's page) the table is
+  "<manager>'s team, by person": the account's owner today; rates under min_compare customers
+  greyed, not hidden; the finding names whose book lost the most money. A person zooms to their
+  book (seg.owner, the team kept). Managers get [roles.manager] retention = true: roles.py keeps
+  their scope's accounts in cohort, renewals_ahead, call_accounts and call_waiting, and drops the
+  book's totals (year's sums, prior, this_bridge, calls, call_value, forecast but its days).
+  roles_test checks no stray account and no book total; role_pages_test the person rows and zoom.
   My work (18 Nov 2026, Nikodem's CSM route: start on My book, pick up from the queue, know the
   account, act): on a CSM's or pool member's page the Tasks tab is "My work", the queue.
   Columns: account, ARR, at stake (the flag's value: Act the whole ARR, Watch/Shelfware the

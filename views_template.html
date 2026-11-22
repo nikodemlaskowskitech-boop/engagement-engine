@@ -546,7 +546,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <div class="tiles" id="cs-tiles"></div>
         <p class="note" id="cs-recon"></p>
         <div class="panel" id="cs-teams-panel">
-          <h2>By team: is retention the same everywhere?</h2>
+          <h2 id="cs-teams-title">By team: is retention the same everywhere?</h2>
           <p class="finding small" id="cs-teams-finding"></p>
           <div class="tablewrap" id="cs-teams"></div>
           <p class="note" id="cs-teams-note"></p>
@@ -3232,28 +3232,44 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // GRR and NRR by team (22 Nov 2026, the zoom): the same cohort split by the account's manager;
   // a team name zooms the whole page to it. Self-service has no team: its own row.
   const zoomTeam = (m) => { for (const k in seg) seg[k] = ""; seg.manager = m; saveSeg(); redraw(); };
+  const zoomPerson = (o) => { seg.owner = o; saveSeg(); redraw(); };      // keeps the team: Whole book goes back up
   function drawTeamsRetention() {
-    const all = RET.cohort || [], sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
-    const teamOf = (id) => { const a = accOfAny(id); return a && a.tier !== "Self-service" ? (a.manager || "") : "ss"; };
+    const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
+    // zoomed to one team (or a manager's own page): one row per person instead, the drill-down
+    const mgr = seg.manager || (teamById[seg.owner] || {}).manager || "", byPerson = !!mgr;
+    const teamOf = byPerson
+      ? (id) => { const a = accOfAny(id); return a && a.tier !== "Self-service" ? (a.owner_id || "") : "ss"; }
+      : (id) => { const a = accOfAny(id); return a && a.tier !== "Self-service" ? (a.manager || "") : "ss"; };
+    const inTeam = (id) => { const a = accOfAny(id); return !!a && a.manager === mgr; };
+    const all = (RET.cohort || []).filter((r) => !byPerson || inTeam(r[0]));
     const keys = [...new Set(all.map((r) => teamOf(r[0])))].sort((a, b) => (a === "ss") - (b === "ss") || (a ? managerName(a) : "~").localeCompare(b ? managerName(b) : "~"));
-    const name = (k) => k === "ss" ? "Self-service (no team)" : k ? `${managerName(k)}'s team` : "No manager";
+    const name = (k) => k === "ss" ? "Self-service (no team)" : byPerson ? (ownerName[k] || k || "No owner") : k ? `${managerName(k)}'s team` : "No manager";
+    $("cs-teams-title").textContent = byPerson ? `${managerName(mgr)}'s team, by person` : "By team: is retention the same everywhere?";
     const rows = keys.map((k) => {
       const c = all.filter((r) => teamOf(r[0]) === k), st = sum(c, (r) => r[2]), en = sum(c, (r) => r[3]);
       const lost = sum(c.filter((r) => r[1] === "churned"), (r) => r[2]) + sum(c.filter((r) => r[1] === "contraction"), (r) => r[2] - r[3]);
-      const ahead = (RET.renewals_ahead || []).filter((r) => teamOf(r[0]) === k);
+      const ahead = (RET.renewals_ahead || []).filter((r) => (!byPerson || inTeam(r[0])) && teamOf(r[0]) === k);
       return { k, n: c.length, st, grr: st ? (st - lost) / st : null, nrr: st ? en / st : null, risk: sum(ahead, (r) => r[3]) };
     });
     const few = (r) => r.n < MIN_COMPARE;
     const teams = rows.filter((r) => r.k !== "ss" && !few(r) && r.grr != null).sort((a, b) => a.grr - b.grr);
-    $("cs-teams-finding").textContent = teams.length >= 2
+    // by person: rates on 5 to 10 customers swing with one account, so the finding names money, not a rank
+    const people = rows.filter((r) => r.k !== "ss" && r.st);
+    const lostMost = people.map((r) => ({ ...r, lost: r.st * (1 - r.grr) })).sort((a, b) => b.lost - a.lost)[0];
+    $("cs-teams-finding").textContent = byPerson
+      ? (lostMost && lostMost.lost > 0 ? `${name(lostMost.k)}'s book lost the most this year: ${money(lostMost.lost)} of ${money(lostMost.st)} (GRR ${pct1(lostMost.grr)}, ${lostMost.n} customers). A conversation about those accounts, not a ranking.` : "No ARR lost on this team's accounts this year.")
+      : teams.length >= 2
       ? `${name(teams[0].k)} kept ${pct1(teams[0].grr)} of its ARR (GRR), ${name(teams[teams.length - 1].k)} ${pct1(teams[teams.length - 1].grr)}: ${Math.abs(100 * (teams[teams.length - 1].grr - teams[0].grr)).toFixed(1)} points apart.`
       : "Too few teams with enough customers to compare.";
-    const cur = seg.manager;
-    $("cs-teams").innerHTML = `<table><thead><tr><th>Team</th><th class="r">Customers on day one</th><th class="r">ARR on day one</th><th class="r">GRR</th><th class="r">NRR</th><th class="r">Renewals at risk, next two quarters</th></tr></thead><tbody>` +
+    const cur = byPerson ? seg.owner : seg.manager;
+    $("cs-teams").innerHTML = `<table><thead><tr><th>${byPerson ? "Person" : "Team"}</th><th class="r">Customers on day one</th><th class="r">ARR on day one</th><th class="r">GRR</th><th class="r">NRR</th><th class="r">Renewals at risk, next two quarters</th></tr></thead><tbody>` +
       rows.map((r) => `<tr${r.k === cur ? ' class="on"' : ""}><td>${r.k && r.k !== "ss" ? `<button class="link" data-zoom="${esc(r.k)}">${esc(name(r.k))}</button>` : esc(name(r.k))}</td><td class="r num">${r.n}</td><td class="r num">${money(r.st)}</td>` +
-        (few(r) ? `<td class="r muted" colspan="2">too few to tell</td>` : `<td class="r num">${pct1(r.grr)}</td><td class="r num">${pct1(r.nrr)}</td>`) + `<td class="r num">${money(r.risk)}</td></tr>`).join("") + "</tbody></table>";
-    $("cs-teams").querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => zoomTeam(b.dataset.zoom)));
-    $("cs-teams-note").textContent = `The whole book's cohort, whatever the filters, so teams compare. A team is its accounts' manager today: an account that moved teams counts where it is now. Fewer than ${MIN_COMPARE} customers: too few to tell. Click a team to zoom the whole page to it.`;
+        (few(r) && !byPerson ? `<td class="r muted" colspan="2">too few to tell</td>`
+          : few(r) ? `<td class="r num muted">${pct1(r.grr)}</td><td class="r num muted">${pct1(r.nrr)}</td>` : `<td class="r num">${pct1(r.grr)}</td><td class="r num">${pct1(r.nrr)}</td>`) + `<td class="r num">${money(r.risk)}</td></tr>`).join("") + "</tbody></table>";
+    $("cs-teams").querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => byPerson ? zoomPerson(b.dataset.zoom) : zoomTeam(b.dataset.zoom)));
+    $("cs-teams-note").textContent = byPerson
+      ? `The team's whole cohort, whatever the other filters. A person is the account's owner today: an account handed over counts with its new owner, so read it with the handovers in mind. Under ${MIN_COMPARE} customers the rates are greyed: one account moves them by 10 points or more. Click a person to zoom to their book. On a CSM's own page these stay team totals.`
+      : `The whole book's cohort, whatever the filters, so teams compare. A team is its accounts' manager today: an account that moved teams counts where it is now. Fewer than ${MIN_COMPARE} customers: too few to tell. Click a team to zoom the whole page to it, and again on a person.`;
   }
   function drawCase() {
     if ($("ld-perf")) $("ld-perf").hidden = $("cs-method-panel").hidden = !RET;   // leader only: managers' pages carry no retention data
