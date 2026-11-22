@@ -260,6 +260,34 @@ print(json.dumps(r))`;
       check(!M.line && M.reach && M.grid && !eq.length, "a manager: the full queue lists, no summary line, no script errors", JSON.stringify(M) + eq.join(" | "));
       await q.close();
     }
+    // the four kinds of work (22 Nov 2026): Anna marks a to-do not needed (it leaves My work and the
+    // history says so), plans a next step with an aim, and answers whether it achieved it
+    {
+      const w = await ctx.newPage(); const ew = []; w.on("pageerror", (e) => ew.push(e.message));
+      await w.goto(base + csmDoor); await w.waitForTimeout(900);
+      await w.evaluate(() => localStorage.removeItem("cockpit-sandbox-decisions")); await w.reload(); await w.waitForTimeout(900);
+      await w.click("#tab-tasks"); await w.waitForTimeout(300);
+      const ids = () => w.$$eval("table.queue tbody tr:not(.detail)", (r) => r.map((x) => x.querySelector("[data-open]").dataset.open));
+      const before = await ids();
+      await w.click(`table.queue [data-open="${before[0]}"]`); await w.waitForTimeout(500);
+      await w.click("#tl-why [data-decline]"); await w.selectOption("#tl-why .dc-reason", "other"); await w.click("#tl-why .dc-save"); await w.waitForTimeout(200);
+      const needNote = /note/i.test(await w.textContent("#tl-why .dc-msg"));
+      await w.selectOption("#tl-why .dc-reason", "handled"); await w.click("#tl-why .dc-save"); await w.waitForTimeout(500);
+      const why = (await w.textContent("#tl-why")).replace(/\s+/g, " "), hist = await w.textContent("#tl-done");
+      await w.click("#tab-tasks"); await w.waitForTimeout(300);
+      const after = await ids(), fin = await w.textContent("#tk-finding");
+      check(needNote && /Not needed: Already handled elsewhere/.test(why) && /Marked not needed/.test(hist) && after.length === before.length - 1 && !after.includes(before[0]) && /marked not needed/.test(fin),
+        `a CSM marks a to-do not needed (\"Other\" asks for a note): it leaves My work (${before.length} -> ${after.length}) and the history says so`, `${why.slice(0, 160)} | ${fin}`);
+      await w.click(`table.queue [data-open="${after[0] || before[1]}"]`).catch(() => {}); await w.waitForTimeout(500);
+      await w.fill("#ns-due", await w.getAttribute("#ns-due", "min")); await w.selectOption("#ns-aim", "volume"); await w.click("#ns-save"); await w.waitForTimeout(500);
+      const asked = !!(await w.$('#tl-next [data-aim="partly"]'));
+      if (asked) { await w.click('#tl-next [data-aim="partly"]'); await w.waitForTimeout(500); }
+      const nx = (await w.textContent("#tl-next")).replace(/\s+/g, " ");
+      check(asked && /Aim: Confirm the renewal volume/.test(nx) && /Did it achieve its aim\? Partly/.test(nx) && /Aim checked/.test(await w.textContent("#tl-done")) && !ew.length,
+        "a next step carries its aim; once its date comes the owner is asked, answers \"Partly\", and the history records it; no script errors", nx.slice(0, 200) + ew.join(" | "));
+      await w.evaluate(() => localStorage.removeItem("cockpit-sandbox-decisions"));
+      await w.close();
+    }
     // a CSM's page has its own walkthrough (21 Nov 2026): where I stand, what's coming, what to pick
     // up, the account, then the leader's page it rolls up to; each step lights up its part
     const p2 = await ctx.newPage(); const e2 = []; p2.on("pageerror", (e) => e2.push(e.message));

@@ -135,8 +135,9 @@ def connect():
                 user_id:    'VARCHAR',
                 -- status and manager: a manager's decision in the cockpit (cockpit_sync.py);
                 -- amount: a renewal forecast's value (forecast_set); due: a next step's
-                -- date (next_step_set); both from the cockpit
-                properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE, due VARCHAR)',
+                -- date (next_step_set); both from the cockpit; intended: what a next step
+                -- should achieve, or the aim an outcome check is about ([work], 22 Nov 2026)
+                properties: 'STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE, due VARCHAR, intended VARCHAR)',
                 context:    'STRUCT(source VARCHAR)'
             }})
         """)
@@ -147,7 +148,7 @@ def connect():
             CREATE VIEW engagement AS
             SELECT NULL::VARCHAR AS event_id, NULL::VARCHAR AS event_name, NULL::VARCHAR AS event_type,
                    NULL::TIMESTAMP AS "timestamp", NULL::VARCHAR AS account_id, NULL::VARCHAR AS user_id,
-                   NULL::STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE, due VARCHAR) AS properties,
+                   NULL::STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE, due VARCHAR, intended VARCHAR) AS properties,
                    NULL::STRUCT(source VARCHAR) AS context, NULL::DATE AS event_date
             WHERE false
         """)

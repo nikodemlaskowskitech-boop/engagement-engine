@@ -134,7 +134,9 @@ engine runs.
 | `task_claimed` | owner_id, topic, slack_user | Someone took a task in Slack |
 | `task_assigned` | owner_id (the new owner), topic (the flag), status, manager | A manager gave a task to someone else in the cockpit |
 | `handback_approved` | owner_id (the manager), topic `handback`, slack_user or manager | A manager approved handing a follow-up back to the pool |
-| `next_step_set` | owner_id (who), topic `next_step`, status (call, qbr, email, internal), due (date), note, outcome (owner or manager) | The next step planned on an account ("action planned"). Internal |
+| `next_step_set` | owner_id (who), topic `next_step`, status (call, qbr, email, internal), due (date), note, outcome (owner or manager), intended (what it should achieve: [work] intended_outcomes, optional) | The next step planned on an account ("action planned"). Internal |
+| `recommendation_declined` | owner_id (who), topic (the flag), status (its status), outcome (the reason: [work] decline_reasons), due (snooze date, for "later"), note (required for "other") | A flag's to-do judged not needed (22 Nov 2026). It leaves My work while the flag keeps that status, or until the snooze date. Internal |
+| `outcome_checked` | owner_id (who), topic `outcome_check`, intended (the aim), status (yes, partly, no: [work] outcome_results), note, outcome (owner or manager) | Did a next step achieve its aim, answered by its owner; the team lead sees it, nothing to approve (22 Nov 2026). Internal |
 | `forecast_set` | owner_id (who), topic `renewal_forecast`, status (renew, downsize, churn), amount (value expected at renewal), note (reason), outcome (owner or manager) | An owner or their manager set the account's renewal forecast in the cockpit. Internal: never a customer touch |
 
 Topics that matter: `getting_started` (journeys), `churn_call`, `growth_call`,

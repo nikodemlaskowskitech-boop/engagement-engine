@@ -40,6 +40,7 @@ count it.
 | ARR, ARR at risk, upside | Yes | Yes | Yes | Yes |
 | Colleagues' renewal forecasts | Yes | Yes | Yes, read-only | Yes, read-only |
 | Set a forecast or next step | No | Team's accounts | Own accounts | Own accounts |
+| Mark a to-do not needed, check a next step's aim | No | Team's accounts | Own accounts | Own accounts |
 | Reassign a task, approve a hand-back | No | Team's tasks | No | No |
 | Confirm a handover brief | No | Team's accounts | Own accounts (outgoing owner) | Own accounts |
 | "Did it work?" | By owner | By owner, their team | No (not a CSM tab since 21 Nov 2026) | No |
@@ -55,6 +56,9 @@ page).
 
 ## Why each choice
 
+- **The owner checks an aim; the team lead sees it** (22 Nov 2026). Did a next
+  step achieve its aim is the CSM's own answer. The team lead has visibility,
+  never an approval step: "approval feels like micromanaging" (Nikodem).
 - **The leader sees where a manager is needed, not the queues** (21 Nov 2026).
   Not reached, Not picked up and No CSM are a manager's work lists; the leader's
   page has one line naming the team that holds most of what's late.

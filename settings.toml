@@ -284,7 +284,7 @@ tabs = ["tasks", "lead", "overview", "outcomes", "team", "book", "timeline", "on
 scope = "team"
 self_service = true
 outcomes = "by_owner"
-edit = { forecast = "team", next_step = "team", assign = "team", handback = "team", handover_confirm = "team" }
+edit = { forecast = "team", next_step = "team", assign = "team", handback = "team", handover_confirm = "team", decline = "team", outcome_check = "team" }
 
 [roles.csm]
 # three places (20 Nov 2026, Nikodem's CSM route): My book (where I stand), My work (what to pick
@@ -293,14 +293,22 @@ tabs = ["mybook", "tasks", "timeline"]
 scope = "team"
 self_service = false
 outcomes = "team_total"              # account assignment may drive commission: no per-owner results
-edit = { forecast = "own", next_step = "own", handover_confirm = "own" }
+edit = { forecast = "own", next_step = "own", handover_confirm = "own", decline = "own", outcome_check = "own" }
 
 [roles.member]                       # a Scale pool member: like a CSM, on the accounts named to them
 tabs = ["mybook", "tasks", "timeline"]
 scope = "team"
 self_service = false
 outcomes = "team_total"
-edit = { forecast = "own", next_step = "own", handover_confirm = "own" }
+edit = { forecast = "own", next_step = "own", handover_confirm = "own", decline = "own", outcome_check = "own" }
+
+[work]
+# The four kinds of work (22 Nov 2026, Nikodem): a recommendation (the engine's to-do on a flag)
+# can be declined with a reason; a next step says what it should achieve; the owner checks later
+# whether it did (the team lead sees it, no approval). The keys are what the events carry.
+decline_reasons = { handled = "Already handled elsewhere", context = "The customer context says no", data = "The data is wrong", later = "Not now (snooze until a date)", other = "Other" }
+intended_outcomes = { ramp = "Agree a ramp or adoption plan", volume = "Confirm the renewal volume", unblock = "Unblock a technical issue", growth = "Build the growth case", sponsor = "Re-engage a sponsor", other = "Other" }
+outcome_results = { yes = "Achieved", partly = "Partly", no = "Not achieved" }
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo

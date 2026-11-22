@@ -18,6 +18,15 @@ the same way Slack clicks are written:
   next_step_set       the next step an owner or manager planned ("action
                       planned"): status = call | qbr | email | internal,
                       due = its date, note, owner_id = who, outcome = role
+                      intended = what it should achieve ([work] intended_outcomes,
+                      optional, 22 Nov 2026)
+  recommendation_declined  a flag's to-do judged not needed: topic = the flag,
+                      status = its status, outcome = the reason ([work]
+                      decline_reasons), due = the snooze date for "later",
+                      note (required for "other"), owner_id = who
+  outcome_checked     did the last next step achieve its aim: status = yes |
+                      partly | no, intended = the aim it was about, note,
+                      owner_id = who. Visible to the team lead, never approved
 
 They go to data/engagement/cockpit.jsonl, rewritten on every run from the
 whole decisions file, so running twice never doubles anything. Decisions made
@@ -56,9 +65,13 @@ CALLS = {"renew", "downsize", "churn"}                  # a renewal forecast
 STEP_TYPES = {"call", "qbr", "email", "internal"}       # a next step (the page's STEP_TYPES)
 ROLES = {"owner", "manager"}
 FLAGS = {"activation", "churn", "expansion", "qbr", "journey"}   # the task flags (cairnpath_db.py flag_names)
+WORK = SETTINGS.get("work", {})
+REASONS = set(WORK.get("decline_reasons", {}))          # why a recommendation isn't needed
+AIMS = set(WORK.get("intended_outcomes", {}))           # what a next step should achieve
+RESULTS = set(WORK.get("outcome_results", {}))          # did it
 TEXT_FIELDS = ("kind", "account_id", "role", "by", "manager", "to_owner", "from_owner", "call", "type",
-               "due", "decided_at", "flag", "status", "reason", "note", "as_of", "decided_by")
-KINDS = {"assign", "handback", "forecast", "next_step", "handover_confirm"}   # handover_confirm: the page's own
+               "due", "decided_at", "flag", "status", "reason", "note", "as_of", "decided_by", "intended", "result")
+KINDS = {"assign", "handback", "forecast", "next_step", "handover_confirm", "decline", "outcome_check"}   # handover_confirm: the page's own
 ISO_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
@@ -153,6 +166,24 @@ def problem(d, accounts, team, kinds=None):
         if not clean(d.get("reason")):
             return "no reason"
         return None
+    if kind == "decline":
+        if d.get("flag") not in FLAGS or not d.get("status"):
+            return "not a known flag, or no status"
+        if d.get("reason") not in REASONS:
+            return f"unknown reason {str(d.get('reason'))[:30]!r}"
+        if d["reason"] == "later" and not is_day(d.get("due")):
+            return "a snooze needs a date"
+        if d["reason"] == "other" and not clean(d.get("note")):
+            return "'other' needs a note"
+        return None
+    if kind == "outcome_check":
+        if d.get("result") not in RESULTS:
+            return f"unknown result {str(d.get('result'))[:30]!r}"
+        if d.get("intended") not in AIMS:
+            return f"unknown aim {str(d.get('intended'))[:30]!r}"
+        return None
+    if d.get("intended") is not None and d["intended"] not in AIMS:
+        return f"unknown aim {str(d.get('intended'))[:30]!r}"
     if d.get("type") not in STEP_TYPES:
         return f"unknown next step {str(d.get('type'))[:30]!r}"
     if not is_day(d.get("due")):
@@ -179,8 +210,8 @@ def build(decisions, as_of, run_date, accounts, team, kinds=None):
     # The latest decision per task wins (a manager can change their mind)
     latest, stale, forecasts = {}, 0, []
     for d in sorted(good, key=lambda d: d["decided_at"]):
-        if d["kind"] in ("forecast", "next_step"):
-            forecasts.append(d)
+        if d["kind"] in ("forecast", "next_step", "decline", "outcome_check"):
+            forecasts.append(d)                 # every one, whatever the data: they're the history
             continue
         if d.get("as_of") != as_of:
             stale += 1
@@ -204,6 +235,24 @@ def build(decisions, as_of, run_date, accounts, team, kinds=None):
             "context": {"source": "cockpit"},
         })
     for d in forecasts:                     # forecasts and next steps: every one, for the history
+        if d["kind"] in ("decline", "outcome_check"):
+            dec = d["kind"] == "decline"
+            events.append({
+                "event_id": f"cockpit-{d['kind']}-{d['account_id']}-{d['decided_at']}",
+                "event_name": "recommendation_declined" if dec else "outcome_checked",
+                "event_type": "engagement",
+                "timestamp": f"{run_date}T{d['decided_at'][11:19]}Z",
+                "account_id": d["account_id"],
+                "user_id": None,
+                "properties": {"owner_id": d["by"], "topic": clean(d["flag"]) if dec else "outcome_check",
+                               "outcome": d["reason"] if dec else d["role"], "note": clean(d.get("note")),
+                               "slack_user": None, "status": clean(d["status"]) if dec else d["result"],
+                               "manager": None, "amount": None,
+                               "due": d.get("due") if dec and d["reason"] == "later" else None,
+                               "intended": None if dec else d["intended"]},
+                "context": {"source": "cockpit"},
+            })
+            continue
         plan = d["kind"] == "next_step"
         events.append({
             "event_id": f"cockpit-{d['kind']}-{d['account_id']}-{d['decided_at']}",
@@ -216,7 +265,8 @@ def build(decisions, as_of, run_date, accounts, team, kinds=None):
                            "outcome": d["role"], "note": clean(d.get("note") if plan else d.get("reason")),
                            "slack_user": None, "status": d["type"] if plan else d["call"],
                            "manager": None, "amount": None if plan else d.get("amount"),
-                           "due": d["due"] if plan else None},
+                           "due": d["due"] if plan else None,
+                           "intended": d.get("intended") if plan else None},
             "context": {"source": "cockpit"},
         })
     return events, skipped, stale
@@ -257,7 +307,9 @@ def main():
     print(f"Cockpit decisions for the data as of {as_of}: {assigned} reassigned, "
           f"{handbacks} hand-backs approved, "
           f"{sum(e['event_name'] == 'forecast_set' for e in events)} renewal forecasts, "
-          f"{sum(e['event_name'] == 'next_step_set' for e in events)} next steps"
+          f"{sum(e['event_name'] == 'next_step_set' for e in events)} next steps, "
+          f"{sum(e['event_name'] == 'recommendation_declined' for e in events)} recommendations declined, "
+          f"{sum(e['event_name'] == 'outcome_checked' for e in events)} outcomes checked"
           + (f" ({stale} from older data skipped)" if stale else ""))
     for e in events:
         p = e["properties"]
@@ -267,6 +319,13 @@ def main():
         if e["event_name"] == "forecast_set":
             amount = f" {p['amount']:,.0f}" if p["amount"] is not None else ""
             print(f"  {e['account_id']}  forecast   {p['status']}{amount}  (by {p['owner_id']}, {p['outcome']})")
+            continue
+        if e["event_name"] == "recommendation_declined":
+            print(f"  {e['account_id']}  declined   {p['topic']} {p['status']}: {p['outcome']}"
+                  f"{' until ' + p['due'] if p['due'] else ''}  (by {p['owner_id']})")
+            continue
+        if e["event_name"] == "outcome_checked":
+            print(f"  {e['account_id']}  aim        {p['intended']}: {p['status']}  (by {p['owner_id']})")
             continue
         what = f"to {p['owner_id']}" if e["event_name"] == "task_assigned" else "hand-back approved"
         print(f"  {e['account_id']}  {p['topic']:<10} {p['status']:<28} {what}  (by {p['manager']})")
