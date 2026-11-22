@@ -209,6 +209,9 @@ export = {
     "forecasts": facts.forecasts(con),
     # next steps planned in the cockpit ("action planned"), oldest first
     "next_steps": facts.next_steps(con),
+    # the four kinds of work (22 Nov 2026): recommendations declined, aims checked
+    "declines": facts.declines(con),
+    "outcome_checks": facts.outcome_checks(con),
     "onboarding": rows(con, "SELECT * FROM onboarding ORDER BY account_id"),
     "time_to_action": facts.time_to_action(con),
     "team": rows(con, "SELECT * FROM cs_team ORDER BY owner_type, owner_id"),
@@ -242,6 +245,7 @@ export = {
                  "my_week_days": SETTINGS["cockpit"]["my_week_days"],
                  "research_days": SETTINGS["research"]["days"],
                  "research_growth_themes": SETTINGS["research"]["growth_themes"],
+                 "work": SETTINGS["work"],          # decline reasons, intended outcomes, results (22 Nov 2026)
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"],
                  "follow_up_days": SETTINGS["follow_ups"]["after_days"],

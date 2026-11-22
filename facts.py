@@ -131,7 +131,7 @@ def touches(con, account_id=None):
                properties.topic AS topic, properties.owner_id AS owner_id,
                context.source AS source, properties.outcome AS outcome, properties.note AS note
         FROM engagement
-        WHERE event_name NOT IN ('forecast_set', 'next_step_set')   -- internal: exported apart
+        WHERE event_name NOT IN ('forecast_set', 'next_step_set', 'recommendation_declined', 'outcome_checked')   -- internal: exported apart
         {only}
         -- ties on the same minute broken by account and event: the same data always
         -- exports in the same order, so two runs can be compared file to file
@@ -155,9 +155,33 @@ def next_steps(con, account_id=None):
     return rows(con, f"""
         SELECT e.account_id, e."timestamp" AS decided_at, e.properties.owner_id AS by,
                e.properties.outcome AS role, e.properties.status AS type,
-               e.properties.due AS due, e.properties.note AS note, a.as_of_date AS as_of
+               e.properties.due AS due, e.properties.note AS note, a.as_of_date AS as_of,
+               e.properties.intended AS intended
         FROM engagement e, as_of a WHERE e.event_name = 'next_step_set' {only}
         ORDER BY e."timestamp", e.event_id""")
+
+
+def declines(con, account_id=None):
+    """Recommendations judged not needed (22 Nov 2026), oldest first: which flag's to-do, the
+    reason ([work] decline_reasons), a snooze date for "later", who."""
+    only = f"AND account_id = '{_id(account_id)}'" if account_id else ""
+    return rows(con, f"""
+        SELECT account_id, "timestamp" AS decided_at, properties.owner_id AS by,
+               properties.topic AS flag, properties.status AS status,
+               properties.outcome AS reason, properties.due AS due, properties.note AS note
+        FROM engagement WHERE event_name = 'recommendation_declined' {only}
+        ORDER BY "timestamp", event_id""")
+
+
+def outcome_checks(con, account_id=None):
+    """Did a next step achieve its aim (22 Nov 2026), oldest first: the aim, yes | partly | no, who."""
+    only = f"AND account_id = '{_id(account_id)}'" if account_id else ""
+    return rows(con, f"""
+        SELECT account_id, "timestamp" AS decided_at, properties.owner_id AS by,
+               properties.outcome AS role, properties.intended AS intended,
+               properties.status AS result, properties.note AS note
+        FROM engagement WHERE event_name = 'outcome_checked' {only}
+        ORDER BY "timestamp", event_id""")
 
 
 def tasks(con, account_id=None, owner=None):

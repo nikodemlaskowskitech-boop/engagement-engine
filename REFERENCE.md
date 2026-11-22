@@ -933,6 +933,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   accounts; cs_team owner_type picks csm or member). Who decided stays
   self-declared (THREAT_MODEL.md).
   `tests/cockpit_sync_test.py`: no DuckDB, a small made-up CRM.
+  The four kinds of work, first step (22 Nov 2026, Nikodem's answers in the assessment, section
+  L): two new decisions and an aim. "decline" marks a flag's to-do not needed with a [work]
+  decline_reasons key ("later" needs a snooze date, "other" a note) -> recommendation_declined;
+  "outcome_check" answers whether a next step achieved its aim (yes, partly, no) ->
+  outcome_checked; a next step may carry "intended" ([work] intended_outcomes). Checked like
+  every decision (rights from [roles] edit: decline and outcome_check, own for a CSM, team for
+  a team lead). On the page: "Not needed?" under a to-do in Why now (the task leaves My work while
+  the flag keeps its status, or until the snooze date), "What should this achieve?" on a next
+  step, and "Did it achieve its aim?" once its date has come; both go into the account's
+  history. The public site drops their notes (typed by a person). facts.declines and
+  facts.outcome_checks feed the export; cairnpath_db's engagement struct gains intended.
 - `pull_clicks.py`: first step of run_all. Gathers the Slack clicks the AWS
   listener saved under [aws] slack_clicks_prefix into
   data/engagement/slack_clicks.jsonl (oldest first; rewritten only when a

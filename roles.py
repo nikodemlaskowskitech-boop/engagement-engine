@@ -28,7 +28,7 @@ TEMPLATE = Path(__file__).resolve().parent / "views_template.html"
 SEARCH_TEMPLATE = Path(__file__).resolve().parent / "site_search.html"   # the public site's search page
 
 # what each part of the export is keyed by: rows with an account_id outside the scope go
-ACCOUNT_ROWS = ["touches", "forecasts", "next_steps", "onboarding", "time_to_action",
+ACCOUNT_ROWS = ["touches", "forecasts", "next_steps", "declines", "outcome_checks", "onboarding", "time_to_action",
                 "churn_signals", "renewals", "tasks"]
 
 
@@ -259,6 +259,9 @@ def build(export, template=None, out=PAGES, sandbox=False):
         if sandbox:    # a note typed in Slack may hold anything: never public. The generator's own
                        # notes (source cs_history) are made up, so the demo may show them
             page["touches"] = [t if t.get("source") == "cs_history" else {**t, "note": None} for t in page.get("touches", [])]
+            # the same for a decline's or an outcome check's note: typed by a person, never public
+            for k in ("declines", "outcome_checks"):
+                page[k] = [{**r, "note": None} for r in page.get(k, [])]
         meta["sandbox"] = bool(sandbox)
         if sandbox and SETTINGS.get("demo", {}).get("author"):      # the public site's who-and-why strip and tour
             # the CSM door: [demo] csm, else the first CSM (a company's own team has no Tom)

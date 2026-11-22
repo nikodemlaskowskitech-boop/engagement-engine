@@ -136,5 +136,34 @@ cs.SETTINGS["roles"] = real
 check(not cs.build([{**REAL[0], "by": "mem_priya"}], AS_OF, RUN, ACCOUNTS, TEAM, {"mem_priya": "member"})[0],
       "a pool member's rights come from [roles.member]: not their account, refused")
 
+print("\nThe four kinds of work (22 Nov 2026): declines, aims and outcome checks")
+DEC = {"kind": "decline", "account_id": "acc_024", "flag": "churn", "status": "Act", "reason": "handled",
+       "by": "csm_mia", "role": "owner", "as_of": AS_OF, "decided_at": AT}
+ev = run([DEC])[0]
+check(len(ev) == 1 and ev[0]["event_name"] == "recommendation_declined" and ev[0]["properties"]["outcome"] == "handled"
+      and ev[0]["properties"]["topic"] == "churn" and ev[0]["properties"]["status"] == "Act",
+      "Mia declines the churn Act to-do on her account: one recommendation_declined event with the reason", ev)
+check(not run([{**DEC, "reason": "lazy"}])[0], "an unknown reason is refused")
+check(not run([{**DEC, "reason": "later"}])[0] and run([{**DEC, "reason": "later", "due": "2026-11-15"}])[0][0]["properties"]["due"] == "2026-11-15",
+      "\"not now\" needs a snooze date, and carries it")
+check(not run([{**DEC, "reason": "other"}])[0] and len(run([{**DEC, "reason": "other", "note": "Merger pending"}])[0]) == 1,
+      "\"other\" needs a note")
+check(not run([{**DEC, "by": "csm_tom"}])[0], "someone else's account: refused")
+check(len(run([{**DEC, "by": "mgr_sophie", "role": "manager"}])[0]) == 1 and not run([{**DEC, "by": "mgr_james", "role": "manager"}])[0],
+      "the team lead may decline on their team's account, another team's lead may not")
+check(not run([{**DEC, "flag": "gossip"}])[0], "an unknown flag is refused")
+STEP = {**REAL[1], "intended": "volume"}
+ev = run([STEP])[0]
+check(len(ev) == 1 and ev[0]["properties"]["intended"] == "volume", "a next step carries what it should achieve", ev)
+check(not run([{**STEP, "intended": "world peace"}])[0], "...an unknown aim is refused")
+check(run([REAL[1]])[0][0]["properties"]["intended"] is None, "...and a next step with no aim still goes through (it's optional)")
+CHK = {"kind": "outcome_check", "account_id": "acc_024", "intended": "volume", "result": "partly", "note": "Agreed 80% of volume",
+       "by": "csm_mia", "role": "owner", "as_of": AS_OF, "decided_at": AT}
+ev = run([CHK])[0]
+check(len(ev) == 1 and ev[0]["event_name"] == "outcome_checked" and ev[0]["properties"]["status"] == "partly"
+      and ev[0]["properties"]["intended"] == "volume", "the owner checks the aim: one outcome_checked event", ev)
+check(not run([{**CHK, "result": "maybe"}])[0] and not run([{**CHK, "intended": None}])[0], "an unknown result, or no aim: refused")
+check(not run([{**CHK, "by": "csm_tom"}])[0], "...and not on someone else's account")
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)

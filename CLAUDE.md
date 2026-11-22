@@ -170,7 +170,10 @@ One JSON event per line, one file per day in `data/events/`.
   renew | downsize | churn, .amount, .note = reason, .owner_id = who,
   .outcome = owner | manager; internal, never a customer touch) and
   next_step_set (action planned: .status = call | qbr | email | internal,
-  .due, .note, .owner_id, .outcome; internal too).
+  .due, .note, .owner_id, .outcome, .intended = its aim; internal too),
+  recommendation_declined (a flag's to-do not needed: .topic = flag, .status,
+  .outcome = reason, .due = snooze) and outcome_checked (did the step achieve
+  its aim: .intended, .status = yes | partly | no). Lists in settings [work].
 
 ## The four flags
 

@@ -144,6 +144,8 @@ dl.facts dd { margin: 0; }
 .why .wn p { margin: 4px 0 0; color: var(--ink-2); }
 .why .todo { color: var(--ink); }
 .why .todo b { font-weight: 600; }
+.why .todo.declined { color: var(--ink-3); }
+.decline-form .fc-form, .aim-ask .fc-form { margin-top: 6px; }
 @media (max-width: 720px) { .why .wn { grid-template-columns: 1fr; } }
 /* an insight from the documents: context beside "Why", never a status */
 .insight { display: block; margin-top: 4px; font-size: 0.8rem; color: var(--ink-2); text-align: left; }
@@ -971,11 +973,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   forecasts = groupForecasts(D.forecasts || []);
   // Next steps ("action planned"), account -> oldest first; the latest is the plan
   let nextSteps = groupForecasts(D.next_steps || []);
+  // the four kinds of work (22 Nov 2026): a flag's to-do declined with a reason, and whether a next
+  // step achieved its aim; the export carries the synced ones, the published page its live database
+  let declines = groupForecasts(D.declines || []), checks = groupForecasts(D.outcome_checks || []);
+  const WORK = (D.settings && D.settings.work) || { decline_reasons: {}, intended_outcomes: {}, outcome_results: {} };
+  // a recommendation is declined while its flag is at the same status, until a snooze date passes
+  const declinedOf = (id, flag, status) => {
+    const d = (declines[id] || []).filter((x) => x.flag === flag && x.status === status).slice(-1)[0];
+    return d && !(d.reason === "later" && d.due && day(d.due) <= TODAY) ? d : null;
+  };
   const STEP_TYPES = { call: "Customer call", qbr: "QBR", email: "Email", internal: "Internal review" };
   // the plan for an account: the owner's next step, else a QBR booked in the CRM
   const planOf = (a) => {
     const s = (nextSteps[a.account_id] || []).slice(-1)[0];
-    if (s) return { kind: "step", type: STEP_TYPES[s.type] || s.type, due: s.due, note: s.note, by: s.by, role: s.role, set_on: s.as_of };
+    if (s) return { kind: "step", type: STEP_TYPES[s.type] || s.type, due: s.due, note: s.note, by: s.by, role: s.role, set_on: s.as_of, intended: s.intended, decided_at: s.decided_at };
     if (a.next_qbr_date && a.next_qbr_date > D.as_of) return { kind: "crm", type: "QBR", due: a.next_qbr_date, note: "booked in the CRM" };
     return null;
   };
@@ -1429,7 +1440,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // Why now (21 Nov 2026, the CSM's route: "do I know this account?"): before the history, each
   // open flag in words with its money and what the rules say to do, then what the documents say
   // (an insight, never a status). A healthy account gets one calm line on its usage instead.
-  function drawWhy(a, RANK) {
+  function drawWhy(a, RANK = { critical: 4, serious: 3, warning: 2, good: 1 }) {
     const fl = a.flags.slice().sort((x, y) => (RANK[severity(y)] || 0) - (RANK[severity(x)] || 0));
     const ins = insightsOf(a.account_id, (fl[0] || {}).flag).slice(0, 2);
     const insHtml = ins.length ? `<div><span class="flag neutral inline"><span class="pill">Insight</span></span>` +
@@ -1440,7 +1451,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       body = fl.map((f) => `<div><span class="flag ${severity(f)} inline"><span class="pill">${esc(f.flag)} · ${esc(f.status)}</span></span>` +
         `<p>${esc(f.reasons)}</p>` +
         (valueOf(f) != null ? `<p><b>${money(valueOf(f))} ${f.flag === "churn" ? "ARR at risk" : "upside"}</b> · ${esc(f.value_basis)}</p>` : "") +
-        (f.action ? `<p class="todo"><b>To do:</b> ${esc(f.action)}</p>` : "") + `</div>`).join("") + insHtml;
+        (f.action ? todoHtml(a, f) : "") + `</div>`).join("") + insHtml;
     } else {
       // last value against 30 days before, from the chart's own series
       const last = (xs) => { for (let i = xs.length - 1; i >= 0; i--) if (xs[i] != null) return [xs[i], i]; return [null, -1]; };
@@ -1453,8 +1464,46 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         `<p class="todo"><b>To do:</b> nothing flagged. Keep the cadence and set a renewal forecast before the renewal.</p></div>` + insHtml;
     }
     $("tl-why").innerHTML = `<h2>Why now</h2><div class="wn">${body}</div>`;
+    wireDeclines(a);
     const r = $("tl-why").querySelector("[data-goto-research]");
     if (r) r.addEventListener("click", () => { const x = $("tl-research"); if (x && !x.hidden) x.scrollIntoView({ behavior: "smooth", block: "start" }); });
+  }
+  // A flag's to-do is the engine's recommendation (22 Nov 2026). The owner (or their team lead)
+  // can mark it not needed, with a reason; it then leaves My work until the flag changes or a
+  // snooze date passes. The leader sees declines by rule, which tells noise from neglect.
+  function todoHtml(a, f) {
+    const d = declinedOf(a.account_id, f.flag, f.status);
+    if (d) return `<p class="todo declined"><b>To do:</b> <s>${esc(f.action)}</s><br><small>Not needed: ${esc(WORK.decline_reasons[d.reason] || d.reason)}` +
+      `${d.reason === "later" && d.due ? ` until ${fmt(d.due)}` : ""}${d.note ? ` · ${esc(d.note)}` : ""} (${esc(ownerName[d.by] || managerName(d.by) || d.by)}, ${whenText(d.decided_at)})</small></p>`;
+    const can = dbState === "ready" && forecastRole(a, "decline");
+    return `<p class="todo"><b>To do:</b> ${esc(f.action)}` +
+      (can ? ` <button class="link" data-decline="${esc(f.flag)}|${esc(f.status)}">Not needed?</button>` : "") + `</p><div class="decline-form" hidden></div>`;
+  }
+  function wireDeclines(a) {
+    $("tl-why").querySelectorAll("[data-decline]").forEach((b) => b.addEventListener("click", () => {
+      const [flag, status] = b.dataset.decline.split("|"), form = b.closest("p").nextElementSibling;
+      form.hidden = false; b.hidden = true;
+      form.innerHTML = `<div class="fc-form"><select class="dc-reason" aria-label="Why isn't it needed?">${Object.entries(WORK.decline_reasons).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>` +
+        `<input class="dc-due" type="date" min="${new Date((TODAY + 1) * 864e5).toISOString().slice(0, 10)}" aria-label="Snooze until" hidden>` +
+        `<input class="dc-note" type="text" maxlength="200" placeholder="A note (needed for Other)" aria-label="Note">` +
+        `<button class="small primary dc-save">Save</button><button class="small dc-cancel">Cancel</button></div><p class="note dc-msg" role="alert"></p>`;
+      const q = (c) => form.querySelector(c);
+      q(".dc-reason").addEventListener("change", () => { q(".dc-due").hidden = q(".dc-reason").value !== "later"; });
+      q(".dc-cancel").addEventListener("click", () => { form.hidden = true; b.hidden = false; });
+      q(".dc-save").addEventListener("click", async () => {
+        const reason = q(".dc-reason").value, due = q(".dc-due").value, note = q(".dc-note").value.trim(), msg = (t) => { q(".dc-msg").textContent = t; };
+        if (reason === "later" && (!due || day(due) <= TODAY)) return msg("Pick the date it should come back.");
+        if (reason === "other" && !note) return msg("Say why in the note.");
+        const w = forecastRole(a, "decline"); if (!w) return;
+        q(".dc-save").disabled = true;
+        const at = new Date().toISOString();
+        try {
+          await db.collection("decisions").doc(`decline~${a.account_id}~${at.replace(/[^0-9]/g, "")}`).set({
+            kind: "decline", account_id: a.account_id, flag, status, reason, ...(reason === "later" ? { due } : {}), note,
+            by: w.by, role: w.role, as_of: D.as_of, decided_at: at, decided_by: me });
+        } catch (e) { q(".dc-save").disabled = false; msg("That wasn't saved. Try again in a moment."); }
+      });
+    }));
   }
   // Next step ("action planned"): what the owner will do next and by when.
   // Overdue when the date passes with no meeting since it was set. A QBR
@@ -1468,7 +1517,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     return met ? { overdue: false, text: "done (meeting held)" } : { overdue: true, text: `${-left} d overdue` };
   };
   const planText = (a, p) => { const st = planStatus(a, p);
-    return p ? `${esc(p.type)}, ${fmt(p.due)}${st ? ` <span class="${st.overdue ? "bad" : "muted"}">${st.text}</span>` : ""}` : ""; };
+    return p ? `${esc(p.type)}, ${fmt(p.due)}${st ? ` <span class="${st.overdue ? "bad" : "muted"}">${st.text}</span>` : ""}` +
+      (p.intended ? `<small><br>Aim: ${esc(WORK.intended_outcomes[p.intended] || p.intended)}</small>` : "") : ""; };
   // Summary: everything done on the account, newest first (customer touches,
   // tasks sent, plans and forecasts), next to what's coming up.
   const DONE_TEXT = {
@@ -1501,6 +1551,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     for (const t of TASKS.filter((x) => x.account_id === id && x.sent_on))
       done.push({ date: t.sent_on, at: t.sent_on, what: `Task sent: ${t.flag} ${t.status}`, who: `${ownerName[t.routed_to] || t.routed_to} · now ${t.action_status}`, customer: false });
     for (const s of nextSteps[id] || []) done.push({ date: String(s.decided_at).slice(0, 10), at: String(s.decided_at), what: `Next step planned: ${STEP_TYPES[s.type] || s.type} by ${fmt(s.due)}`, who: s.role === "manager" ? managerName(s.by) + " (manager)" : ownerName[s.by] || s.by, customer: false });
+    // the four kinds of work in the history too (22 Nov 2026): a to-do marked not needed, an aim checked
+    for (const d of declines[id] || []) done.push({ date: String(d.decided_at).slice(0, 10), at: String(d.decided_at), what: `Marked not needed: the ${d.flag} ${d.status} to-do (${(WORK.decline_reasons[d.reason] || d.reason).toLowerCase()})`, who: ownerName[d.by] || managerName(d.by) + " (manager)", customer: false });
+    for (const c of checks[id] || []) done.push({ date: String(c.decided_at).slice(0, 10), at: String(c.decided_at), what: `Aim checked: ${WORK.intended_outcomes[c.intended] || c.intended}: ${(WORK.outcome_results[c.result] || c.result).toLowerCase()}`, who: ownerName[c.by] || managerName(c.by) + " (manager)", customer: false });
     for (const f of forecasts[id] || []) done.push({ date: String(f.decided_at).slice(0, 10), at: String(f.decided_at), what: `Forecast: ${callText(f)}`, who: (f.role === "manager" ? managerName(f.by) + " (manager)" : ownerName[f.by] || f.by) + (f.reason ? ` · ${f.reason}` : ""), customer: false });
     done.sort((x, y) => y.at.localeCompare(x.at));       // full timestamps: two saves on one day stay in order
     const SHORT = 3;                                     // the history comes after why now and what to do: three rows, then View all
@@ -1557,16 +1610,43 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     let h = `<h3>Action planned</h3>`;
     h += p ? `<p><b>${planText(a, p)}</b>${p.kind === "step" ? ` · ${p.role === "manager" ? esc(managerName(p.by)) + " (manager)" : esc(ownerName[p.by] || p.by)}` : ""}${p.note ? `<br><small>${esc(p.note)}</small>` : ""}</p>`
       : `<p class="${a.flags.some((f) => f.flag === "churn" && f.status === "Act") ? "bad" : "muted"}">No next step recorded.</p>`;
+    // did it achieve its aim? (22 Nov 2026): asked of the owner once the date has come, answered once;
+    // the team lead sees the answer, nothing to approve
+    if (p && p.kind === "step" && p.intended) {
+      const done = (checks[id] || []).filter((c) => String(c.decided_at) > String(p.decided_at)).slice(-1)[0];
+      const aim = esc(WORK.intended_outcomes[p.intended] || p.intended);
+      const whoCheck = forecastRole(a, "outcome_check");
+      if (done) h += `<p class="aim-done">Did it achieve its aim? <b>${esc(WORK.outcome_results[done.result] || done.result)}</b> <small>(${whenText(done.decided_at)})${done.note ? " · " + esc(done.note) : ""}</small></p>`;
+      else if (day(p.due) <= TODAY && whoCheck && dbState === "ready")
+        h += `<div class="aim-ask"><p>Did it achieve its aim: <b>${aim}</b>?</p><div class="fc-form">` +
+          Object.entries(WORK.outcome_results).map(([k, v]) => `<button class="small" data-aim="${k}">${esc(v)}</button>`).join("") +
+          `<input id="aim-note" type="text" maxlength="200" placeholder="What happened (optional)" aria-label="What happened"></div><p class="note" id="aim-msg" role="alert"></p></div>`;
+      else if (day(p.due) <= TODAY) h += `<p class="note">Aim: ${aim}, not checked yet.</p>`;
+    }
     const who = forecastRole(a, "next_step");
     if (dbState !== "ready") h += `<p class="note">Next steps are recorded in the published cockpit.</p>`;
     else if (!who) h += actAsHtml(a, "plan a next step");
     else h += `<div class="fc-form"><select id="ns-type" aria-label="Next step">${Object.entries(STEP_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>` +
       `<input id="ns-due" type="date" min="${new Date(TODAY * 864e5).toISOString().slice(0, 10)}" aria-label="Due date">` +
+      `<select id="ns-aim" aria-label="What should this achieve?"><option value="">What should this achieve? (optional)</option>${Object.entries(WORK.intended_outcomes).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>` +
       `<input id="ns-note" type="text" maxlength="200" placeholder="What and with whom (optional)" aria-label="Note">` +
       `<button class="small primary" id="ns-save">Plan it</button></div><p class="note" id="ns-msg" role="alert"></p>`;
     if (hist.length > 1) h += `<ul class="fc-hist">` + hist.slice(0, -1).reverse().slice(0, 3).map((s) =>
       `<li>${whenText(s.decided_at)} · ${esc(STEP_TYPES[s.type] || s.type)}, ${fmt(s.due)}${s.note ? " · " + esc(s.note) : ""}</li>`).join("") + "</ul>";
     host.innerHTML = h;
+    host.querySelectorAll("[data-aim]").forEach((b) => b.addEventListener("click", async () => {
+      const w = forecastRole(a, "outcome_check"); if (!w) return;
+      host.querySelectorAll("[data-aim]").forEach((x) => { x.disabled = true; });
+      const at = new Date().toISOString();
+      try {
+        await db.collection("decisions").doc(`outcome_check~${id}~${at.replace(/[^0-9]/g, "")}`).set({
+          kind: "outcome_check", account_id: id, intended: p.intended, result: b.dataset.aim, note: $("aim-note").value.trim(),
+          by: w.by, role: w.role, as_of: D.as_of, decided_at: at, decided_by: me });
+      } catch (e) {
+        host.querySelectorAll("[data-aim]").forEach((x) => { x.disabled = false; });
+        $("aim-msg").textContent = "That answer wasn't saved. Try again in a moment.";
+      }
+    }));
     if (!who || dbState !== "ready") return;
     $("ns-save").addEventListener("click", async () => {
       const due = $("ns-due").value, msg = (t) => { $("ns-msg").textContent = t; };
@@ -1576,6 +1656,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       try {
         await db.collection("decisions").doc(`next_step~${id}~${at.replace(/[^0-9]/g, "")}`).set({
           kind: "next_step", account_id: id, type: $("ns-type").value, due, note: $("ns-note").value.trim(),
+          ...($("ns-aim").value ? { intended: $("ns-aim").value } : {}),
           by: who.by, role: who.role, as_of: D.as_of, decided_at: at, decided_by: me });
       } catch (e) {
         $("ns-save").disabled = false;
@@ -2611,6 +2692,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("tk-week").querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
   }
   function drawQueue(items, host) {
+    // a recommendation marked not needed leaves the queue while its flag stays the same (22 Nov 2026)
+    const off = items.filter((t) => declinedOf(t.account_id, t.flag, t.status));
+    items = items.filter((t) => !off.includes(t));
     const Q = items.slice().sort((x, y) => urgency(y) - urgency(x)
       || ((byId[y.account_id] || {}).arr || 0) - ((byId[x.account_id] || {}).arr || 0) || (x.account_id < y.account_id ? -1 : 1));
     $("tk-title").textContent = `My work: ${Q.length}`;
@@ -2619,7 +2703,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const late = live.filter((t) => { const s = t.status === "Act" ? reachOf(t.account_id, t.flag) : null; return s && !s.reached && s.left < 0; }).length;
     $("tk-finding").textContent = !live.length ? `${segName()}: nothing to pick up.`
       : `${segName()}: ${live.length} to work, ${money(stake)} at risk${up ? ` and ${money(up)} of upside` : ""}` +
-        (late ? `; ${late} past ${late === 1 ? "its" : "their"} days to reach.` : ".");
+        (late ? `; ${late} past ${late === 1 ? "its" : "their"} days to reach.` : ".") +
+        (off.length ? ` ${plural(off.length, "recommendation")} marked not needed, on ${off.length === 1 ? "its" : "their"} account page.` : "");
     host.innerHTML = `<table class="queue keep-order"><thead><tr><th>Account</th><th class="r">ARR</th><th class="r">At stake</th><th>Why</th><th>Reach by</th><th>Last</th><th>Next</th><th>Status</th></tr></thead><tbody>` +
       Q.map((t, i) => {
         const a = byId[t.account_id] || {}, st = stakeOf(t), last = lastOf(t.account_id), plan = a.account_id ? planOf(a) : null;
@@ -2714,12 +2799,15 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       for (const d of snap.docs) {
         const v = d.data(); if (!v) continue;
         if (PAGE && !PAGE_ACCOUNTS.has(v.account_id)) continue;     // review 6 Nov: never another team's decisions
-        if (v.kind === "forecast" || v.kind === "next_step" || v.kind === "handover_confirm") fs.push(v);   // kept whatever the data
+        if (["forecast", "next_step", "handover_confirm", "decline", "outcome_check"].includes(v.kind)) fs.push(v);   // kept whatever the data
         else if (v.as_of === D.as_of) decisions[d.id] = v;           // task decisions on older data: ignored
       }
       forecasts = groupForecasts(fs.filter((v) => v.kind === "forecast"));
       nextSteps = groupForecasts(fs.filter((v) => v.kind === "next_step"));
       handoverConfirms = groupForecasts(fs.filter((v) => v.kind === "handover_confirm"));
+      declines = groupForecasts(fs.filter((v) => v.kind === "decline"));
+      checks = groupForecasts(fs.filter((v) => v.kind === "outcome_check"));
+      if (sel.value && byId[sel.value] && $("tl-why")) drawWhy(byId[sel.value]);
       drawTasks(); drawMyBook(); drawLeadership(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); }
     }, () => { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } });
     drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); }
