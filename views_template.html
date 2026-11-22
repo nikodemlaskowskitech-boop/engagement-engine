@@ -796,6 +796,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <p class="note">Days from the first signal to the renewal. Less than <span id="oc-late"></span> days is too late to act.</p>
         </div>
       </div>
+      <div class="panel" id="oc-why-panel">
+        <h2>Why they left, and what the flags saw</h2>
+        <p class="finding small" id="oc-why-finding"></p>
+        <div class="tablewrap" id="oc-why"></div>
+        <p class="note">The CRM's closed-lost reason on each churned or downsized renewal (generated in the demo). A reason the flags rarely see coming, like an acquisition, needs a different signal, not a tighter threshold. Click a row to list its accounts.</p>
+      </div>
       <div class="panel" id="oc-calls-panel">
         <h2>Did a churn call help? (Act accounts, Scale and Enterprise)</h2>
         <div class="tablewrap" id="oc-calls"></div>
@@ -2527,6 +2533,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // with account assignment driving commission, per-owner results invite comparing luck of the draw.
   function drawOutcomesTotal() {
     if ($("oc-rules-panel")) $("oc-rules-panel").hidden = true;   // team totals: the rules are the managers' call
+    if ($("oc-why-panel")) $("oc-why-panel").hidden = true;
     const T = D.outcomes_total, LATE = D.settings.too_late_days;
     $("oc-late").textContent = LATE;
     for (const id of ["oc-list", "oc-list-title"]) $(id).innerHTML = "";
@@ -2574,13 +2581,31 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const changes = rows.filter((r) => r[3] === false).length;
     $("oc-rules-note").textContent = `${segOn() ? segName() + ": " : ""}${changes ? `${changes} of ${rows.length} rules miss their bar.` : "every rule meets its bar."} The bars are in settings.toml [backtest]; a change shows here after the next run. Fewer than 10 accounts behind a line: too few to tell.`;
   }
+  // Why they left (22 Nov 2026, the data lab): the closed-lost reason, the ARR it took, and how
+  // many of those accounts the churn flags had flagged beforehand
+  function drawLossReasons(lost) {
+    const panel = $("oc-why-panel");
+    const W = lost.filter((r) => r.reason);
+    panel.hidden = !W.length;
+    if (!W.length) return;
+    const by = {};
+    for (const r of W) (by[r.reason] = by[r.reason] || []).push(r);
+    const rows = Object.entries(by).map(([k, xs]) => ({ k, xs, arr: xs.reduce((t, r) => t + (r.lost_arr || 0), 0), seen: xs.filter((r) => r.flagged).length }))
+      .sort((a, b) => b.arr - a.arr || b.xs.length - a.xs.length);
+    const blind = rows.filter((r) => r.xs.length >= 3).sort((a, b) => a.seen / a.xs.length - b.seen / b.xs.length)[0];
+    $("oc-why-finding").textContent = `${segOn() ? segName() + ": " + rows[0].k : rows[0].k.replace(/^./, (c) => c.toUpperCase())} took the most, ${money(rows[0].arr)} across ${rows[0].xs.length} ${rows[0].xs.length === 1 ? "account" : "accounts"}` +
+      (blind && blind.seen < blind.xs.length ? `; the flags saw "${blind.k}" coming least often, ${blind.seen} of ${blind.xs.length}.` : ".");
+    $("oc-why").innerHTML = `<table class="nosort"><thead><tr><th>Reason</th><th class="r">Accounts</th><th class="r">ARR lost</th><th class="r">Flagged beforehand</th></tr></thead><tbody>` +
+      rows.map((r) => `<tr class="click" tabindex="0" data-k="${esc(r.k)}"><td>${esc(r.k)}</td><td class="r num">${r.xs.length}</td><td class="r num">${money(r.arr)}</td><td class="r num">${r.seen} of ${r.xs.length}${r.xs.length >= 3 ? ` (${pct(r.seen, r.xs.length)}%)` : ""}</td></tr>`).join("") + "</tbody></table>";
+    $("oc-why").querySelectorAll("tr.click").forEach((tr) => tr.addEventListener("click", () => listOutcomes(`Lost: ${tr.dataset.k}`, by[tr.dataset.k])));
+  }
   function drawOutcomes() {
     if (!$("view-outcomes")) return;                     // not on this person's page
     if (D.outcomes_total) return drawOutcomesTotal();
     const R = D.renewals.filter((r) => inSegId(r.account_id)), LATE = D.settings.too_late_days;
     $("oc-late").textContent = LATE;
     if (!R.length) {
-      for (const id of ["oc-stats", "oc-matrix", "oc-warning", "oc-calls", "oc-list", "oc-value", "oc-value-finding", "oc-rules", "oc-rules-note"]) $(id).innerHTML = "";
+      for (const id of ["oc-stats", "oc-matrix", "oc-warning", "oc-calls", "oc-list", "oc-value", "oc-value-finding", "oc-rules", "oc-rules-note", "oc-why", "oc-why-finding"]) $(id).innerHTML = "";
       $("oc-finding").textContent = D.renewals.length ? `${segName()}: no renewals in the six months after the data.`
         : "No renewal outcomes yet: run .\\run_all.ps1 -Regenerate to create them.";
       return;
@@ -2598,6 +2623,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     ];
     $("oc-stats").innerHTML = stats.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
     drawRules(lost.length, tp.length, flagged.length, warn, R);
+    drawLossReasons(lost);
 
     // the 2x2: flagged or not, lost or kept
     const cell = (items, name, cls) => `<td><button class="cellbtn ${cls}" data-name="${name}"><span class="v">${items.length}</span><span class="k">${name}</span></button></td>`;

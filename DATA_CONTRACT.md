@@ -161,6 +161,12 @@ Optional column `renewal_arr`: what the account renewed at (0 if it churned).
 With it, the backtest compares the ARR the data put at risk, and the owners'
 forecasts, with the ARR really lost. Without it, only the counts.
 
+Optional column `reason` (22 Nov 2026): the closed-lost reason on a churned or
+downsized renewal, in the CRM's own words (the demo: moved to a competitor,
+champion left, budget cut, never rolled out, smaller scope, acquired). With it,
+"Did it work?" shows why accounts left and which reasons the flags saw coming.
+Empty on renewals that weren't lost.
+
 What happened at each renewal: the CRM's closed renewals, exported. Without it
 the engine still runs; you just can't measure how well the flags predict.
 

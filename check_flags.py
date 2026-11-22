@@ -150,9 +150,9 @@ for label, flag, statuses, wrong in FALSE_ALARMS:
 # The planted trend (generate_events.PLANTED_TREND, 21 Nov 2026): the engine must see that new
 # logos of the recent cohort are shelfware far more often than the rest of the book. Rates come
 # from the flags, never from the answer key; the key only says which accounts were planted.
-planted = [a for a, r in key.items() if r.get("planted")]
+from generate_events import PLANTED_TREND, RECOVERY, END_DATE
+planted = [a for a, r in key.items() if r.get("planted") == PLANTED_TREND["name"]]
 if planted:
-    from generate_events import PLANTED_TREND, END_DATE
     crm = {r["account_id"]: r for r in read("crm_accounts.csv") if r.get("status") != "churned"}
     lo, hi = PLANTED_TREND["signed_days_ago"]
     def days_ago(a):
@@ -171,6 +171,18 @@ if planted:
     for a in planted:
         if a not in shelf:
             problems.append(("Planted trend", "missed", a, ""))
+
+# Recovered accounts (generate_events.RECOVERY, the data lab, 22 Nov 2026): far below their
+# contract all year, back to normal over the last 90 days. Today they carry no churn flag; that
+# they had one three months ago shows on Leadership's "What moved" (role_pages_test checks it).
+recovered = [a for a, r in key.items() if r.get("planted") == RECOVERY["name"]]
+if recovered:
+    churned_now = {r["account_id"] for r in flags["churn"]}
+    still = [a for a in recovered if a in churned_now]
+    ok = len(recovered) >= 3 and not still
+    print(f"  {'PASS ' if ok else 'CHECK'}  Recovered accounts: {len(recovered) - len(still)} of {len(recovered)} carry no churn flag today")
+    for a in still:
+        problems.append(("Recovered", "still flagged", a, ""))
 
 # --- 3. Every miss and false alarm, by name -------------------------------------
 

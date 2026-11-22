@@ -54,17 +54,21 @@ def add_views(con):
                    NULL::VARCHAR AS flag_status, NULL::BOOLEAN AS flagged, NULL::DATE AS signal_date,
                    NULL::BIGINT AS warning_days, NULL::BOOLEAN AS had_churn_call, NULL::DOUBLE AS util_now,
                    NULL::DOUBLE AS arr, NULL::DOUBLE AS renewal_arr, NULL::DOUBLE AS lost_arr,
-                   NULL::DOUBLE AS data_at_risk, NULL::VARCHAR AS forecast_call, NULL::DOUBLE AS forecast_lost
+                   NULL::DOUBLE AS data_at_risk, NULL::VARCHAR AS forecast_call, NULL::DOUBLE AS forecast_lost,
+                   NULL::VARCHAR AS reason
                    WHERE false""")
         return
     # renewal_arr (what the account renewed at) is optional: without it, the
     # value comparison stays empty and the counts still work
     cols = {r[0] for r in con.sql(f"DESCRIBE SELECT * FROM read_csv('{OUTCOMES}', all_varchar = true)").fetchall()}
     renewal_arr = "renewal_arr::DOUBLE" if "renewal_arr" in cols else "NULL::DOUBLE"
+    # reason (optional, 22 Nov 2026): the CRM's closed-lost reason on a churned or downsized renewal
+    reason = "nullif(trim(reason), '')" if "reason" in cols else "NULL::VARCHAR"
     con.sql(f"""
     CREATE VIEW backtest AS
     WITH outcomes AS (
-        SELECT account_id, renewal_date::DATE AS renewal_date, outcome, {renewal_arr} AS renewal_arr
+        SELECT account_id, renewal_date::DATE AS renewal_date, outcome, {renewal_arr} AS renewal_arr,
+               {reason} AS reason
         FROM read_csv('{OUTCOMES}', all_varchar = true)
     ),
     at_risk AS (
@@ -110,7 +114,8 @@ def add_views(con):
            fc.call                                          AS forecast_call,
            CASE fc.call WHEN 'churn' THEN c.arr
                         WHEN 'downsize' THEN greatest(0, c.arr - fc.amount)
-                        WHEN 'renew' THEN 0 END             AS forecast_lost
+                        WHEN 'renew' THEN 0 END             AS forecast_lost,
+           o.reason
     FROM outcomes o
     JOIN crm c USING (account_id)
     LEFT JOIN at_risk r USING (account_id)
