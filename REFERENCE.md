@@ -722,6 +722,15 @@ Read a file's entry before changing that file, and update the entry in the same 
   stake per day left, ARR breaks ties), grouped by team at book level. The Leadership ops line
   links here. role_pages_test checks the narrowing, the rows adding up, the stage list, the
   leader's grouping and the ops-line link.
+  PR2 (22 Nov 2026): two panels under the funnel. Signals that fired: a signal fires in the
+  week an account first shows a flag and status it didn't have the week before (from history.py's
+  weekly replay, Enterprise and Scale), the last [operational] signal_weeks against the ones
+  before; the finding names a kind up by 3+ and by half ("plan for the extra calls"). Coverage in
+  value: ARR with a meeting held in the last coverage_days, by tier and stage (each account in its
+  worst: churn Act, Shelfware, Watch, expansion, no flag); the finding names the flagged cell with
+  the most ARR not met; a cell lists its accounts. CS team folded in: [roles.*] fold keeps the
+  section on a page without its tab (roles.strip_tabs) and the page moves it into Operational,
+  under the band "The team". The main views.html keeps the CS team tab.
   My work (18 Nov 2026, Nikodem's CSM route: start on My book, pick up from the queue, know the
   account, act): on a CSM's or pool member's page the Tasks tab is "My work", the queue.
   Columns: account, ARR, at stake (the flag's value: Act the whole ARR, Watch/Shelfware the

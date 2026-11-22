@@ -46,7 +46,7 @@ count it.
 | "Did it work?" | By owner | By owner, their team | No (not a CSM tab since 21 Nov 2026) | No |
 | Leadership tab | Yes (opens here) | Yes | No | No |
 | Performance on Leadership (GRR, NRR, the forecast; was the Business case tab) | Yes | No | No | No |
-| Tabs | Leadership (Performance first), Operational, Did it work?, CS team, Account, Onboarding | Operational, Leadership, Did it work?, CS team, Book of business, Account, Onboarding | My book, My work, Account | My book, My work, Account |
+| Tabs | Leadership (Performance first), Operational (CS team inside), Did it work?, Account, Onboarding | Operational (CS team inside), Leadership, Did it work?, Book of business, Account, Onboarding | My book, My work, Account | My book, My work, Account |
 | Opens on | Leadership | Operational | My book | My book |
 | The queue | Operational: the funnel per team, the backlog by team, read-only | Operational: the funnel per person, the backlog with decisions | My work (by cash at stake, 18 Nov 2026) | My work |
 
@@ -61,8 +61,10 @@ page).
   meeting (with "aim checked" as a share of Done), then the backlog in the CSM's
   order. The director sees it per team and acts through the team lead, so there
   is no reassigning at book level; a team lead sees it per person and reassigns
-  or approves hand-backs. Book of business left the leader's page; CS team stays
-  until it folds into Operational, Onboarding until it becomes Programmes.
+  or approves hand-backs. Book of business left the leader's page; Onboarding stays
+  until it becomes Programmes. PR2 (same day) added signals that fired and coverage
+  in value, and folded CS team into Operational ([roles.*] fold): speed to call and
+  room to take more are part of running the work, not a place of their own.
 
 - **The owner checks an aim; the team lead sees it** (22 Nov 2026). Did a next
   step achieve its aim is the CSM's own answer. The team lead has visibility,
