@@ -68,8 +68,9 @@ page).
 - **Did it work? is the page for rule changes; Onboarding is Programmes** (22 Nov
   2026, Operational PR3). The evidence on calls ("Did a churn call help?") sits in
   Operational, where the call is decided. Did it work? keeps the backtest and opens
-  with one line per rule: its evidence, its bar ([backtest] in settings) and keep
-  or change, naming the setting. Programmes is CS's one-to-many work; today the
+  with one line per rule (catch rate, precision, warning time): its evidence, its
+  bar ([backtest] in settings) and keep or change, naming the setting. ARR at risk
+  vs. really lost is a lesson-learned table, not a rule to tune. Programmes is CS's one-to-many work; today the
   welcome programme and its control group.
 
 - **The owner checks an aim; the team lead sees it** (22 Nov 2026). Did a next

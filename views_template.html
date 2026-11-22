@@ -796,7 +796,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <p class="note" id="oc-calls-note">Act accounts only, so like is compared with like. Read the counts: with groups this small, chance can hide a real effect.</p>
       </div>
       <div class="panel">
-        <h2>ARR at risk vs. ARR really lost at renewal</h2>
+        <h2>Lesson learned: ARR at risk vs. ARR really lost at renewal</h2>
         <p class="finding small" id="oc-value-finding"></p>
         <div class="tablewrap" id="oc-value"></div>
         <p class="note">At risk: the data's rule ([money.at_risk] in settings.toml: the whole ARR at Act, the unused part at Watch and Shelfware). Lost: ARR minus what the account renewed at. Under 100% the rule over-calls the risk, or CS saved some of it; over 100% it's too relaxed. The renewal values are generated (a downsize shrinks to about what the account uses), so this shows the method, not proof the rule is right. Owners' forecasts join this table once their accounts renew.</p>
@@ -2553,19 +2553,15 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // against the bar in settings [backtest], and the setting to change when it misses
   function drawRules(nLost, nTp, nFlagged, warn, R) {
     const B = D.settings.rule_bars || {}, LATE = D.settings.too_late_days;
-    const V = R.filter((r) => r.renewal_arr != null && r.flagged), ar = V.reduce((t, r) => t + (r.data_at_risk || 0), 0), lo = V.reduce((t, r) => t + (r.lost_arr || 0), 0);
     const late = warn.filter((w) => w < LATE).length;
-    const band = B.at_risk_band || [70, 130], few = (n) => n < 10;
-    // the status furthest outside the band names what to change
-    const byStatus = ["Act", "Watch", "Shelfware"].map((st) => { const xs = V.filter((r) => r.flag_status === st), a = xs.reduce((t, r) => t + (r.data_at_risk || 0), 0);
-      return { st, a, r: a ? pct(xs.reduce((t, r) => t + (r.lost_arr || 0), 0), a) : null }; }).filter((x) => x.r != null);
-    const over = ar && pct(lo, ar) > band[1];               // the direction of the whole, then the status furthest that way
-    const off = byStatus.sort((x, y) => over ? y.r - x.r : x.r - y.r)[0];
+    const few = (n) => n < 10;
     const rows = [
       ["Churn flags catch the losses", `${nTp} of ${nLost} (${pct(nTp, nLost)}%)`, `${B.min_recall}%+`, few(nLost) ? null : pct(nTp, nLost) >= B.min_recall, "loosen [churn] thresholds: a higher utilisation line, a smaller WAU drop"],
       ["A flag means a real loss", `${nTp} of ${nFlagged} (${pct(nTp, nFlagged)}%)`, `${B.min_precision}%+`, few(nFlagged) ? null : pct(nTp, nFlagged) >= B.min_precision, "tighten [churn] thresholds, or keep them and accept more calls"],
       ["Warning comes early enough", `${late} of ${warn.length} under ${LATE} days (${pct(late, warn.length)}%)`, `${B.max_too_late}% or less`, few(warn.length) ? null : pct(late, warn.length) <= B.max_too_late, "an earlier signal: a shorter trend window in [churn]"],
-      ["ARR at risk matches what's lost", ar ? `${money(lo)} lost of ${money(ar)} (${pct(lo, ar)}%)` : "–", `${band[0]}–${band[1]}%`, !ar || few(V.length) ? null : pct(lo, ar) >= band[0] && pct(lo, ar) <= band[1], `[money] at_risk counts too ${pct(lo, ar) > band[1] ? "little" : "much"}${off ? `, most at ${off.st} (${off.r}% of it lost)` : ""}: count ${pct(lo, ar) > band[1] ? "more" : "less"} of the ARR there, unless CS saved the difference`],
+      // ARR at risk vs lost is not a rule to tune (22 Nov 2026, Nikodem): at Act CS is meant to
+      // save part of it, so lost < at risk is the work showing, not a miscalibration. It stays below
+      // as a lesson-learned table.
     ];
     $("oc-rules").innerHTML = `<table class="nosort"><thead><tr><th>Rule</th><th class="r">Evidence</th><th class="r">Bar</th><th>Verdict</th></tr></thead><tbody>` +
       rows.map(([k, ev, bar, ok, change]) => `<tr><td>${esc(k)}</td><td class="r num">${ev}</td><td class="r">${esc(bar)}</td><td>${ok == null ? '<span class="muted">too few to tell</span>' : ok ? "Keep" : `<b>Change</b>: ${esc(change)}`}</td></tr>`).join("") + "</tbody></table>";
