@@ -25,7 +25,9 @@ Words are cut to a rough stem (evaluating, evaluate -> evaluat; invoices -> invo
 and common words dropped ([search] stop_words), the same way for documents and
 questions. Keywords only find the words used: "competitor" doesn't find "we're
 benchmarking Lumen Analytics". tests/search_test.py measures how much that costs
-(recall per question) against the corpus's answer key; meaning (vectors) comes next.
+(recall per question) against the corpus's answer key. Meaning (22 Nov 2026): embed.py
+gives each redacted document a vector; meaning() ranks by them and ranked() merges both
+lists ([embed] mode: keywords, meaning or hybrid).
 
 The documents are raw text with real names. search() and accounts() rank them, on the
 laptop. redacted(con, hits) is the only form that may leave (a model, the MCP server):
@@ -163,16 +165,81 @@ def search(con, query, k=None, account_id=None, synonyms=True):
     return out
 
 
-def accounts(con, query, k=None, synonyms=True):
-    """The accounts whose documents match the question best: each account once, ranked by
-    its best document, with the citations that matched (k accounts)."""
+# --- Search by meaning (22 Nov 2026): vectors from embed.py, next to the keywords ---------
+EMBED = SETTINGS.get("embed", {})
+VECTORS_FILE = None               # tests point this at their own file; None = data/<[outputs] vectors>
+
+
+def _vectors(con):
+    """The documents' vectors (embed.py) as a table, loaded once per connection."""
+    if con.sql("SELECT count(*) FROM duckdb_tables() WHERE table_name = 'doc_vectors'").fetchone()[0]:
+        return
+    from settings import output_file
+    path = VECTORS_FILE or output_file("vectors")
+    if not path.exists():
+        raise FileNotFoundError(f"No vectors yet ({path.name}): run python embed.py first")
+    con.sql(f"""CREATE TABLE doc_vectors AS
+        SELECT account_id, id, vector::DOUBLE[] AS vector
+        FROM read_json('{str(path).replace(chr(92), "/")}', format = 'newline_delimited',
+                       columns = {{account_id: 'VARCHAR', id: 'VARCHAR', vector: 'DOUBLE[]'}})""")
+
+
+def meaning(con, query, k=None, provider=None):
+    """The k documents closest in meaning to the question (cosine of the vectors), best first,
+    in search()'s shape. The question is embedded by the same model as the documents."""
+    import embed
     k = int(k or CONF["top_k"])
-    hits = search(con, query, k=k * 5, synonyms=synonyms)        # enough documents to fill k accounts
-    ranked = {}
+    q = str(query).strip()
+    if not q:
+        return []
+    _vectors(con)
+    qv = "[" + ",".join(f"{x:.6f}" for x in embed.embed_query(q, provider)) + "]::DOUBLE[]"
+    rel = con.sql(f"""
+        SELECT v.account_id, v.id, d.kind, d.date, d.title,
+               round(list_cosine_similarity(v.vector, {qv}), 4) AS score, d.text
+        FROM doc_vectors v JOIN documents d USING (account_id, id)
+        ORDER BY score DESC, v.account_id, v.id
+        LIMIT {k}""")
+    words = [w for w in re.findall(r"[a-z]+", q.lower()) if len(w) > 3]
+    return [{"account_id": a, "id": i, "kind": kind, "date": str(day), "title": title, "score": float(score),
+             "matched": [], "line": _best_line(text, words)}
+            for a, i, kind, day, title, score, text in rel.fetchall()]
+
+
+def ranked(con, query, k=None, mode=None, synonyms=True, provider=None):
+    """The documents, ranked the [embed] mode's way: keywords (BM25), meaning (vectors) or
+    hybrid (both lists merged by reciprocal rank fusion: each list adds 1 / (rrf_k + rank),
+    so a document high in either list rises, and high in both rises most)."""
+    k = int(k or CONF["top_k"])
+    mode = mode or EMBED.get("mode", "keywords")
+    if mode == "keywords":
+        return search(con, query, k, synonyms=synonyms)
+    if mode == "meaning":
+        return meaning(con, query, k, provider)
+    if mode != "hybrid":
+        raise ValueError(f"[embed] mode must be keywords, meaning or hybrid, not {mode!r}")
+    rrf = int(EMBED.get("rrf_k", 60))
+    lists = [search(con, query, k * 3, synonyms=synonyms), meaning(con, query, k * 3, provider)]
+    best, fused = {}, {}
+    for hits in lists:
+        for rank, h in enumerate(hits, 1):
+            key = (h["account_id"], h["id"])
+            fused[key] = fused.get(key, 0.0) + 1.0 / (rrf + rank)
+            best.setdefault(key, h)            # the keyword hit first: it knows the words that matched
+    order = sorted(fused, key=lambda key: (-fused[key], key))   # no ties: the same question, the same order
+    return [{**best[key], "score": round(fused[key], 5)} for key in order[:k]]
+
+
+def accounts(con, query, k=None, synonyms=True, mode=None, provider=None):
+    """The accounts whose documents match the question best: each account once, ranked by
+    its best document, with the citations that matched (k accounts). mode: see ranked()."""
+    k = int(k or CONF["top_k"])
+    hits = ranked(con, query, k * 5, mode, synonyms, provider)   # enough documents to fill k accounts
+    by_account = {}
     for h in hits:
-        r = ranked.setdefault(h["account_id"], {"account_id": h["account_id"], "score": h["score"], "documents": []})
+        r = by_account.setdefault(h["account_id"], {"account_id": h["account_id"], "score": h["score"], "documents": []})
         r["documents"].append(h["id"])
-    return list(ranked.values())[:k]
+    return list(by_account.values())[:k]
 
 
 def redacted(con, hits):

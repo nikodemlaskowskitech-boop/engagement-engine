@@ -147,11 +147,19 @@ def _upgrade_ledger():
 def record(feature, account_id, response, seconds=None):
     """One row per call. Header once; the file only grows (like the action log)."""
     usage = response.usage
+    return record_usage(feature, account_id, PROVIDER, MODEL, usage.input_tokens, usage.output_tokens,
+                        cost(usage.input_tokens, usage.output_tokens), seconds,
+                        getattr(response, "stop_reason", "") or "")
+
+
+def record_usage(feature, account_id, provider, model, input_tokens, output_tokens, cost_usd,
+                 seconds=None, stop_reason=""):
+    """A ledger row for any model call, its cost already worked out (the embeddings have their
+    own price, [embed] price_per_million, 22 Nov 2026)."""
     row = {"time_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "month": this_month(),
-           "feature": feature, "account_id": account_id, "provider": PROVIDER, "model": MODEL,
-           "input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
-           "cost_usd": f"{cost(usage.input_tokens, usage.output_tokens):.6f}", "where": where(),
-           "stop_reason": getattr(response, "stop_reason", "") or "",
+           "feature": feature, "account_id": account_id, "provider": provider, "model": model,
+           "input_tokens": input_tokens, "output_tokens": output_tokens,
+           "cost_usd": f"{cost_usd:.6f}", "where": where(), "stop_reason": stop_reason,
            "seconds": "" if seconds is None else f"{seconds:.2f}"}
     _upgrade_ledger()
     new = not LEDGER.exists()
@@ -164,15 +172,20 @@ def record(feature, account_id, response, seconds=None):
     return row
 
 
-def call(client, feature, account_id, **request):
-    """The only way the scripts call the model: budget first, then the call, then the ledger.
-    A feature with no budget in settings is refused too: every feature must have a limit."""
+def check_budget(feature):
+    """Refuse (OverBudget) when the feature has no budget here or this month's is spent."""
     if feature not in BUDGETS:
         raise OverBudget(f"no budget for '{feature}' in settings.toml [llm.monthly_budget_usd.{where()}]")
     so_far = spent(feature)
     if so_far >= BUDGETS[feature]:
         raise OverBudget(f"{feature}: ${so_far:.2f} spent in {this_month()}, budget ${BUDGETS[feature]:.2f} "
                          f"(settings.toml [llm.monthly_budget_usd.{where()}])")
+
+
+def call(client, feature, account_id, **request):
+    """The only way the scripts call the model: budget first, then the call, then the ledger.
+    A feature with no budget in settings is refused too: every feature must have a limit."""
+    check_budget(feature)
     started = time.perf_counter()        # the whole answer: the request, the model writing, the reply
     response = client.messages.create(**request)
     record(feature, account_id, response, time.perf_counter() - started)

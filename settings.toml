@@ -482,6 +482,7 @@ ledger_file = "ai_spend.csv"
 qbr_brief = 1.00
 handover = 1.50
 ask_account = 1.00            # ask.py: about a cent a question (laptop only: AWS has no budget, so it's refused there)
+embed = 0.10                  # embed.py: the vectors and each question's (22 Nov 2026: the whole corpus is a fraction of a cent)
 [llm.monthly_budget_usd.aws]
 qbr_brief = 1.00
 handover = 1.50
@@ -500,6 +501,7 @@ history_flags = "history_flags.csv"
 history_tasks = "history_tasks.csv"
 qbr_facts = "qbr_facts.json"
 qbr_user_key = "qbr_user_key.csv"
+vectors = "vectors.jsonl"            # embed.py: one vector per redacted document (search by meaning)
 
 [search]
 # Account search over tickets, emails and call notes (Phase 9). generate_documents.py writes a
@@ -579,6 +581,19 @@ disputing = ["dispute", "overage", "charged", "charge", "credit", "refund", "bil
 security = ["sso", "saml", "okta", "infosec", "pen", "audit", "questionnaire", "encryption"]
 compliance = ["gdpr", "dpa", "legal", "processors", "hosted", "certification", "iso", "soc"]
 stuck = ["blocked", "delay", "delayed", "waiting", "slip", "fails", "failing", "install", "setup", "implementation"]
+
+[embed]
+# Search by meaning (Phase 9, 22 Nov 2026): embed.py turns each redacted document into a vector,
+# search.py ranks by those vectors next to the keywords. PRIVACY.md §13, AI_COST.md.
+provider = "bedrock"                 # "bedrock": Titan in our AWS account ([aws]); "stand-in": tests, no AWS
+model = "amazon.titan-embed-text-v2:0"
+dimensions = 512                     # Titan offers 256, 512 or 1024; AWS measured 512 at about 99% of 1024's accuracy
+price_per_million = 0.02             # USD per million input tokens, Titan Text Embeddings V2 list price (our estimate)
+max_chars = 20000                    # Titan takes up to 50,000 characters; our longest document is far under
+# How search.py ranks: "keywords" (BM25 and the synonyms), "meaning" (vectors only) or "hybrid"
+# (both lists merged by reciprocal rank fusion). Stays on keywords until the laptop's recall says otherwise.
+mode = "keywords"
+rrf_k = 60                           # reciprocal rank fusion: 1 / (rrf_k + rank) from each list (the usual 60)
 
 [mcp]
 # The local MCP server (mcp_server.py): whose book its tools answer for, cut exactly like
