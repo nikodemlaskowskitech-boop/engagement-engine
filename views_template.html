@@ -314,6 +314,8 @@ ul.research q { color: var(--ink-2); }
 .tour .row .end { margin-left: auto; }
 body.touring { padding-bottom: 50vh; }   /* room to scroll a lit part above the panel */
 #ld-perf:not([hidden]) { display: grid; gap: 20px; }   /* the band keeps the view's rhythm (.sub tucks under its finding) */
+.glossary summary { cursor: pointer; list-style: none; } .glossary summary h2 { display: inline; } .glossary summary::before { content: "+ "; color: var(--ink-3); } .glossary[open] summary::before { content: "− "; }
+.glossary dd { margin: 0 0 8px; color: var(--ink-2); }
 .band { font: 600 0.78rem var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin: 12px 0 0; }
 .tour-focus { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 6px; scroll-margin: 90px; }
 @media (max-width: 640px) { .tour { right: 16px; bottom: 16px; } }
@@ -585,7 +587,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <div class="panel" id="ld-ops-line" hidden>
         <h2>Where a manager is needed</h2>
         <p class="finding small" id="ld-ops-finding"></p>
-        <p class="note">Each manager's page lists the accounts and tasks. The leader sees the pattern, not the queue.</p>
+        <p class="note">Each manager's page lists the accounts and tasks. The leader sees the pattern, not the queue. Late: past the tier's days to reach the customer, for an account at Act and for a task alike.</p>
       </div>
       <div class="panel" id="ld-ops-reach">
         <h2>Not reached: accounts at Act past their deadline</h2>
@@ -637,6 +639,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <div class="tablewrap"><table id="ld-team"></table></div>
         <p class="note">Meetings held in the last 30 days and the share of each owner's accounts met in that time, against the median of owners of the same kind (CSMs with CSMs, pool members with pool members). Counts, not hours: the data has no meeting length. Pools are queues, not people, so they aren't listed.</p>
       </div>
+      <!-- one rule per number (22 Nov 2026, the definitions pass): the names every page uses -->
+      <details class="panel glossary" id="ld-glossary">
+        <summary><h2>Definitions used on this page</h2></summary>
+        <dl class="facts" id="ld-glossary-list"></dl>
+      </details>
       <div class="panel" id="cs-method-panel">
         <h2>How these numbers are worked out</h2>
         <ul class="method" id="cs-method"></ul>
@@ -2044,7 +2051,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const tot = (cs) => cs.reduce((s, c) => ({ live: s.live + c.live, hit: s.hit + c.hit }), { live: 0, hit: 0 });
     const L = tot(last), F = tot(first);
     $("bk-finding").textContent = bkM === "risk"
-      ? `${segOn() ? segName() + ": " : ""}${L.hit} of ${L.live} live accounts (${pct(L.hit, L.live)}%) sit under the churn line today, up from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`
+      ? `${segOn() ? segName() + ": " : ""}${L.hit} of ${L.live} live accounts${segOn() ? "" : " in the whole book"} (${pct(L.hit, L.live)}%) sit under the 40% usage line today, up from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`
       : `${segOn() ? segName() + ": " : ""}${L.hit} of ${L.live} live accounts (${pct(L.hit, L.live)}%) are at 80% of their contract or more today, from ${F.hit} of ${F.live} (${pct(F.hit, F.live)}%) on ${fmt(weeks[0])}.`;
     // shelfware by tier, counts next to shares (small segments mislead)
     $("bk-shelf").textContent = tiers.filter((t) => D.accounts.some((a) => a.tier === t && inSeg(a))).map((t) => {
@@ -2208,8 +2215,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     for (const st of STAGES) n[st.key] = S.filter(st.test).length;
     const act = n.act, fast = n.fast;
     $("ov-finding").textContent = act
-      ? `${segOn() ? segName() + ": " : ""}${n.nocall} of the ${act} accounts that need a call (${pct(n.nocall, act)}%) haven't had one yet.`
-      : `${segOn() ? segName() + ": " : ""}no account at Act needs a call.`;
+      ? `${segOn() ? segName() + ": " : ""}${n.nocall} of the ${act} accounts at churn Act (${pct(n.nocall, act)}%) haven't been reached yet.`
+      : `${segOn() ? segName() + ": " : ""}no account at churn Act.`;
     if ($("ov-reach-days")) $("ov-reach-days").textContent = REACH_TEXT;
     const host = $("ov-sieve"); host.innerHTML = "";
     // desktop: label, bar, share in one row; phone: the label above its bar, the share as "n%"
@@ -2488,7 +2495,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const pooled = open.filter((t) => teamById[t.routed_to] && teamById[t.routed_to].owner_type === "pool").length;
     $("tk-finding").textContent = !TASKS.length
       ? "No tasks sent yet: run .\\run_all.ps1 -Actions to send them, and the cockpit shows what became of each."
-      : `${segName()}: ${n.Open} open and ${n.Claimed} claimed tasks, ${open.filter((t) => t.age_days >= REACH(tierOf(t.account_id))).length} of them open longer than their tier's days to reach the customer (${REACH_TEXT}). ${pooled} sit in a shared pool queue with nobody on them.`;
+      : `${segName()}: ${n.Open} open and ${n.Claimed} claimed tasks, ${open.filter((t) => t.age_days >= REACH(tierOf(t.account_id))).length} of them late (open longer than their tier's days to reach the customer: ${REACH_TEXT}). ${pooled} sit in a shared pool queue with nobody on them.`;
     // what the viewer can do here
     const banner = $("tk-banner");
     const msg = !TASKS.length ? "" : saveError ? saveError
@@ -2834,7 +2841,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const COST = D.settings.cs_cost_per_head || 0;
     const who = segd ? segName() + ": " : "";
     $("cs-finding").textContent = start
-      ? `${who}GRR ${pct1(grr)} this year${!segd && prior ? `, up from ${pct1(prior.grr)} the year before` : ""}; NRR ${pct1(nrr)}${!segd && prior ? ` (${pct1(prior.nrr)})` : ""}. The next two quarters put ${money(fData)} at risk: ${(fData / Math.max(1, point)).toFixed(1)} points of GRR.`
+      ? `${who}GRR ${pct1(grr)} this year${!segd && prior ? `, up from ${pct1(prior.grr)} the year before` : ""}; NRR ${pct1(nrr)}${!segd && prior ? ` (${pct1(prior.nrr)})` : ""}. Renewals at risk in the next two quarters: ${money(fData)}, ${(fData / Math.max(1, point)).toFixed(1)} points of GRR.`
       : `${segName()}: no customers in this segment on the first day of the year.`;
     $("cs-sub").textContent = `${cohort.length} customers on ${fmtFull(y.period_start || D.as_of)}, ${money(start)} ARR between them; new logos count in neither number. All of it licence revenue (committed volume and add-ons): no services in this book.`;
     $("cs-tiles").innerHTML =
@@ -2892,7 +2899,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     hbars($("cs-fc"), [
       { label: "Up for renewal", noBar: true, from: 0, to: 0, color: BASE, value: `${money(sum(ahead, (r) => r[1]))} <small>${plural(ahead.length, "renewal")}</small>` },
       { label: "Data's rule", from: 0, to: fData, color: "var(--viz-renewal)", value: `${money(fData)} <small>${(fData / Math.max(1, point)).toFixed(1)} pts</small>`,
-        onClick: () => caseList("At risk by the data's rule", ahead.filter((r) => r[3] > 0).map(asRow).sort((a, b) => b.dl - a.dl), FC_COLS) },
+        onClick: () => caseList("Renewals at risk by the data's rule", ahead.filter((r) => r[3] > 0).map(asRow).sort((a, b) => b.dl - a.dl), FC_COLS) },
       { label: `Owners (${ownerCalls})`, from: 0, to: fOwner, color: "var(--accent)", value: `${money(fOwner)} <small>${(fOwner / Math.max(1, point)).toFixed(1)} pts</small>`,
         onClick: () => caseList("At risk with the owners' forecasts", ahead.filter((r) => r[4] > 0).map(asRow).sort((a, b) => b.ol - a.ol), FC_COLS) },
       { sep: true },
@@ -2901,7 +2908,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     ], fmax);
     const gap = fData - fActual;
     $("cs-fc-finding").textContent = ahead.length
-      ? `${money(fData)} at risk by the data's rule; ${money(fActual)} was really lost, so the rule ${Math.abs(gap) < 0.1 * Math.max(1, fActual) ? "was close" : gap > 0 ? `overstated it by ${money(gap)}` : `understated it by ${money(-gap)}`}.`
+      ? `${money(fData)} of renewals at risk by the data's rule; in the demo's known outcomes for these renewals ${money(fActual)} was really lost, so the rule ${Math.abs(gap) < 0.1 * Math.max(1, fActual) ? "was close" : gap > 0 ? `overstated it by ${money(gap)}` : `understated it by ${money(-gap)}`}.`
       : "No renewals in the next two quarters in this segment.";
     $("cs-fc-note").textContent = `The data's rule counts the whole ARR at Act and the unused part at Watch and Shelfware. Owners' forecasts replace it where they set one (${ownerCalls} so far). "What happened" is the demo's own future (renewal outcomes generated with the data): it shows how predictable the number is, the point of a forecast. Upside at these renewals: ${money(fUp)}.`;
 
@@ -2997,7 +3004,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // The leader's one line on the managers' queues (step 3): only what is past its line (Act
   // accounts past their reach deadline, tasks waiting STALE+ days, Enterprise accounts with no
   // CSM), and whose team holds most of it. Pages with ops_lists keep the full panels instead.
-  function drawOpsLine(late, stale, noCsm, STALE) {
+  // the glossary: one name, one rule, one population each; a new number gets a row here first
+  function drawGlossary() {
+    const host = $("ld-glossary-list"); if (!host) return;
+    const G = [
+      ["ARR at risk", "Today's churn flags, by value: an account at Act counts its whole ARR, Watch and Shelfware the unused part. Enterprise and Scale unless \"whole book\" is said."],
+      ["Renewals at risk, next two quarters", "Renewals due in the next 180 days, valued by the data's rule (or the owner's forecast where one is set). A different measure from ARR at risk: it depends on the renewal date."],
+      ["At Act", "An account whose churn or expansion flag is at Act, Enterprise and Scale. A churn-only view says \"churn Act\"."],
+      ["Reached / late", `Reached: a meeting with the customer since the signal (or up to ${D.settings.early_days ?? 14} days before it). Late: past the tier's days without one (${REACH_TEXT}). The same clock applies to a task.`],
+      ["Enterprise and Scale ARR / whole book / starting ARR", "Accounts with a named CSM or pool / every live account, Self-service included / the customers on the first day of the year, the base of GRR and NRR."],
+      ["Under the 40% usage line", "Live accounts whose 30-day utilisation is under 40% of their contract, whole book. Not the same as at risk: a flag needs a falling trend or a drop in users too."],
+    ];
+    host.innerHTML = G.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join("");
+  }
+  function drawOpsLine(late, stale, noCsm) {
     const full = !PAGE || PAGE.ops_lists !== false;
     $("ld-ops-reach").hidden = $("ld-ops-grid").hidden = !full;
     const line = $("ld-ops-line"); line.hidden = full || !(late.length || stale.length || noCsm.length);
@@ -3010,7 +3030,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const total = late.length + stale.length;
     const bits = [];
     if (late.length) bits.push(`${plural(late.length, "account")} at Act past ${late.length === 1 ? "its" : "their"} reach deadline`);
-    if (stale.length) bits.push(`${plural(stale.length, "task")} waiting ${STALE}+ days`);
+    if (stale.length) bits.push(`${plural(stale.length, "task")} late (open past ${stale.length === 1 ? "its" : "their"} tier's days: ${REACH_TEXT})`);
     if (noCsm.length) bits.push(`${plural(noCsm.length, "Enterprise account")} with no CSM (${money(noCsm.reduce((t, a) => t + a.arr, 0))} ARR)`);
     $("ld-ops-finding").textContent = bits.join("; ") + "." +
       (top && total ? ` ${top[1]} of the ${total} late items sit with ${(ownerName[top[0]] || top[0]).replace(/ \(manager\)$/, "")}'s team.` : "");
@@ -3082,7 +3102,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       { label: "ARR", r: true, get: (a) => money(a.arr) },
     ], "Every Enterprise account in this segment has a CSM.", 5);
     drawLeadTrends(STALE, who);
-    drawOpsLine(late, stale, noCsm, STALE);
+    drawGlossary();
+    // one clock for a late task, the same as Tasks: its tier's days to reach the customer (22 Nov 2026, definitions pass)
+    drawOpsLine(late, waiting.filter((t) => t.age_days >= REACH(tierOf(t.account_id))), noCsm);
     // the trail: four stages, each a cairn whose colour and height say how urgent it is
     const pct = (n, d) => d ? `${n} of ${d} (${Math.round(100 * n / d)}%)` : `${n}`;
     const notCalled = act.filter((a) => !called(a)), noPlan = act.filter((a) => !planned(a));

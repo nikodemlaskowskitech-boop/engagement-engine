@@ -22,8 +22,8 @@ had."
 
 "The page opens the way a CFO asks: are we keeping the revenue we have? GRR
 88.6%, up from 87% the year before; NRR 103%. One point of GRR is worth €147k
-here, so that's the yardstick for any budget request. The next two quarters put
-€1.1M at risk, about 7 points. Accounts we reached in time (7 days for
+here, so that's the yardstick for any budget request. Renewals at risk in the next two
+quarters: €1.1M, about 7 points. Accounts we reached in time (7 days for
 Enterprise, 14 for Scale) kept 72% of their ARR at renewal, against 37%: a clear
 gap, but on only 13 against 16 accounts. That's why the page shows the method
 and never claims we saved anything; a CFO trusts that more."
