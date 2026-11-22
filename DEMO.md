@@ -28,6 +28,11 @@ Enterprise, 14 for Scale) kept 72% of their ARR at renewal, against 37%: a clear
 gap, but on only 13 against 16 accounts. That's why the page shows the method
 and never claims we saved anything; a CFO trusts that more."
 
+[Optional: By team, under the tiles]
+
+"Is it the same everywhere? James's team kept 88.8%, Sophie's 90.6%: close.
+One click on a team and every number on the page is that team's."
+
 [Scroll: Exposure and the team]
 
 "Then what's at stake now. €1.5M of the €12.3M Enterprise and Scale ARR is at

@@ -67,6 +67,19 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
   }
   const full = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "views_data.json"), "utf8"));   // the whole export, to recompute from
   console.log("\nMy work (18 Nov 2026): a CSM's queue, by cash at stake per day left");
+  {   // the zoom (22 Nov 2026): GRR and NRR by team on Performance; a team name zooms the page,
+      // and Operational follows (per person, the team's own funnel)
+    const { p, errors } = await open("leader.html", "lead");
+    const teams = await p.$$eval("#cs-teams tbody tr", (trs) => trs.map((tr) => tr.cells[0].textContent));
+    const finding = await p.textContent("#cs-teams-finding");
+    await p.click("#cs-teams [data-zoom]"); await p.waitForTimeout(250);
+    const mgr = await p.inputValue("#seg-manager"), name = (await p.textContent("#cs-finding")).split(":")[0];
+    await p.click("#tab-tasks"); await p.waitForTimeout(200);
+    const head = await p.$$eval("#tk-funnel-rows thead th", (ths) => ths[0] && ths[0].textContent.replace(/[▲▼↕]/g, "").trim());
+    check(teams.length >= 3 && /points apart/.test(finding) && mgr && name === teams[0] && head === "Person" && !errors.length,
+      "leader.html: GRR and NRR by team; a team name zooms the page and Operational follows", JSON.stringify({ teams, mgr, name, head, errors }));
+    await p.close();
+  }
   {   // the leader: Operational per team, the backlog grouped by team, no decisions (22 Nov 2026)
     const { p } = await open("leader.html", "lead", true);
     await p.click("#tab-tasks"); await p.waitForTimeout(200);

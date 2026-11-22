@@ -545,6 +545,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <p class="sub" id="cs-sub"></p>
         <div class="tiles" id="cs-tiles"></div>
         <p class="note" id="cs-recon"></p>
+        <div class="panel" id="cs-teams-panel">
+          <h2>By team: is retention the same everywhere?</h2>
+          <p class="finding small" id="cs-teams-finding"></p>
+          <div class="tablewrap" id="cs-teams"></div>
+          <p class="note" id="cs-teams-note"></p>
+        </div>
         <div class="grid2 even">
           <div class="panel">
             <h2>Where the year's ARR went</h2>
@@ -2783,11 +2789,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const cell = (v, of) => `${v} <small>(${pct(v, of)}%)</small>`;
       rowsHost.innerHTML = `<table><thead><tr><th>${byTeam ? "Team" : "Person"}</th>${FUNNEL.map((st) => `<th class="r">${esc(st.label)}</th>`).join("")}<th class="r">Aim checked</th></tr></thead><tbody>` +
         keys.map((k) => { const c = funnelCounts(F.filter((t) => keyOf(t) === k));
-          return `<tr><td>${esc(nameOfKey(k))}</td>${c.n.map((v, i) => `<td class="r num">${i ? cell(v, c.n[0]) : v}</td>`).join("")}<td class="r num">${c.aim} of ${c.n[4]}</td></tr>`; }).join("") + "</tbody></table>";
+          return `<tr><td>${byTeam && k ? `<button class="link" data-zoom="${esc(k)}">${esc(nameOfKey(k))}</button>` : esc(nameOfKey(k))}</td>${c.n.map((v, i) => `<td class="r num">${i ? cell(v, c.n[0]) : v}</td>`).join("")}<td class="r num">${c.aim} of ${c.n[4]}</td></tr>`; }).join("") + "</tbody></table>";
     }
+    rowsHost.querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => { for (const k in seg) seg[k] = ""; seg.manager = b.dataset.zoom; saveSeg(); redraw(); }));
     $("tk-funnel-note").textContent = `Each stage counts the tasks at it or beyond. Named owner: sent to a CSM or pool member, not left in a pool queue (a row per person counts a pool-queue task on that person's account). Met: any meeting on the account since the task was sent; Done: the meeting the flag asked for. Aim checked: the owner said whether the next step did its job (started 22 Nov 2026, so few so far).` +
       (resolved ? ` ${resolved} ${resolved === 1 ? "task" : "tasks"} resolved on ${resolved === 1 ? "its" : "their"} own (the flag went away first) ${resolved === 1 ? "is" : "are"} left out.` : "") +
-      (byTeam ? " The director acts through the team lead: pick a manager to act on a team's tasks." : "");
+      (byTeam ? " The director acts through the team lead: click a team to zoom in." : "");
   }
   // ---------------------------------------------------------------- Operational PR2 (22 Nov 2026)
   // Signals that fired: a signal fires in the week an account first shows that flag and status
@@ -3222,6 +3229,32 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       wrap.append(row);
     }
   }
+  // GRR and NRR by team (22 Nov 2026, the zoom): the same cohort split by the account's manager;
+  // a team name zooms the whole page to it. Self-service has no team: its own row.
+  const zoomTeam = (m) => { for (const k in seg) seg[k] = ""; seg.manager = m; saveSeg(); redraw(); };
+  function drawTeamsRetention() {
+    const all = RET.cohort || [], sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
+    const teamOf = (id) => { const a = accOfAny(id); return a && a.tier !== "Self-service" ? (a.manager || "") : "ss"; };
+    const keys = [...new Set(all.map((r) => teamOf(r[0])))].sort((a, b) => (a === "ss") - (b === "ss") || (a ? managerName(a) : "~").localeCompare(b ? managerName(b) : "~"));
+    const name = (k) => k === "ss" ? "Self-service (no team)" : k ? `${managerName(k)}'s team` : "No manager";
+    const rows = keys.map((k) => {
+      const c = all.filter((r) => teamOf(r[0]) === k), st = sum(c, (r) => r[2]), en = sum(c, (r) => r[3]);
+      const lost = sum(c.filter((r) => r[1] === "churned"), (r) => r[2]) + sum(c.filter((r) => r[1] === "contraction"), (r) => r[2] - r[3]);
+      const ahead = (RET.renewals_ahead || []).filter((r) => teamOf(r[0]) === k);
+      return { k, n: c.length, st, grr: st ? (st - lost) / st : null, nrr: st ? en / st : null, risk: sum(ahead, (r) => r[3]) };
+    });
+    const few = (r) => r.n < MIN_COMPARE;
+    const teams = rows.filter((r) => r.k !== "ss" && !few(r) && r.grr != null).sort((a, b) => a.grr - b.grr);
+    $("cs-teams-finding").textContent = teams.length >= 2
+      ? `${name(teams[0].k)} kept ${pct1(teams[0].grr)} of its ARR (GRR), ${name(teams[teams.length - 1].k)} ${pct1(teams[teams.length - 1].grr)}: ${Math.abs(100 * (teams[teams.length - 1].grr - teams[0].grr)).toFixed(1)} points apart.`
+      : "Too few teams with enough customers to compare.";
+    const cur = seg.manager;
+    $("cs-teams").innerHTML = `<table><thead><tr><th>Team</th><th class="r">Customers on day one</th><th class="r">ARR on day one</th><th class="r">GRR</th><th class="r">NRR</th><th class="r">Renewals at risk, next two quarters</th></tr></thead><tbody>` +
+      rows.map((r) => `<tr${r.k === cur ? ' class="on"' : ""}><td>${r.k && r.k !== "ss" ? `<button class="link" data-zoom="${esc(r.k)}">${esc(name(r.k))}</button>` : esc(name(r.k))}</td><td class="r num">${r.n}</td><td class="r num">${money(r.st)}</td>` +
+        (few(r) ? `<td class="r muted" colspan="2">too few to tell</td>` : `<td class="r num">${pct1(r.grr)}</td><td class="r num">${pct1(r.nrr)}</td>`) + `<td class="r num">${money(r.risk)}</td></tr>`).join("") + "</tbody></table>";
+    $("cs-teams").querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => zoomTeam(b.dataset.zoom)));
+    $("cs-teams-note").textContent = `The whole book's cohort, whatever the filters, so teams compare. A team is its accounts' manager today: an account that moved teams counts where it is now. Fewer than ${MIN_COMPARE} customers: too few to tell. Click a team to zoom the whole page to it.`;
+  }
   function drawCase() {
     if ($("ld-perf")) $("ld-perf").hidden = $("cs-method-panel").hidden = !RET;   // leader only: managers' pages carry no retention data
     if (!$("ld-perf") || !RET) return;
@@ -3256,6 +3289,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       tile("ARR per CS person", people.length ? money(covered / people.length) : "–", COST
         ? `one GRR point = ${(point / COST).toFixed(1)} people at ${money(COST)} a year`
         : `${money(covered)} with a named CSM or pool member, ${people.length} ${people.length === 1 ? "person" : "people"}`, false);
+    drawTeamsRetention();
     $("cs-recon").textContent = `Book ${money(book)} = ${money(covered)} with a named CSM or pool member + ${money(book - covered)} Self-service and not yet owned.`;
 
     // 1. where the year's ARR went: a horizontal waterfall, this year (and the year before, whole book only)
