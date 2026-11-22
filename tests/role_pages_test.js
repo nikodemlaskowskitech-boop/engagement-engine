@@ -75,6 +75,15 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     const forms = await p.$$eval("#tk-list select, #tk-list button.primary", (x) => x.length);
     check((await p.textContent("#tab-tasks")).trim() === "Operational" && first === "Team" && groups.length >= 1 && groups.every((g) => /team|CS ops/.test(g)) && !forms,
       "leader.html: Operational per team, the backlog grouped by team, no reassigning at book level", JSON.stringify({ first, groups, forms }));
+    // PR2: signals that fired, coverage in value, CS team folded in (22 Nov 2026)
+    const sigRows = await p.$$eval("#op-sig tbody tr", (trs) => trs.length);
+    const teamIn = !!(await p.$("#view-tasks #op-team-slot #tm-cap")) && !(await p.$("#tab-team"));
+    const cov = await p.$("#op-cov [data-cov]");
+    const want = cov && +((await cov.evaluate((b) => b.nextElementSibling.textContent)).match(/of (\d+) account/) || [])[1];
+    if (cov) { await cov.click(); await p.waitForTimeout(150); }
+    const listed = await p.$$eval("#op-cov-list tbody tr", (trs) => trs.length);
+    check(sigRows > 0 && teamIn && cov && listed === want && /biggest gap|had a meeting/.test(await p.textContent("#op-cov-finding")),
+      "leader.html: Operational has signals that fired, coverage in value (a cell lists its accounts) and the CS team inside it", JSON.stringify({ sigRows, teamIn, want, listed }));
     await p.click("#tab-lead"); await p.waitForTimeout(100);
     const go = await p.$("#ld-ops-go");
     if (go && await go.isVisible()) { await go.click(); await p.waitForTimeout(100);

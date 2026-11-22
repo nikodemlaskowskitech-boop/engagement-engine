@@ -218,13 +218,16 @@ def slice_export(export, person_id, person):
     return page, meta
 
 
-def strip_tabs(html, keep):
-    """Take the tabs this role doesn't have out of the page: the button and its section."""
+def strip_tabs(html, keep, fold=()):
+    """Take the tabs this role doesn't have out of the page: the button and its section.
+    A folded tab ([roles.*] fold, 22 Nov 2026) loses its button but keeps its section: the
+    page shows it inside another view (CS team inside Operational)."""
     for view in re.findall(r'data-view="([a-z]+)"', html):
         if view in keep:
             continue
         html = re.sub(rf'\s*<button role="tab" id="tab-{view}"[^>]*>.*?</button>', "", html, count=1)
-        html = re.sub(rf'\s*<section class="view" id="view-{view}".*?</section>', "", html, count=1, flags=re.S)
+        if view not in fold:
+            html = re.sub(rf'\s*<section class="view" id="view-{view}".*?</section>', "", html, count=1, flags=re.S)
     return html
 
 
@@ -279,7 +282,7 @@ def build(export, template=None, out=PAGES, sandbox=False):
         options = (('<option value="" selected>More people…</option>' if doors else "")    # on a door: the list is "more"
                    + "".join(f'<option value="{files[o]}"{" selected" if o == pid and not doors else ""}>'
                              f'{everyone[o]["name"]} ({kind[everyone[o]["role"]]})</option>' for o in everyone))
-        html = strip_tabs(template, set(meta["tabs"]))
+        html = strip_tabs(template, set(meta["tabs"]), set(ROLES[person["role"]].get("fold", [])))
         html = (html.replace("__PAGE_OPTIONS__", options)
                     .replace("__PAGE_META__", safe_json(meta))
                     .replace("__VIEWS_DATA__", safe_json(page)))

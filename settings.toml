@@ -269,7 +269,8 @@ peer_median = "book"                 # "against the median" compares with: "book
 [roles.leader]
 # four places (22 Nov 2026, the leadership design): Leadership (report up), Operational (the "tasks"
 # view: run the work), Did it work?, the account; CS team until Operational PR2, Onboarding until PR3
-tabs = ["lead", "tasks", "outcomes", "team", "timeline", "onboarding"]
+tabs = ["lead", "tasks", "outcomes", "timeline", "onboarding"]
+fold = ["team"]                      # CS team shows inside Operational (22 Nov 2026, Operational PR2)
 # GRR, NRR, the ARR bridge and the renewals ahead: the Performance band on Leadership (21 Nov 2026,
 # Business case folded in); leader only
 retention = true
@@ -282,7 +283,8 @@ outcomes = "by_owner"
 edit = {}                            # read-only: a leader never overrides someone's forecast
 
 [roles.manager]
-tabs = ["tasks", "lead", "outcomes", "team", "book", "timeline", "onboarding"]   # Overview's sieve is Operational's funnel now
+tabs = ["tasks", "lead", "outcomes", "book", "timeline", "onboarding"]   # Overview's sieve is Operational's funnel now
+fold = ["team"]
 scope = "team"
 self_service = true
 outcomes = "by_owner"
@@ -303,6 +305,12 @@ scope = "team"
 self_service = false
 outcomes = "team_total"
 edit = { forecast = "own", next_step = "own", handover_confirm = "own", decline = "own", outcome_check = "own", commitment = "own" }
+
+[operational]
+# Operational (22 Nov 2026, PR2): signals that fired, compared over two windows of this many
+# weeks; coverage in value = ARR with a meeting held in the last coverage_days
+signal_weeks = 4
+coverage_days = 60
 
 [signals]
 # Leadership's Signals band (22 Nov 2026, the leadership design I1): fixed lines, the same every

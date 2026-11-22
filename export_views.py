@@ -247,7 +247,7 @@ export = {
                  "research_days": SETTINGS["research"]["days"],
                  "research_growth_themes": SETTINGS["research"]["growth_themes"],
                  "work": SETTINGS["work"],
-                 "signals": SETTINGS["signals"],    # Leadership's Signals band (22 Nov 2026)          # decline reasons, intended outcomes, results (22 Nov 2026)
+                 "signals": SETTINGS["signals"], "operational": SETTINGS["operational"],    # Leadership's Signals band (22 Nov 2026)          # decline reasons, intended outcomes, results (22 Nov 2026)
                  "too_late_days": SETTINGS["backtest"]["too_late_days"],
                  "churn_line": SETTINGS["churn"]["util_below"],
                  "follow_up_days": SETTINGS["follow_ups"]["after_days"],
