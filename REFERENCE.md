@@ -740,6 +740,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   Nikodem: forward-looking, at risk next quarter is normal; looking back it's a lesson learned,
   and at Act CS is meant to save part of it): its table stays lower down, titled "Lesson learned". The
   Onboarding tab's label is Programmes (the view id stays onboarding).
+  The zoom (22 Nov 2026): Performance gets "By team: is retention the same everywhere?"
+  (drawTeamsRetention): the year's cohort split by the account's manager today (Self-service its
+  own row), customers and ARR on day one, GRR, NRR and the renewals at risk in the next two
+  quarters; under min_compare customers: too few to tell. The whole book's cohort whatever the
+  filters, so teams compare. A team name zooms the whole page (seg.manager); Operational's
+  per-team funnel rows zoom the same way. role_pages_test checks the rows, the zoom and that
+  Operational follows (per person).
   My work (18 Nov 2026, Nikodem's CSM route: start on My book, pick up from the queue, know the
   account, act): on a CSM's or pool member's page the Tasks tab is "My work", the queue.
   Columns: account, ARR, at stake (the flag's value: Act the whole ARR, Watch/Shelfware the
