@@ -173,7 +173,9 @@ One JSON event per line, one file per day in `data/events/`.
   .due, .note, .owner_id, .outcome, .intended = its aim; internal too),
   recommendation_declined (a flag's to-do not needed: .topic = flag, .status,
   .outcome = reason, .due = snooze) and outcome_checked (did the step achieve
-  its aim: .intended, .status = yes | partly | no). Lists in settings [work].
+  its aim: .intended, .status = yes | partly | no); from Slack too, "Not needed"
+  on a card and commitment_made (.note = what was promised, .due) on the call
+  form. Lists in settings [work].
 
 ## The four flags
 

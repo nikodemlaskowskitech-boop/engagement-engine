@@ -131,7 +131,8 @@ def touches(con, account_id=None):
                properties.topic AS topic, properties.owner_id AS owner_id,
                context.source AS source, properties.outcome AS outcome, properties.note AS note
         FROM engagement
-        WHERE event_name NOT IN ('forecast_set', 'next_step_set', 'recommendation_declined', 'outcome_checked')   -- internal: exported apart
+        WHERE event_name NOT IN ('forecast_set', 'next_step_set', 'recommendation_declined', 'outcome_checked',
+                                 'commitment_made')   -- internal: exported apart (commitments: step 3)
         {only}
         -- ties on the same minute broken by account and event: the same data always
         -- exports in the same order, so two runs can be compared file to file

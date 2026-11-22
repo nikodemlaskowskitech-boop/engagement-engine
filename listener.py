@@ -36,7 +36,8 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 from slack_loop import (CALL_TOPIC, OUTCOMES, append_event, call_form, call_logged_blocks, claimed_blocks,
-                        form_answers, handback_blocks, load_env, run_date)
+                        form_answers, handback_blocks, load_env, run_date, decline_answers, decline_error, decline_form, declined_blocks,
+                        promise_answers, promise_error)
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -72,15 +73,46 @@ def log_call(ack, body, client):
 
 @app.view("log_call_form")
 def log_call_submitted(ack, body, view, client):
+    promise, by = promise_answers(view)
+    bad = promise_error(promise, by)
+    if bad:                                         # the form stays open, the error under its field
+        return ack(response_action="errors", errors=bad)
     ack()
     ref = json.loads(view["private_metadata"])
     outcome, note = form_answers(view)
     user = body["user"]["id"]
     topic = CALL_TOPIC.get(ref["f"], "follow_up")
     append_event(DAY, ref["a"], "meeting_held", ref["o"], topic, user, outcome, note)
+    if promise:                                     # a promise made in the meeting (22 Nov 2026)
+        append_event(DAY, ref["a"], "commitment_made", ref["o"], "commitment", user, note=promise, due=by)
     client.chat_update(channel=ref["channel"], ts=ref["ts"], text=f"{ref['n']}: call logged",
-                       blocks=call_logged_blocks(ref, user, outcome, note))
-    print(f"  call logged {ref['a']}  {ref['n']}  ({topic}, {OUTCOMES[outcome]})")
+                       blocks=call_logged_blocks(ref, user, outcome, note, promise, by))
+    print(f"  call logged {ref['a']}  {ref['n']}  ({topic}, {OUTCOMES[outcome]})" + (f", committed by {by}" if promise else ""))
+
+
+@app.action("decline")
+def decline(ack, body, client):
+    ack()
+    ref = json.loads(body["actions"][0]["value"])
+    client.views_open(trigger_id=body["trigger_id"],
+                      view=decline_form(ref, body["channel"]["id"], body["message"]["ts"]))
+
+
+@app.view("decline_form")
+def decline_submitted(ack, body, view, client):
+    reason, until, note = decline_answers(view)
+    bad = decline_error(reason, until, note, DAY)
+    if bad:
+        return ack(response_action="errors", errors=bad)
+    ack()
+    ref = json.loads(view["private_metadata"])
+    user = body["user"]["id"]
+    # the same event the cockpit writes: the flag, its status, the reason, a snooze date
+    append_event(DAY, ref["a"], "recommendation_declined", ref["o"], ref["f"], user, reason, note,
+                 status=ref["s"], due=until if reason == "later" else None)
+    client.chat_update(channel=ref["channel"], ts=ref["ts"], text=f"{ref['n']}: not needed",
+                       blocks=declined_blocks(ref, user, reason, until, note))
+    print(f"  not needed  {ref['a']}  {ref['n']}  ({reason})")
 
 
 @app.action("approve_handback")
