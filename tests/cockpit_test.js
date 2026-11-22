@@ -717,7 +717,7 @@ const segment = async (page, values) => {
     const od = await page.$$eval("#ld-reach .badge.overdue", (bs) => bs.length);
     check(od === lateN, `...past the deadline shows "overdue N d" (${lateN})`, od);
     await tab(page, "tasks");
-    const tk = await page.$$eval("#tk-list tbody tr", (rs) => rs.map((r) => [r.cells[2].innerText, r.cells[5].innerText]));
+    const tk = await page.$$eval("#tk-list tbody tr:not(.group)", (rs) => rs.map((r) => [r.cells[2].innerText, r.cells[5].innerText]));
     check(tk.filter(([task]) => / · Act/.test(task)).every(([, reach]) => /left|overdue|reached|–/.test(reach)) && tk.some(([, r]) => /left|overdue|reached/.test(r)),
       "Tasks: an Act task shows its reach-by (days left, overdue or reached)", JSON.stringify(tk.slice(0, 3)));
     const sharper = D.tasks.filter((x) => ["Open", "Claimed"].includes(x.action_status)).filter((x) => {

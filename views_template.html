@@ -479,7 +479,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
       <button role="tab" id="tab-lead" data-view="lead" aria-selected="false">Leadership</button>
       <button role="tab" id="tab-mybook" data-view="mybook" aria-selected="false">My book</button>
-      <button role="tab" id="tab-tasks" data-view="tasks" aria-selected="false">Tasks</button>
+      <button role="tab" id="tab-tasks" data-view="tasks" aria-selected="false">Operational</button>
       <button role="tab" id="tab-outcomes" data-view="outcomes" aria-selected="false">Did it work?</button>
       <button role="tab" id="tab-timeline" data-view="timeline" aria-selected="false">Account timeline</button>
       <button role="tab" id="tab-onboarding" data-view="onboarding" aria-selected="false">Onboarding</button>
@@ -605,7 +605,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <div class="panel" id="ld-ops-line" hidden>
         <h2>Where a manager is needed</h2>
         <p class="finding small" id="ld-ops-finding"></p>
-        <p class="note">Each manager's page lists the accounts and tasks. The leader sees the pattern, not the queue. Late: past the tier's days to reach the customer, for an account at Act and for a task alike.</p>
+        <p class="note">Each manager's page lists the accounts and tasks. The leader sees the pattern, not the queue. Late: past the tier's days to reach the customer, for an account at Act and for a task alike. <button class="link" id="ld-ops-go">See it on Operational</button></p>
       </div>
       <div class="panel" id="ld-ops-reach">
         <h2>Not reached: accounts at Act past their deadline</h2>
@@ -720,8 +720,17 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
     <section class="view" id="view-tasks" role="tabpanel" aria-labelledby="tab-tasks" hidden>
       <p class="finding" id="tk-finding"></p>
-      <p class="sub">Every task the engine sent to a person, and what became of it: Done means the right meeting happened, Resolved that the flag went away. Pick your name under Manager to act on your team's tasks: give one to someone else, or approve a hand-back. A decision is saved here and applied on the next run, when the task goes to its new owner in Slack.</p>
+      <p class="sub">Is the work moving? Every task the engine sent to a person, from "a person is needed" to "the aim was checked", then the backlog in the order a CSM picks it up: the most cash at stake per day left first. Pick your name under Manager to act on your team's tasks: give one to someone else, or approve a hand-back. A decision is saved here and applied on the next run, when the task goes to its new owner in Slack.</p>
       <p class="banner" id="tk-banner" hidden></p>
+      <!-- Operational (22 Nov 2026, the leadership design): the funnel from "a person is needed"
+           to "the aim was checked", per team for the director and per person for a team lead -->
+      <div class="panel" id="tk-funnel-panel" hidden>
+        <h2 id="tk-funnel-title">From signal to outcome</h2>
+        <p class="finding" style="font-size:1rem" id="tk-funnel-finding"></p>
+        <div id="tk-funnel"></div>
+        <div class="tablewrap" id="tk-funnel-rows"></div>
+        <p class="note" id="tk-funnel-note"></p>
+      </div>
       <div class="controls">
         <div class="chips" id="tk-status" aria-label="Status"></div>
       </div>
@@ -733,7 +742,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <div class="panel">
         <h2 id="tk-title">Tasks</h2>
         <div class="tablewrap" id="tk-list"></div>
-        <p class="note">Oldest first. CS ops items (handoff gaps, no CSM) close only when the CRM is fixed, so they can't be reassigned here. A hand-back is approved by the manager it went to.</p>
+        <p class="note">Most cash at stake per day left first (to the reach deadline at Act, else to the renewal); ARR breaks ties. CS ops items (handoff gaps, no CSM) close only when the CRM is fixed, so they can't be reassigned here. A hand-back is approved by the manager it went to.</p>
       </div>
     </section>
 
@@ -2655,6 +2664,71 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const sub = document.querySelector("#view-tasks .sub");
     if (sub) sub.textContent = "What to pick up, the most cash at stake per day left first: to the reach deadline at Act, else to the renewal. ARR is there as a fact and breaks ties. Click Last or Next to see that engagement.";
   }
+  // ---------------------------------------------------------------- Operational: the funnel (22 Nov 2026)
+  // Each task from "a person is needed" to "done": every stage is a subset of the one above
+  // (a later stage implies the earlier ones). Done = the right meeting happened (team_report's
+  // rule); "aim checked" is a share of Done beside it, not a stage. Resolved tasks (the flag
+  // went away before anyone met) leave the funnel and are counted in the note.
+  const metAfter = (t) => (D.touches || []).some((x) => x.account_id === t.account_id && x.event === "meeting_held" && x.date >= t.sent_on);
+  const ownedBy = (t) => (byId[t.account_id] && poolTaskOf(t, byId[t.account_id].owner_id)) ? byId[t.account_id].owner_id : t.routed_to;
+  const FUNNEL = [
+    { key: "needed", label: "A person is needed", test: () => true },
+    { key: "named", label: "Has a named owner", test: (t) => { const o = teamById[t.routed_to]; return !!(o && o.owner_type !== "pool") || !!t.assigned_from; } },   // a pool queue is nobody yet (the opening line's rule)
+    { key: "picked", label: "Picked up", test: (t) => t.action_status === "Claimed" },
+    { key: "met", label: "Met the customer", test: metAfter },
+    { key: "done", label: "Done (the right meeting)", test: (t) => t.action_status === "Done" },
+  ];
+  // the furthest stage a task reached: each stage counts every task at it or beyond
+  const reachIdx = (t) => { let k = 0; FUNNEL.forEach((st, i) => { if (st.test(t)) k = i; }); return k; };
+  const aimChecked = (t) => t.action_status === "Done" && (D.outcome_checks || []).some((c) => c.account_id === t.account_id && String(c.decided_at).slice(0, 10) >= t.sent_on);
+  let tkStage = null;                                    // a clicked stage: the backlog lists the tasks that stopped before it
+  function funnelCounts(T) {
+    const n = FUNNEL.map((_, i) => T.filter((t) => reachIdx(t) >= i).length);
+    return { n, aim: T.filter(aimChecked).length };
+  }
+  function drawFunnel(T) {
+    const panel = $("tk-funnel-panel");
+    if (!panel) return;
+    panel.hidden = QUEUE || !TASKS.length;
+    if (panel.hidden) return;
+    const F = T.filter((t) => t.action_status !== "Resolved"), resolved = T.length - F.length, { n, aim } = funnelCounts(F);
+    // the biggest drop between two stages: where the work gets stuck
+    let worst = 1;
+    for (let i = 1; i < FUNNEL.length; i++) if (n[i - 1] - n[i] > n[worst - 1] - n[worst]) worst = i;
+    $("tk-funnel-finding").textContent = !F.length ? `${segName()}: no task needed a person.`
+      : `${segName()}: ${n[4]} of ${n[0]} tasks (${pct(n[4], n[0])}%) ended in the right meeting; the biggest drop is before "${FUNNEL[worst].label.toLowerCase()}" (${n[worst - 1] - n[worst]} stopped there).`;
+    const host = $("tk-funnel"); host.innerHTML = "";
+    const ph = isPhone(), W = fitW(880), LBL = ph ? 0 : 230, BAR = ph ? W - 90 : W - LBL - 170, RH = ph ? 44 : 32, top = n[0] || 1;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${FUNNEL.length * RH + 6}`, role: "img", "aria-label": "From signal to outcome, stage by stage" }, host);
+    FUNNEL.forEach((st, i) => {
+      const y = 4 + i * RH, w = Math.max(2, (BAR * n[i]) / top), x0 = ph ? 4 : LBL, by = ph ? y + 20 : y + 5, ty = ph ? y + 32 : y + 19;
+      const g = el("g", { class: "stage", "data-key": st.key, style: "cursor:pointer" }, svg);
+      el("text", { x: 4, y: ph ? y + 13 : y + 19, class: "lbl" }, g).textContent = st.label;
+      el("rect", { x: x0, y: by, width: w, height: ph ? 16 : RH - 12, rx: 3, fill: "var(--viz-measure)", opacity: tkStage && tkStage !== st.key ? 0.55 : 1 }, g);
+      el("text", { x: x0 + w + 6, y: ty, class: "val" }, g).textContent = n[i];
+      const share = i ? (ph ? `${pct(n[i], n[i - 1])}%` : `${pct(n[i], n[i - 1])}% of the stage above`) : "";
+      if (i === FUNNEL.length - 1) el("text", { x: W - 4, y: ty, "text-anchor": "end" }, g).textContent = ph ? `${share} · aim ${aim}` : `${share} · aim checked ${aim} of ${n[i]}`;
+      else if (share) el("text", { x: W - 4, y: ty, "text-anchor": "end" }, g).textContent = share;
+      g.addEventListener("click", () => { tkStage = tkStage === st.key ? null : st.key; drawTasks(); });
+      hover(g, `<b>${esc(st.label)}</b><br>${n[i]} tasks${i ? `, ${n[i - 1] - n[i]} stopped before this stage` : ""}<br>Click to list ${i ? "the ones that stopped before it" : "them all"}`);
+    });
+    // per team (the director) or per person (a team lead): the same stages as shares of "needed"
+    const byTeam = !seg.manager && !seg.owner, byPerson = !!seg.manager && !seg.owner;
+    const rowsHost = $("tk-funnel-rows");
+    if (!byTeam && !byPerson) rowsHost.innerHTML = "";
+    else {
+      const keyOf = (t) => byTeam ? (t.manager || "") : ownedBy(t);
+      const nameOfKey = (k) => byTeam ? (k ? `${managerName(k)}'s team` : "No team (CS ops)") : (ownerName[k] || k);
+      const keys = [...new Set(F.map(keyOf))].sort((a, b) => nameOfKey(a).localeCompare(nameOfKey(b)));
+      const cell = (v, of) => `${v} <small>(${pct(v, of)}%)</small>`;
+      rowsHost.innerHTML = `<table><thead><tr><th>${byTeam ? "Team" : "Person"}</th>${FUNNEL.map((st) => `<th class="r">${esc(st.label)}</th>`).join("")}<th class="r">Aim checked</th></tr></thead><tbody>` +
+        keys.map((k) => { const c = funnelCounts(F.filter((t) => keyOf(t) === k));
+          return `<tr><td>${esc(nameOfKey(k))}</td>${c.n.map((v, i) => `<td class="r num">${i ? cell(v, c.n[0]) : v}</td>`).join("")}<td class="r num">${c.aim} of ${c.n[4]}</td></tr>`; }).join("") + "</tbody></table>";
+    }
+    $("tk-funnel-note").textContent = `Each stage counts the tasks at it or beyond. Named owner: sent to a CSM or pool member, not left in a pool queue (a row per person counts a pool-queue task on that person's account). Met: any meeting on the account since the task was sent; Done: the meeting the flag asked for. Aim checked: the owner said whether the next step did its job (started 22 Nov 2026, so few so far).` +
+      (resolved ? ` ${resolved} ${resolved === 1 ? "task" : "tasks"} resolved on ${resolved === 1 ? "its" : "their"} own (the flag went away first) ${resolved === 1 ? "is" : "are"} left out.` : "") +
+      (byTeam ? " The director acts through the team lead: pick a manager to act on a team's tasks." : "");
+  }
   function drawTasks() {
     if (!$("view-tasks")) return;                     // not on this person's page
     const T = TASKS.filter(taskInSeg);
@@ -2677,8 +2751,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("tk-status").querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => {
       tkShow.has(b.dataset.s) ? tkShow.delete(b.dataset.s) : tkShow.add(b.dataset.s); drawTasks();
     }));
-    const items = T.filter((t) => tkShow.has(t.action_status));
-    $("tk-title").textContent = `Tasks: ${items.length}`;
+    drawFunnel(T);
+    const stI = tkStage && !QUEUE ? FUNNEL.findIndex((s) => s.key === tkStage) : -1;
+    const items = stI >= 0
+      ? T.filter((t) => t.action_status !== "Resolved" && (stI === 0 || reachIdx(t) === stI - 1))
+      : T.filter((t) => tkShow.has(t.action_status));
+    $("tk-title").textContent = stI > 0 ? `Stopped before "${FUNNEL[stI].label.toLowerCase()}": ${items.length}` : `Backlog: ${items.length}`;
+    if (stI >= 0) $("tk-title").insertAdjacentHTML("beforeend", ' <button class="link" id="tk-stage-clear">Show the backlog</button>');
+    if ($("tk-stage-clear")) $("tk-stage-clear").addEventListener("click", () => { tkStage = null; drawTasks(); });
     const host = $("tk-list");
     if (QUEUE) drawWeek();                            // the week ahead shows even with nothing to pick up
     if (QUEUE && !items.length) {                     // an empty queue: My work's own words, not the manager's
@@ -2692,13 +2772,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         && teamById[byId[t.account_id].owner_id].owner_type === "member"
         ? `<small class="pooltag"><br>Pool queue · ${seg.owner === byId[t.account_id].owner_id ? "your" : esc(ownerName[byId[t.account_id].owner_id]) + "'s"} account</small>` : "") +
       (t.assigned_from ? `<small><br>given by ${esc(managerName(t.assigned_by))}, was with ${esc(ownerName[t.assigned_from] || t.assigned_from)}</small>` : "");
-    host.innerHTML = `<table><thead><tr><th>Account</th><th>Region</th><th>Task</th><th>Owner</th><th class="r">Age</th><th>Reach by</th><th>Status</th><th>Decision</th></tr></thead><tbody>` +
-      items.map((t) => `<tr><td><button class="link" data-open="${esc(t.account_id)}">${nameOf(t.account_id)}</button><small><br>${esc(byId[t.account_id] ? byId[t.account_id].tier : "not in the CRM")}</small></td>` +
+    // the CSM's order (cash at stake per day left, ARR breaks ties); the director's book is grouped by team
+    const ordered = items.slice().sort((x, y) => urgency(y) - urgency(x)
+      || ((byId[y.account_id] || {}).arr || 0) - ((byId[x.account_id] || {}).arr || 0) || (x.account_id < y.account_id ? -1 : 1));
+    const grouped = !seg.manager && !seg.owner && !seg.acc;
+    const teams = grouped ? [...new Set(ordered.map((t) => t.manager || ""))].sort((a, b) => (a ? managerName(a) : "~").localeCompare(b ? managerName(b) : "~")) : [null];
+    const row = (t) => `<tr><td><button class="link" data-open="${esc(t.account_id)}">${nameOf(t.account_id)}</button><small><br>${esc(byId[t.account_id] ? byId[t.account_id].tier : "not in the CRM")}</small></td>` +
         `<td>${esc(byId[t.account_id] ? byId[t.account_id].region : "—")}</td>` +
         `<td>${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small>${nowAsk(t)}</td>` +
         `<td>${ownerCell(t)}</td><td class="r num">${t.age_days} d</td>` +
         `<td>${t.status === "Act" && liveT(t) ? reachBadge(reachOf(t.account_id, t.flag)) : "–"}</td>` +
-        `<td>${badge(t)}</td><td>${decisionCell(t)}</td></tr>`).join("") + "</tbody></table>";
+        `<td>${badge(t)}</td><td>${decisionCell(t)}</td></tr>`;
+    host.innerHTML = `<table><thead><tr><th>Account</th><th>Region</th><th>Task</th><th>Owner</th><th class="r">Age</th><th>Reach by</th><th>Status</th><th>Decision</th></tr></thead><tbody>` +
+      teams.map((m) => { const g = m === null ? ordered : ordered.filter((t) => (t.manager || "") === m);
+        return (m === null ? "" : `<tr class="group"><td colspan="8">${m ? esc(managerName(m)) + "'s team" : "No team (CS ops)"} (${g.length})</td></tr>`) + g.map(row).join(""); }).join("") + "</tbody></table>";
     const byDoc = Object.fromEntries(items.flatMap((t) => [[docId("assign", t), t], [docId("handback", t), t]]));
     host.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
     host.querySelectorAll("select[data-assign]").forEach((s) => s.addEventListener("change", () => { if (s.value) decide("assign", byDoc[s.dataset.assign], s.value, s); }));
@@ -3208,6 +3295,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     if (late.length) bits.push(`${plural(late.length, "account")} at Act past ${late.length === 1 ? "its" : "their"} reach deadline`);
     if (stale.length) bits.push(`${plural(stale.length, "task")} late (open past ${stale.length === 1 ? "its" : "their"} tier's days: ${REACH_TEXT})`);
     if (noCsm.length) bits.push(`${plural(noCsm.length, "Enterprise account")} with no CSM (${money(noCsm.reduce((t, a) => t + a.arr, 0))} ARR)`);
+    if ($("ld-ops-go")) { $("ld-ops-go").hidden = !$("tab-tasks"); $("ld-ops-go").onclick = () => $("tab-tasks").click(); }
     $("ld-ops-finding").textContent = bits.join("; ") + "." +
       (top && total ? ` ${top[1]} of the ${total} late items sit with ${(ownerName[top[0]] || top[0]).replace(/ \(manager\)$/, "")}'s team.` : "");
   }
@@ -4086,7 +4174,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
             list: journey }
         : pick && { v: "timeline", acc: pick.account_id, h: `One account, end to end: ${pick.account_name}`, p: "Usage, every CS touch, why the engine flagged it (in words, never a score), the plan and the renewal forecast." },
       { v: "lead", el: "ld-tiles", h: "The leader's one page", p: "What's at risk, whether anyone has called, what's planned and the forecast, sorted by value. Click any number to list its accounts." },
-      views.includes("tasks") && { v: "tasks", h: "Where the work goes", p: "Every task the engine sent, routed by tier: a named CSM for Enterprise, a regional pool for Scale, automation for Self-service. Owner, age and status." },
+      views.includes("tasks") && { v: "tasks", el: "tk-funnel-panel", h: "Operational: is the work moving?", p: "Every task the engine sent to a person, from \"a person is needed\" to the right meeting, per team. Click a stage to list the tasks that stopped before it; below, the backlog in the order a CSM picks it up." },
       views.includes("outcomes") && { v: "outcomes", h: "Did it work?", p: "Today's flags held against what really happened at renewal: caught, missed and false alarms, and how much warning they gave." },
       { h: "A page per person, and the documents", p: "Each person gets their own page, holding only their team's data. Open a CSM's morning page, or ask the tickets, emails and call notes in plain words.",
         links: [DEMO.csm_page && [`${DEMO.csm_name}'s page (a CSM)`, DEMO.csm_page], ["Ask the documents", "search.html"]].filter(Boolean) },

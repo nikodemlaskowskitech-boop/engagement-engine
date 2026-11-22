@@ -46,15 +46,23 @@ count it.
 | "Did it work?" | By owner | By owner, their team | No (not a CSM tab since 21 Nov 2026) | No |
 | Leadership tab | Yes (opens here) | Yes | No | No |
 | Performance on Leadership (GRR, NRR, the forecast; was the Business case tab) | Yes | No | No | No |
-| Tabs | Leadership (Performance first), the team-wide tabs, Tasks, Account | Tasks, Leadership, the team-wide tabs, Account | My book, My work, Account | My book, My work, Account |
-| Opens on | Leadership | Tasks | My book | My book |
-| The queue | Tasks (with decisions) | Tasks (with decisions) | My work (by cash at stake, 18 Nov 2026) | My work |
+| Tabs | Leadership (Performance first), Operational, Did it work?, CS team, Account, Onboarding | Operational, Leadership, Did it work?, CS team, Book of business, Account, Onboarding | My book, My work, Account | My book, My work, Account |
+| Opens on | Leadership | Operational | My book | My book |
+| The queue | Operational: the funnel per team, the backlog by team, read-only | Operational: the funnel per person, the backlog with decisions | My work (by cash at stake, 18 Nov 2026) | My work |
 
 Every change is checked twice: the page offers only what the role allows, and
 `cockpit_sync.py` checks each saved decision again on our side (never trust the
 page).
 
 ## Why each choice
+
+- **Operational replaces Overview and Tasks** (22 Nov 2026, the leadership design).
+  One place to run the work: the funnel from "a person is needed" to the right
+  meeting (with "aim checked" as a share of Done), then the backlog in the CSM's
+  order. The director sees it per team and acts through the team lead, so there
+  is no reassigning at book level; a team lead sees it per person and reassigns
+  or approves hand-backs. Book of business left the leader's page; CS team stays
+  until it folds into Operational, Onboarding until it becomes Programmes.
 
 - **The owner checks an aim; the team lead sees it** (22 Nov 2026). Did a next
   step achieve its aim is the CSM's own answer. The team lead has visibility,

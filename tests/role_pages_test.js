@@ -67,13 +67,41 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
   }
   const full = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "views_data.json"), "utf8"));   // the whole export, to recompute from
   console.log("\nMy work (18 Nov 2026): a CSM's queue, by cash at stake per day left");
+  {   // the leader: Operational per team, the backlog grouped by team, no decisions (22 Nov 2026)
+    const { p } = await open("leader.html", "lead", true);
+    await p.click("#tab-tasks"); await p.waitForTimeout(200);
+    const first = await p.$$eval("#tk-funnel-rows thead th", (ths) => ths[0] && ths[0].textContent.replace(/[▲▼↕]/g, "").trim());
+    const groups = await p.$$eval("#tk-list tr.group", (trs) => trs.map((t) => t.textContent));
+    const forms = await p.$$eval("#tk-list select, #tk-list button.primary", (x) => x.length);
+    check((await p.textContent("#tab-tasks")).trim() === "Operational" && first === "Team" && groups.length >= 1 && groups.every((g) => /team|CS ops/.test(g)) && !forms,
+      "leader.html: Operational per team, the backlog grouped by team, no reassigning at book level", JSON.stringify({ first, groups, forms }));
+    await p.click("#tab-lead"); await p.waitForTimeout(100);
+    const go = await p.$("#ld-ops-go");
+    if (go && await go.isVisible()) { await go.click(); await p.waitForTimeout(100);
+      check((await p.getAttribute("#tab-tasks", "aria-selected")) === "true", "leader.html: the ops line opens Operational"); }
+    await p.close();
+  }
   for (const f of ["csm_anna.html", "csm_tom.html", "csm_mia.html", "pm_jonas.html", "mgr_sophie.html"]) {
     const m = meta(f), { p } = await open(f, "tasks", true);
     await p.click("#tab-tasks"); await p.waitForTimeout(150);
     const label = (await p.textContent("#tab-tasks")).trim();
     if (m.role === "manager") {          // managers and the leader keep the task table and its decisions
       const heads = await p.$$eval("#tk-list thead th", (ths) => ths.map((t) => t.textContent.replace(/[▲▼↕]/g, "").trim()));
-      check(label === "Tasks" && heads.includes("Decision") && !heads.includes("At stake"), `${f}: still "Tasks", the manager's table`, `${label} ${heads}`);
+      check(label === "Operational" && heads.includes("Decision") && !heads.includes("At stake"), `${f}: "Operational", the manager's table`, `${label} ${heads}`);
+      // the funnel (22 Nov 2026): each stage a subset of the one above, per person at team level,
+      // a stage click lists exactly the tasks that stopped before it
+      const fn = await p.$$eval("#tk-funnel g.stage text.val", (ts) => ts.map((t) => +t.textContent));
+      const persons = await p.$$eval("#tk-funnel-rows thead th", (ths) => ths[0] && ths[0].textContent.replace(/[▲▼↕]/g, "").trim());
+      const sumNeeded = await p.$$eval("#tk-funnel-rows tbody tr", (trs) => trs.reduce((t, tr) => t + (+tr.cells[1].textContent), 0));
+      check(fn.length === 5 && fn.every((v, i) => !i || v <= fn[i - 1]) && persons === "Person" && sumNeeded === fn[0],
+        `${f}: the funnel narrows stage by stage, one row per person adding up (${fn.join(" > ")})`, JSON.stringify({ fn, persons, sumNeeded }));
+      await p.click('#tk-funnel g.stage[data-key="picked"]'); await p.waitForTimeout(150);
+      const listed = await p.$$eval("#tk-list tbody tr:not(.group)", (trs) => trs.length);
+      const title = await p.textContent("#tk-title");
+      check(listed === fn[1] - fn[2] && /Stopped before "picked up": \d+/.test(title),
+        `${f}: "picked up" lists the ${fn[1] - fn[2]} tasks that stopped before it`, `${listed} ${title}`);
+      await p.click("#tk-stage-clear"); await p.waitForTimeout(100);
+      check(/^Backlog: \d+/.test(await p.textContent("#tk-title")), `${f}: "Show the backlog" goes back to the list`);
       await p.close(); continue;
     }
     const rows = await p.$$eval("table.queue tbody tr:not(.detail)", (trs) => trs.map((tr) => tr.querySelector("[data-open]").dataset.open));
