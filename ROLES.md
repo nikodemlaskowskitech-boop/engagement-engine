@@ -46,7 +46,7 @@ count it.
 | "Did it work?" | By owner | By owner, their team | No (not a CSM tab since 21 Nov 2026) | No |
 | Leadership tab | Yes (opens here) | Yes | No | No |
 | Performance on Leadership (GRR, NRR, the forecast; was the Business case tab) | Yes | No | No | No |
-| Tabs | Leadership (Performance first), Operational (CS team inside), Did it work?, Account, Onboarding | Operational (CS team inside), Leadership, Did it work?, Book of business, Account, Onboarding | My book, My work, Account | My book, My work, Account |
+| Tabs | Leadership (Performance first), Operational (CS team inside), Did it work? (the rules), Account, Programmes | Operational (CS team inside), Leadership, Did it work? (the rules), Book of business, Account, Programmes | My book, My work, Account | My book, My work, Account |
 | Opens on | Leadership | Operational | My book | My book |
 | The queue | Operational: the funnel per team, the backlog by team, read-only | Operational: the funnel per person, the backlog with decisions | My work (by cash at stake, 18 Nov 2026) | My work |
 
@@ -65,6 +65,12 @@ page).
   until it becomes Programmes. PR2 (same day) added signals that fired and coverage
   in value, and folded CS team into Operational ([roles.*] fold): speed to call and
   room to take more are part of running the work, not a place of their own.
+- **Did it work? is the page for rule changes; Onboarding is Programmes** (22 Nov
+  2026, Operational PR3). The evidence on calls ("Did a churn call help?") sits in
+  Operational, where the call is decided. Did it work? keeps the backtest and opens
+  with one line per rule: its evidence, its bar ([backtest] in settings) and keep
+  or change, naming the setting. Programmes is CS's one-to-many work; today the
+  welcome programme and its control group.
 
 - **The owner checks an aim; the team lead sees it** (22 Nov 2026). Did a next
   step achieve its aim is the CSM's own answer. The team lead has visibility,

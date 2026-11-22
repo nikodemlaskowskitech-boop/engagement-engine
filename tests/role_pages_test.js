@@ -84,6 +84,18 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     const listed = await p.$$eval("#op-cov-list tbody tr", (trs) => trs.length);
     check(sigRows > 0 && teamIn && cov && listed === want && /biggest gap|had a meeting/.test(await p.textContent("#op-cov-finding")),
       "leader.html: Operational has signals that fired, coverage in value (a cell lists its accounts) and the CS team inside it", JSON.stringify({ sigRows, teamIn, want, listed }));
+    // PR3: the churn-call evidence under Operational, "Did it work?" as the rules, Programmes
+    check(!!(await p.$("#view-tasks #op-calls-slot #oc-calls table")) && (await p.textContent("#tab-onboarding")).trim() === "Programmes",
+      "leader.html: \"Did a churn call help?\" sits in Operational; Onboarding is Programmes");
+    await p.click("#tab-outcomes"); await p.waitForTimeout(150);
+    const rules = await p.$$eval("#oc-rules tbody tr", (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent)));
+    const agree = rules.every(([, ev, bar, v]) => {
+      if (/too few/.test(v)) return true;
+      const got = +(ev.match(/\((\d+)%\)/) || [])[1], ok = /^Keep/.test(v);
+      const m = bar.match(/^(\d+)%\+$/), le = bar.match(/^(\d+)% or less$/), band = bar.match(/^(\d+)–(\d+)%$/);
+      return ok === (m ? got >= +m[1] : le ? got <= +le[1] : band ? got >= +band[1] && got <= +band[2] : ok);
+    });
+    check(rules.length === 4 && agree && !(await p.$("#view-outcomes #oc-calls-panel")), "leader.html: Did it work? gives each rule keep or change, matching its evidence and bar", JSON.stringify(rules));
     await p.click("#tab-lead"); await p.waitForTimeout(100);
     const go = await p.$("#ld-ops-go");
     if (go && await go.isVisible()) { await go.click(); await p.waitForTimeout(100);

@@ -487,7 +487,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       <button role="tab" id="tab-tasks" data-view="tasks" aria-selected="false">Operational</button>
       <button role="tab" id="tab-outcomes" data-view="outcomes" aria-selected="false">Did it work?</button>
       <button role="tab" id="tab-timeline" data-view="timeline" aria-selected="false">Account timeline</button>
-      <button role="tab" id="tab-onboarding" data-view="onboarding" aria-selected="false">Onboarding</button>
+      <button role="tab" id="tab-onboarding" data-view="onboarding" aria-selected="false">Programmes</button>
       <button role="tab" id="tab-team" data-view="team" aria-selected="false">CS team</button>
       <button role="tab" id="tab-book" data-view="book" aria-selected="false">Book of business</button>
     </nav>
@@ -752,6 +752,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <div class="tablewrap" id="op-cov-list"></div>
         </div>
       </div>
+      <div id="op-calls-slot"></div>
       <div id="op-team-slot"></div>
       <div class="controls">
         <div class="chips" id="tk-status" aria-label="Status"></div>
@@ -770,7 +771,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
     <section class="view" id="view-outcomes" role="tabpanel" aria-labelledby="tab-outcomes" hidden>
       <p class="finding" id="oc-finding"></p>
-      <p class="sub">The backtest: today's churn flags against what happened at each renewal in the six months after the data. The outcomes are generated, with surprises no flag can see, so this shows the method, not proof.</p>
+      <p class="sub">Are the rules right? Today's churn flags against what happened at each renewal in the six months after the data, and what to change in settings.toml if they're off. The outcomes are generated, with surprises no flag can see, so this shows the method, not proof.</p>
+      <div class="panel" id="oc-rules-panel">
+        <h2>The rules: keep or change</h2>
+        <div class="tablewrap" id="oc-rules"></div>
+        <p class="note" id="oc-rules-note"></p>
+      </div>
       <div class="stat-row" id="oc-stats"></div>
       <div class="grid2">
         <div class="panel">
@@ -784,7 +790,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <p class="note">Days from the first signal to the renewal. Less than <span id="oc-late"></span> days is too late to act.</p>
         </div>
       </div>
-      <div class="panel">
+      <div class="panel" id="oc-calls-panel">
         <h2>Did a churn call help? (Act accounts, Scale and Enterprise)</h2>
         <div class="tablewrap" id="oc-calls"></div>
         <p class="note" id="oc-calls-note">Act accounts only, so like is compared with like. Read the counts: with groups this small, chance can hide a real effect.</p>
@@ -845,7 +851,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
 
     <section class="view" id="view-onboarding" role="tabpanel" aria-labelledby="tab-onboarding" hidden>
       <p class="finding" id="ob-finding"></p>
-      <p class="sub">New Self-service and Scale accounts. Welcomed accounts got the getting-started email the day after signing; the control group is the onboarding holdout and got none. The effect in this data is planted, so this shows the method; it doesn't prove that real emails work.</p>
+      <p class="sub">CS programmes: the one-to-many work, and whether it works. Today one programme, the welcome for new Self-service and Scale accounts. Welcomed accounts got the getting-started email the day after signing; the control group is the onboarding holdout and got none. The effect in this data is planted, so this shows the method; it doesn't prove that real emails work.</p>
       <div class="controls">
         <div class="seg" id="ob-tier" role="group" aria-label="Tier">
           <button id="ob-all" data-tier="all" aria-pressed="true">Both tiers</button>
@@ -1229,6 +1235,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("op-team-slot").insertAdjacentHTML("beforeend", '<h2 class="band">The team: speed to call and room to take more</h2>');
     $("op-team-slot").append(sec);
   }
+  // "Did a churn call help?" sits where the call is decided (22 Nov 2026, Operational PR3): on a
+  // role page with Operational, under the funnel; "Did it work?" keeps the rules
+  if (PAGE && $("oc-calls-panel") && $("op-calls-slot") && $("view-tasks") && !(PAGE.role === "csm" || PAGE.role === "member")) $("op-calls-slot").append($("oc-calls-panel"));
   const views = PAGE ? PAGE.tabs.slice() : ["overview", "lead", "mybook", "tasks", "outcomes", "timeline", "onboarding", "team", "book"];
   // counted, never typed: "Ten views" stayed after a tab moved to its own page (16 Nov 2026 review)
   $("n-views").textContent = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"][views.length - 1] || String(views.length);
@@ -2511,10 +2520,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // Below manager level the page holds only the team's totals, never a row per account:
   // with account assignment driving commission, per-owner results invite comparing luck of the draw.
   function drawOutcomesTotal() {
+    if ($("oc-rules-panel")) $("oc-rules-panel").hidden = true;   // team totals: the rules are the managers' call
     const T = D.outcomes_total, LATE = D.settings.too_late_days;
     $("oc-late").textContent = LATE;
     for (const id of ["oc-list", "oc-list-title"]) $(id).innerHTML = "";
-    if (!T.renewals) { for (const id of ["oc-stats", "oc-matrix", "oc-warning", "oc-calls", "oc-value", "oc-value-finding"]) $(id).innerHTML = "";
+    if (!T.renewals) { for (const id of ["oc-stats", "oc-matrix", "oc-warning", "oc-calls", "oc-value", "oc-value-finding", "oc-rules", "oc-rules-note"]) $(id).innerHTML = "";
       $("oc-finding").textContent = "Your team: no renewals in the six months after the data."; return; }
     $("oc-finding").textContent = `Your team: the churn flags caught ${T.tp} of the ${T.lost} accounts that churned or shrank at renewal (${pct(T.tp, T.lost)}%), a median of ${T.median_warning ?? "—"} days before. Team totals only: results by owner are for managers.`;
     $("oc-stats").innerHTML = [
@@ -2539,13 +2549,36 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("oc-value").innerHTML = `<table class="nosort"><thead><tr><th>Status today</th><th class="r">Renewals</th><th class="r">ARR</th><th class="r">At risk (rule)</th><th class="r">Really lost</th><th class="r">Lost / at risk</th></tr></thead><tbody>` +
       T.value.map((g) => g.small ? `<tr><td>${g.group === "All renewals" ? "<b>All renewals</b>" : esc(g.group)}</td><td class="r num">${g.n}</td><td class="r muted" colspan="4">${g.n < T.min_group ? `fewer than ${T.min_group}: not shown` : "not shown: it would give away a small group"}</td></tr>` : `<tr><td>${g.group === "All renewals" ? "<b>All renewals</b>" : esc(g.group)}</td><td class="r num">${g.n}</td><td class="r num">${money(g.arr)}</td><td class="r num">${g.at_risk ? money(g.at_risk) : "–"}</td><td class="r num">${money(g.lost)}</td><td class="r num">${g.at_risk ? pct(g.lost, g.at_risk) + "%" : "–"}</td></tr>`).join("") + "</tbody></table>";
   }
+  // "Did it work?" as the page for rule changes (22 Nov 2026): one line per rule, its evidence
+  // against the bar in settings [backtest], and the setting to change when it misses
+  function drawRules(nLost, nTp, nFlagged, warn, R) {
+    const B = D.settings.rule_bars || {}, LATE = D.settings.too_late_days;
+    const V = R.filter((r) => r.renewal_arr != null && r.flagged), ar = V.reduce((t, r) => t + (r.data_at_risk || 0), 0), lo = V.reduce((t, r) => t + (r.lost_arr || 0), 0);
+    const late = warn.filter((w) => w < LATE).length;
+    const band = B.at_risk_band || [70, 130], few = (n) => n < 10;
+    // the status furthest outside the band names what to change
+    const byStatus = ["Act", "Watch", "Shelfware"].map((st) => { const xs = V.filter((r) => r.flag_status === st), a = xs.reduce((t, r) => t + (r.data_at_risk || 0), 0);
+      return { st, a, r: a ? pct(xs.reduce((t, r) => t + (r.lost_arr || 0), 0), a) : null }; }).filter((x) => x.r != null);
+    const over = ar && pct(lo, ar) > band[1];               // the direction of the whole, then the status furthest that way
+    const off = byStatus.sort((x, y) => over ? y.r - x.r : x.r - y.r)[0];
+    const rows = [
+      ["Churn flags catch the losses", `${nTp} of ${nLost} (${pct(nTp, nLost)}%)`, `${B.min_recall}%+`, few(nLost) ? null : pct(nTp, nLost) >= B.min_recall, "loosen [churn] thresholds: a higher utilisation line, a smaller WAU drop"],
+      ["A flag means a real loss", `${nTp} of ${nFlagged} (${pct(nTp, nFlagged)}%)`, `${B.min_precision}%+`, few(nFlagged) ? null : pct(nTp, nFlagged) >= B.min_precision, "tighten [churn] thresholds, or keep them and accept more calls"],
+      ["Warning comes early enough", `${late} of ${warn.length} under ${LATE} days (${pct(late, warn.length)}%)`, `${B.max_too_late}% or less`, few(warn.length) ? null : pct(late, warn.length) <= B.max_too_late, "an earlier signal: a shorter trend window in [churn]"],
+      ["ARR at risk matches what's lost", ar ? `${money(lo)} lost of ${money(ar)} (${pct(lo, ar)}%)` : "–", `${band[0]}–${band[1]}%`, !ar || few(V.length) ? null : pct(lo, ar) >= band[0] && pct(lo, ar) <= band[1], `[money] at_risk counts too ${pct(lo, ar) > band[1] ? "little" : "much"}${off ? `, most at ${off.st} (${off.r}% of it lost)` : ""}: count ${pct(lo, ar) > band[1] ? "more" : "less"} of the ARR there, unless CS saved the difference`],
+    ];
+    $("oc-rules").innerHTML = `<table class="nosort"><thead><tr><th>Rule</th><th class="r">Evidence</th><th class="r">Bar</th><th>Verdict</th></tr></thead><tbody>` +
+      rows.map(([k, ev, bar, ok, change]) => `<tr><td>${esc(k)}</td><td class="r num">${ev}</td><td class="r">${esc(bar)}</td><td>${ok == null ? '<span class="muted">too few to tell</span>' : ok ? "Keep" : `<b>Change</b>: ${esc(change)}`}</td></tr>`).join("") + "</tbody></table>";
+    const changes = rows.filter((r) => r[3] === false).length;
+    $("oc-rules-note").textContent = `${segOn() ? segName() + ": " : ""}${changes ? `${changes} of ${rows.length} rules miss their bar.` : "every rule meets its bar."} The bars are in settings.toml [backtest]; a change shows here after the next run. Fewer than 10 accounts behind a line: too few to tell.`;
+  }
   function drawOutcomes() {
     if (!$("view-outcomes")) return;                     // not on this person's page
     if (D.outcomes_total) return drawOutcomesTotal();
     const R = D.renewals.filter((r) => inSegId(r.account_id)), LATE = D.settings.too_late_days;
     $("oc-late").textContent = LATE;
     if (!R.length) {
-      for (const id of ["oc-stats", "oc-matrix", "oc-warning", "oc-calls", "oc-list", "oc-value", "oc-value-finding"]) $(id).innerHTML = "";
+      for (const id of ["oc-stats", "oc-matrix", "oc-warning", "oc-calls", "oc-list", "oc-value", "oc-value-finding", "oc-rules", "oc-rules-note"]) $(id).innerHTML = "";
       $("oc-finding").textContent = D.renewals.length ? `${segName()}: no renewals in the six months after the data.`
         : "No renewal outcomes yet: run .\\run_all.ps1 -Regenerate to create them.";
       return;
@@ -2562,6 +2595,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       ["Too late to act", `${warn.filter((w) => w < LATE).length} <small>of ${warn.length} under ${LATE} days</small>`],
     ];
     $("oc-stats").innerHTML = stats.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+    drawRules(lost.length, tp.length, flagged.length, warn, R);
 
     // the 2x2: flagged or not, lost or kept
     const cell = (items, name, cls) => `<td><button class="cellbtn ${cls}" data-name="${name}"><span class="v">${items.length}</span><span class="k">${name}</span></button></td>`;
