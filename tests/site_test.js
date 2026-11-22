@@ -247,7 +247,14 @@ print(json.dumps(r))`;
       await q.goto(base + "leader.html#lead"); await q.waitForTimeout(800);
       const L = await q.evaluate(() => ({ line: document.getElementById("ld-ops-line").hidden ? "" : document.getElementById("ld-ops-finding").textContent,
         lists: !document.getElementById("ld-ops-reach").hidden || !document.getElementById("ld-ops-grid").hidden }));
-      check(!L.lists && /past their reach deadline|waiting \d+\+ days|with no CSM/.test(L.line), "the leader: no queue lists, one line on where a manager is needed", L.line);
+      check(!L.lists && /past their reach deadline|late \(open past|with no CSM/.test(L.line), "the leader: no queue lists, one line on where a manager is needed", L.line);
+      // one clock for a late task (the definitions pass, 22 Nov 2026): the line and Tasks agree
+      const lineLate = +((L.line.match(/(\d+) tasks? late/) || [])[1] || 0);
+      await q.click("#tab-tasks"); await q.waitForTimeout(300);
+      const tasksLate = +(((await q.textContent("#tk-finding")) || "").match(/(\d+) of them late/) || [])[1] || 0;
+      check(lineLate === tasksLate, `the leader: ${lineLate} tasks late on Leadership, ${tasksLate} on Tasks: one rule`, `${lineLate} vs ${tasksLate}`);
+      const gl = await q.evaluate(() => document.querySelectorAll("#ld-glossary-list dt").length);
+      check(gl >= 6, `the leader: the glossary lists ${gl} definitions`);
       await q.goto(base + "mgr_james.html#lead"); await q.waitForTimeout(800);
       const M = await q.evaluate(() => ({ line: !document.getElementById("ld-ops-line").hidden, reach: !document.getElementById("ld-ops-reach").hidden, grid: !document.getElementById("ld-ops-grid").hidden }));
       check(!M.line && M.reach && M.grid && !eq.length, "a manager: the full queue lists, no summary line, no script errors", JSON.stringify(M) + eq.join(" | "));

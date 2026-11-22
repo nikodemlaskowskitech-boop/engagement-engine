@@ -837,6 +837,14 @@ Read a file's entry before changing that file, and update the entry in the same 
   deadline, tasks waiting stale_task_days+, Enterprise with no CSM) and whose team holds most of
   it. Nikodem's Operational Effectiveness direction (22 Nov) gives the lists a leader's page of
   their own next. site_test checks both pages.
+  The definitions pass (22 Nov 2026, after two reviews): one rule and one name per number.
+  "ARR at risk" (today's flags) and "renewals at risk, next two quarters" (the renewal rule) are
+  never just "at risk"; the forecast panel says its "really lost" is the demo's known outcome for
+  those renewals. "At Act" is churn or expansion, Enterprise and Scale, and a churn-only view
+  says "churn Act". A task is late on one clock, its tier's days to reach the customer, on Tasks
+  and on the Leadership line alike (was 14 days on the line). The usage line names its population
+  (whole book). A glossary panel on Leadership lists the rules; a new number gets a row first.
+  site_test checks the line and Tasks agree.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;
