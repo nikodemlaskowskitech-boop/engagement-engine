@@ -190,6 +190,44 @@ check(method == "chat.update" and sent.get("channel") == "C_QUEUE" and sent.get(
       and "Call logged by <@U_ANNA>" in json.dumps(sent.get("blocks")),
       "...and the original card shows the call")
 
+print("\nThe four kinds of work (22 Nov 2026): a promise on the call form, and Not needed")
+def submit_with(values, callback="log_call_form"):
+    return {"type": "view_submission", "user": {"id": "U_ANNA"}, "view": {"id": "V_" + callback + str(len(json.dumps(values))),
+            "callback_id": callback, "private_metadata": json.dumps(meta), "state": {"values": values}}}
+base_vals = {"outcome": {"value": {"selected_option": {"value": "reached_fine"}}}, "note": {"value": {"value": None}}}
+result, s3, _, slack, _ = run(request(submit_with({**base_vals, "promise": {"value": {"value": "Send the ramp plan"}},
+                                                    "promise_by": {"value": {"selected_date": "2026-11-05"}}})))
+evs = sorted(events(s3).values(), key=lambda e: e["event_name"])
+check(len(evs) == 2 and evs[0]["event_name"] == "commitment_made" and evs[0]["properties"]["note"] == "Send the ramp plan"
+      and evs[0]["properties"]["due"] == "2026-11-05" and evs[1]["event_name"] == "meeting_held"
+      and slack.calls and "Committed: Send the ramp plan, by 2026-11-05" in json.dumps(slack.calls[0][2]),
+      "a call with a promise: the meeting and a commitment_made (what, by when), shown on the card", evs)
+result, s3, _, slack, _ = run(request(submit_with({**base_vals, "promise": {"value": {"value": "Send the ramp plan"}}})))
+check(not s3.objects and not slack.calls and json.loads(result["body"]) == {"response_action": "errors", "errors": {"promise_by": "Pick the date it's due."}},
+      "...a promise with no date keeps the form open with the error under the date, nothing saved", result)
+result, s3, _, _, _ = run(request(submit_with(base_vals)))
+check([e["event_name"] for e in events(s3).values()] == ["meeting_held"], "...and a call with no promise is just the meeting, as before")
+
+result, s3, _, slack, _ = run(request(click("decline")))
+method, _, sent = slack.calls[0] if slack.calls else (None, None, {})
+check(not s3.objects and method == "views.open" and sent["view"]["callback_id"] == "decline_form"
+      and len(sent["view"]["blocks"][1]["element"]["options"]) == 5, "Not needed: opens the form with the five reasons, records nothing yet")
+dec = lambda reason, until=None, note=None: submit_with({"reason": {"value": {"selected_option": {"value": reason}}},
+                                                        "until": {"value": {"selected_date": until}}, "note": {"value": {"value": note}}}, "decline_form")
+result, s3, _, slack, _ = run(request(dec("handled")))
+ev = next(iter(events(s3).values()), {})
+check(ev.get("event_name") == "recommendation_declined" and ev["properties"]["topic"] == "churn" and ev["properties"]["status"] == "Act"
+      and ev["properties"]["outcome"] == "handled" and "due" not in ev["properties"]
+      and slack.calls and "Not needed, says <@U_ANNA>: *Already handled elsewhere*" in json.dumps(slack.calls[0][2]),
+      "...saved: the same recommendation_declined event as the cockpit's (flag, status, reason), the card says who and why", ev)
+for title, args, field in [("\"Not now\" with no date", ("later",), "until"), ("\"Not now\" dated today", ("later", DAY), "until"),
+                           ("\"Other\" with no note", ("other",), "note")]:
+    result, s3, _, _, _ = run(request(dec(*args)))
+    check(not s3.objects and field in json.loads(result["body"]).get("errors", {}), f"...{title}: the form stays open, nothing saved")
+result, s3, _, _, _ = run(request(dec("later", "2026-12-01")))
+ev = next(iter(events(s3).values()), {})
+check(ev["properties"].get("due") == "2026-12-01", "...\"Not now\" carries its snooze date")
+
 hb = {**REF, "f": "journey", "s": "Follow-up not picked up", "o": "mgr_sophie"}
 result, s3, _, slack, _ = run(request(click("approve_handback", hb)))
 ev = next(iter(events(s3).values()), {})

@@ -38,6 +38,10 @@ CALL_TOPIC = {"churn": "churn_call", "expansion": "growth_call", "activation": "
 OUTCOMES = {"reached_at_risk": "Reached: at risk", "reached_fine": "Reached: all fine",
             "no_answer": "No answer"}
 
+# The four kinds of work (22 Nov 2026): why a recommendation isn't needed, the same list as the
+# cockpit's ([work] decline_reasons), so a decline means the same wherever it's made
+REASONS = SETTINGS["work"]["decline_reasons"]
+
 
 def load_env(*names):
     """Read the named settings from .env into the environment (never printed)."""
@@ -95,6 +99,9 @@ def card_blocks(task, owner_name, last_touch=None, day=None):
              "value": ref},
             {"type": "button", "action_id": "log_call", "style": "primary",
              "text": {"type": "plain_text", "text": "Log QBR" if task["flag"] == "qbr" else "Log call"},
+             "value": ref},
+            # the recommendation judged not needed, with a reason (22 Nov 2026)
+            {"type": "button", "action_id": "decline", "text": {"type": "plain_text", "text": "Not needed"},
              "value": ref}]
     return [
         {"type": "section", "text": {"type": "mrkdwn", "text":
@@ -115,11 +122,13 @@ def run_date():
 
 
 def make_event(day, account_id, event_name, owner_id, topic, slack_user, outcome=None, note=None,
-               event_id=None):
+               event_id=None, status=None, due=None):
     """One click as an engagement event, dated on the pipeline's run date at the
     real time of day of the click. event_id: Slack's own identity of the click, when known,
-    so the same click sent twice is the same event (a replay overwrites, never doubles)."""
+    so the same click sent twice is the same event (a replay overwrites, never doubles).
+    status and due: a decline's flag status and snooze date, a commitment's date."""
     now = datetime.now(timezone.utc)
+    extra = {k: v for k, v in (("status", status), ("due", due)) if v is not None}
     return {
         "event_id": event_id or str(uuid.uuid4()),
         "event_name": event_name,
@@ -128,14 +137,16 @@ def make_event(day, account_id, event_name, owner_id, topic, slack_user, outcome
         "account_id": account_id,
         "user_id": None,
         "properties": {"owner_id": owner_id, "topic": topic, "outcome": outcome,
-                       "note": note, "slack_user": slack_user},
+                       "note": note, "slack_user": slack_user, **extra},
         "context": {"source": "slack"},
     }
 
 
-def append_event(day, account_id, event_name, owner_id, topic, slack_user, outcome=None, note=None):
+def append_event(day, account_id, event_name, owner_id, topic, slack_user, outcome=None, note=None,
+                 status=None, due=None):
     """Append one click as an engagement event in data/engagement/<run date>.jsonl (the laptop)."""
-    event = make_event(day, account_id, event_name, owner_id, topic, slack_user, outcome, note)
+    event = make_event(day, account_id, event_name, owner_id, topic, slack_user, outcome, note,
+                       status=status, due=due)
     path = DATA / "engagement" / f"{day}.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
@@ -175,6 +186,13 @@ def call_form(ref, channel, ts):
             {"type": "input", "block_id": "note", "optional": True,
              "label": {"type": "plain_text", "text": "Note"},
              "element": {"type": "plain_text_input", "action_id": "value", "multiline": True}},
+            # a promise made in the meeting (22 Nov 2026): what, by when; tracked as a commitment
+            {"type": "input", "block_id": "promise", "optional": True,
+             "label": {"type": "plain_text", "text": "We committed to… (optional)"},
+             "element": {"type": "plain_text_input", "action_id": "value", "max_length": 200}},
+            {"type": "input", "block_id": "promise_by", "optional": True,
+             "label": {"type": "plain_text", "text": "By"},
+             "element": {"type": "datepicker", "action_id": "value"}},
         ]}
 
 
@@ -184,11 +202,87 @@ def form_answers(view):
     return values["outcome"]["value"]["selected_option"]["value"], values["note"]["value"].get("value") or None
 
 
-def call_logged_blocks(ref, user, outcome, note):
+def promise_answers(view):
+    """(what was promised, by when) from a submitted call form, or (None, None). A form from
+    before 22 Nov 2026 has no such fields: nothing promised."""
+    values = view["state"]["values"]
+    what = ((values.get("promise") or {}).get("value") or {}).get("value") or None
+    by = ((values.get("promise_by") or {}).get("value") or {}).get("selected_date") or None
+    return (what.strip()[:200] if what else None), by
+
+
+def promise_error(what, by):
+    """Slack shows this under the field when the form is incomplete, or None."""
+    if by and not what:
+        return {"promise": "Say what was promised, or clear the date."}
+    if what and not by:
+        return {"promise_by": "Pick the date it's due."}
+    return None
+
+
+def decline_form(ref, channel, ts):
+    """The "Not needed" form: why the recommendation isn't needed ([work] decline_reasons)."""
+    meta = json.dumps({**ref, "channel": channel, "ts": ts})
+    return {
+        "type": "modal", "callback_id": "decline_form", "private_metadata": meta,
+        "title": {"type": "plain_text", "text": "Not needed"},
+        "submit": {"type": "plain_text", "text": "Save"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            {"type": "section", "text": {"type": "mrkdwn",
+                                         "text": f"*{ref['n']}* ({ref['a']}) · {flag_label(ref['f'], ref['s'])}"}},
+            {"type": "input", "block_id": "reason", "label": {"type": "plain_text", "text": "Why isn't it needed?"},
+             "element": {"type": "static_select", "action_id": "value", "options": [
+                 {"text": {"type": "plain_text", "text": label}, "value": key} for key, label in REASONS.items()]}},
+            {"type": "input", "block_id": "until", "optional": True,
+             "label": {"type": "plain_text", "text": "Snooze until (for \"Not now\")"},
+             "element": {"type": "datepicker", "action_id": "value"}},
+            {"type": "input", "block_id": "note", "optional": True,
+             "label": {"type": "plain_text", "text": "Note (needed for \"Other\")"},
+             "element": {"type": "plain_text_input", "action_id": "value", "max_length": 200}},
+        ]}
+
+
+def decline_answers(view):
+    """(reason, snooze date, note) from a submitted "Not needed" form."""
+    values = view["state"]["values"]
+    reason = ((values["reason"]["value"] or {}).get("selected_option") or {}).get("value")
+    until = (values.get("until", {}).get("value") or {}).get("selected_date") or None
+    note = ((values.get("note", {}).get("value") or {}).get("value") or "").strip()[:200] or None
+    return reason, until, note
+
+
+def decline_error(reason, until, note, day):
+    """The same rules as the cockpit (cockpit_sync.py): a known reason, a future date for
+    "later", a note for "other". Returned as Slack's field errors, or None."""
+    if reason not in REASONS:
+        return {"reason": "Pick a reason."}
+    if reason == "later" and (not until or str(until) <= str(day)):
+        return {"until": "Pick the date it should come back."}
+    if reason == "other" and not note:
+        return {"note": "Say why."}
+    return None
+
+
+def declined_blocks(ref, user, reason, until, note):
+    """The card after "Not needed": the buttons give way to who and why."""
+    why = REASONS[reason] + (f" until {until}" if reason == "later" and until else "")
+    text = f":no_entry_sign: Not needed, says <@{user}>: *{why}*" + (f" · _{note}_" if note else "")
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": f"*{ref['n']}* ({ref['a']}) · {flag_label(ref['f'], ref['s'])}"}},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]},
+        {"type": "actions", "elements": [{"type": "button", "action_id": "open_timeline",
+                                          "text": {"type": "plain_text", "text": "Open timeline"},
+                                          "url": f"{SLACK['cockpit_url']}#{ref['a']}"}]},
+    ]
+
+
+def call_logged_blocks(ref, user, outcome, note, promise=None, by=None):
     """The card after a call is logged: the buttons give way to what happened (the bot
     can't read messages, by design, so the card is rebuilt from what we know)."""
     what = "QBR" if ref["f"] == "qbr" else "Call"
-    text = f":telephone_receiver: {what} logged by <@{user}>: *{OUTCOMES[outcome]}*" + (f" · _{note}_" if note else "")
+    text = (f":telephone_receiver: {what} logged by <@{user}>: *{OUTCOMES[outcome]}*" + (f" · _{note}_" if note else "")
+            + (f"\n:handshake: Committed: {promise}, by {by}" if promise else ""))
     return [
         {"type": "section", "text": {"type": "mrkdwn", "text": f"*{ref['n']}* ({ref['a']}) · {flag_label(ref['f'], ref['s'])}"}},
         {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]},

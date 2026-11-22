@@ -966,6 +966,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   call_logged_blocks, handback_blocks); the Slack app talks to one listener at
   a time (Socket Mode on = the laptop, a Request URL = AWS). actions.py puts
   the run date on every button ("d"), so either listener dates a click on it.
+  The four kinds of work in Slack (22 Nov 2026): a "Not needed" button on every task card opens a
+  form with the [work] decline_reasons (the same list and rules as the cockpit: a future date for
+  "later", a note for "other"; Slack keeps the form open with the error under the field) and
+  writes recommendation_declined with the flag and its status; the card then says who and why.
+  The call form gains an optional "We committed to…" and "By" (both or neither): a promise
+  becomes commitment_made (what, by when) beside the meeting, and shows on the card. Both
+  listeners use the same pieces; the AWS one gives the promise its own id from the click's.
 - `tests/cockpit_test.js`: the cockpit test (Node + Playwright, a headless
   browser). Opens data/views.html like a person would: every tab in light and
   dark, desktop and phone (no script errors, no sideways scroll); numbers agree

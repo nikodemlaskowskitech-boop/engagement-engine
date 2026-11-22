@@ -39,7 +39,8 @@ import uuid
 from datetime import datetime, timezone
 
 from slack_loop import (CALL_TOPIC, OUTCOMES, call_form, call_logged_blocks, claimed_blocks, form_answers,
-                        handback_blocks, make_event)
+                        handback_blocks, make_event, decline_answers, decline_error, decline_form,
+                        declined_blocks, promise_answers, promise_error)
 
 BUCKET = os.environ.get("BUCKET", "")
 OWNER = os.environ.get("ACCOUNT_ID", "")
@@ -113,10 +114,15 @@ def click_id(payload):
     return str(uuid.uuid5(uuid.NAMESPACE_URL, "slack:" + "|".join(map(str, parts + [payload.get("user", {}).get("id")]))))
 
 
-def save(s3, ref, event_name, topic, user, outcome=None, note=None, event_id=None):
+def click_day(ref):
+    """The pipeline's run date the card carries, else today's."""
+    return ref.get("d") if DAY.match(str(ref.get("d", ""))) else datetime.now(timezone.utc).date().isoformat()
+
+
+def save(s3, ref, event_name, topic, user, outcome=None, note=None, event_id=None, status=None, due=None):
     """One click, one file under state/clicks/<run date>/<click id>.json."""
-    day = ref.get("d") if DAY.match(str(ref.get("d", ""))) else datetime.now(timezone.utc).date().isoformat()
-    event = make_event(day, ref["a"], event_name, ref["o"], topic, user, outcome, note, event_id)
+    day = click_day(ref)
+    event = make_event(day, ref["a"], event_name, ref["o"], topic, user, outcome, note, event_id, status, due)
     s3.put_object(Bucket=BUCKET, Key=f"{CLICKS}{day}/{event['event_id']}.json", Body=json.dumps(event).encode(),
                   ContentType="application/json", ExpectedBucketOwner=OWNER)
     return event
@@ -124,6 +130,12 @@ def save(s3, ref, event_name, topic, user, outcome=None, note=None, event_id=Non
 
 def answer(code, body=""):
     return {"statusCode": code, "headers": {"Content-Type": "text/plain"}, "body": body}
+
+
+def form_errors(errors):
+    """Keep the form open with an error under each field (Slack's response_action)."""
+    return {"statusCode": 200, "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"response_action": "errors", "errors": errors})}
 
 
 def handler(event, context, s3=None, ssm=None, opener=None, now=None):
@@ -157,6 +169,9 @@ def handler(event, context, s3=None, ssm=None, opener=None, now=None):
         elif kind == "log_call":                    # the form must open within 3 s of the click
             slack("views.open", token, {"trigger_id": payload.get("trigger_id"),
                                         "view": call_form(ref, channel, ts)}, opener)
+        elif kind == "decline":                     # the "Not needed" form, within 3 s of the click
+            slack("views.open", token, {"trigger_id": payload.get("trigger_id"),
+                                        "view": decline_form(ref, channel, ts)}, opener)
         elif kind == "approve_handback":
             save(s3, ref, "handback_approved", "handback", user, event_id=click_id(payload))
             slack("chat.update", token, {"channel": channel, "ts": ts, "text": f"{ref['n']}: hand-back approved",
@@ -170,11 +185,33 @@ def handler(event, context, s3=None, ssm=None, opener=None, now=None):
         outcome, note = form_answers(view)
         if outcome not in OUTCOMES:
             return answer(200)
+        promise, by = promise_answers(view)
+        bad = promise_error(promise, by)
+        if bad:
+            return form_errors(bad)
         topic = CALL_TOPIC.get(ref["f"], "follow_up")
-        save(s3, ref, "meeting_held", topic, user, outcome, note, click_id(payload))
+        cid = click_id(payload)
+        save(s3, ref, "meeting_held", topic, user, outcome, note, cid)
+        if promise:                                # a promise made in the meeting: its own event, its own id
+            save(s3, ref, "commitment_made", "commitment", user, note=promise,
+                 event_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"promise:{cid}")) if cid else None, due=by)
         slack("chat.update", token, {"channel": ref["channel"], "ts": ref["ts"], "text": f"{ref['n']}: call logged",
-                                     "blocks": call_logged_blocks(ref, user, outcome, note)}, opener)
-        print(f"  call logged {ref['a']}  {ref['n']}  ({topic}, {OUTCOMES[outcome]})")
+                                     "blocks": call_logged_blocks(ref, user, outcome, note, promise, by)}, opener)
+        print(f"  call logged {ref['a']}  {ref['n']}  ({topic}, {OUTCOMES[outcome]})" + (f", committed by {by}" if promise else ""))
         return answer(200)                         # an empty 200 closes the form
+
+    if payload.get("type") == "view_submission" and payload.get("view", {}).get("callback_id") == "decline_form":
+        view = payload["view"]
+        ref = json.loads(view.get("private_metadata") or "{}")
+        reason, until, note = decline_answers(view)
+        bad = decline_error(reason, until, note, click_day(ref))
+        if bad:
+            return form_errors(bad)
+        save(s3, ref, "recommendation_declined", ref["f"], user, reason, note, click_id(payload),
+             status=ref["s"], due=until if reason == "later" else None)
+        slack("chat.update", token, {"channel": ref["channel"], "ts": ref["ts"], "text": f"{ref['n']}: not needed",
+                                     "blocks": declined_blocks(ref, user, reason, until, note)}, opener)
+        print(f"  not needed  {ref['a']}  {ref['n']}  ({reason})")
+        return answer(200)
 
     return answer(200)                             # anything else: nothing to do
