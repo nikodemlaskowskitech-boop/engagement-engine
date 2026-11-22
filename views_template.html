@@ -585,6 +585,17 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <p class="note" id="ld-move-note"></p>
         </div>
       </div>
+      <!-- Signals (22 Nov 2026, the leadership design I1): what's changing. Fixed lines, discussed
+           only when they move; the portfolio's themes from the documents; one cross-signal rule -->
+      <h2 class="band" id="ld-signals-band">Signals: what's changing</h2>
+      <div class="grid2 even" id="ld-signals">
+        <div class="panel"><h2>Shelfware among new accounts</h2><p class="finding small" id="sg-cohort"></p><div id="sg-cohort-chart"></div><p class="note" id="sg-cohort-note"></p></div>
+        <div class="panel"><h2>Under the 40% usage line</h2><p class="finding small" id="sg-usage"></p><div id="sg-usage-chart"></div><p class="note" id="sg-usage-note"></p></div>
+      </div>
+      <div class="grid2 even" id="ld-signals-2">
+        <div class="panel"><h2>What customers raise</h2><p class="finding small" id="sg-themes-finding"></p><ul class="sum-list" id="sg-themes"></ul><p class="note" id="sg-themes-note"></p></div>
+        <div class="panel"><h2>Where the signals meet</h2><p class="finding small" id="sg-cross-finding"></p><ul class="sum-list" id="sg-cross"></ul><p class="note" id="sg-cross-note"></p></div>
+      </div>
       <div class="panel" id="ld-trail-panel" hidden>
         <h2 id="ld-trail-title"></h2>
         <div class="tablewrap" id="ld-trail-list"></div>
@@ -3013,7 +3024,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       tile("Gross revenue retention", pct1(grr), !segd && prior ? `year before ${pct1(prior.grr)} (${pts(grr - prior.grr)})` : "this year, standard cohort", false) +
       tile("Net revenue retention", pct1(nrr), !segd && prior ? `year before ${pct1(prior.nrr)} (${pts(nrr - prior.nrr)})` : "this year, standard cohort", false) +
       tile("One point of GRR", money(point), `1% of today's ${money(book)} ARR`, false) +
-      tile("At risk, next two quarters", money(fData), `${(fData / Math.max(1, point)).toFixed(1)} pts of GRR · ${plural(ahead.length, "renewal")}`, fData > 0) +
+      tile("Renewals at risk, next two quarters", money(fData), `${(fData / Math.max(1, point)).toFixed(1)} pts of GRR · ${plural(ahead.length, "renewal")}`, fData > 0) +
       tile("ARR per CS person", people.length ? money(covered / people.length) : "–", COST
         ? `one GRR point = ${(point / COST).toFixed(1)} people at ${money(COST)} a year`
         : `${money(covered)} with a named CSM or pool member, ${people.length} ${people.length === 1 ? "person" : "people"}`, false);
@@ -3200,6 +3211,90 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("ld-ops-finding").textContent = bits.join("; ") + "." +
       (top && total ? ` ${top[1]} of the ${total} late items sit with ${(ownerName[top[0]] || top[0]).replace(/ \(manager\)$/, "")}'s team.` : "");
   }
+  // Signals (22 Nov 2026): every line is a weekly share with its denominator, from the replay of
+  // the flags (history.py) and the usage series; "moved" = move_points or more over move_weeks.
+  const SG = (D.settings && D.settings.signals) || {};
+  function trendSvg(series, labels) {
+    // one or two weekly lines of shares (%), the same scale; the end of each line labelled
+    const W = fitW(420, 300), H = 120, L = 30, R = 70, T = 8, B = 20, n = series[0].length;
+    const max = Math.max(10, ...series.flat().filter((v) => v != null)) * 1.15;
+    const X = (i) => L + (i / Math.max(1, n - 1)) * (W - L - R), Y = (v) => T + (1 - v / max) * (H - T - B);
+    const cols = ["var(--ink)", "var(--ink-3)"];
+    let g = `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--line)"/>` +
+      `<text x="${L - 4}" y="${Y(0) + 4}" text-anchor="end" class="lbl">0%</text><text x="${L - 4}" y="${Y(max / 1.15) + 4}" text-anchor="end" class="lbl">${Math.round(max / 1.15)}%</text>` +
+      `<text x="${L}" y="${H - 4}" class="lbl">${fmt(HIST.weeks[0])}</text><text x="${W - R}" y="${H - 4}" text-anchor="end" class="lbl">${fmt(HIST.weeks[n - 1])}</text>`;
+    series.forEach((sr, k) => {
+      const pts = sr.map((v, i) => (v == null ? null : `${X(i).toFixed(1)},${Y(v).toFixed(1)}`)).filter(Boolean).join(" ");
+      const lastI = sr.map((v, i) => (v == null ? -1 : i)).filter((i) => i >= 0).pop();
+      g += `<polyline points="${pts}" fill="none" stroke="${cols[k]}" stroke-width="2" stroke-linejoin="round"/>`;
+      if (lastI != null && lastI >= 0) g += `<text x="${X(lastI) + 6}" y="${Y(sr[lastI]) + 4 + (k ? 10 : 0)}" class="lbl" fill="${cols[k]}">${series.length > 1 ? esc(labels[k]) + " " : ""}${Math.round(sr[lastI])}%</text>`;   // one line: the number is enough
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(labels.join(" and "))}, weekly">${g}</svg>`;
+  }
+  const moved = (now, then) => (now == null || then == null ? "" : Math.abs(now - then) < (SG.move_points ?? 5) ? "steady" : now > then ? "up" : "down");
+  function drawSignals() {
+    if (!$("ld-signals") || !HIST.weeks || !HIST.weeks.length) return;
+    const W = HIST.weeks, last = W.length - 1, base = Math.max(0, last - (SG.move_weeks ?? 13)), pool = D.accounts.filter(inSeg);
+    const who = segOn() ? segName() + ": " : "";
+    // 1. shelfware by signing cohort: new accounts against the book signed before them
+    const [lo, hi] = SG.new_signed_days || [60, 200];
+    const shelf = {};
+    for (const [w, id, f, st] of HIST.flags) if (f === "churn" && st === "Shelfware") (shelf[w] = shelf[w] || new Set()).add(id);
+    const at = (w) => { const d = day(W[w]), S = shelf[w] || new Set();
+      const nw = pool.filter((a) => a.customer_since && d - day(a.customer_since) >= lo && d - day(a.customer_since) <= hi);
+      const old = pool.filter((a) => a.customer_since && d - day(a.customer_since) > hi);
+      return { n: nw.length, h: nw.filter((a) => S.has(a.account_id)).length, on: old.length, oh: old.filter((a) => S.has(a.account_id)).length }; };
+    const cs = W.map((_, w) => at(w)), share = (h, n) => (n ? (100 * h) / n : null);
+    const nS = cs.map((c) => share(c.h, c.n)), oS = cs.map((c) => share(c.oh, c.on)), C = cs[last];
+    const mv = moved(nS[last], nS[base]);
+    $("sg-cohort").textContent = C.n
+      ? `${who}${C.h} of ${C.n} accounts signed ${lo}-${hi} days ago (${pct(C.h, C.n)}%) are Shelfware, against ${C.oh} of ${C.on} (${pct(C.oh, C.on)}%) of the book signed earlier. ` +
+        (mv === "steady" ? `Steady since ${fmt(W[base])}.` : `${mv === "up" ? "Up" : "Down"} from ${Math.round(nS[base] ?? 0)}% on ${fmt(W[base])}.`)
+      : `${who}no account signed ${lo}-${hi} days ago.`;
+    $("sg-cohort-chart").innerHTML = trendSvg([nS, oS], ["new", "earlier"]);
+    $("sg-cohort-note").textContent = `Possible explanations to check, not conclusions: who Sales signed, how onboarding went, or what was promised in the deal. ${(SG.planted || {}).cohort_shelfware || ""}`;
+    // 2. under the 40% usage line, by week, the whole book (or the segment)
+    const idx = W.map((we) => D.util_dates.findIndex((d) => d >= we));
+    const us = idx.map((i) => { if (i < 0) return null; const live = pool.filter((a) => a.util[i] != null); return live.length ? { n: live.length, h: live.filter((a) => a.util[i] < 40).length } : null; });
+    const uS = us.map((u) => (u ? share(u.h, u.n) : null)), U = us[last] || { n: 0, h: 0 };
+    const mu = moved(uS[last], uS[base]);
+    $("sg-usage").textContent = `${who}${U.h} of ${U.n} live accounts${segOn() ? "" : " in the whole book"} (${pct(U.h, U.n)}%) are under the line. ` +
+      (mu === "steady" ? `Steady since ${fmt(W[base])}.` : `${mu === "up" ? "Up" : "Down"} from ${Math.round(uS[base] ?? 0)}% on ${fmt(W[base])}.`);
+    $("sg-usage-chart").innerHTML = trendSvg([uS], ["under 40%"]);
+    $("sg-usage-note").textContent = "30-day utilisation under 40% of the contract. Not the same as at risk: a flag needs a falling trend or fewer users too.";
+    // 3. what customers raise: themes from the documents across the portfolio, with ARR and
+    // "raised without action" (no CS meeting or workshop since the document)
+    const R = D.research || {}, since = TODAY - (SG.theme_days ?? 90), byTheme = {};
+    for (const a of pool) for (const t of ((R[a.account_id] || {}).themes || [])) {
+      if (day(t.date) < since) continue;
+      const met = (D.touches || []).some((x) => x.account_id === a.account_id && CS_TOUCH.has(x.event) && x.date >= t.date);
+      const b = byTheme[t.label] = byTheme[t.label] || { accs: [], arr: 0, idle: [] };
+      b.accs.push(a); b.arr += a.arr || 0; if (!met) b.idle.push(a);
+    }
+    const th = Object.entries(byTheme).sort((x, y) => y[1].arr - x[1].arr);
+    const idleAll = new Set(th.flatMap(([, b]) => b.idle.map((a) => a.account_id)));
+    $("sg-themes-finding").textContent = th.length
+      ? `${who}${plural(new Set(th.flatMap(([, b]) => b.accs.map((a) => a.account_id))).size, "account")} raised something in the last ${SG.theme_days ?? 90} days; ${idleAll.size} with no CS meeting since.`
+      : `${who}nothing raised in the documents in the last ${SG.theme_days ?? 90} days.`;
+    $("sg-themes").innerHTML = th.slice(0, 5).map(([label, b]) => `<li><span class="when">${money(b.arr)}</span><span><b>${esc(label)}</b>: ${plural(b.accs.length, "account")}` +
+      `${b.idle.length ? `, <span class="bad">${b.idle.length} raised without action</span>` : ""}<br><small>${b.accs.slice(0, 3).map((a) => `<button class="link" data-open-acc="${esc(a.account_id)}">${esc(a.account_name)}</button>`).join(", ")}${b.accs.length > 3 ? " and more" : ""}</small></span></li>`).join("");
+    $("sg-themes-note").textContent = "Themes are keyword matches in tickets, emails and call notes, with their evidence on each account page: possible, not verdicts. In the demo, documents cover a few dozen accounts.";
+    // 4. where the signals meet: a risk theme + usage under the line or a churn flag + a renewal soon
+    const grow = new Set((D.settings && D.settings.research_growth_themes) || []);
+    const cross = pool.filter((a) => {
+      const risk = ((R[a.account_id] || {}).themes || []).some((t) => !grow.has(t.theme) && day(t.date) >= since);
+      const u = (a.util || []).filter((v) => v != null).slice(-1)[0];
+      const usage = (u != null && u < 40) || a.flags.some((f) => f.flag === "churn");
+      return risk && usage && day(a.renewal_date) - TODAY >= 0 && day(a.renewal_date) - TODAY <= (SG.renewal_days ?? 120);
+    }).sort((x, y) => (y.arr || 0) - (x.arr || 0));
+    $("sg-cross-finding").textContent = cross.length
+      ? `${who}${plural(cross.length, "account")} (${money(cross.reduce((t, a) => t + (a.arr || 0), 0))} ARR) raised a concern, show weak usage and renew within ${SG.renewal_days ?? 120} days.`
+      : `${who}no account where a raised concern, weak usage and a near renewal meet.`;
+    $("sg-cross").innerHTML = cross.slice(0, 5).map((a) => { const t = ((R[a.account_id] || {}).themes || []).find((x) => !grow.has(x.theme));
+      return `<li><span class="when">${money(a.arr)}</span><span><button class="link" data-open-acc="${esc(a.account_id)}"><b>${esc(a.account_name)}</b></button><br><small>${esc(t ? t.label : "")} · renews ${fmt(a.renewal_date)} · ${esc(a.owner || "")}</small></span></li>`; }).join("");
+    $("sg-cross-note").textContent = "Any one of these is common; together they ask for a conversation before the renewal does. A rule over facts on the page, not a prediction.";
+    $("ld-signals").parentElement.querySelectorAll("[data-open-acc]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.openAcc)));
+  }
   function drawLeadership() {
     if (!$("view-lead")) return;                     // not on this person's page
     const accs = D.accounts.filter(inSeg), person = (a) => a.tier !== "Self-service";
@@ -3268,6 +3363,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     ], "Every Enterprise account in this segment has a CSM.", 5);
     drawLeadTrends(STALE, who);
     drawGlossary();
+    drawSignals();
     // one clock for a late task, the same as Tasks: its tier's days to reach the customer (22 Nov 2026, definitions pass)
     drawOpsLine(late, waiting.filter((t) => t.age_days >= REACH(tierOf(t.account_id))), noCsm);
     // the trail: four stages, each a cairn whose colour and height say how urgent it is

@@ -850,6 +850,30 @@ const segment = async (page, values) => {
     await page.close();
   }
 
+  // --- Signals on Leadership (22 Nov 2026): recomputed from the export ---
+  {
+    const { page, errors } = await open(browser);
+    await tab(page, "lead");
+    const S = D.settings.signals, H = D.history, last = H.weeks.length - 1, [lo, hi] = S.new_signed_days;
+    const dd = (s) => Math.round(Date.parse(s) / 864e5), d = dd(H.weeks[last]);
+    const shelf = new Set(H.flags.filter(([w, , f, st]) => w === last && f === "churn" && st === "Shelfware").map((x) => x[1]));
+    const nw = D.accounts.filter((a) => d - dd(a.customer_since) >= lo && d - dd(a.customer_since) <= hi);
+    const old = D.accounts.filter((a) => d - dd(a.customer_since) > hi);
+    const txt = await page.textContent("#sg-cohort");
+    check(txt.startsWith(`${nw.filter((a) => shelf.has(a.account_id)).length} of ${nw.length} accounts signed`) && txt.includes(`against ${old.filter((a) => shelf.has(a.account_id)).length} of ${old.length}`),
+      "signals: shelfware among new accounts against the book, recomputed from the weekly replay", txt);
+    const asOf = dd(D.as_of), since = asOf + 1 - S.theme_days, grow = new Set(D.settings.research_growth_themes), R = D.research || {};
+    const cross = D.accounts.filter((a) => {
+      const risk = ((R[a.account_id] || {}).themes || []).some((t) => !grow.has(t.theme) && dd(t.date) >= since);
+      const u = (a.util || []).filter((v) => v != null).slice(-1)[0];
+      const days = dd(a.renewal_date) - (asOf + 1);
+      return risk && ((u != null && u < 40) || a.flags.some((f) => f.flag === "churn")) && days >= 0 && days <= S.renewal_days; });
+    const ct = await page.textContent("#sg-cross-finding");
+    check(cross.length ? ct.startsWith(`${cross.length} account`) : /no account/.test(ct), `signals: ${cross.length} accounts where a concern, weak usage and a near renewal meet`, ct);
+    check(/Planted in the demo data/.test(await page.textContent("#sg-cohort-note")) && !errors.length, "signals: the planted trend says so, no script errors", errors.join(" | "));
+    await page.close();
+  }
+
   // --- Business case: GRR and NRR, standard definitions, 12 Nov 2026 ---
   {
     const R = D.retention, Y = R.year, P = R.prior, F = R.forecast;
