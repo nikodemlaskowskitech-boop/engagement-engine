@@ -109,6 +109,7 @@ def accounts(con, where=""):
                coalesce(c.csm_owner, c.pool_owner, c.cs_pool) AS owner_id,   -- the named owner first
                c.cs_pool AS pool,
                c.arr, c.arr_estimated,
+               coalesce(c.customer_since, c.contract_start) AS customer_since,   -- first signed: the cohort (22 Nov 2026)
                t.owner_name AS owner, t.manager
         FROM crm c
         LEFT JOIN cs_team t ON t.owner_id = coalesce(c.csm_owner, c.pool_owner, c.cs_pool)

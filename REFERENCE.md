@@ -850,6 +850,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   and on the Leadership line alike (was 14 days on the line). The usage line names its population
   (whole book). A glossary panel on Leadership lists the rules; a new number gets a row first.
   site_test checks the line and Tasks agree.
+  Signals (22 Nov 2026, the leadership design I1): a band after Exposure with four parts, the same
+  every quarter. Two weekly lines with their denominators: Shelfware among accounts signed
+  [signals] new_signed_days ago against the book signed earlier (from history.py's replay and the
+  export's new customer_since; the planted trend, labelled as planted), and the share under the
+  40% usage line. Each says "steady" or how far it moved over move_weeks (move_points or more).
+  "What customers raise": the research themes across the portfolio in theme_days, by ARR, with
+  "raised without action" (no CS meeting or workshop since the document). "Where the signals
+  meet": a risk theme, plus usage under the line or a churn flag, plus a renewal within
+  renewal_days. Every number follows the segment bar. cockpit_test recomputes the cohort and the
+  cross-signal from the export. Book of business folds into this band with the tab restructure.
+  The definitions pass missed one tile: "Renewals at risk, next two quarters", fixed here.
 - `roles.py`: one cockpit page per person (ROLES.md, settings.toml [roles]),
   called by export_views.py, or `python roles.py` on data/views_data.json. Cuts
   the export to the person's accounts (the team = everyone under one manager;

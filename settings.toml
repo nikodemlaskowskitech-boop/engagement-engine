@@ -302,6 +302,21 @@ self_service = false
 outcomes = "team_total"
 edit = { forecast = "own", next_step = "own", handover_confirm = "own", decline = "own", outcome_check = "own", commitment = "own" }
 
+[signals]
+# Leadership's Signals band (22 Nov 2026, the leadership design I1): fixed lines, the same every
+# quarter, discussed only when they move. "New accounts" = signed new_signed_days ago (old enough
+# for the Shelfware rule, recent enough to be a cohort); a line "moved" when it changed by
+# move_points or more over move_weeks. Themes count when raised in the last theme_days; "raised
+# without action" = no CS meeting or workshop since. The cross-signal: a risk theme, plus usage
+# under the line or a churn flag, plus a renewal within renewal_days.
+new_signed_days = [60, 200]
+move_weeks = 13
+move_points = 5
+theme_days = 90
+renewal_days = 120
+# said beside a line the demo data was built to show (generate_events.PLANTED_TREND)
+planted = { cohort_shelfware = "Planted in the demo data on purpose (generate_events.py), to show the method." }
+
 [work]
 # The four kinds of work (22 Nov 2026, Nikodem): a recommendation (the engine's to-do on a flag)
 # can be declined with a reason; a next step says what it should achieve; the owner checks later
