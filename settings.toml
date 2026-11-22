@@ -284,7 +284,7 @@ tabs = ["tasks", "lead", "overview", "outcomes", "team", "book", "timeline", "on
 scope = "team"
 self_service = true
 outcomes = "by_owner"
-edit = { forecast = "team", next_step = "team", assign = "team", handback = "team", handover_confirm = "team", decline = "team", outcome_check = "team" }
+edit = { forecast = "team", next_step = "team", assign = "team", handback = "team", handover_confirm = "team", decline = "team", outcome_check = "team", commitment = "team" }
 
 [roles.csm]
 # three places (20 Nov 2026, Nikodem's CSM route): My book (where I stand), My work (what to pick
@@ -293,14 +293,14 @@ tabs = ["mybook", "tasks", "timeline"]
 scope = "team"
 self_service = false
 outcomes = "team_total"              # account assignment may drive commission: no per-owner results
-edit = { forecast = "own", next_step = "own", handover_confirm = "own", decline = "own", outcome_check = "own" }
+edit = { forecast = "own", next_step = "own", handover_confirm = "own", decline = "own", outcome_check = "own", commitment = "own" }
 
 [roles.member]                       # a Scale pool member: like a CSM, on the accounts named to them
 tabs = ["mybook", "tasks", "timeline"]
 scope = "team"
 self_service = false
 outcomes = "team_total"
-edit = { forecast = "own", next_step = "own", handover_confirm = "own", decline = "own", outcome_check = "own" }
+edit = { forecast = "own", next_step = "own", handover_confirm = "own", decline = "own", outcome_check = "own", commitment = "own" }
 
 [work]
 # The four kinds of work (22 Nov 2026, Nikodem): a recommendation (the engine's to-do on a flag)
@@ -309,6 +309,9 @@ edit = { forecast = "own", next_step = "own", handover_confirm = "own", decline 
 decline_reasons = { handled = "Already handled elsewhere", context = "The customer context says no", data = "The data is wrong", later = "Not now (snooze until a date)", other = "Other" }
 intended_outcomes = { ramp = "Agree a ramp or adoption plan", volume = "Confirm the renewal volume", unblock = "Unblock a technical issue", growth = "Build the growth case", sponsor = "Re-engage a sponsor", other = "Other" }
 outcome_results = { yes = "Achieved", partly = "Partly", no = "Not achieved" }
+# a commitment (a promise to the customer): where it was made, and how it ended
+commitment_sources = { meeting = "In a meeting", email = "In an email", call = "In a call (notes)", other = "Elsewhere" }
+commitment_results = { kept = "Kept", dropped = "Dropped" }
 
 [handover]
 # Handover briefs (handover.py): where the three silos' exports live (the demo
@@ -508,6 +511,13 @@ max_themes = 3
 # of evidence supports one theme only (its strongest): on the demo corpus, precision 40% -> 78%,
 # recall 95% -> 76% (20 Nov 2026; measured against the answer key, so optimistic)
 min_relative_score = 0.5
+# Promises our side made (22 Nov 2026, Nikodem: commitments from meetings and emails): a sentence
+# from someone on our side (an email From: or a call line by a speaker whose redacted name starts
+# with our_side) with a promise word and an action verb. Shown as a possible commitment with its
+# line; a person tracks it before it counts. Keyword matching: it misses promises phrased otherwise.
+promise_our_side = "CS"
+promise_words = ["we'll", "we will", "i'll", "i will", "as promised"]
+promise_verbs = ["send", "share", "set up", "credit", "hold", "bring", "follow up", "get back", "book", "run", "fix", "deliver", "provide", "schedule", "check", "confirm", "escalate", "arrange", "prepare", "look into", "introduce", "waive", "extend"]
 # themes that point to growth, not risk: on a growth row they come first, on a churn row last
 # (My book and My work show the first theme beside "Why" as an insight, never as a status)
 growth_themes = ["more_volume"]

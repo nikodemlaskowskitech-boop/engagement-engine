@@ -175,7 +175,9 @@ One JSON event per line, one file per day in `data/events/`.
   .outcome = reason, .due = snooze) and outcome_checked (did the step achieve
   its aim: .intended, .status = yes | partly | no); from Slack too, "Not needed"
   on a card and commitment_made (.note = what was promised, .due) on the call
-  form. Lists in settings [work].
+  form; the cockpit adds commitments (tracked from a promise found in the
+  documents: .status = its id) and commitment_closed (.topic = the commitment's
+  event id, .status = kept | dropped). Lists in settings [work].
 
 ## The four flags
 

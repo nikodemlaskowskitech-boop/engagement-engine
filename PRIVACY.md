@@ -324,3 +324,10 @@ The account page's research (research.py) reads only the redacted documents the 
 already carries (§6): names, emails, phones and companies are replaced before the file is
 committed. So the themes and evidence lines on any page, the public site included, are no more
 than the public search already shows.
+
+## 12. Commitments and declines on the public site (22 Nov 2026)
+
+A promise typed by a person (in Slack's call form or the cockpit), and the note on a declined
+recommendation or an outcome check, never reach the public site: roles.py --site replaces them.
+A commitment tracked from a document keeps its text, because that text is the redacted line the
+public search already shows. Possible promises are found only in the redacted documents file.

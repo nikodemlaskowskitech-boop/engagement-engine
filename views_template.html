@@ -146,6 +146,11 @@ dl.facts dd { margin: 0; }
 .why .todo b { font-weight: 600; }
 .why .todo.declined { color: var(--ink-3); }
 .decline-form .fc-form, .aim-ask .fc-form { margin-top: 6px; }
+.chip { display: inline-block; font: 600 0.7rem var(--font-body); border-radius: 4px; padding: 1px 6px; background: var(--line); color: var(--ink-2); }
+.chip.late { background: color-mix(in srgb, var(--critical) 20%, transparent); color: var(--critical); }
+.chip.soon { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
+.chip.kept { background: color-mix(in srgb, var(--good) 20%, transparent); color: var(--good); }
+.com-add { margin-top: 10px; }
 @media (max-width: 720px) { .why .wn { grid-template-columns: 1fr; } }
 /* an insight from the documents: context beside "Why", never a status */
 .insight { display: block; margin-top: 4px; font-size: 0.8rem; color: var(--ink-2); text-align: left; }
@@ -770,6 +775,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <div class="forecast" id="tl-next"></div>
         <div class="forecast" id="tl-forecast"></div>
       </div>
+      <!-- commitments (22 Nov 2026): what we promised the customer, and possible promises in the documents -->
+      <div class="panel" id="tl-commit" hidden></div>
       <div class="panel">
         <h2>Summary: what was done, what's next</h2>
         <p class="finding small" id="tl-sum-line"></p>
@@ -978,6 +985,21 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   let declines = groupForecasts(D.declines || []), checks = groupForecasts(D.outcome_checks || []);
   const WORK = (D.settings && D.settings.work) || { decline_reasons: {}, intended_outcomes: {}, outcome_results: {} };
   // a recommendation is declined while its flag is at the same status, until a snooze date passes
+  // commitments (22 Nov 2026): the export's (Slack's and the synced cockpit's), plus the live
+  // database's; a cockpit commitment is named by the same id cockpit_sync.py gives its event
+  let comLive = [], comClose = [];
+  const comKey = (d) => `cockpit-commitment-${d.account_id}-${d.decided_at}`;
+  function commitmentsOf(id) {
+    const base = (D.commitments || []).filter((c) => c.account_id === id && !(dbState === "ready" && c.via === "cockpit")).map((c) => ({ ...c }));
+    const live = comLive.filter((d) => d.account_id === id).map((d) => ({ key: comKey(d), account_id: id, made_at: d.decided_at, by: d.by,
+      what: d.what, due: d.due, source: d.source, doc: d.doc || null, via: "cockpit" }));
+    const all = base.concat(live);
+    for (const c of all) { const cl = comClose.filter((x) => x.key === c.key).slice(-1)[0]; if (cl) Object.assign(c, { result: cl.result, closed_at: cl.decided_at, closed_by: cl.by }); }
+    return all.sort((x, y) => String(x.due).localeCompare(String(y.due)));
+  }
+  const comState = (c) => c.result ? { k: c.result, t: (WORK.commitment_results || {})[c.result] || c.result }
+    : day(c.due) < TODAY ? { k: "late", t: `Late ${TODAY - day(c.due)} d` }
+    : day(c.due) - TODAY <= 7 ? { k: "soon", t: day(c.due) === TODAY ? "Due today" : `Due in ${day(c.due) - TODAY} d` } : { k: "open", t: "Open" };
   const declinedOf = (id, flag, status) => {
     const d = (declines[id] || []).filter((x) => x.flag === flag && x.status === status).slice(-1)[0];
     return d && !(d.reason === "later" && d.due && day(d.due) <= TODAY) ? d : null;
@@ -1505,6 +1527,59 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       });
     }));
   }
+  // Commitments: what we promised this customer, by when, and whether we kept it. The owner (or
+  // team lead) adds one, tracks one found in the documents, and closes it; everyone else reads.
+  function drawCommitments(id) {
+    const a = byId[id], host = $("tl-commit"); if (!a || !host) return;
+    const list = commitmentsOf(id), R = (D.research || {})[id] || {}, can = dbState === "ready" && forecastRole(a, "commitment");
+    const tracked = new Set(list.filter((c) => c.doc).map((c) => `${c.doc}|${String(c.what).slice(0, 60)}`));
+    const found = (R.promises || []).filter((p) => !tracked.has(`${p.id}|${p.line.slice(0, 60)}`));
+    host.hidden = a.tier === "Self-service" && !list.length && !found.length;
+    if (host.hidden) return;
+    const st = list.map(comState), late = st.filter((x) => x.k === "late").length, open = st.filter((x) => ["open", "soon", "late"].includes(x.k)).length;
+    const SRC = WORK.commitment_sources || {};
+    let h = `<h2>Commitments: what we promised</h2><p class="finding small">${list.length
+      ? `${plural(open, "open commitment")}${late ? `, ${late} late` : ""}; ${st.filter((x) => x.k === "kept").length} kept, ${st.filter((x) => x.k === "dropped").length} dropped.`
+      : "No promise on record for this account."}</p>`;
+    if (list.length) h += `<ul class="sum-list">` + list.map((c, i) => { const x = st[i];
+      return `<li><span class="when"><span class="chip ${x.k}">${esc(x.t)}</span></span><span><b>${esc(c.what)}</b><br><small>by ${fmt(c.due)} · ${esc((SRC[c.source] || c.source || "").toLowerCase())}` +
+        `${c.doc ? ` (${esc(c.doc)})` : ""} · ${esc(ownerName[c.by] || managerName(c.by))}${c.result ? `, closed ${whenText(c.closed_at)}` : ""}</small>` +
+        (can && !c.result ? `<br><button class="small" data-close="${esc(c.key)}" data-result="kept">Kept</button> <button class="small" data-close="${esc(c.key)}" data-result="dropped">Dropped</button>` : "") + `</span></li>`; }).join("") + `</ul>`;
+    if (can) h += `<div class="fc-form com-add"><input id="com-what" type="text" maxlength="200" placeholder="We committed to…" aria-label="What was promised">` +
+      `<input id="com-due" type="date" aria-label="By"><select id="com-src" aria-label="Where">${Object.entries(SRC).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>` +
+      `<button class="small primary" id="com-save">Add</button></div><p class="note" id="com-msg" role="alert"></p>`;
+    if (found.length) h += `<h3 class="mini">Possible promises in the documents</h3><ul class="sum-list">` + found.map((p, i) =>
+      `<li><span class="when">${fmt(p.date)}<br><small>${esc((KIND[p.kind] || p.kind).toLowerCase())} ${esc(p.id)}</small></span><span>"${esc(p.line)}"` +
+      (can ? `<br><button class="link" data-track="${i}">Track it</button>` : "") + `</span></li>`).join("") + `</ul>` +
+      `<p class="note">Found by keywords in what our side wrote (an email we sent, our lines in a call): possible promises, not verdicts. Tracking one makes it count.</p>`;
+    host.innerHTML = h;
+    if (!can) return;
+    const save = async (doc) => {
+      const at = new Date().toISOString();
+      await db.collection("decisions").doc(`${doc.kind}~${id}~${at.replace(/[^0-9]/g, "")}`).set({ ...doc, account_id: id,
+        by: can.by, role: can.role, as_of: D.as_of, decided_at: at, decided_by: me });
+    };
+    host.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", async () => {
+      b.disabled = true;
+      try { await save({ kind: "commitment_close", key: b.dataset.close, result: b.dataset.result }); } catch (e) { b.disabled = false; }
+    }));
+    $("com-save").addEventListener("click", async () => {
+      const what = $("com-what").value.trim(), due = $("com-due").value, msg = (t) => { $("com-msg").textContent = t; };
+      if (!what) return msg("Say what was promised.");
+      if (!due) return msg("Pick the date it's due.");
+      $("com-save").disabled = true;
+      try { await save({ kind: "commitment", what, due, source: $("com-src").value }); }
+      catch (e) { $("com-save").disabled = false; msg("That wasn't saved. Try again in a moment."); }
+    });
+    host.querySelectorAll("[data-track]").forEach((b) => b.addEventListener("click", async () => {
+      const p = found[Number(b.dataset.track)];
+      // due: a fortnight after the document by default; the owner can close or re-add with another date
+      const due = new Date((Math.max(day(p.date) + 14, TODAY)) * 864e5).toISOString().slice(0, 10);
+      b.disabled = true;
+      try { await save({ kind: "commitment", what: p.line.slice(0, 200), due, source: p.kind === "E" ? "email" : "call", doc: p.id }); }
+      catch (e) { b.disabled = false; }
+    }));
+  }
   // Next step ("action planned"): what the owner will do next and by when.
   // Overdue when the date passes with no meeting since it was set. A QBR
   // booked in the CRM counts as the plan until the owner records one.
@@ -1605,6 +1680,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   function drawNext(id) {
     const a = byId[id], host = $("tl-next"); if (!a) return;
     drawSummary(id);                                     // the summary reads the same plan
+    drawCommitments(id);                                 // and the promises beside it
     if (a.tier === "Self-service") { host.innerHTML = ""; return; }
     const hist = nextSteps[id] || [], p = planOf(a);
     let h = `<h3>Action planned</h3>`;
@@ -2799,7 +2875,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       for (const d of snap.docs) {
         const v = d.data(); if (!v) continue;
         if (PAGE && !PAGE_ACCOUNTS.has(v.account_id)) continue;     // review 6 Nov: never another team's decisions
-        if (["forecast", "next_step", "handover_confirm", "decline", "outcome_check"].includes(v.kind)) fs.push(v);   // kept whatever the data
+        if (["forecast", "next_step", "handover_confirm", "decline", "outcome_check", "commitment", "commitment_close"].includes(v.kind)) fs.push(v);   // kept whatever the data
         else if (v.as_of === D.as_of) decisions[d.id] = v;           // task decisions on older data: ignored
       }
       forecasts = groupForecasts(fs.filter((v) => v.kind === "forecast"));
@@ -2807,6 +2883,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       handoverConfirms = groupForecasts(fs.filter((v) => v.kind === "handover_confirm"));
       declines = groupForecasts(fs.filter((v) => v.kind === "decline"));
       checks = groupForecasts(fs.filter((v) => v.kind === "outcome_check"));
+      comLive = fs.filter((v) => v.kind === "commitment"); comClose = fs.filter((v) => v.kind === "commitment_close");
       if (sel.value && byId[sel.value] && $("tl-why")) drawWhy(byId[sel.value]);
       drawTasks(); drawMyBook(); drawLeadership(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); }
     }, () => { dbState = "none"; drawTasks(); if (sel.value) { drawNext(sel.value); drawForecast(sel.value); drawHandover(sel.value); } });

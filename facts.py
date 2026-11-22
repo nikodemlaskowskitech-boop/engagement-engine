@@ -132,7 +132,7 @@ def touches(con, account_id=None):
                context.source AS source, properties.outcome AS outcome, properties.note AS note
         FROM engagement
         WHERE event_name NOT IN ('forecast_set', 'next_step_set', 'recommendation_declined', 'outcome_checked',
-                                 'commitment_made')   -- internal: exported apart (commitments: step 3)
+                                 'commitment_made', 'commitment_closed')   -- internal: exported apart
         {only}
         -- ties on the same minute broken by account and event: the same data always
         -- exports in the same order, so two runs can be compared file to file
@@ -172,6 +172,26 @@ def declines(con, account_id=None):
                properties.outcome AS reason, properties.due AS due, properties.note AS note
         FROM engagement WHERE event_name = 'recommendation_declined' {only}
         ORDER BY "timestamp", event_id""")
+
+
+def commitments(con, account_id=None):
+    """Promises made to customers (22 Nov 2026), oldest first, each with how it ended if it has:
+    from the Slack call form (source meeting) or tracked in the cockpit (from a document, or
+    added). key = the commitment's event id, which a close names."""
+    only = f"AND m.account_id = '{_id(account_id)}'" if account_id else ""
+    return rows(con, f"""
+        WITH closed AS (
+            SELECT properties.topic AS key, properties.status AS result, "timestamp" AS closed_at,
+                   properties.owner_id AS closed_by,
+                   row_number() OVER (PARTITION BY properties.topic ORDER BY "timestamp" DESC, event_id DESC) AS n
+            FROM engagement WHERE event_name = 'commitment_closed')
+        SELECT m.event_id AS key, m.account_id, m."timestamp" AS made_at, m.properties.owner_id AS by,
+               m.properties.note AS what, m.properties.due AS due,
+               coalesce(m.properties.outcome, 'meeting') AS source, m.properties.status AS doc,
+               m.context.source AS via, c.result, c.closed_at, c.closed_by
+        FROM engagement m LEFT JOIN closed c ON c.key = m.event_id AND c.n = 1
+        WHERE m.event_name = 'commitment_made' {only}
+        ORDER BY m."timestamp", m.event_id""")
 
 
 def outcome_checks(con, account_id=None):

@@ -27,6 +27,12 @@ the same way Slack clicks are written:
   outcome_checked     did the last next step achieve its aim: status = yes |
                       partly | no, intended = the aim it was about, note,
                       owner_id = who. Visible to the team lead, never approved
+  commitment_made     a promise to the customer (22 Nov 2026): note = what,
+                      due = by when, outcome = where it was made ([work]
+                      commitment_sources), status = the document it came from
+                      (E2, C1) when tracked from one, owner_id = who
+  commitment_closed   how a promise ended: topic = the commitment's event id,
+                      status = kept | dropped, note, owner_id = who
 
 They go to data/engagement/cockpit.jsonl, rewritten on every run from the
 whole decisions file, so running twice never doubles anything. Decisions made
@@ -69,9 +75,15 @@ WORK = SETTINGS.get("work", {})
 REASONS = set(WORK.get("decline_reasons", {}))          # why a recommendation isn't needed
 AIMS = set(WORK.get("intended_outcomes", {}))           # what a next step should achieve
 RESULTS = set(WORK.get("outcome_results", {}))          # did it
+SOURCES = set(WORK.get("commitment_sources", {}))       # where a promise was made
+ENDINGS = set(WORK.get("commitment_results", {}))       # how it ended
+DOC_ID = re.compile(r"^[SEC]\d{1,4}$")                  # a document's id in the research (E2, C1, S3)
+KEY = re.compile(r"^[\w~.:-]{1,120}$")                   # a commitment's id: an event id
 TEXT_FIELDS = ("kind", "account_id", "role", "by", "manager", "to_owner", "from_owner", "call", "type",
-               "due", "decided_at", "flag", "status", "reason", "note", "as_of", "decided_by", "intended", "result")
-KINDS = {"assign", "handback", "forecast", "next_step", "handover_confirm", "decline", "outcome_check"}   # handover_confirm: the page's own
+               "due", "decided_at", "flag", "status", "reason", "note", "as_of", "decided_by", "intended", "result",
+               "what", "source", "doc", "key")
+KINDS = {"assign", "handback", "forecast", "next_step", "handover_confirm", "decline", "outcome_check",
+         "commitment", "commitment_close"}   # handover_confirm: the page's own
 ISO_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
@@ -141,7 +153,7 @@ def problem(d, accounts, team, kinds=None):
         return f"unknown role {str(d.get('role'))[:30]!r}"
     by = d.get("by")
     role = "manager" if d["role"] == "manager" else (kinds or {}).get(by, "csm")
-    where = may(role, kind)
+    where = may(role, "commitment" if kind == "commitment_close" else kind)   # closing a promise: the same right as making it
     if not where:
         return f"a {role} may not set a {kind} ([roles.{role}] edit)"
     if d["role"] == "manager" and by not in {team.get(o) for o in acc["owners"]}:
@@ -182,6 +194,22 @@ def problem(d, accounts, team, kinds=None):
         if d.get("intended") not in AIMS:
             return f"unknown aim {str(d.get('intended'))[:30]!r}"
         return None
+    if kind == "commitment":
+        if not clean(d.get("what")):
+            return "no promise text"
+        if not is_day(d.get("due")):
+            return "due isn't a date"
+        if d.get("source") not in SOURCES:
+            return f"unknown source {str(d.get('source'))[:30]!r}"
+        if d.get("doc") is not None and not DOC_ID.match(d["doc"]):
+            return "doc isn't a document id"
+        return None
+    if kind == "commitment_close":
+        if not (isinstance(d.get("key"), str) and KEY.match(d["key"])):
+            return "no commitment to close"
+        if d.get("result") not in ENDINGS:
+            return f"unknown result {str(d.get('result'))[:30]!r}"
+        return None
     if d.get("intended") is not None and d["intended"] not in AIMS:
         return f"unknown aim {str(d.get('intended'))[:30]!r}"
     if d.get("type") not in STEP_TYPES:
@@ -210,7 +238,7 @@ def build(decisions, as_of, run_date, accounts, team, kinds=None):
     # The latest decision per task wins (a manager can change their mind)
     latest, stale, forecasts = {}, 0, []
     for d in sorted(good, key=lambda d: d["decided_at"]):
-        if d["kind"] in ("forecast", "next_step", "decline", "outcome_check"):
+        if d["kind"] in ("forecast", "next_step", "decline", "outcome_check", "commitment", "commitment_close"):
             forecasts.append(d)                 # every one, whatever the data: they're the history
             continue
         if d.get("as_of") != as_of:
@@ -235,6 +263,25 @@ def build(decisions, as_of, run_date, accounts, team, kinds=None):
             "context": {"source": "cockpit"},
         })
     for d in forecasts:                     # forecasts and next steps: every one, for the history
+        if d["kind"] in ("commitment", "commitment_close"):
+            made = d["kind"] == "commitment"
+            events.append({
+                # the page names a cockpit commitment by this same id, to close it later
+                "event_id": f"cockpit-{d['kind']}-{d['account_id']}-{d['decided_at']}",
+                "event_name": "commitment_made" if made else "commitment_closed",
+                "event_type": "engagement",
+                "timestamp": f"{run_date}T{d['decided_at'][11:19]}Z",
+                "account_id": d["account_id"],
+                "user_id": None,
+                "properties": {"owner_id": d["by"], "topic": "commitment" if made else d["key"],
+                               "outcome": d["source"] if made else d["role"],
+                               "note": clean(d.get("what") if made else d.get("note")),
+                               "slack_user": None, "status": (d.get("doc") if made else d["result"]),
+                               "manager": None, "amount": None, "due": d["due"] if made else None,
+                               "intended": None},
+                "context": {"source": "cockpit"},
+            })
+            continue
         if d["kind"] in ("decline", "outcome_check"):
             dec = d["kind"] == "decline"
             events.append({
@@ -309,7 +356,9 @@ def main():
           f"{sum(e['event_name'] == 'forecast_set' for e in events)} renewal forecasts, "
           f"{sum(e['event_name'] == 'next_step_set' for e in events)} next steps, "
           f"{sum(e['event_name'] == 'recommendation_declined' for e in events)} recommendations declined, "
-          f"{sum(e['event_name'] == 'outcome_checked' for e in events)} outcomes checked"
+          f"{sum(e['event_name'] == 'outcome_checked' for e in events)} outcomes checked, "
+          f"{sum(e['event_name'] == 'commitment_made' for e in events)} commitments, "
+          f"{sum(e['event_name'] == 'commitment_closed' for e in events)} closed"
           + (f" ({stale} from older data skipped)" if stale else ""))
     for e in events:
         p = e["properties"]
@@ -323,6 +372,10 @@ def main():
         if e["event_name"] == "recommendation_declined":
             print(f"  {e['account_id']}  declined   {p['topic']} {p['status']}: {p['outcome']}"
                   f"{' until ' + p['due'] if p['due'] else ''}  (by {p['owner_id']})")
+            continue
+        if e["event_name"] in ("commitment_made", "commitment_closed"):
+            print(f"  {e['account_id']}  {'promise' if e['event_name'] == 'commitment_made' else 'promise ' + p['status']}"
+                  f"{'  by ' + p['due'] if p['due'] else ''}  (by {p['owner_id']})")
             continue
         if e["event_name"] == "outcome_checked":
             print(f"  {e['account_id']}  aim        {p['intended']}: {p['status']}  (by {p['owner_id']})")
