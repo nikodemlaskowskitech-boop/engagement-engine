@@ -359,6 +359,11 @@ Read a file's entry before changing that file, and update the entry in the same 
   evidence supports one theme only; a greeting is never the evidence. On the demo corpus
   precision 40% -> 78%, recall 95% -> 76% (chosen against the answer key: optimistic). The page
   says "possible themes" and shows each evidence line and source. tests/research_test.py.
+  Promises our side made (22 Nov 2026, Nikodem: commitments from meetings and emails too):
+  per account, "promises": each sentence in an email we sent (From: our_side) or in our
+  speaker's lines in a call with a promise word and an action verb ([research] promise_*), with
+  its document id and date. Shown on the account page as possible promises to track; keyword
+  matching, so it misses promises phrased otherwise. Demo corpus: 10 across 4 accounts.
 - `mcp_server.py` (13 Nov 2026): the engine as MCP tools (mcp 2.2.0, MCPServer; pinned in
   (18 Nov 2026: timeline leaves out a meeting's free-text note, which goes to a model; the
   outcome, a fixed label, stays. mcp_server_test checks it.)
@@ -944,6 +949,16 @@ Read a file's entry before changing that file, and update the entry in the same 
   step, and "Did it achieve its aim?" once its date has come; both go into the account's
   history. The public site drops their notes (typed by a person). facts.declines and
   facts.outcome_checks feed the export; cairnpath_db's engagement struct gains intended.
+  Commitments on the account page (22 Nov 2026): a panel after the plan and forecast lists each
+  promise (open, due within 7 days, late, kept, dropped), with Kept and Dropped for the owner or
+  team lead, an "Add" form (what, by when, where) and the possible promises found in the
+  documents with "Track it" (due a fortnight after the document by default). facts.commitments
+  joins each commitment_made to its latest commitment_closed.
+  Commitments (22 Nov 2026): "commitment" (what, due, source from [work] commitment_sources,
+  doc = a document id when tracked from one) -> commitment_made with event id
+  cockpit-commitment-<account>-<decided_at>, which the page uses to name it; "commitment_close"
+  (key = that id, or a Slack commitment's event id; result kept | dropped) -> commitment_closed.
+  Closing takes the same right as making ([roles] edit commitment).
 - `pull_clicks.py`: first step of run_all. Gathers the Slack clicks the AWS
   listener saved under [aws] slack_clicks_prefix into
   data/engagement/slack_clicks.jsonl (oldest first; rewritten only when a

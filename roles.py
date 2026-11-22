@@ -28,7 +28,7 @@ TEMPLATE = Path(__file__).resolve().parent / "views_template.html"
 SEARCH_TEMPLATE = Path(__file__).resolve().parent / "site_search.html"   # the public site's search page
 
 # what each part of the export is keyed by: rows with an account_id outside the scope go
-ACCOUNT_ROWS = ["touches", "forecasts", "next_steps", "declines", "outcome_checks", "onboarding", "time_to_action",
+ACCOUNT_ROWS = ["touches", "forecasts", "next_steps", "declines", "outcome_checks", "commitments", "onboarding", "time_to_action",
                 "churn_signals", "renewals", "tasks"]
 
 
@@ -262,6 +262,10 @@ def build(export, template=None, out=PAGES, sandbox=False):
             # the same for a decline's or an outcome check's note: typed by a person, never public
             for k in ("declines", "outcome_checks"):
                 page[k] = [{**r, "note": None} for r in page.get(k, [])]
+            # a promise typed in Slack or the cockpit: the same rule (one tracked from a document
+            # keeps its text: that's the redacted line the public search already shows)
+            page["commitments"] = [c if c.get("doc") else {**c, "what": "(typed by a person: kept off the public site)"}
+                                   for c in page.get("commitments", [])]
         meta["sandbox"] = bool(sandbox)
         if sandbox and SETTINGS.get("demo", {}).get("author"):      # the public site's who-and-why strip and tour
             # the CSM door: [demo] csm, else the first CSM (a company's own team has no Tom)

@@ -288,6 +288,26 @@ print(json.dumps(r))`;
       await w.evaluate(() => localStorage.removeItem("cockpit-sandbox-decisions"));
       await w.close();
     }
+    // commitments (22 Nov 2026): Mia tracks a promise found in Yarrow Studio's documents, keeps it,
+    // and adds one already past its date; the panel counts them, the suggestion leaves the list
+    {
+      const c = await ctx.newPage(); const ec = []; c.on("pageerror", (e) => ec.push(e.message));
+      await c.goto(base + "csm_mia.html"); await c.waitForTimeout(900);
+      await c.evaluate(() => localStorage.removeItem("cockpit-sandbox-decisions")); await c.reload(); await c.waitForTimeout(900);
+      await c.click("#tab-timeline"); await c.fill("#tl-find", "acc_024"); await c.keyboard.press("Enter"); await c.waitForTimeout(500);
+      const sugg = () => c.$$eval("#tl-commit [data-track]", (b) => b.length);
+      const s0 = await sugg();
+      await c.click("#tl-commit [data-track]"); await c.waitForTimeout(400);
+      const tracked = (await c.textContent("#tl-commit")).replace(/\s+/g, " ");
+      await c.click('#tl-commit [data-result="kept"]'); await c.waitForTimeout(400);
+      await c.fill("#com-what", "Send the iOS fix timeline"); await c.fill("#com-due", "2026-10-10"); await c.click("#com-save"); await c.waitForTimeout(400);
+      const fin = await c.textContent("#tl-commit .finding");
+      check(s0 >= 3 && (await sugg()) === s0 - 1 && /1 open commitment/.test(tracked) && /1 open commitment, 1 late; 1 kept, 0 dropped/.test(fin)
+        && /Late 9 d/.test(await c.textContent("#tl-commit")) && !ec.length,
+        `commitments: a promise from the documents tracked (${s0} suggestions -> ${s0 - 1}), kept, and a late one added; counted right`, fin + ec.join(" | "));
+      await c.evaluate(() => localStorage.removeItem("cockpit-sandbox-decisions"));
+      await c.close();
+    }
     // a CSM's page has its own walkthrough (21 Nov 2026): where I stand, what's coming, what to pick
     // up, the account, then the leader's page it rolls up to; each step lights up its part
     const p2 = await ctx.newPage(); const e2 = []; p2.on("pageerror", (e) => e2.push(e.message));

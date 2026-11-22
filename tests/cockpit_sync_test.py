@@ -165,5 +165,22 @@ check(len(ev) == 1 and ev[0]["event_name"] == "outcome_checked" and ev[0]["prope
 check(not run([{**CHK, "result": "maybe"}])[0] and not run([{**CHK, "intended": None}])[0], "an unknown result, or no aim: refused")
 check(not run([{**CHK, "by": "csm_tom"}])[0], "...and not on someone else's account")
 
+print("\nCommitments (22 Nov 2026): tracked from a document or added, then kept or dropped")
+COM = {"kind": "commitment", "account_id": "acc_024", "what": "Hold the price per event if they renew by 31 January",
+       "due": "2027-01-31", "source": "call", "doc": "C1", "by": "csm_mia", "role": "owner", "as_of": AS_OF, "decided_at": AT}
+ev = run([COM])[0]
+check(len(ev) == 1 and ev[0]["event_name"] == "commitment_made" and ev[0]["properties"]["due"] == "2027-01-31"
+      and ev[0]["properties"]["status"] == "C1" and ev[0]["properties"]["outcome"] == "call"
+      and ev[0]["event_id"] == f"cockpit-commitment-acc_024-{AT}", "a promise tracked from call C1: what, by when, where, and an id the page can name", ev)
+check(not run([{**COM, "what": "  "}])[0] and not run([{**COM, "due": "soon"}])[0] and not run([{**COM, "source": "rumour"}])[0]
+      and not run([{**COM, "doc": "../etc"}])[0], "no text, no date, an unknown source or a strange document id: refused")
+check(not run([{**COM, "by": "csm_tom"}])[0], "...and not on someone else's account")
+CLO = {"kind": "commitment_close", "account_id": "acc_024", "key": f"cockpit-commitment-acc_024-{AT}", "result": "kept",
+       "by": "csm_mia", "role": "owner", "as_of": AS_OF, "decided_at": "2026-11-02T09:00:00.000Z"}
+ev = run([CLO])[0]
+check(len(ev) == 1 and ev[0]["event_name"] == "commitment_closed" and ev[0]["properties"]["topic"] == CLO["key"]
+      and ev[0]["properties"]["status"] == "kept", "closing it: commitment_closed, naming the commitment, kept", ev)
+check(not run([{**CLO, "result": "forgotten"}])[0] and not run([{**CLO, "key": "a b; drop"}])[0], "an unknown result or a malformed id: refused")
+
 print("\nFAILED" if failed else "\nOK")
 sys.exit(1 if failed else 0)

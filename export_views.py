@@ -212,6 +212,7 @@ export = {
     # the four kinds of work (22 Nov 2026): recommendations declined, aims checked
     "declines": facts.declines(con),
     "outcome_checks": facts.outcome_checks(con),
+    "commitments": facts.commitments(con),              # promises to customers, and how they ended
     "onboarding": rows(con, "SELECT * FROM onboarding ORDER BY account_id"),
     "time_to_action": facts.time_to_action(con),
     "team": rows(con, "SELECT * FROM cs_team ORDER BY owner_type, owner_id"),

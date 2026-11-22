@@ -49,5 +49,14 @@ if key_file.exists():
     truth = sum(len(v & set(r1)) for v in key.values())
     check(shown and right / len(shown) >= 0.7, f"precision {right}/{len(shown)} ({right / max(1, len(shown)):.0%}) on the demo corpus, floor 70% (optimistic: chosen on this corpus)")
     check(right / max(1, truth) >= 0.6, f"recall {right}/{truth} ({right / max(1, truth):.0%}), floor 60%")
+print("\nPromises our side made (22 Nov 2026)")
+mail_ours = {"id": "E9", "kind": "E", "text": "From: CS 1 <[email]>\nTo: Customer A <[email]>\n\nThanks for today. I'll send the SSO guide by Friday. Talk soon."}
+mail_theirs = {"id": "E8", "kind": "E", "text": "From: Customer A <[email]>\nTo: CS 1 <[email]>\n\nI'll send you our numbers next week."}
+call = {"id": "C9", "kind": "C", "text": "[00:00:10] Customer A: We'll check internally.\n[00:00:20] CS 2: Good point. I'll set up a session with your admins."}
+check(research.promises(mail_ours) == ["I'll send the SSO guide by Friday."], "an email we sent: the promise sentence, nothing else", research.promises(mail_ours))
+check(research.promises(mail_theirs) == [], "the customer's email: their words, not our promise")
+check(research.promises(call) == ["I'll set up a session with your admins."], "a call: our speaker's promise sentence only", research.promises(call))
+check(research.promises({"id": "S1", "kind": "S", "text": "We'll fix it"}) == [], "a ticket: not a source of our promises")
+
 print("\nFAILED" if failed else "\nAll passed")
 sys.exit(1 if failed else 0)

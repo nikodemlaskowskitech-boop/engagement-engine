@@ -10,7 +10,8 @@ comes with the line that matched and its source (S1, E2, C1), so a person judges
 Keyword search, not a verdict: the page says so.
 
     from research import build
-    build(as_of) -> {account_id: {"tickets", "open_tickets", "emails", "calls", "themes": [...]}}
+    build(as_of) -> {account_id: {"tickets", "open_tickets", "emails", "calls", "themes": [...],
+                                  "promises": [...] (what our side promised, 22 Nov 2026)}}
 """
 
 import json
@@ -46,6 +47,29 @@ def evidence(hit):
     return line
 
 
+def _any(words):
+    return re.compile(r"\b(" + "|".join(re.escape(w) for w in words) + r")\b", re.I)
+
+
+def promises(d):
+    """Sentences in which our side promised something, from one redacted document: an email
+    sent by our side, or our speaker's lines in a call. [(line), ...] in document order."""
+    ours, word, verb = CONF["promise_our_side"], _any(CONF["promise_words"]), _any(CONF["promise_verbs"])
+    text = d.get("text") or ""
+    if d["kind"] == "E":
+        m = re.search(r"^From:\s*(.+)$", text, re.M)
+        if not m or not m.group(1).strip().startswith(ours):
+            return []                                         # the customer's email: their words, not our promise
+        parts = re.split(r"(?<=[.!?])\s+|\n+", text[m.end():])
+    elif d["kind"] == "C":
+        speaker = re.compile(r"^\[[^\]]+\]\s*" + re.escape(ours) + r" \d+:\s*")
+        parts = [sentence for line in text.split("\n") if speaker.match(line)      # each sentence of our lines:
+                 for sentence in re.split(r"(?<=[.!?])\s+", speaker.sub("", line))]  # the promise, not the whole turn
+    else:
+        return []
+    return [p.strip(" -") for p in parts if word.search(p) and verb.search(p)]
+
+
 def build(as_of, docs=None):
     docs = rows() if docs is None else docs
     if not docs:
@@ -55,7 +79,10 @@ def build(as_of, docs=None):
     for d in docs:                                            # the counts, in the window
         if d["date"] < since:
             continue
-        r = out.setdefault(d["account_id"], {"tickets": 0, "open_tickets": 0, "emails": 0, "calls": 0, "themes": []})
+        r = out.setdefault(d["account_id"], {"tickets": 0, "open_tickets": 0, "emails": 0, "calls": 0, "themes": [],
+                                             "promises": []})
+        r["promises"] += [{"id": d["id"], "kind": d["kind"], "date": d["date"], "line": line[:300]}
+                          for line in promises(d)]
         if d["kind"] == "S":
             r["tickets"] += 1
             m = TICKET.match(d["title"])
@@ -90,6 +117,7 @@ def build(as_of, docs=None):
                              key=lambda t: (t["date"], t["theme"]), reverse=True)
         for t in r["themes"]:
             t.pop("score")
+        r["promises"].sort(key=lambda p: (p["date"], p["id"]), reverse=True)   # newest first, no ties within a document
     return dict(sorted(out.items()))
 
 
