@@ -406,6 +406,12 @@ champion_ratio = 2        # the top user is the champion when doing 2x+ the next
 
 [backtest]
 too_late_days = 30        # warning shorter than this before a renewal is too late to act on
+# "Did it work?" as the page for rule changes (22 Nov 2026, Operational PR3): each line says
+# keep or change, against these bars
+min_recall = 60           # % of losses the churn flags caught; below: loosen the churn thresholds
+min_precision = 40        # % of flagged accounts that were really lost; below: tighten them
+max_too_late = 25         # % of caught losses with under too_late_days of warning; above: an earlier signal
+at_risk_band = [70, 130]  # really lost / the rule's ARR at risk, %; outside: change [money] at_risk
 
 [journeys]
 unopened_after_days = 5   # give people a few days to open an email
