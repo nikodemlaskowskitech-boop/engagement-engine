@@ -411,7 +411,6 @@ too_late_days = 30        # warning shorter than this before a renewal is too la
 min_recall = 60           # % of losses the churn flags caught; below: loosen the churn thresholds
 min_precision = 40        # % of flagged accounts that were really lost; below: tighten them
 max_too_late = 25         # % of caught losses with under too_late_days of warning; above: an earlier signal
-at_risk_band = [70, 130]  # really lost / the rule's ARR at risk, %; outside: change [money] at_risk
 
 [journeys]
 unopened_after_days = 5   # give people a few days to open an email

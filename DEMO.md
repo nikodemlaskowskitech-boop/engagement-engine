@@ -47,7 +47,7 @@ that's the team lead I'd talk to: as director I act through them. Coverage
 in value shows where: Shelfware on Scale, €291k of ARR with no meeting in 60
 days, 2 of 9 accounts met."
 
-## 3. Did it work? (40 s)
+## 3. Did it work? (35 s)
 
 [Did it work? tab]
 
@@ -56,9 +56,7 @@ renewal, the churn flags caught 34 of the 50 accounts we lost or that shrank,
 68%, with a median of 198 days' warning. The outcomes are generated, so this
 shows the method, not proof. On your own history, it's the first thing I'd
 run. The top of the page turns that into decisions: each rule against its bar,
-keep or change. Three keep; the at-risk rule counts too much (€710k really lost
-of €1.1M called at risk), mostly at Act, unless CS saved the difference. That's
-a question to test, not a rule to change on one year."
+keep or change. Today all three keep."
 
 ## 4. One account (40 s)
 

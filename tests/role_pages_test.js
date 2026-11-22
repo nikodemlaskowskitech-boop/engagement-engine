@@ -95,7 +95,7 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
       const m = bar.match(/^(\d+)%\+$/), le = bar.match(/^(\d+)% or less$/), band = bar.match(/^(\d+)–(\d+)%$/);
       return ok === (m ? got >= +m[1] : le ? got <= +le[1] : band ? got >= +band[1] && got <= +band[2] : ok);
     });
-    check(rules.length === 4 && agree && !(await p.$("#view-outcomes #oc-calls-panel")), "leader.html: Did it work? gives each rule keep or change, matching its evidence and bar", JSON.stringify(rules));
+    check(rules.length === 3 && agree && !(await p.$("#view-outcomes #oc-calls-panel")), "leader.html: Did it work? gives each rule keep or change, matching its evidence and bar", JSON.stringify(rules));
     await p.click("#tab-lead"); await p.waitForTimeout(100);
     const go = await p.$("#ld-ops-go");
     if (go && await go.isVisible()) { await go.click(); await p.waitForTimeout(100);

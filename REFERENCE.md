@@ -733,11 +733,12 @@ Read a file's entry before changing that file, and update the entry in the same 
   under the band "The team". The main views.html keeps the CS team tab.
   PR3 (22 Nov 2026): "Did a churn call help?" (#oc-calls-panel) moves under Operational's funnel
   on leader and manager pages (#op-calls-slot); the main views.html keeps it on Did it work?. Did
-  it work? opens with "The rules: keep or change" (drawRules): catch rate, precision, warning
-  under too_late_days and lost / ARR at risk, each against its bar in [backtest] (min_recall,
-  min_precision, max_too_late, at_risk_band), Keep or Change naming the setting; under 10
-  accounts behind a line: too few to tell. The at-risk line names the status furthest in the
-  whole's direction, "unless CS saved the difference". Hidden on team-total pages. The
+  it work? opens with "The rules: keep or change" (drawRules): catch rate, precision and warning
+  under too_late_days, each against its bar in [backtest] (min_recall, min_precision,
+  max_too_late), Keep or Change naming the setting; under 10 accounts behind a line: too few to
+  tell. Hidden on team-total pages. ARR at risk vs really lost is not a rule line (22 Nov 2026,
+  Nikodem: forward-looking, at risk next quarter is normal; looking back it's a lesson learned,
+  and at Act CS is meant to save part of it): its table stays lower down, titled "Lesson learned". The
   Onboarding tab's label is Programmes (the view id stays onboarding).
   My work (18 Nov 2026, Nikodem's CSM route: start on My book, pick up from the queue, know the
   account, act): on a CSM's or pool member's page the Tasks tab is "My work", the queue.
