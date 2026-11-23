@@ -88,6 +88,9 @@ llm.BUDGETS.clear(); llm.BUDGETS.update(saved)
 print("\nSearch by meaning and hybrid (stand-in vectors: the plumbing, not the quality)")
 embed.build("stand-in", tmp)
 search.VECTORS_FILE = tmp
+# the stand-in's similarities aren't Titan's: [embed] min_similarity is a Titan number, so the
+# plumbing below runs without it, and the floor's own checks set theirs explicitly
+search.EMBED = {**search.EMBED, "min_similarity": 0}
 con = connect()
 search.add_views(con)
 q = "Which customers need more capacity?"
@@ -108,8 +111,10 @@ check(len(search.meaning(con, odd, 5, "stand-in", floor=-1)) == 5, "without a fl
 bar = search.meaning(con, odd, 1, "stand-in", floor=-1)[0]["score"] + 0.001   # just above nonsense's best
 check(search.meaning(con, odd, 5, "stand-in", floor=bar) == [], "with a floor above nonsense's best, nonsense finds nothing by meaning")
 # (whether right answers stay above it is measured with the real model: search_test's calibration)
-check(search.ranked(con, odd, 5, "hybrid", provider="stand-in") == [] or float(search.EMBED.get("min_similarity", 0)) <= 0,
-      "...and hybrid answers nothing (the page says no match), once [embed] min_similarity is set")
+search.EMBED["min_similarity"] = bar
+check(search.ranked(con, odd, 5, "hybrid", provider="stand-in") == [],
+      "...and hybrid answers nothing (the page says no match), with [embed] min_similarity at that floor")
+search.EMBED["min_similarity"] = 0
 floored = search.meaning(con, q, 10, "stand-in", floor=0.2)
 check(all(h["score"] >= 0.2 for h in floored) and len(floored) <= 10, "every document kept is at or above the floor")
 lines = [h["line"] for h in search.meaning(con, q, 30, "stand-in", floor=-1)]

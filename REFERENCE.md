@@ -457,6 +457,11 @@ Read a file's entry before changing that file, and update the entry in the same 
   anything by meaning and hybrid still finds at least what keywords find. Same day: the line
   shown for a hit skips headers, greetings, sign-offs and quoted replies (content_lines); with
   no word in common it's the first line that says something (a match by meaning showed "Hi CS 1,").
+  Set the same evening from Nikodem's laptop run: 0.23 (off-topic best 0.115-0.214; right
+  answers lowest 0.168, a quarter below 0.280, median 0.331; 22 of 27 held-out asks keep a right
+  document by meaning, the other 5 still come by keywords). The margin over nonsense is thin
+  (0.016) and rests on 12 off-topic questions: re-run the calibration when the corpus grows.
+  embed_test runs its stand-in plumbing with the floor at 0 (a Titan number, not the stand-in's).
 - `ask.py` (14 Nov 2026): one question about one account, answered in at most 150 words, every
   sentence citing [DATA] or a document ID. RAG on the laptop: search.search picks the
   account's [ask] top_k documents for the question (BM25 with the vocabulary; doc_folders says
