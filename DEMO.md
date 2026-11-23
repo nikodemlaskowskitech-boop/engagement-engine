@@ -51,7 +51,9 @@ the right meeting. The biggest drop is the first one: 9 sit in a pool queue
 with nobody named. Per team, James's team is at 67% against Sophie's 93%, so
 that's the team lead I'd talk to: as director I act through them. Coverage
 in value shows where: Shelfware on Scale, €291k of ARR with no meeting in 60
-days, 2 of 9 accounts met."
+days, 2 of 9 accounts met. And what we promised customers: 20 promises
+open, 13 of them late, the oldest by two months. That's trust leaking, and
+no CRM report shows it."
 
 ## 3. Did it work? (35 s)
 

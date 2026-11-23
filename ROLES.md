@@ -56,6 +56,9 @@ page).
 
 ## Why each choice
 
+- **Promises where people work** (23 Nov 2026): a CSM's My work opens with the promises
+  they owe, late first; Operational shows the team's or the book's, by person or team. Closing
+  one stays on the account page (Kept or Dropped), where its context is.
 - **Retention drills down: book, team, person** (22 Nov 2026, Nikodem: "I should be
   able to drill down to individual CSM metrics as well as have a view of team or
   total book"). The leader sees GRR and NRR by team and, one click further, by

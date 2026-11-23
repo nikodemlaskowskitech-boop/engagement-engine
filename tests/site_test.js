@@ -201,6 +201,15 @@ print(json.dumps(r))`;
       const mm = fs.readFileSync(path.join(DIR, f), "utf8").match(/<script id="views-data" type="application\/json">([\s\S]*?)<\/script>/);
       if (mm) for (const t of JSON.parse(mm[1]).touches || []) if (t.note && t.source !== "cs_history") notes.push(`${f}: ${t.account_id} (${t.source})`); }
     check(!notes.length, "no note typed in Slack on any public page (the generator's made-up notes may show)", notes.slice(0, 3).join(", "));
+    // the same for a promise typed by a person (23 Nov 2026): shown only when tracked from a
+    // document (its redacted line) or made up by the generator (via cs_history)
+    const typed = [], shown = [];
+    for (const f of fs.readdirSync(DIR).filter((x) => x.endsWith(".html") && x !== "search.html")) {
+      const mm = fs.readFileSync(path.join(DIR, f), "utf8").match(/<script id="views-data" type="application\/json">([\s\S]*?)<\/script>/);
+      if (mm) for (const c of JSON.parse(mm[1]).commitments || []) {
+        if (!c.doc && c.via !== "cs_history" && !/kept off the public site/.test(c.what)) typed.push(`${f}: ${c.account_id}`);
+        if (c.via === "cs_history") shown.push(c.what); } }
+    check(!typed.length && shown.length > 0, `no promise typed by a person on any public page; the generator's ${shown.length} show`, typed.slice(0, 3).join(", "));
     // two doors instead of a list of every person (18 Nov 2026): Leader | CSM, the rest under "More people"
     const csmDoor = demo("csm") + ".html";
     const door = async (pg) => ({ shown: await pg.isVisible("#doors"),
@@ -296,13 +305,21 @@ print(json.dumps(r))`;
       await c.evaluate(() => localStorage.removeItem("cockpit-sandbox-decisions")); await c.reload(); await c.waitForTimeout(900);
       await c.click("#tab-timeline"); await c.fill("#tl-find", "acc_024"); await c.keyboard.press("Enter"); await c.waitForTimeout(500);
       const sugg = () => c.$$eval("#tl-commit [data-track]", (b) => b.length);
-      const s0 = await sugg();
+      // counted from where the account starts: the generator plants promises too (23 Nov 2026)
+      const count = async () => { const t = await c.textContent("#tl-commit .finding");
+        const g = (re) => +((t.match(re) || [])[1] || 0);
+        return { open: g(/(\d+) open commitment/), late: g(/, (\d+) late/), kept: g(/(\d+) kept/), t }; };
+      const n0 = await count(), s0 = await sugg();
+      const line = (await c.$eval("#tl-commit [data-track]", (b) => b.closest("li").textContent)).match(/"([^"]{20,60})/)[1];
       await c.click("#tl-commit [data-track]"); await c.waitForTimeout(400);
-      const tracked = (await c.textContent("#tl-commit")).replace(/\s+/g, " ");
-      await c.click('#tl-commit [data-result="kept"]'); await c.waitForTimeout(400);
+      const n1 = await count();
+      const mine = await c.$$eval("#tl-commit li", (lis, l) => lis.findIndex((li) => li.textContent.includes(l) && li.querySelector('[data-result="kept"]')), line);
+      await (await c.$$("#tl-commit li"))[mine].$('[data-result="kept"]').then((b) => b.click()); await c.waitForTimeout(400);
+      const n2 = await count();
       await c.fill("#com-what", "Send the iOS fix timeline"); await c.fill("#com-due", "2026-10-10"); await c.click("#com-save"); await c.waitForTimeout(400);
-      const fin = await c.textContent("#tl-commit .finding");
-      check(s0 >= 3 && (await sugg()) === s0 - 1 && /1 open commitment/.test(tracked) && /1 open commitment, 1 late; 1 kept, 0 dropped/.test(fin)
+      const n3 = await count(), fin = n3.t;
+      check(s0 >= 3 && (await sugg()) === s0 - 1 && mine >= 0 && n1.open === n0.open + 1 && n2.open === n0.open && n2.kept === n0.kept + 1
+        && n3.open === n0.open + 1 && n3.late === n0.late + 1
         && /Late 9 d/.test(await c.textContent("#tl-commit")) && !ec.length,
         `commitments: a promise from the documents tracked (${s0} suggestions -> ${s0 - 1}), kept, and a late one added; counted right`, fin + ec.join(" | "));
       await c.evaluate(() => localStorage.removeItem("cockpit-sandbox-decisions"));

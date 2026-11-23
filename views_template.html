@@ -742,6 +742,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <div class="tablewrap" id="tk-funnel-rows"></div>
         <p class="note" id="tk-funnel-note"></p>
       </div>
+      <!-- Promises (23 Nov 2026, commitments step 2): what we owe customers, where people work -->
+      <div class="panel" id="op-promises-panel" hidden>
+        <h2 id="op-promises-title">Promises to customers</h2>
+        <p class="finding small" id="op-promises-finding"></p>
+        <div class="tablewrap" id="op-promises-rows"></div>
+        <div id="op-promises"></div>
+        <p class="note" id="op-promises-note"></p>
+      </div>
       <div id="op-pr2" hidden>
         <div class="panel">
           <h2>Signals that fired</h2>
@@ -1043,6 +1051,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // the four kinds of work (22 Nov 2026): a flag's to-do declined with a reason, and whether a next
   // step achieved its aim; the export carries the synced ones, the published page its live database
   let declines = groupForecasts(D.declines || []), checks = groupForecasts(D.outcome_checks || []);
+  // defined early (23 Nov 2026): the account page draws commitments at load, before the rest of the script ran
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const WORK = (D.settings && D.settings.work) || { decline_reasons: {}, intended_outcomes: {}, outcome_results: {} };
   // a recommendation is declined while its flag is at the same status, until a snooze date passes
   // commitments (22 Nov 2026): the export's (Slack's and the synced cockpit's), plus the live
@@ -2903,6 +2913,58 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     if (QUEUE) return;
     drawSignalsFired(); drawCoverage();
   }
+  // Promises (23 Nov 2026, commitments step 2): every commitment in scope, the late ones first.
+  // My work: the ones I owe (my accounts); Operational: the team's or the book's, by person or team.
+  const PROMISE_DAYS = 90;                                   // closed ones count over this window
+  function promisesInScope() {
+    const ids = new Set((D.commitments || []).map((c) => c.account_id).concat(comLive.map((d) => d.account_id)));
+    return [...ids].filter((id) => byId[id] && inSeg(byId[id])).flatMap(commitmentsOf)
+      .filter((c) => !c.result || TODAY - day(String(c.closed_at).slice(0, 10)) <= PROMISE_DAYS);
+  }
+  function drawPromises() {
+    const panel = $("op-promises-panel");
+    if (!panel) return;
+    const P = promisesInScope(), st = new Map(P.map((c) => [c, comState(c)]));
+    panel.hidden = !P.length && !QUEUE;
+    if (panel.hidden) return;
+    const open = P.filter((c) => !c.result).sort((x, y) => day(x.due) - day(y.due) || (x.account_id < y.account_id ? -1 : 1));
+    const late = open.filter((c) => st.get(c).k === "late"), soon = open.filter((c) => st.get(c).k === "soon");
+    const kept = P.filter((c) => c.result === "kept").length, dropped = P.filter((c) => c.result === "dropped").length;
+    const oldest = late.length ? TODAY - day(late[0].due) : 0;
+    $("op-promises-title").textContent = QUEUE ? "Promises you owe" : "Promises to customers";
+    $("op-promises-finding").textContent = !open.length
+      ? `${segName()}: no open promise${kept + dropped ? `; ${kept} of ${kept + dropped} closed in ${PROMISE_DAYS} days were kept` : ""}.`
+      : `${segName()}: ${open.length} open ${open.length === 1 ? "promise" : "promises"}, ${late.length} late${late.length ? ` (the oldest ${oldest} days)` : ""}` +
+        `${soon.length ? `, ${soon.length} due this week` : ""}; ${kept} of ${kept + dropped} closed in ${PROMISE_DAYS} days were kept` +
+        `${kept + dropped ? ` (${pct(kept, kept + dropped)}%)` : ""}.`;
+    // by team at book level, by person under a manager; none on a person's own page
+    const byTeam = !QUEUE && !seg.manager && !seg.owner, byPerson = !QUEUE && !!seg.manager && !seg.owner;
+    const rowsHost = $("op-promises-rows");
+    if (!byTeam && !byPerson) rowsHost.innerHTML = "";
+    else {
+      const keyOf = (c) => byTeam ? ((byId[c.account_id] || {}).manager || "") : c.by;
+      const nameOfKey = (k) => byTeam ? (k ? `${managerName(k)}'s team` : "No team") : (ownerName[k] || managerName(k) || k);
+      const keys = [...new Set(P.map(keyOf))].sort((a, b) => nameOfKey(a).localeCompare(nameOfKey(b)));
+      rowsHost.innerHTML = `<table><thead><tr><th>${byTeam ? "Team" : "Person"}</th><th class="r">Open</th><th class="r">Late</th><th class="r">Kept</th><th class="r">Dropped</th></tr></thead><tbody>` +
+        keys.map((k) => { const xs = P.filter((c) => keyOf(c) === k), n = (f) => xs.filter(f).length;
+          return `<tr><td>${esc(nameOfKey(k))}</td><td class="r num">${n((c) => !c.result)}</td><td class="r num">${n((c) => st.get(c).k === "late")}</td>` +
+            `<td class="r num">${n((c) => c.result === "kept")}</td><td class="r num">${n((c) => c.result === "dropped")}</td></tr>`; }).join("") + "</tbody></table>";
+    }
+    // the open ones, late first: two at a glance, the rest one click away (a dashboard summarises)
+    const show = (all) => `<ul class="sum-list">` + (all ? open : open.slice(0, QUEUE ? 5 : 2)).map((c) => `<li><span class="when"><span class="chip ${st.get(c).k}">${esc(st.get(c).t)}</span></span>` +
+      `<span><b>${esc(c.what)}</b><br><small><button class="link" data-open="${esc(c.account_id)}">${nameOf(c.account_id)}</button> · by ${fmt(c.due)}` +
+      `${QUEUE ? "" : ` · ${esc(ownerName[c.by] || managerName(c.by) || "")}`}</small></span></li>`).join("") + `</ul>` +
+      (!all && open.length > (QUEUE ? 5 : 2) ? `<button class="link" id="op-promises-all">View all (${open.length})</button>` : "");
+    const host = $("op-promises");
+    const paint = (all) => {
+      host.innerHTML = open.length ? show(all) : "";
+      host.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
+      if ($("op-promises-all")) $("op-promises-all").addEventListener("click", () => paint(true));
+    };
+    paint(false);
+    $("op-promises-note").textContent = "A promise is logged on Slack's call form or on the account page, and closed there (Kept or Dropped). Late: its date has passed and it's still open." +
+      (QUEUE ? " Open an account to close one." : "");
+  }
   function drawTasks() {
     if (!$("view-tasks")) return;                     // not on this person's page
     const T = TASKS.filter(taskInSeg);
@@ -2925,7 +2987,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("tk-status").querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => {
       tkShow.has(b.dataset.s) ? tkShow.delete(b.dataset.s) : tkShow.add(b.dataset.s); drawTasks();
     }));
-    drawFunnel(T); drawOpsPr2();
+    drawFunnel(T); drawOpsPr2(); drawPromises();
     const stI = tkStage && !QUEUE ? FUNNEL.findIndex((s) => s.key === tkStage) : -1;
     const items = stI >= 0
       ? T.filter((t) => t.action_status !== "Resolved" && (stI === 0 || reachIdx(t) === stI - 1))
@@ -3836,7 +3898,6 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const lastTouch = (id) => { const t = touchesBy[id]; return t && t.length ? t[t.length - 1] : null; };
   const met30 = (id) => (touchesBy[id] || []).some((t) => t.event === "meeting_held" && day(t.date) > RUN - 31);
   const fmtFull = (s) => fmt(s) + " " + s.slice(0, 4);
-  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
   // Usage trend for one account: the sparkline uses the account's own range (at least 20
   // points tall, so a small wobble isn't blown up), and a trend marker says the change over
   // 60 days in words: a drop of 5+ points is a red down arrow, a rise a green up arrow.

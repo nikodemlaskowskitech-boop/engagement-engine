@@ -35,6 +35,8 @@ ENGINE_FILES = ["settings.py", "settings.toml", "cairnpath_db.py", "ingest.py", 
                 "roles.py",                             # export_views.py builds the role pages with it
                 "slack_loop.py",                        # export_views.py takes the meeting outcome labels from it
                                                         # (since #194; missing until 20 Nov 2026: the AWS export failed)
+                "embed.py", "search_export.py",         # search.py's meaning mode imports them (23 Nov 2026); the
+                                                        # engine stays on keywords, so they never call Bedrock here
                 "research.py", "search.py",             # the account page's research (20 Nov 2026), with the search...
                 "site_documents.jsonl"]                 # ...from the redacted documents the public search
                                                         # carries: never the raw corpus (bundled from

@@ -833,6 +833,54 @@ MEETING_NOTES = {   # (kind, outcome): what they said, then what's next; 3 x 3 =
 }
 
 
+# Promises made in those meetings (23 Nov 2026, commitments step 2): some "what's next" lines
+# are a promise our side made, logged on the Slack call form as a commitment with a due date.
+# From the meeting's own ID (no random draw); in the last PROMISE_DAYS only, so the cockpit
+# shows promises of every kind: kept before the date, dropped, still open, and late.
+PROMISES = {                     # the note's "what's next" -> (what we promised, days to deliver)
+    "Agreed a usage review in two weeks.": ("Run the usage review with their team", 14),
+    "Sending a short adoption plan.": ("Send the adoption plan", 7),
+    "Want a plan before the renewal talks.": ("Send a renewal plan before the talks", 14),
+    "Asked about the experiments add-on.": ("Send the experiments add-on overview", 7),
+    "Analytics team wants more people trained.": ("Book a training for the analytics team", 21),
+    "Need a new sponsor before the renewal.": ("Introduce them to an executive sponsor", 21),
+}
+PROMISE_DAYS = 75
+
+
+def promise_events(meeting):
+    """The commitment a meeting's note promised, and how it ended so far: kept (about half,
+    before or near the date), dropped (1 in 10), or still open (late once its date has passed)."""
+    note = meeting["properties"].get("note") or ""
+    hit = next((v for k, v in PROMISES.items() if note.endswith(k)), None)
+    when = datetime.strptime(meeting["timestamp"], "%Y-%m-%dT%H:%M:%SZ")
+    if not hit or (END_DATE - when.date()).days > PROMISE_DAYS:
+        return []
+    what, days = hit
+    h = int(meeting["event_id"].replace("-", ""), 16)
+    made = when + timedelta(minutes=5)
+    key = str(uuid.uuid5(uuid.NAMESPACE_URL, "promise-" + meeting["event_id"]))
+    owner = meeting["properties"]["owner_id"]
+    due = (when.date() + timedelta(days=days)).isoformat()
+    out = [{"event_id": key, "event_name": "commitment_made", "event_type": "engagement",
+            "timestamp": made.strftime("%Y-%m-%dT%H:%M:%SZ"), "account_id": meeting["account_id"], "user_id": None,
+            "properties": {"owner_id": owner, "note": what, "due": due, "outcome": "meeting"},
+            "context": {"source": "cs_history"}}]
+    fate, lag = (h >> 8) % 10, days - 3 + (h >> 16) % 8          # kept 3 days early to 4 late
+    closed = when + timedelta(days=lag, hours=2)
+    if fate < 5 and closed.date() <= END_DATE:
+        result = "kept"
+    elif fate == 5 and closed.date() <= END_DATE:
+        result = "dropped"
+    else:
+        return out                                                # still open
+    out.append({"event_id": str(uuid.uuid5(uuid.NAMESPACE_URL, "closed-" + key)), "event_name": "commitment_closed",
+                "event_type": "engagement", "timestamp": closed.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "account_id": meeting["account_id"], "user_id": None,
+                "properties": {"owner_id": owner, "topic": key, "status": result}, "context": {"source": "cs_history"}})
+    return out
+
+
 def meeting_log(event, personality, topic):
     """The outcome and note for a generated meeting, from its own ID (no random draw)."""
     h = int(event["event_id"].replace("-", ""), 16)
@@ -909,6 +957,7 @@ def engagement_for_account(rng, acc):
             if note:
                 e["properties"]["note"] = note
         out.append(e)
+        out.extend(promise_events(e))                  # a promise made in it, if the note says so
 
     # Getting started email, the day after signing (control group: none)
     if acc["welcomed"]:
