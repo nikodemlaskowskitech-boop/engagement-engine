@@ -141,7 +141,8 @@ search_memory_mb = 512
 search_timeout_seconds = 10
 search_rate_per_second = 2
 search_burst = 5
-search_cache_seconds = 3600      # CloudFront keeps an answer an hour (the demo data changes rarely)
+search_cache_seconds = 300       # CloudFront keeps an answer 5 minutes (23 Nov 2026: an hour served old answers
+                                 # after a deploy, while Nikodem checked a fix; the throttle bounds the cost anyway)
 search_max_chars = 200
 # Search by meaning on the site too (23 Nov 2026, Nikodem): with the laptop's vectors up to date at
 # deploy, the search function carries them and may call Titan (only Titan) for each question it
