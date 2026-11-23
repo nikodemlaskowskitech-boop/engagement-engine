@@ -67,6 +67,32 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
   }
   const full = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "views_data.json"), "utf8"));   // the whole export, to recompute from
   console.log("\nMy work (18 Nov 2026): a CSM's queue, by cash at stake per day left");
+  {   // Slack made visible (23 Nov 2026): a task's card, drawn from the exported Block Kit, and its
+      // buttons played on the page: taken, a call logged with a promise, not needed
+    const { p, errors } = await open("csm_anna.html", "tasks");
+    const btn = await p.$("#tk-list [data-slack]");
+    const key = btn && await btn.getAttribute("data-slack");
+    const blocks = await p.evaluate((k) => JSON.parse(document.getElementById("views-data").textContent).slack_cards[k], key);
+    if (btn) { await btn.click(); await p.waitForTimeout(150); }
+    const card = async () => (await p.textContent("#tk-list .slack-prev")).replace(/\s+/g, " ");
+    const first = btn ? await card() : "";
+    const sectionText = blocks ? blocks[0].text.text.replace(/\*/g, "").replace(/\n/g, " ") : "";
+    await p.click("#tk-list .slack-prev [data-act=claim]"); await p.waitForTimeout(100);
+    const taken = await card();
+    await p.click("#tk-list .slack-prev [data-act=log_call]"); await p.waitForTimeout(100);
+    await p.fill("#tk-list .slack-prev [name=promise]", "Send the adoption plan");
+    await p.click("#tk-list .slack-prev button[type=submit]"); await p.waitForTimeout(100);
+    const held = await p.$eval("#tk-list .slack-prev [name=by]", (x) => document.activeElement === x).catch(() => false);
+    await p.fill("#tk-list .slack-prev [name=by]", "2026-10-30");
+    await p.click("#tk-list .slack-prev button[type=submit]"); await p.waitForTimeout(100);
+    const logged = await card();
+    const flat = (x) => x.replace(/\s+/g, "");          // the card's line breaks are <br>, the export's are newlines
+    check(!!btn && flat(first).includes(flat(sectionText).slice(0, 60)) && /Taken by @Anna/.test(taken) && !/I'll take it/.test(taken)
+          && held && /Call logged by @Anna/.test(logged) && /Committed: Send the adoption plan, by 2026-10-30/.test(logged) && !errors.length,
+      "csm_anna.html: a task's Slack card as the engine posts it; taken, then a call logged with its promise (a promise needs its date)",
+      JSON.stringify({ key, first: first.slice(0, 120), taken: taken.slice(0, 80), logged: logged.slice(0, 160), held, errors }));
+    await p.close();
+  }
   {   // Programmes says what the numbers say (23 Nov 2026: James's team read "about the same: 77% vs
       // 100%" on 2 control accounts): too few under min_compare, "about the same" only within 5 points
     for (const f of ["leader.html", "mgr_james.html", "mgr_sophie.html"]) {
@@ -114,6 +140,18 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     const head = await p.$$eval("#tk-funnel-rows thead th", (ths) => ths[0] && ths[0].textContent.replace(/[▲▼↕]/g, "").trim());
     check(teams.length >= 3 && /points apart/.test(finding) && mgr && name === teams[0] && head === "Person" && !errors.length,
       "leader.html: GRR and NRR by team; a team name zooms the page and Operational follows", JSON.stringify({ teams, mgr, name, head, errors }));
+    // and back up (23 Nov 2026, Nikodem: "I can't revert it to the top view")
+    const crumb = await p.isVisible("#tk-funnel-crumbs") && /Back to the whole book/.test(await p.textContent("#tk-funnel-crumbs"));
+    await p.click("#tk-funnel-crumbs [data-up]"); await p.waitForTimeout(250);
+    const back = await p.$$eval("#tk-funnel-rows thead th", (ths) => ths[0] && ths[0].textContent.replace(/[▲▼↕]/g, "").trim());
+    await p.click("#tab-lead"); await p.waitForTimeout(150);
+    await p.click("#cs-teams [data-zoom]"); await p.waitForTimeout(200);
+    await p.click("#cs-teams [data-zoom]"); await p.waitForTimeout(200);          // a team, then a person
+    const deep = await p.textContent("#cs-teams-crumbs");
+    await p.click("#cs-teams-crumbs [data-up]"); await p.waitForTimeout(200);
+    const upOne = await p.textContent("#cs-teams-title");
+    check(crumb && back === "Team" && /Whole book › .*'s team › /.test(deep) && /'s team, by person$/.test(upOne) && !(await p.inputValue("#seg-owner").catch(() => "")),
+      "leader.html: the crumbs go back up, one level at a time, from Operational and from Performance", JSON.stringify({ crumb, back, deep, upOne }));
     await p.close();
   }
   {   // a manager: their team's retention by person; a person zooms to their book (22 Nov 2026)

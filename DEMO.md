@@ -44,6 +44,14 @@ week. Everything is sorted by value, and value guides the work. It's never
 anyone's credit. And it moves both ways: since July 12 accounts got worse, and
 12 got better, mostly Shelfware accounts that finally rolled out."
 
+[Optional, 20 s: Slack. On Operational, click "Slack card" under a task]
+
+"Nobody has to open a dashboard to get their work. Each task reaches its owner
+as a card in Slack: why, what to do, and three buttons. [Click Log call, add a
+promise and a date] That click becomes an event the engine reads on its next
+run: the call shows on the account's timeline tagged via Slack, and the promise
+is tracked until it's kept."
+
 [Optional, 20 s: Operational tab]
 
 "And is the work moving? Of 60 tasks that needed a person, 48 (80%) ended in

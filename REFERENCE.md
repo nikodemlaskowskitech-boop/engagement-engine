@@ -694,6 +694,22 @@ Read a file's entry before changing that file, and update the entry in the same 
   account by value, what's coming, what to pick up, know the account, it rolls up to the leader's
   page). Each step lights up the part it explains (.tour-focus) and the page gets room below so
   that part scrolls clear of the panel. The account shown: the biggest flagged one with documents.
+  Slack made visible (23 Nov 2026, Nikodem: "we don't see it when we are using the dashboard"):
+  each open or claimed task carries the card it gets in Slack (export_views.slack_cards, built by
+  slack_loop.card_blocks, the code actions.py posts with, with slack_loop.last_touches now shared
+  by both; roles.py keeps a page's own accounts' cards only). A "Slack card" link under the status
+  in My work and Operational's backlog opens it in a row below: drawn from the Block Kit (bold,
+  italics, emoji), labelled a preview, no Slack logo. Its buttons play the loop on the page only:
+  "I'll take it" (Taken by @you), "Log call" (outcome, note, a promise that needs its date, as the
+  Slack form insists), "Not needed" (the decline reasons), as claimed_blocks, call_logged_blocks and
+  declined_blocks draw them; in Slack the same click is saved to the engine. The history tags a
+  touch "via Slack" when it came from Slack (source slack) or is a meeting with an outcome logged
+  (only Slack's call form logs one). The tours: a CSM's step "It arrives in Slack" and the leader's
+  "Where the work happens: Slack" open the first card and light it up.
+  Crumbs (23 Nov 2026, Nikodem: "when I zoom in into a team I can't revert it"): Performance's by
+  team and Operational's funnel show "‹ Back to the whole book · Whole book › James's team ›
+  Erik" once zoomed; each level is a click (zoomCrumbs). A manager's page starts at the team; a
+  CSM's page has nothing above it.
   The opening sentences, a pass (23 Nov 2026, "the opening sentences last"): one proposition each,
   no repeats down a page. Operational's opening line drops "0 claimed" and the long aside ("past 7
   days for Enterprise, 14 for Scale"); a signal that jumped names its own next step (tracking checks

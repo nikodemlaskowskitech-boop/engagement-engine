@@ -198,6 +198,26 @@ accounts = facts.accounts(con)
 touches = facts.touches(con)
 
 off = OffBook(con, {a["account_id"] for a in accounts})
+def slack_cards(con, export):
+    """The Slack card each open or claimed task gets (23 Nov 2026, Slack made visible): built by
+    slack_loop.card_blocks, the very code actions.py posts with, so the cockpit's preview can't
+    drift from Slack. Keyed "account|flag|status"; the reasons are the account's flag row's."""
+    accounts = {a["account_id"]: a for a in export["accounts"]}
+    names = {t["owner_id"]: t["owner_name"] for t in export["team"]}
+    touch = slack_loop.last_touches(con)
+    day = con.sql("SELECT as_of_date + 1 FROM as_of").fetchone()[0]
+    cards = {}
+    for t in export["tasks"]:
+        if t["action_status"] not in ("Open", "Claimed"):
+            continue
+        a = accounts.get(t["account_id"], {})
+        row = next((f for f in a.get("flags", []) if f["flag"] == t["flag"] and f["status"] == t["status"]), {})
+        task = {**t, "account_name": a.get("account_name"), "reasons": row.get("reasons", "")}
+        cards[f"{t['account_id']}|{t['flag']}|{t['status']}"] = slack_loop.card_blocks(
+            task, names.get(t["routed_to"], t["routed_to"]), touch.get(t["account_id"]), day)
+    return cards
+
+
 export = {
     "as_of": as_of,
     "util_dates": util_dates,
@@ -241,6 +261,7 @@ export = {
                  "early_days": SETTINGS["team_report"]["early_days"],
                  # the outcome labels a CSM picks in Slack, one list for both (slack_loop.py)
                  "meeting_outcomes": slack_loop.OUTCOMES,
+                 "decline_labels": slack_loop.REASONS,
                  "below_median_points": SETTINGS["cockpit"]["below_median_points"],
                  "min_compare": SETTINGS["cockpit"]["min_compare"],
                  "my_week_days": SETTINGS["cockpit"]["my_week_days"],
@@ -256,6 +277,7 @@ export = {
                  "forecast_gap_share": SETTINGS["money"]["forecast_gap_share"],
                  "open_no_flags_up_to": SETTINGS["cockpit"].get("open_no_flags_up_to", 15)},
 }
+export["slack_cards"] = slack_cards(con, export)     # the preview of each open task's Slack card
 
 out = DATA / "views_data.json"
 data_json = json.dumps(export, separators=(",", ":"))

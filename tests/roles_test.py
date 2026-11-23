@@ -446,6 +446,10 @@ def test_views_data(label, parser, meta, cfg, scope):
     if not check(f"{label}: views-data is an object", isinstance(data, dict), type(data).__name__):
         return
     # the business case (whole book: GRR, NRR, every renewal ahead) only where the role has it (12 Nov, 21 Nov 2026)
+    # the Slack card previews (23 Nov 2026): only the page's own accounts' tasks
+    ids = {a["account_id"] for a in data.get("accounts", [])}
+    stray_cards = [k for k in (data.get("slack_cards") or {}) if k.split("|")[0] not in ids]
+    check(f"{label}: Slack card previews for its own accounts only", not stray_cards, stray_cards[:3])
     if not cfg.get("retention"):
         check(f"{label}: no business case data (leader only)", not data.get("retention"),
               "retention is on the page")

@@ -182,13 +182,14 @@ print(json.dumps(r))`;
     const seen = [];
     for (let i = 0; i < 12; i++) {
       seen.push(await p.evaluate(() => [document.querySelector("#tour .step").textContent, document.querySelector("nav [aria-selected=true]").dataset.view,
-        [...document.querySelectorAll(".tour-focus")].map((e) => e.id + (e.offsetParent ? "" : ":hidden")).join()]));
+        [...document.querySelectorAll(".tour-focus")].map((e) => (e.id || e.className.split(" ")[0]) + (e.offsetParent ? "" : ":hidden")).join()]));
       const n = await p.$('[data-tour="next"]'); if (!n) break; await n.click(); await p.waitForTimeout(250);
     }
-    const views = seen.map((s) => s[1]), litL = seen.slice(1, 7).map((s) => s[2]);
-    check(seen.length === 8 && /Step 1 of 8/.test(seen[0][0]) && views.slice(0, 7).join() === "timeline,lead,lead,lead,tasks,tasks,outcomes"
-          && litL.join() === "cs-tiles,cs-teams-panel,ld-signals,tk-funnel-panel,op-promises-panel,oc-rules-panel",
-      "the tour: 8 steps, one account, then the leader's places, each lighting up a visible part", JSON.stringify(seen));
+    // and Slack (23 Nov 2026): the step after the funnel opens a task's Slack card and lights it up
+    const views = seen.map((s) => s[1]), litL = seen.slice(1, 8).map((s) => s[2]);
+    check(seen.length === 9 && /Step 1 of 9/.test(seen[0][0]) && views.slice(0, 8).join() === "timeline,lead,lead,lead,tasks,tasks,tasks,outcomes"
+          && litL.join() === "cs-tiles,cs-teams-panel,ld-signals,tk-funnel-panel,slack-prev,op-promises-panel,oc-rules-panel",
+      "the tour: 9 steps, one account, then the leader's places and Slack, each lighting up a visible part", JSON.stringify(seen));
     const links = await p.$$eval("#tour a", (as) => as.map((a) => a.getAttribute("href")));
     check(links.includes("search.html") && links.some((h) => /^csm_\w+\.html$/.test(h)), "...ending on a CSM's page and the search", links.join(", "));
     await p.click('[data-tour="close"]');
@@ -339,12 +340,12 @@ print(json.dumps(r))`;
     const cs = [];
     for (let i = 0; i < 10; i++) {
       cs.push(await p2.evaluate(() => [document.querySelector("#tour .step").textContent, document.querySelector("nav [aria-selected=true]").dataset.view,
-        [...document.querySelectorAll(".tour-focus")].map((e) => e.id + (e.offsetParent ? "" : ":hidden")).join()]));
+        [...document.querySelectorAll(".tour-focus")].map((e) => (e.id || e.className.split(" ")[0]) + (e.offsetParent ? "" : ":hidden")).join()]));
       const n = await p2.$('[data-tour="next"]'); if (!n) break; await n.click(); await p2.waitForTimeout(300);
     }
     const cviews = cs.map((x) => x[1]).join(">"), lit = cs.map((x) => x[2]);
-    check(cs.length === 6 && cviews.startsWith("mybook>mybook>tasks>tasks>timeline") && lit.slice(0, 5).every((x) => x && !/hidden/.test(x)),
-      "...6 steps: My book (twice), My work (twice), the account, each lighting up a visible part", JSON.stringify(cs));
+    check(cs.length === 7 && cviews.startsWith("mybook>mybook>tasks>tasks>tasks>timeline") && lit.slice(0, 6).every((x) => x && !/hidden/.test(x)) && lit[4] === "slack-prev",
+      "...7 steps: My book (twice), My work (twice), its Slack card, the account, each lighting up a visible part", JSON.stringify(cs));
     const l2 = await p2.$$eval("#tour a", (as) => as.map((a) => a.getAttribute("href")));
     check(l2.includes("leader.html") && l2.includes("search.html"), "...and ends on the leader's page it rolls up to, and the documents", JSON.stringify(l2));
     await p2.click('[data-tour="close"]');

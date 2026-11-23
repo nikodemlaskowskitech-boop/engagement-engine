@@ -115,6 +115,19 @@ def card_blocks(task, owner_name, last_touch=None, day=None):
     ]
 
 
+def last_touches(con):
+    """{account: (what, when)}: the last CS touch up to the end of the data, the context line
+    on a card. One query for actions.py's cards and the cockpit's preview (23 Nov 2026)."""
+    return {a: (what, when) for a, what, when in con.sql("""
+        SELECT account_id,
+               arg_max(replace(properties.topic, '_', ' ') || ' (' || replace(event_name, '_', ' ') || ')',
+                       "timestamp"),
+               max(event_date)
+        FROM engagement, as_of
+        WHERE event_date <= as_of_date
+        GROUP BY account_id""").fetchall()}
+
+
 def run_date():
     """The pipeline's "today": the day after the last day of data (never the clock's date)."""
     from cairnpath_db import connect
