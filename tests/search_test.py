@@ -149,6 +149,43 @@ else:
     check(held[2]["hybrid"] / held[1] >= float(CONF["min_heldout_recall"]),
           f"held-out: hybrid recall {held[2]['hybrid'] / held[1]:.0%} at least [search] min_heldout_recall ({float(CONF['min_heldout_recall']):.0%})")
 
+    print("\nThe floor (23 Nov 2026): how similar is a right answer, and how similar is nonsense?")
+    # Meaning always has a nearest document. The floor ([embed] min_similarity) has to sit above
+    # what an off-topic question reaches and below what a right document reaches.
+    off = json.loads((ROOT / "tests" / "offtopic.json").read_text(encoding="utf-8"))["questions"]
+    search.VECTORS_FILE = held_path
+    con_h.sql("DROP TABLE IF EXISTS doc_vectors")
+    nonsense = []
+    for text in off:
+        top = search.meaning(con_h, text, 1, floor=-1)
+        nonsense.append(top[0]["score"] if top else -1)
+    right = []                                     # each held-out ask: its best-scoring right document
+    for q, text in asks:
+        hits = [h for h in search.meaning(con_h, text, 50, floor=-1) if h["account_id"] in q["accounts"]]
+        right.append(hits[0]["score"] if hits else -1)
+    search.VECTORS_FILE = None
+    worst_off, s_right = max(nonsense), sorted(right)
+    print(f"  off-topic ({len(off)}): best document's similarity {min(nonsense):.3f} to {worst_off:.3f}")
+    print(f"  held-out ({len(right)} asks): best right document {s_right[0]:.3f} (lowest), "
+          f"{s_right[len(s_right) // 4]:.3f} (a quarter below), {s_right[len(s_right) // 2]:.3f} (median)")
+    suggest = round(worst_off + 0.02, 2)
+    kept = sum(1 for x in right if x >= suggest)
+    print(f"  suggested [embed] min_similarity = {suggest}: every off-topic question finds nothing by meaning, "
+          f"{kept} of {len(right)} held-out asks still reach a right document by meaning")
+    floor = float(SETTINGS["embed"].get("min_similarity", 0))
+    if floor > 0:
+        search.VECTORS_FILE = held_path
+        con_h.sql("DROP TABLE IF EXISTS doc_vectors")
+        leaks = [t for t in off if search.meaning(con_h, t, 5)]
+        after = sum(len([a for a in (x["account_id"] for x in search.accounts(con_h, text, k, mode="hybrid"))
+                         if a in q["accounts"]]) for q, text in asks)
+        search.VECTORS_FILE = None
+        check(not leaks, f"with the floor ({floor}): no off-topic question finds anything by meaning", leaks)
+        check(after >= held[2]["keywords"], f"...and hybrid still finds at least what keywords find on the held-out set "
+                                            f"({after} vs {held[2]['keywords']})")
+    else:
+        print("  (no floor set yet: [embed] min_similarity = 0)")
+
 print("\nRedacted results: the only form that may leave the laptop")
 import csv as _csv                                   # noqa: E402
 import handover                                      # noqa: E402

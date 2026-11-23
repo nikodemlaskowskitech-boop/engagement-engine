@@ -102,6 +102,22 @@ check((kw[0]["account_id"], kw[0]["id"]) in {(h["account_id"], h["id"]) for h in
 check(search.ranked(con, q, 10, "keywords") == kw, "keywords mode is exactly search(): nothing moved for it")
 acc = search.accounts(con, q, 10, mode="hybrid", provider="stand-in")
 check(len(acc) == len({a["account_id"] for a in acc}) and len(acc) <= 10, "accounts(): each account once, at most 10")
+# the floor (23 Nov 2026): meaning always has a nearest document, so nonsense found five accounts
+odd = "zxqv plorbt wibble"                         # no word any document shares: stand-in similarity 0
+check(len(search.meaning(con, odd, 5, "stand-in", floor=-1)) == 5, "without a floor, nonsense still 'finds' 5 documents")
+bar = search.meaning(con, odd, 1, "stand-in", floor=-1)[0]["score"] + 0.001   # just above nonsense's best
+check(search.meaning(con, odd, 5, "stand-in", floor=bar) == [], "with a floor above nonsense's best, nonsense finds nothing by meaning")
+# (whether right answers stay above it is measured with the real model: search_test's calibration)
+check(search.ranked(con, odd, 5, "hybrid", provider="stand-in") == [] or float(search.EMBED.get("min_similarity", 0)) <= 0,
+      "...and hybrid answers nothing (the page says no match), once [embed] min_similarity is set")
+floored = search.meaning(con, q, 10, "stand-in", floor=0.2)
+check(all(h["score"] >= 0.2 for h in floored) and len(floored) <= 10, "every document kept is at or above the floor")
+lines = [h["line"] for h in search.meaning(con, q, 30, "stand-in", floor=-1)]
+check(lines and not any(search._NOISE.match(x) for x in lines),
+      "a match by meaning shows a line that says something: no header, greeting, sign-off or quote",
+      [x for x in lines if search._NOISE.match(x)][:3])
+check(search._best_line("Title: x\nHi CS 1,\n\nOur finance team is unhappy.\nCS 2", []) == "Our finance team is unhappy.",
+      "no word in common: the first real sentence, not 'Hi CS 1,'")
 one = search.meaning(con, q, 5, "stand-in", account_id=kw[0]["account_id"])
 check(one and all(h["account_id"] == kw[0]["account_id"] for h in one), "meaning() for one account: only that account's documents")
 check(all(h["account_id"] == kw[0]["account_id"] for h in search.ranked(con, q, 5, "hybrid", provider="stand-in", account_id=kw[0]["account_id"])),
