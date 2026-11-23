@@ -435,6 +435,14 @@ Read a file's entry before changing that file, and update the entry in the same 
   vectors or no answer from Bedrock, ranked() says so once on stderr and answers with keywords.
   search_test's floors (laptop, real vectors): hybrid at least keywords on both sets, held-out at
   least min_heldout_recall, and no fall-back during the measurement.
+  The floor (23 Nov 2026, Nikodem's screenshot: "what's the weather in Paris" found 5 accounts):
+  meaning always has a nearest document, so by_vector() drops any under [embed] min_similarity
+  (0 = off until calibrated). search_test.py calibrates it on the laptop: tests/offtopic.json's
+  12 questions with no answer vs the held-out asks' best right document, prints a suggested
+  floor (just above the worst off-topic score) and, once set, checks no off-topic question finds
+  anything by meaning and hybrid still finds at least what keywords find. Same day: the line
+  shown for a hit skips headers, greetings, sign-offs and quoted replies (content_lines); with
+  no word in common it's the first line that says something (a match by meaning showed "Hi CS 1,").
 - `ask.py` (14 Nov 2026): one question about one account, answered in at most 150 words, every
   sentence citing [DATA] or a document ID. RAG on the laptop: search.search picks the
   account's [ask] top_k documents for the question (BM25 with the vocabulary; doc_folders says

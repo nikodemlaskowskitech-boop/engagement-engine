@@ -184,23 +184,26 @@ def _vectors(con):
                        columns = {{account_id: 'VARCHAR', id: 'VARCHAR', vector: 'DOUBLE[]'}})""")
 
 
-def by_vector(con, qv, k=None, account_id=None, query=""):
+def by_vector(con, qv, k=None, account_id=None, query="", floor=None):
     """The k documents closest to a question's vector (cosine), best first, in search()'s shape.
     The vector comes from the caller: meaning() on the laptop, the public search's own call to the
-    model in AWS (23 Nov 2026). account_id = one account's documents only."""
+    model in AWS (23 Nov 2026). account_id = one account's documents only.
+    floor (23 Nov 2026): a document under [embed] min_similarity isn't a match. Meaning always
+    has a nearest document, so without it "what's the weather in Paris" returned five accounts."""
     k = int(k or CONF["top_k"])
+    floor = float(EMBED.get("min_similarity", 0) if floor is None else floor)
     only = ""
     if account_id:
         if not re.fullmatch(r"[\w-]+", account_id):
             raise ValueError(f"not an account ID: {account_id!r}")
-        only = f"WHERE v.account_id = '{account_id}'"
+        only = f"AND v.account_id = '{account_id}'"
     _vectors(con)
     lit = "[" + ",".join(f"{float(x):.6f}" for x in qv) + "]::DOUBLE[]"
     rel = con.sql(f"""
         SELECT v.account_id, v.id, d.kind, d.date, d.title,
                round(list_cosine_similarity(v.vector, {lit}), 4) AS score, d.text
         FROM doc_vectors v JOIN documents d USING (account_id, id)
-        {only}
+        WHERE list_cosine_similarity(v.vector, {lit}) >= {floor} {only}
         ORDER BY score DESC, v.account_id, v.id
         LIMIT {k}""")
     words = [w for w in re.findall(r"[a-z]+", str(query).lower()) if len(w) > 3]
@@ -209,7 +212,7 @@ def by_vector(con, qv, k=None, account_id=None, query=""):
             for a, i, kind, day, title, score, text in rel.fetchall()]
 
 
-def meaning(con, query, k=None, provider=None, account_id=None):
+def meaning(con, query, k=None, provider=None, account_id=None, floor=None):
     """The k documents closest in meaning to the question: the question embedded by the same
     model as the documents (embed.py), then by_vector()."""
     import embed
@@ -217,7 +220,7 @@ def meaning(con, query, k=None, provider=None, account_id=None):
     if not q:
         return []
     _vectors(con)                                   # no vectors: fail before paying for the question's
-    return by_vector(con, embed.embed_query(q, provider), k, account_id, q)
+    return by_vector(con, embed.embed_query(q, provider), k, account_id, q, floor)
 
 
 def fuse(lists, k):
@@ -303,13 +306,25 @@ def redacted(con, hits):
     return safe, held_back
 
 
+# Lines that say nothing about the case (23 Nov 2026: a match by meaning showed "Hi CS 1," or
+# "Title: the customer - check-in"): headers, greetings, sign-offs and quoted replies
+_NOISE = re.compile(r"^(From|To|Cc|Subject|Title|Date|CRM account|Participants):|^>|^Opened \d{4}-|^(Hi|Hello|Dear)\b[^.!?]*,$"
+                    r"|^[\w .'-]{1,24},?$")
+
+
+def content_lines(text):
+    """The document's lines worth showing: what was actually said or written."""
+    return [ln.strip() for ln in text.splitlines() if ln.strip() and not _NOISE.match(ln.strip())]
+
+
 def _best_line(text, matched):
-    """The line of the document holding most of the matched words: the context to show."""
+    """The line holding most of the matched words: the context to show. No word in common (a
+    match by meaning): the first line that says something, never a header or a greeting."""
     stems = set(matched)
     def hits(line):
         return sum(1 for w in re.findall(r"\w+", line.lower()) if any(w.startswith(s) for s in stems))
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip() and not re.match(r"^(From|To|Cc):", ln)]
-    best = max(lines, key=hits, default="")
+    lines = content_lines(text) or [ln.strip() for ln in text.splitlines() if ln.strip()]
+    best = max(lines, key=hits, default="")             # max keeps the first of equals: no hit = first line
     return best if len(best) <= 200 else best[:197] + "..."
 
 

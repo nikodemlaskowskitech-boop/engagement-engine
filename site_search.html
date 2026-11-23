@@ -143,7 +143,7 @@ async function ask(q) {
     ? `${results.length} account${results.length > 1 ? "s" : ""}, best match first.${how}`
     : NUMBERS.test(q)
       ? "No document matches. That reads like a question about numbers: this search reads what customers and CS wrote, not the engine's figures. "
-      : "No document matches those words. Try other words, or one of the examples.";
+      : "Nothing in the documents is close to that question, in words or in meaning. Try other words, or one of the examples.";
   if (!results.length && NUMBERS.test(q)) {               // 16 Nov 2026: "what is my biggest churn" found nothing, with no reason why
     const a = document.createElement("a"); a.href = "index.html#lead"; a.textContent = "See the biggest risks on Leadership.";
     status.append(a);

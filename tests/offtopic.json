@@ -1,0 +1,17 @@
+{
+  "note": "Questions with no answer in any document (23 Nov 2026): what a visitor types to test the search. Used to set [embed] min_similarity: by meaning, none of them should find anything.",
+  "questions": [
+    "What's the weather in Paris?",
+    "Who won the football last night?",
+    "Give me a recipe for banana bread",
+    "How tall is the Eiffel Tower?",
+    "What is the capital of Australia?",
+    "Tell me a joke",
+    "Best hiking trails in the Alps",
+    "How do I change a car tyre?",
+    "What time is it in Tokyo?",
+    "Recommend a good science fiction novel",
+    "How many legs does a spider have?",
+    "Translate hello into Polish"
+  ]
+}

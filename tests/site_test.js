@@ -133,7 +133,7 @@ print(json.dumps(r))`;
     await s.fill("#q", "__busy__"); await s.click("button.go"); await s.waitForTimeout(400);
     check(/try again/i.test(await s.textContent("#status")), "the rate limit (429): a friendly 'try again', not an error");
     await s.fill("#q", "zzqx vvbn"); await s.click("button.go"); await s.waitForTimeout(2500);
-    check(/No document matches/.test(await s.textContent("#status")), "no match: says so and suggests the examples");
+    check(/Nothing in the documents is close/.test(await s.textContent("#status")), "no match: says so (in words or in meaning) and suggests the examples");
     // 16 Nov 2026: "what is my biggest churn" found nothing, with no reason why
     await s.fill("#q", "zzqx biggest churn"); await s.click("button.go"); await s.waitForTimeout(2500);
     check(/numbers/.test(await s.textContent("#status")) && (await s.getAttribute("#status a", "href")) === "index.html#lead",
