@@ -109,6 +109,21 @@ out["post"] = call("hello", "POST")
 rows = [json.loads(l) for l in open("documents.jsonl", encoding="utf-8")]
 out["file"] = [[r["account_id"], r["id"], r["title"]] for r in rows]
 out["laptop"] = [a["account_id"] for a in search.accounts(handler._index(), "Which accounts are evaluating a competitor?", handler.TOP_K)]
+# one account asked for by ID (23 Nov 2026): its documents only
+acc = rows[0]["account_id"]
+out["acc"] = acc
+out["acc_docs"] = sorted(r["id"] for r in rows if r["account_id"] == acc)
+out["acc_alone"] = call("show me " + acc.upper())
+out["acc_topic"] = call(acc + " customer call")
+out["acc_none"] = call("acc_zz999")
+titan = []
+if handler.MODE == "hybrid":
+    real = handler.embed
+    handler.embed = lambda q: titan.append(q) or real(q)
+out["code"] = call("invoice INV-36164")
+out["code_titan"] = len(titan)
+if handler.MODE == "hybrid":
+    handler.embed = real
 if handler.MODE == "hybrid":
     q = "Which accounts are evaluating a competitor?"
     con = handler._index()
@@ -148,7 +163,28 @@ def run(where, mode):
 
 r, logs = run(out, "keywords")
 check(r["good"]["body"].get("ranked_by") == "keywords", "keywords bundle: says it ranked by keywords")
+
+
+def explicit(r, label):
+    """23 Nov 2026 (Nikodem): naming an account is an explicit search: that account only."""
+    a = r["acc_alone"]["body"]
+    check(r["acc_alone"]["status"] == 200 and a.get("account") == r["acc"] and "results" not in a
+          and sorted(d["id"] for d in a["documents"]) == r["acc_docs"] and a["ranked_by"] == "newest"
+          and [d["date"] for d in a["documents"]] == sorted((d["date"] for d in a["documents"]), reverse=True),
+          f"{label}: an account ID alone (any case, in a sentence): all its documents, newest first, nothing else", a)
+    t = r["acc_topic"]["body"]
+    check(t.get("account") == r["acc"] and t["documents"] and all(d["id"] in r["acc_docs"] for d in t["documents"]),
+          f"{label}: an account ID and a topic: only that account's documents, ranked", t)
+    n = r["acc_none"]["body"]
+    check(r["acc_none"]["status"] == 200 and n.get("account") == "acc_zz999" and n["documents"] == [],
+          f"{label}: an account with no documents: an empty answer, never another account's")
+    check(r["code"]["status"] == 200 and r["code"]["body"].get("ranked_by") == "keywords" and r["code_titan"] == 0,
+          f"{label}: a code (INV-36164): keywords only, Titan never asked", (r["code"]["body"].get("ranked_by"), r["code_titan"]))
+
+
+explicit(r, "keywords")
 rh, logs_h = run(hyb, "hybrid")
+explicit(rh, "hybrid")
 
 print("\nHybrid (a stand-in for Titan)")
 hres = rh["good"]["body"].get("results", [])

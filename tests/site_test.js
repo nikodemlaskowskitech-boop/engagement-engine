@@ -120,14 +120,46 @@ print(json.dumps(r))`;
       .trim().split("\n").map((l) => JSON.parse(l));
     const cites = new Set(file.map((d) => d.account_id + "|" + d.id));
     await s.click(".chip"); await s.waitForSelector("#results li", { timeout: 15000 });
-    const shown = await s.$$eval("#results li", (ls) => ls.map((l) => ({ head: l.querySelector(".head").textContent, marks: l.querySelectorAll("mark").length })));
-    const ok = shown.every((x) => { const m = x.head.match(/^(acc_h?\d+).*\[(\w+)\]/); return m && cites.has(m[1] + "|" + m[2]); });
+    const shown = await s.$$eval("#results li", (ls) => ls.map((l) => ({ head: [...l.querySelectorAll(".head")].map((h) => h.textContent).join(" "),
+                                                                      name: (l.querySelector(".head .name") || {}).textContent || "",
+                                                                      marks: l.querySelectorAll("mark").length })));
+    const ok = shown.every((x) => { const a = x.head.match(/(acc_h?\d+)/), d = x.head.match(/\[(\w+)\]/); return a && d && cites.has(a[1] + "|" + d[1]); });
     check(shown.length > 0 && shown.length <= 5 && ok, `an example question: ${shown.length} accounts, each citing a document that's in the redacted file`, JSON.stringify(shown));
     check(shown.some((x) => x.marks > 0), "the matching words are highlighted");
-    const accLinks = await s.$$eval("#results li .head a.acc", (as) => as.map((x) => [x.getAttribute("href"), x.textContent]));
+    const accLinks = await s.$$eval("#results li", (ls) => ls.map((l) => [l.querySelector(".head a.acc").getAttribute("href"),
+                                                                          l.textContent.match(/(acc_h?\d+)/)[1]]));
     check(accLinks.length === shown.length && accLinks.every(([h, id]) => h === "index.html#" + id),
       "each result's account opens its timeline in the cockpit (16 Nov 2026 review: IDs led nowhere)", JSON.stringify(accLinks));
     check(/[?]q=/.test(s.url()), "the address holds the question, so it can be shared", s.url());
+    // 23 Nov 2026 (Nikodem): "acc_087 is hard for a normal person": the name first, from the cockpit
+    const ACC = await s.evaluate(() => ACCOUNTS);
+    check(shown.every((x) => { const id = x.head.match(/(acc_h?\d+)/)[1]; return ACC[id] && x.name === ACC[id].n; }),
+      "each result leads with the account's name (then ID, tier, ARR, flags)", JSON.stringify(shown.map((x) => x.name)));
+    check(Object.keys(ACC).every((id) => file.some((d) => d.account_id === id)) && file.every((d) => ACC[d.account_id]),
+      `the page knows exactly the accounts in the documents (${Object.keys(ACC).length}), nothing more`);
+    check(await s.evaluate(() => !highlight("CRM account: acc_037", ["acc", "037"]).includes("<mark>account")),
+      "a short stem marks a whole word only: 'acc' no longer marks 'account'");
+    // asking for one account (by ID, by name, with a topic): that account only (Nikodem: "no need to show anything else")
+    const byDocs = {}; file.forEach((d) => { (byDocs[d.account_id] = byDocs[d.account_id] || []).push(d.id); });
+    const pick = Object.keys(byDocs).sort((x, y) => byDocs[y].length - byDocs[x].length)[0];
+    const onlyThat = async (q, what) => {
+      await s.fill("#q", q); await s.click("button.go");
+      await s.waitForFunction(() => /Only this account|No documents/.test(document.getElementById("status").textContent), null, { timeout: 15000 });
+      const docs = await s.$$eval("#results li:not(.account-card)", (ls) => ls.map((l) => (l.textContent.match(/\[(\w+)\]/) || [])[1]));
+      const card = await s.$eval("#results li.account-card", (l) => l.textContent).catch(() => "");
+      check(card.includes(ACC[pick].n) && card.includes(pick) && docs.length && docs.every((d) => byDocs[pick].includes(d)),
+        `${what}: only ${ACC[pick].n}'s documents (${docs.length}), under its card`, JSON.stringify({ card, docs }));
+      return docs;
+    };
+    const all = await onlyThat(pick, "its ID alone");
+    check(all.length === byDocs[pick].length && /newest first/.test(await s.textContent("#status")),
+      "...all of them, newest first", JSON.stringify(all));
+    await onlyThat(ACC[pick].n.toUpperCase(), "its name, in any case");
+    await onlyThat(`show me ${ACC[pick].n} please`, "its name inside a sentence");
+    await onlyThat(`${ACC[pick].n} customer call`, "its name and a topic");
+    await s.fill("#q", "acc_999"); await s.click("button.go");
+    await s.waitForFunction(() => /No documents/.test(document.getElementById("status").textContent), null, { timeout: 15000 });
+    check(!(await s.$("#results li:not(.account-card)")), "an account with no documents: says so, shows nothing else");
     await s.fill("#q", "   "); await s.click("button.go"); await s.waitForTimeout(150);
     check(/Type a question/.test(await s.textContent("#status")) && !(await s.$("#results li")), "an empty question: a hint, no request");
     await s.fill("#q", "__busy__"); await s.click("button.go"); await s.waitForTimeout(400);

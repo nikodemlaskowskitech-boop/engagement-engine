@@ -360,6 +360,20 @@ Read a file's entry before changing that file, and update the entry in the same 
   meaning; no dates, amounts or "not"; labels instead of names; top 5 and the held-out
   numbers in words (update them when the search changes); nothing typed is stored. The
   cockpit's sandbox banner now carries the same disclaimer and a link to it.
+  Names and one account (23 Nov 2026, Nikodem: "acc_087 is hard for a normal person"; "if I
+  ask for a specific account, no need to show anything else"): roles.search_accounts(export)
+  embeds the accounts in the documents (research.rows(), so it works in the engine Lambda too)
+  as {id: name, tier, ARR, up to two open flags in the cockpit's words, Activated left out};
+  each result leads with the name, then ID, tier, ARR and flags (Act ones outlined). resolve()
+  turns a typed name (whole words, any case, the longest wins) into its ID before the request,
+  so /search keeps one query parameter (CloudFront caches by q only). The handler, on an
+  account ID (search.split_account): that account only, ranked by the rest of the question
+  (search.rank with account_id), or its newest [ACCOUNT_DOCS] documents when the rest is only
+  filler ("show me ..."); the page shows its card, then its documents, "Only this account".
+  A code (account ID, DL-118, INV-36164: search.has_code) is ranked by keywords alone (no
+  Titan call); laptop ranked() does the same. Why: "acc_087" came last in hybrid, as Titan sees
+  no meaning in a code and the fusion lifted generic "CRM account: acc_..." lines. The
+  highlighter marks a stem under 4 letters only as a whole word ("acc" had marked "account").
   Numbers (16 Nov 2026: "what is my biggest churn" found nothing, with no reason why): the
   lede says it reads what was written, not the numbers, and links to Leadership; a
   no-match on a question that reads like one about numbers (NUMBERS: biggest, top, ARR,

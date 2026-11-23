@@ -53,6 +53,10 @@ ol.results li { background: var(--surface); border: 1px solid var(--line); borde
 .line { margin: 0; color: var(--ink-2); font-size: 0.92rem; overflow-wrap: anywhere; }
 mark { background: var(--accent-soft); color: var(--ink); border-bottom: 1px solid var(--accent); padding: 0 1px; }
 .more { margin: 6px 0 0; font-size: 0.8rem; color: var(--ink-3); }
+.head .name { color: var(--ink); font-weight: 600; font-size: 0.9rem; }
+.head .flag { border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--ink-2); }
+.head .flag.act { border-color: var(--critical, #c0392b); color: var(--ink); }
+.account-card { border-color: var(--accent) !important; }
 details.about { margin-top: 34px; border-top: 1px solid var(--line); padding-top: 12px; color: var(--ink-2); font-size: 0.9rem; }
 details.about summary { cursor: pointer; color: var(--ink); font-weight: 500; }
 details.about li { margin: 4px 0; }
@@ -81,7 +85,8 @@ details.about li { margin: 4px 0; }
       <li>It finds and ranks documents. It doesn't write an answer: read the matching line and judge.</li>
       <li>It matches words, plus a short CS vocabulary (a "competitor" question also looks for a benchmark, an RFP, a trial). It also matches by meaning: an embedding model (Amazon Titan, in our own AWS account) turns your question into numbers and finds the documents closest to it, so other wording still finds them. The two lists are merged; the line under the box says which ran.</li>
       <li>It doesn't understand dates, amounts or "not", and it doesn't read the engine's numbers: "the biggest churn risk" is a question for the cockpit's Leadership tab, which ranks accounts by ARR at risk.</li>
-      <li>People appear as labels (Customer A, CS 1) and companies as "the customer": names were removed, and checked for, before the search ever saw the text. So search by topic, not by company name; the account ID opens that account in the cockpit, with its name.</li>
+      <li>People appear as labels (Customer A, CS 1) and companies as "the customer" inside the documents: names were removed, and checked for, before the search ever saw the text. The account's name on each result comes from the cockpit. Type an account's name or ID to search that account only ("Maple Energy invoice"), or just the name to see its documents, newest first.</li>
+      <li>Codes (an account ID, a ticket or invoice number) are matched as typed, by words alone: a code has no meaning to match.</li>
       <li>It shows the top __TOP_K__ accounts. On a test set written by someone who never saw the search, words alone put the first result right about 6 times in 10; words and meaning together find more of the right documents (90% to 96% in the top 10, measured on the laptop).</li>
       <li>What you type isn't stored anywhere. To match by meaning it goes to the embedding model once, and AWS doesn't keep it either.</li>
     </ul>
@@ -90,6 +95,9 @@ details.about li { margin: 4px 0; }
 <script>
 "use strict";
 const EXAMPLES = __EXAMPLES__;
+// the accounts it can find (23 Nov 2026): name, tier, ARR, open flags; the names are the cockpit's
+const ACCOUNTS = __ACCOUNTS__;
+const CURRENCY = __CURRENCY__;
 const KIND = { S: "Ticket", E: "Email", C: "Call" };
 // a question about the engine's numbers, not about what was written (for the empty-result hint)
 const NUMBERS = /\b(biggest|largest|most|top|how (many|much)|arr|revenue|value|forecast|at risk|renewals?|churn(ing)?|ranking|total)\b/i;
@@ -97,18 +105,60 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const day = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
-// highlight the words that matched (the search stems words: "invoic" matches "invoices")
+// highlight the words that matched (the search stems words: "invoic" matches "invoices").
+// A short stem must match the whole word: "acc" (from acc_087) once marked "account".
 function highlight(text, stems) {
   const safe = esc(text);
   if (!stems || !stems.length) return safe;
-  return safe.replace(/[A-Za-zÀ-ÿ0-9]+/g, (w) => stems.some((s) => s.length > 1 && w.toLowerCase().startsWith(s)) ? `<mark>${w}</mark>` : w);
+  const hit = (w) => stems.some((s) => s.length > 1 && (s.length >= 4 ? w.toLowerCase().startsWith(s) : w.toLowerCase() === s));
+  return safe.replace(/[A-Za-zÀ-ÿ0-9]+/g, (w) => hit(w) ? `<mark>${w}</mark>` : w);
+}
+
+const money = (v) => v ? new Intl.NumberFormat("en-GB", { style: "currency", currency: CURRENCY, notation: "compact", maximumFractionDigits: 0 }).format(v) : "";
+// the account as a person reads it: its name first, then the ID, tier, ARR and open flags
+function accountHead(id) {
+  const a = ACCOUNTS[id];
+  const link = `<a class="acc" href="index.html#${encodeURIComponent(id)}" title="Open this account in the cockpit">`;
+  if (!a) return `${link}<b>${esc(id)}</b></a>`;
+  return `${link}<span class="name">${esc(a.n)}</span></a><span>${esc(id)}</span><span>${esc(a.t)}</span>` +
+    (a.a ? `<span>${esc(money(a.a))} ARR</span>` : "") +
+    a.f.map((f) => `<span class="flag${/Act$/.test(f) ? " act" : ""}">${esc(f)}</span>`).join("");
+}
+
+// A name typed in the question becomes the account's ID, so the search knows it was asked for one
+// account: "Maple Energy invoice" -> "acc_001 invoice". The longest name wins ("Maple Energy Group").
+function resolve(q) {
+  if (/\bacc_[a-z0-9]+\b/i.test(q)) return q;
+  const low = q.toLowerCase();
+  let best = null;
+  for (const [id, a] of Object.entries(ACCOUNTS)) {
+    const n = a.n.toLowerCase();
+    const at = low.search(new RegExp("(^|[^a-z0-9])" + n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "($|[^a-z0-9])"));
+    if (at >= 0 && (!best || n.length > best.n.length)) best = { id, n, at };
+  }
+  if (!best) return q;
+  const start = low.indexOf(best.n, best.at);
+  return (q.slice(0, start) + " " + best.id + " " + q.slice(start + best.n.length)).replace(/\s+/g, " ").trim();
+}
+
+// one account, asked for by name or ID: its documents only
+function showAccount(body) {
+  const docs = body.documents || [];
+  $("results").innerHTML = `<li class="account-card"><div class="head">${accountHead(body.account)}</div></li>` +
+    docs.map((d) => `
+    <li>
+      <div class="head"><span>${esc(KIND[d.kind] || d.kind)} [${esc(d.id)}]</span><span>${esc(day(d.date))}</span></div>
+      <p class="title">${highlight(d.title, d.matched)}</p>
+      <p class="line">${highlight(d.line, d.matched)}</p>
+    </li>`).join("");
 }
 
 function show(results) {
   const list = $("results");
   list.innerHTML = results.map((r) => `
     <li>
-      <div class="head"><a class="acc" href="index.html#${encodeURIComponent(r.account_id)}" title="Open this account's timeline in the cockpit"><b>${esc(r.account_id)}</b></a><span>${esc(KIND[r.best.kind] || r.best.kind)} [${esc(r.best.id)}]</span><span>${esc(day(r.best.date))}</span></div>
+      <div class="head">${accountHead(r.account_id)}</div>
+      <div class="head"><span>${esc(KIND[r.best.kind] || r.best.kind)} [${esc(r.best.id)}]</span><span>${esc(day(r.best.date))}</span></div>
       <p class="title">${highlight(r.best.title, r.matched)}</p>
       <p class="line">${highlight(r.best.line, r.matched)}</p>
       ${r.more.length ? `<p class="more">Also matched on this account: ${r.more.map(esc).join(", ")}</p>` : ""}
@@ -126,7 +176,7 @@ async function ask(q) {
   status.textContent = "Searching…";
   let res;
   try {
-    res = await fetch("search?q=" + encodeURIComponent(q), { headers: { Accept: "application/json" } });
+    res = await fetch("search?q=" + encodeURIComponent(resolve(q)), { headers: { Accept: "application/json" } });
   } catch (e) {
     status.className = "warn";
     status.textContent = location.protocol === "file:" ? "The search runs on the live site, not on a saved copy of the page."
@@ -137,6 +187,13 @@ async function ask(q) {
   let body = {};
   try { body = await res.json(); } catch (e) { /* not JSON: handled below */ }
   if (!res.ok) { status.className = "warn"; status.textContent = body.error || "Something went wrong. Try again in a minute."; return; }
+  if (body.account) {                                   // one account, asked for by name or ID
+    const a = ACCOUNTS[body.account], n = (body.documents || []).length, who = a ? a.n : body.account;
+    status.textContent = !n ? `No documents for ${who}${a ? "" : " (this search covers " + Object.keys(ACCOUNTS).length + " accounts)"}.`
+      : `${who}: ${n} document${n > 1 ? "s" : ""}, ${body.ranked_by === "newest" ? "newest first" : "best match first"}. Only this account.`;
+    showAccount(body);
+    return;
+  }
   const results = body.results || [];
   const how = body.ranked_by === "hybrid" ? " Matched by words and meaning." : " Matched by words.";
   status.textContent = results.length

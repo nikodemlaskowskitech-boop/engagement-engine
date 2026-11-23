@@ -262,6 +262,11 @@ then `leak_check()` on everything about to go. An account where anything
 person-shaped survives is held back and listed for a person; nothing is dropped
 silently. The redaction keys never leave `search.py`.
 
+- **Account names on the public search page** (23 Nov 2026): the documents keep "the
+  customer"; the page shows each account's name from the cockpit's own facts (roles.py
+  search_accounts), the same fictional names the cockpit pages show, joined beside the result,
+  never put back into the text. With real data this is what any CS search does: you see the
+  names of the accounts your role may see. The leak check still guards the documents.
 - **Labels are per account** (gap 6): "Customer A" on two accounts are two people.
   Each result carries its account ID, so they're never merged.
 - **The first run held back 14 (account, name) pairs**: 3 were two real people
