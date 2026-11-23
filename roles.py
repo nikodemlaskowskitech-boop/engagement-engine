@@ -188,6 +188,7 @@ def slice_export(export, person_id, person):
         page[key] = [r for r in export.get(key, []) if r.get("account_id") in ids]
     page["handovers"] = {k: v for k, v in export.get("handovers", {}).items() if k in ids}
     page["research"] = {k: v for k, v in export.get("research", {}).items() if k in ids}
+    page["slack_cards"] = {k: v for k, v in export.get("slack_cards", {}).items() if k.split("|")[0] in ids}
     # the weekly history: today's accounts in scope, plus the accounts no longer in the
     # book (left, or no CRM row) that the same rule puts in scope; those carry a key
     # of their own (ob_1, ...), never their id or name

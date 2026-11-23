@@ -56,6 +56,8 @@ page).
 
 ## Why each choice
 
+- **Slack, visible on the page** (23 Nov 2026): every open task shows the card its owner gets
+  in Slack, and its buttons can be tried there; nothing tried in the preview is saved.
 - **Promises where people work** (23 Nov 2026): a CSM's My work opens with the promises
   they owe, late first; Operational shows the team's or the book's, by person or team. Closing
   one stays on the account page (Kept or Dropped), where its context is.

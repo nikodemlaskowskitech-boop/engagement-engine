@@ -243,6 +243,20 @@ button.link.back { display: inline-block; margin: 0 0 8px; padding: 4px 0; font-
 .segbar.on { box-shadow: inset 0 -2px 0 var(--accent-soft); }
 /* tasks */
 .badge.overdue { background: var(--critical); color: var(--on-strong, #fff); }
+/* The Slack card preview (23 Nov 2026): a chat message drawn from the card's own Block Kit, in the
+   page's colours; labelled a preview, no Slack logo */
+.slack-prev { max-width: 640px; border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; background: var(--card, var(--bg)); }
+.slack-prev .who { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; margin-bottom: 6px; }
+.slack-prev .who i { width: 28px; height: 28px; border-radius: 6px; background: var(--ink); color: var(--bg); display: grid; place-items: center; font: 700 0.9rem var(--font-body); font-style: normal; }
+.slack-prev .who small { color: var(--ink-3, var(--ink-2)); }
+.slack-prev .sec { line-height: 1.45; }
+.slack-prev .ctx { font-size: 0.8rem; color: var(--ink-2); margin-top: 6px; }
+.slack-prev .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.slack-prev .acts button { font: 600 0.8rem var(--font-body); padding: 4px 10px; border-radius: 4px; border: 1px solid var(--rule); background: var(--bg); color: var(--ink); cursor: pointer; }
+.slack-prev .acts button.primary { background: var(--accent); color: var(--on-strong, #fff); border-color: var(--accent); }
+.slack-prev form { display: grid; gap: 6px; margin-top: 10px; max-width: 420px; }
+.crumbs { margin: -4px 0 8px; font-size: 0.85rem; }
+.slack-label { font-size: 0.78rem; color: var(--ink-2); margin: 0 0 6px; }
 .badge { display: inline-block; font: 600 0.72rem var(--font-body); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
 .badge.Open { background: var(--bg); color: var(--ink-2); border: 1px solid var(--rule); }
 .badge.Open.stale, .badge.Draft { background: var(--warning-bg); color: var(--warning-ink); border: 0; }
@@ -547,6 +561,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         <p class="note" id="cs-recon"></p>
         <div class="panel" id="cs-teams-panel">
           <h2 id="cs-teams-title">By team: is retention the same everywhere?</h2>
+          <p class="crumbs" id="cs-teams-crumbs" hidden></p>
           <p class="finding small" id="cs-teams-finding"></p>
           <div class="tablewrap" id="cs-teams"></div>
           <p class="note" id="cs-teams-note"></p>
@@ -737,6 +752,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
            to "the aim was checked", per team for the director and per person for a team lead -->
       <div class="panel" id="tk-funnel-panel" hidden>
         <h2 id="tk-funnel-title">From signal to outcome</h2>
+        <p class="crumbs" id="tk-funnel-crumbs" hidden></p>
         <p class="finding" style="font-size:1rem" id="tk-funnel-finding"></p>
         <div id="tk-funnel"></div>
         <div class="tablewrap" id="tk-funnel-rows"></div>
@@ -1702,7 +1718,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const OUT = (D.settings && D.settings.meeting_outcomes) || {};
       const said = t.event === "meeting_held" && (t.outcome || t.note)                 // what came of it, when logged
         ? [t.outcome ? (OUT[t.outcome] || t.outcome) : "", t.note || ""].filter(Boolean).join(" · ") : "";
-      done.push(same[k] = { date: t.date, at: t.date, what, base: what, n: 1, who: [who, said].filter(Boolean).join(" · "), customer });
+      // logged in Slack (23 Nov 2026): a meeting's outcome comes only from Slack's call form, and a
+      // click from Slack carries its source; the tag shows where the loop closes
+      const slack = t.source === "slack" || (t.event === "meeting_held" && !!t.outcome);
+      done.push(same[k] = { date: t.date, at: t.date, what, base: what, n: 1, who: [who, said].filter(Boolean).join(" · "), customer, slack });
     }
     for (const t of TASKS.filter((x) => x.account_id === id && x.sent_on))
       done.push({ date: t.sent_on, at: t.sent_on, what: `Task sent: ${t.flag} ${t.status}`, who: `${ownerName[t.routed_to] || t.routed_to} · now ${t.action_status}`, customer: false });
@@ -1714,7 +1733,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     done.sort((x, y) => y.at.localeCompare(x.at));       // full timestamps: two saves on one day stay in order
     const SHORT = 3;                                     // the history comes after why now and what to do: three rows, then View all
     const shown = sumAll ? done : done.slice(0, SHORT);
-    $("tl-done").innerHTML = done.length ? shown.map((d) => `<li><span class="when">${fmt(d.date)}<br>${ago(d.date)}</span><span>${d.customer ? "<b>" + esc(d.what) + "</b>" : esc(d.what)}${d.who ? `<br><small>${esc(d.who)}</small>` : ""}</span></li>`).join("") +
+    $("tl-done").innerHTML = done.length ? shown.map((d) => `<li><span class="when">${fmt(d.date)}<br>${ago(d.date)}</span><span>${d.customer ? "<b>" + esc(d.what) + "</b>" : esc(d.what)}${d.slack ? ' <span class="badge Open" title="Logged from the task card in Slack">via Slack</span>' : ""}${d.who ? `<br><small>${esc(d.who)}</small>` : ""}</span></li>`).join("") +
       (done.length > SHORT ? `<li><span></span><button class="link" id="tl-done-all">${sumAll ? "Show fewer" : `View all (${done.length})`}</button></li>` : "")
       : '<li><span></span><span class="muted">Nothing on record in the last 90 days.</span></li>';
     const b = $("tl-done-all"); if (b) b.addEventListener("click", () => { sumAll = !sumAll; drawSummary(id); });
@@ -2836,6 +2855,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           return `<tr><td>${byTeam && k ? `<button class="link" data-zoom="${esc(k)}">${esc(nameOfKey(k))}</button>` : esc(nameOfKey(k))}</td>${c.n.map((v, i) => `<td class="r num">${i ? cell(v, c.n[0]) : v}</td>`).join("")}<td class="r num">${c.aim} of ${c.n[4]}</td></tr>`; }).join("") + "</tbody></table>";
     }
     rowsHost.querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => { for (const k in seg) seg[k] = ""; seg.manager = b.dataset.zoom; saveSeg(); redraw(); }));
+    zoomCrumbs($("tk-funnel-crumbs"));
     $("tk-funnel-note").textContent = `Each stage counts the tasks at it or beyond. Named owner: sent to a CSM or pool member, not left in a pool queue (a row per person counts a pool-queue task on that person's account). Met: any meeting on the account since the task was sent; Done: the meeting the flag asked for. Aim checked: the owner said whether the next step did its job (started 22 Nov 2026, so few so far).` +
       (resolved ? ` ${resolved} ${resolved === 1 ? "task" : "tasks"} resolved on ${resolved === 1 ? "its" : "their"} own (the flag went away first) ${resolved === 1 ? "is" : "are"} left out.` : "") +
       (byTeam ? " The director acts through the team lead: click a team to zoom in." : "");
@@ -3028,7 +3048,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         `<td>${esc(t.flag)} · ${esc(t.status)}<small><br>${esc(t.action)}</small>${nowAsk(t)}</td>` +
         `<td>${ownerCell(t)}</td><td class="r num">${t.age_days} d</td>` +
         `<td>${t.status === "Act" && liveT(t) ? reachBadge(reachOf(t.account_id, t.flag)) : "–"}</td>` +
-        `<td>${badge(t)}</td><td>${decisionCell(t)}</td></tr>`;
+        `<td>${badge(t)}${slackBtn(t)}</td><td>${decisionCell(t)}</td></tr>`;
     host.innerHTML = `<table><thead><tr><th>Account</th><th>Region</th><th>Task</th><th>Owner</th><th class="r">Age</th><th>Reach by</th><th>Status</th><th>Decision</th></tr></thead><tbody>` +
       teams.map((m) => { const g = m === null ? ordered : ordered.filter((t) => (t.manager || "") === m);
         return (m === null ? "" : `<tr class="group"><td colspan="8">${m ? esc(managerName(m)) + "'s team" : "No team (CS ops)"} (${g.length})</td></tr>`) + g.map(row).join(""); }).join("") + "</tbody></table>";
@@ -3037,6 +3057,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     host.querySelectorAll("select[data-assign]").forEach((s) => s.addEventListener("change", () => { if (s.value) decide("assign", byDoc[s.dataset.assign], s.value, s); }));
     host.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", () => decide("handback", byDoc[b.dataset.approve], null, b)));
     host.querySelectorAll("[data-undo]").forEach((b) => b.addEventListener("click", () => undo(b.dataset.undo, b)));
+    wireSlack(host, 8);
   }
   // ---------------------------------------------------------------- My work (18 Nov 2026)
   // A CSM's or pool member's page: the queue to pick up from, ordered by the cash at stake per day
@@ -3111,6 +3132,80 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     if (!w.length) $("tk-week").innerHTML = "";        // the finding already says so
     $("tk-week").querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
   }
+  // ---------------------------------------------------------------- Slack made visible (23 Nov 2026)
+  // The card each open task gets in Slack, drawn from D.slack_cards: Block Kit built by the same
+  // code that posts it (slack_loop.card_blocks), so the preview can't drift. Its buttons play the
+  // loop here: in Slack a click is saved to the engine; in this preview it stays on this page.
+  const SLACK_CARDS = D.slack_cards || {};
+  const SLACK_EMOJI = { raising_hand: "✋", no_entry_sign: "🚫", telephone_receiver: "📞", handshake: "🤝", leftwards_arrow_with_hook: "↩️" };
+  const mrkdwn = (t) => esc(t).replace(/\*([^*\n]+)\*/g, "<b>$1</b>").replace(/(^|\s)_([^_\n]+)_/g, "$1<i>$2</i>")
+    .replace(/:([a-z_]+):/g, (m, k) => SLACK_EMOJI[k] || m).replace(/\n/g, "<br>");
+  const slackKey = (t) => `${t.account_id}|${t.flag}|${t.status}`;
+  const slackBtn = (t) => SLACK_CARDS[slackKey(t)] ? `<br><button class="link" data-slack="${esc(slackKey(t))}" aria-expanded="false"><small>Slack card</small></button>` : "";
+  const slackYou = () => PAGE && ownerName[PAGE.person] ? ownerName[PAGE.person].split(" ")[0] : "you";
+  const slackPlayed = {};                                    // key -> the card after a click, this page only
+  function slackCardHtml(key) {
+    const blocks = slackPlayed[key] || SLACK_CARDS[key];
+    const ref = JSON.parse(((SLACK_CARDS[key].find((b) => b.type === "actions") || { elements: [] }).elements.find((e) => e.value) || {}).value || "{}");
+    const body = blocks.map((b) => b.type === "section" ? `<div class="sec">${mrkdwn(b.text.text)}</div>`
+      : b.type === "context" ? `<div class="ctx">${b.elements.map((e) => mrkdwn(e.text)).join(" ")}</div>`
+      : b.type === "actions" ? `<div class="acts">${b.elements.map((e) => `<button type="button" class="${e.style === "primary" ? "primary" : ""}" data-act="${esc(e.action_id)}">${esc(e.text.text)}</button>`).join("")}</div>` : "").join("");
+    return `<p class="slack-label">A preview of the card ${esc(ownerName[ref.o] || "the owner")} gets in Slack. Try the buttons: in Slack a click is saved to the engine and lands on the account's timeline; here it stays on this page.</p>` +
+      `<div class="slack-prev" data-key="${esc(key)}"><div class="who"><i>C</i><b>Cairnpath engine</b> <small>app · ${fmt(D.as_of)}</small></div>${body}<div class="slack-form"></div></div>`;
+  }
+  function slackAfter(key, kind, ref, a = {}) {
+    // the card after a click, as slack_loop's claimed_blocks / call_logged_blocks / declined_blocks draw it
+    const head = { type: "section", text: { type: "mrkdwn", text: `*${ref.n}* (${ref.a}) · ${ref.f.toLowerCase() === ref.s.toLowerCase() ? `*${ref.s}*` : `${ref.f} *${ref.s}*`}` } };
+    const open = { type: "actions", elements: [{ action_id: "open_timeline", text: { text: "Open timeline" } }] };
+    const ctx = (text) => ({ type: "context", elements: [{ text }] });
+    const who = `@${slackYou()}`, outs = (D.settings && D.settings.meeting_outcomes) || {}, why = (D.settings && D.settings.decline_labels) || {};
+    if (kind === "claim") {
+      const blocks = (slackPlayed[key] || SLACK_CARDS[key]).map((b) => b.type === "actions" ? { ...b, elements: b.elements.filter((e) => e.action_id !== "claim") } : b);
+      const i = blocks.findIndex((b) => b.type === "actions");
+      blocks.splice(i, 0, ctx(`:raising_hand: Taken by ${who}`));
+      return blocks;
+    }
+    if (kind === "log_call") return [head, ctx(`:telephone_receiver: ${ref.f === "qbr" ? "QBR" : "Call"} logged by ${who}: *${outs[a.outcome] || a.outcome}*` +
+      (a.note ? ` · _${a.note}_` : "") + (a.promise ? `\n:handshake: Committed: ${a.promise}, by ${a.by}` : "")), open];
+    if (kind === "decline") return [head, ctx(`:no_entry_sign: Not needed, says ${who}: *${why[a.reason] || a.reason}${a.reason === "later" && a.until ? ` until ${a.until}` : ""}*` + (a.note ? ` · _${a.note}_` : "")), open];
+    if (kind === "approve_handback") return [...SLACK_CARDS[key].filter((b) => b.type !== "actions"), ctx(`:leftwards_arrow_with_hook: Hand-back approved by ${who}: back to the pool`)];
+    return null;
+  }
+  function wireSlack(host, cols) {
+    const paint = (box, key) => {
+      box.innerHTML = slackCardHtml(key);
+      const card = box.querySelector(".slack-prev"), ref = JSON.parse(((SLACK_CARDS[key].find((b) => b.type === "actions") || { elements: [] }).elements.find((e) => e.value) || {}).value || "{}");
+      const form = card.querySelector(".slack-form");
+      card.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
+        const act = b.dataset.act;
+        if (act === "open_timeline") return openAccount(ref.a);
+        if (act === "claim" || act === "approve_handback") { slackPlayed[key] = slackAfter(key, act, ref); return paint(box, key); }
+        const outs = (D.settings && D.settings.meeting_outcomes) || {}, why = (D.settings && D.settings.decline_labels) || {};
+        form.innerHTML = act === "log_call"
+          ? `<label>How did it go? <select name="outcome">${Object.entries(outs).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("")}</select></label>` +
+            `<label>Note <input name="note" maxlength="200" placeholder="What was said, in a line"></label>` +
+            `<label>Did we promise something? <input name="promise" maxlength="120" placeholder="e.g. Send the adoption plan"></label>` +
+            `<label>By <input name="by" type="date"></label><button class="primary" type="submit">Submit</button>`
+          : `<label>Why not needed? <select name="reason">${Object.entries(why).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("")}</select></label>` +
+            `<label>Until (for "later") <input name="until" type="date"></label><label>Note <input name="note" maxlength="200"></label><button class="primary" type="submit">Submit</button>`;
+        form.innerHTML = `<form>${form.innerHTML}</form>`;
+        form.querySelector("form").addEventListener("submit", (ev) => {
+          ev.preventDefault();
+          const a = Object.fromEntries(new FormData(ev.target).entries());
+          if (act === "log_call" && a.promise && !a.by) { ev.target.querySelector("[name=by]").focus(); return; }   // a promise needs its date, as in Slack
+          slackPlayed[key] = slackAfter(key, act, ref, a); paint(box, key);
+        });
+      }));
+    };
+    host.querySelectorAll("[data-slack]").forEach((b) => b.addEventListener("click", () => {
+      const tr = b.closest("tr"), next = tr && tr.nextElementSibling;
+      if (next && next.classList.contains("detail") && next.dataset.which === "slack") { next.remove(); b.setAttribute("aria-expanded", "false"); return; }
+      if (next && next.classList.contains("detail")) next.remove();
+      const d = document.createElement("tr"); d.className = "detail"; d.dataset.which = "slack";
+      d.innerHTML = `<td colspan="${cols}"></td>`; tr.after(d); b.setAttribute("aria-expanded", "true");
+      paint(d.firstChild, b.dataset.slack);
+    }));
+  }
   function drawQueue(items, host) {
     // a recommendation marked not needed leaves the queue while its flag stays the same (22 Nov 2026)
     const off = items.filter((t) => declinedOf(t.account_id, t.flag, t.status));
@@ -3136,10 +3231,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           `<td>${s ? reachBadge(s) : a.renewal_date ? `<small>renewal ${fmt(a.renewal_date)}</small>` : "–"}</td>` +
           `<td>${last ? `<button class="link" data-last="${i}" aria-expanded="false">${fmt(last.date)}<small><br>${esc(kindOf(last))}</small></button>` : '<span class="muted">none on record</span>'}</td>` +
           `<td>${plan ? `<button class="link" data-next="${i}" aria-expanded="false">${esc(plan.type)}<small><br>${fmt(plan.due)}</small></button>` : '<span class="badge nothing">nothing planned</span>'}</td>` +
-          `<td>${badge(t)}</td></tr>`;
+          `<td>${badge(t)}${slackBtn(t)}</td></tr>`;
       }).join("") + "</tbody></table>";
     host.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.open)));
     wireInsights(host);
+    wireSlack(host, 8);
     // Last / Next: the engagement opens in a row under its task, a second click closes it
     host.querySelectorAll("[data-last], [data-next]").forEach((b) => b.addEventListener("click", () => {
       const i = Number(b.dataset.last ?? b.dataset.next), t = Q[i], tr = b.closest("tr"), open = tr.nextElementSibling;
@@ -3331,6 +3427,26 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // a team name zooms the whole page to it. Self-service has no team: its own row.
   const zoomTeam = (m) => { for (const k in seg) seg[k] = ""; seg.manager = m; saveSeg(); redraw(); };
   const zoomPerson = (o) => { seg.owner = o; saveSeg(); redraw(); };      // keeps the team: Whole book goes back up
+  // Where the zoom is, and one click back up (23 Nov 2026, Nikodem: "I can't revert it to the top
+  // view"): Whole book > a team > a person, on every panel you can drill into. A manager's page
+  // starts at their team; a CSM's page has nothing above it, so no crumbs.
+  function zoomCrumbs(host) {
+    if (!host) return;
+    const mgrPage = PAGE && PAGE.role === "manager", own = PAGE && (PAGE.role === "csm" || PAGE.role === "member");
+    const m = seg.manager || (teamById[seg.owner] || {}).manager || "";
+    const levels = [];
+    if (!mgrPage && !own) levels.push(["Whole book", () => { for (const k in seg) seg[k] = ""; }]);
+    if (m && !own) levels.push([`${managerName(m)}'s team`, () => { for (const k in seg) seg[k] = ""; seg.manager = m; }]);
+    if (seg.owner && !own) levels.push([ownerName[seg.owner] || seg.owner, null]);
+    const depth = levels.length - 1, up = levels[depth - 1];
+    host.hidden = depth < 1 || (mgrPage && !seg.owner) || (!mgrPage && !m && !seg.owner);
+    if (host.hidden) { host.innerHTML = ""; return; }
+    host.innerHTML = `<button class="link" data-up>‹ Back to ${esc(up[0].toLowerCase() === "whole book" ? "the whole book" : up[0])}</button>` +
+      `<span class="muted"> · ${levels.map(([l], i) => i < depth ? `<button class="link" data-lv="${i}">${esc(l)}</button>` : `<b>${esc(l)}</b>`).join(" › ")}</span>`;
+    const go = (i) => { levels[i][1](); saveSeg(); redraw(); };
+    host.querySelector("[data-up]").addEventListener("click", () => go(depth - 1));
+    host.querySelectorAll("[data-lv]").forEach((b) => b.addEventListener("click", () => go(+b.dataset.lv)));
+  }
   function drawTeamsRetention() {
     const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
     // zoomed to one team (or a manager's own page): one row per person instead, the drill-down
@@ -3364,6 +3480,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       rows.map((r) => `<tr${r.k === cur ? ' class="on"' : ""}><td>${r.k && r.k !== "ss" ? `<button class="link" data-zoom="${esc(r.k)}">${esc(name(r.k))}</button>` : esc(name(r.k))}</td><td class="r num">${r.n}</td><td class="r num">${money(r.st)}</td>` +
         (few(r) && !byPerson ? `<td class="r muted" colspan="2">too few to tell</td>`
           : few(r) ? `<td class="r num muted">${pct1(r.grr)}</td><td class="r num muted">${pct1(r.nrr)}</td>` : `<td class="r num">${pct1(r.grr)}</td><td class="r num">${pct1(r.nrr)}</td>`) + `<td class="r num">${money(r.risk)}</td></tr>`).join("") + "</tbody></table>";
+    zoomCrumbs($("cs-teams-crumbs"));
     $("cs-teams").querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => byPerson ? zoomPerson(b.dataset.zoom) : zoomTeam(b.dataset.zoom)));
     $("cs-teams-note").textContent = byPerson
       ? `The team's whole cohort, whatever the other filters. A person is the account's owner today: an account handed over counts with its new owner, so read it with the handovers in mind. Under ${MIN_COMPARE} customers the rates are greyed: one account moves them by 10 points or more. Click a person to zoom to their book. On a CSM's own page these stay team totals.`
@@ -4451,6 +4568,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       { v: "mybook", el: "mb-port-view", h: "Every account, by value at stake", p: "Why each one is flagged, in words; the last and next CS engagement; and an insight from its tickets, emails or call notes. Churn and growth apart, as the leader reports them. An insight is context: it never changes a status." },
       { v: "tasks", el: "tk-week-panel", h: "What's coming", p: "The next 14 days, in value: QBRs, renewals and tasks due, so nothing arrives as a surprise." },
       { v: "tasks", el: "tk-list", h: "What to pick up", p: "The queue, sorted by cash at stake per day left: a big renewal next month comes before a small one this week. Each row says what to do now, and shows the last and next engagement in place." },
+      { v: "tasks", slack: true, h: "It arrives in Slack too", p: `Each task also reaches ${me} as a card in Slack: why, what to do, and buttons to take it, log the call (with any promise and its date) or say it's not needed. A click there lands on the account's timeline, tagged "via Slack". Try the buttons here: this preview is drawn from the card the engine posts.` },
       mine && { v: "timeline", acc: mine.account_id, el: "tl-why", h: `Know the account: ${mine.account_name}`, p: "Why now comes first: each flag in words, the money at stake and what to do, beside what the documents say. Then the plan and the renewal forecast, the history with what came of each meeting, the research and the usage." },
       { h: "It rolls up", p: `What ${me} does here is what the leader's page reports: same measures, same accounts. Open it, or ask the documents in plain words.`,
         links: [DEMO.leader_page && ["The leader's page", DEMO.leader_page], ["Ask the documents", "search.html"]].filter(Boolean) },
@@ -4470,6 +4588,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         p: "Patterns across accounts before they reach renewal: a new cohort not ramping up, themes customers raise with no action yet. One trend is planted in the demo data, and says so." },
       views.includes("tasks") && { v: "tasks", el: "tk-funnel-panel", h: "Operational: is the work moving?",
         p: "Every task the engine sent to a person, from \"a person is needed\" to the right meeting, per team. Click a stage to list the tasks that stopped before it; the director acts through the team lead." },
+      views.includes("tasks") && Object.keys(SLACK_CARDS).length && { v: "tasks", slack: true, h: "Where the work happens: Slack",
+        p: "The engine doesn't wait for anyone to open a dashboard: each task reaches its owner as a Slack card, and the clicks (taken, call logged, not needed, a promise) come back as events on the timeline, tagged \"via Slack\". Try this card's buttons: it's drawn from the one the engine posts." },
       views.includes("tasks") && { v: "tasks", el: "op-promises-panel", h: "Where the time goes, and what we owe",
         p: "Promises made to customers and how many are late, then which signals fired this month and the ARR met in 60 days by stage: is effort following the money?" },
       views.includes("outcomes") && { v: "outcomes", el: "oc-rules-panel", h: "Did it work? Keep or change the rules",
@@ -4487,7 +4607,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       document.body.classList.add("touring");
       if (s.v) {
         show(s.v);
-        const el = (s.el && $(s.el) && !$(s.el).hidden) ? $(s.el) : $("view-" + s.v);
+        if (s.slack) {                                   // open the first task's Slack card, once
+          const b = document.querySelector("#tk-list [data-slack]");
+          if (b && b.getAttribute("aria-expanded") !== "true") b.click();
+        }
+        const slackCard = s.slack && document.querySelector("#tk-list .slack-prev");
+        const el = slackCard || ((s.el && $(s.el) && !$(s.el).hidden) ? $(s.el) : $("view-" + s.v));
         if (el !== $("view-" + s.v)) el.classList.add("tour-focus");
         el.scrollIntoView({ behavior: "smooth", block: "start" });
       }

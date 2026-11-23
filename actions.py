@@ -74,7 +74,7 @@ from time import sleep
 
 from cairnpath_db import connect
 from settings import SETTINGS, input_path, output_file
-from slack_loop import card_blocks, card_channel, dm_target, interactive, load_env
+from slack_loop import card_blocks, card_channel, dm_target, interactive, last_touches, load_env
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -182,14 +182,7 @@ def task_line(t):
 con = connect()
 run_date = con.sql("SELECT as_of_date + 1 FROM as_of").fetchone()[0]
 # last touch up to the end of the data (not today's own emails), for context in Slack
-last_touch = {a: (what, when) for a, what, when in con.sql("""
-    SELECT account_id,
-           arg_max(replace(properties.topic, '_', ' ') || ' (' || replace(event_name, '_', ' ') || ')',
-                   "timestamp"),
-           max(event_date)
-    FROM engagement, as_of
-    WHERE event_date <= as_of_date
-    GROUP BY account_id""").fetchall()}
+last_touch = last_touches(con)
 queue_hook, email_hook = load_webhooks()
 # the bot token posts task cards with buttons; without it, everything stays a digest
 bot_token, demo_user = load_env("SLACK_BOT_TOKEN", "SLACK_DEMO_USER")
