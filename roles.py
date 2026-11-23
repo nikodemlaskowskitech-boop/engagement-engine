@@ -280,8 +280,9 @@ def build(export, template=None, out=PAGES, sandbox=False):
             for k in ("declines", "outcome_checks"):
                 page[k] = [{**r, "note": None} for r in page.get(k, [])]
             # a promise typed in Slack or the cockpit: the same rule (one tracked from a document
-            # keeps its text: that's the redacted line the public search already shows)
-            page["commitments"] = [c if c.get("doc") else {**c, "what": "(typed by a person: kept off the public site)"}
+            # keeps its text: that's the redacted line the public search already shows; the
+            # generator's own, via cs_history, are made up like its notes, 23 Nov 2026)
+            page["commitments"] = [c if c.get("doc") or c.get("via") == "cs_history" else {**c, "what": "(typed by a person: kept off the public site)"}
                                    for c in page.get("commitments", [])]
         meta["sandbox"] = bool(sandbox)
         if sandbox and SETTINGS.get("demo", {}).get("author"):      # the public site's who-and-why strip and tour

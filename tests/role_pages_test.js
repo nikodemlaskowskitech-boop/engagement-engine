@@ -67,6 +67,29 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
   }
   const full = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "views_data.json"), "utf8"));   // the whole export, to recompute from
   console.log("\nMy work (18 Nov 2026): a CSM's queue, by cash at stake per day left");
+  {   // promises (23 Nov 2026): Operational by team adds up to its finding; My work lists the
+      // person's own, late first, the rest one click away
+    const { p, errors } = await open("leader.html", "lead");
+    await p.click("#tab-tasks"); await p.waitForTimeout(200);
+    const f = await p.textContent("#op-promises-finding");
+    const [, nOpen, late] = (f.match(/(\d+) open promises?, (\d+) late/) || []).map(Number);
+    const rows = await p.$$eval("#op-promises-rows tbody tr", (trs) => trs.map((tr) => [+tr.cells[1].textContent, +tr.cells[2].textContent]));
+    check(nOpen > 0 && rows.reduce((t, r) => t + r[0], 0) === nOpen && rows.reduce((t, r) => t + r[1], 0) === late && !errors.length,
+      `leader.html: promises by team add up to the finding (${nOpen} open, ${late} late)`, JSON.stringify({ f, rows, errors }));
+    await p.close();
+    const c = await open("csm_anna.html");
+    await c.p.click("#tab-tasks"); await c.p.waitForTimeout(200);
+    const title = await c.p.textContent("#op-promises-title");
+    const chips = await c.p.$$eval("#op-promises li .chip", (xs) => xs.map((x) => x.textContent));
+    const days = chips.filter((t) => /^Late/.test(t)).map((t) => +t.match(/\d+/)[0]);
+    const all = await c.p.$("#op-promises-all");
+    if (all) { await all.click(); await c.p.waitForTimeout(100); }
+    const after = await c.p.$$eval("#op-promises li", (xs) => xs.length);
+    const n = +((await c.p.textContent("#op-promises-finding")).match(/(\d+) open promise/) || [])[1];
+    check(title === "Promises you owe" && days.every((d, i) => !i || d <= days[i - 1]) && after === n && !(await c.p.$("#op-promises-rows table")) && !c.errors.length,
+      "csm_anna.html: My work lists the promises she owes, late first, all of them one click away", JSON.stringify({ title, chips, after, n, errors: c.errors }));
+    await c.p.close();
+  }
   {   // the zoom (22 Nov 2026): GRR and NRR by team on Performance; a team name zooms the page,
       // and Operational follows (per person, the team's own funnel)
     const { p, errors } = await open("leader.html", "lead");

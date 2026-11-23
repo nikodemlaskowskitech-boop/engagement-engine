@@ -1045,6 +1045,20 @@ Read a file's entry before changing that file, and update the entry in the same 
   team lead, an "Add" form (what, by when, where) and the possible promises found in the
   documents with "Track it" (due a fortnight after the document by default). facts.commitments
   joins each commitment_made to its latest commitment_closed.
+  Promises where people work (23 Nov 2026, commitments step 2): "Promises you owe" on My work and
+  "Promises to customers" on Operational (drawPromises): every commitment on the accounts in scope,
+  open ones plus those closed in the last 90 days; the finding counts open, late (the oldest),
+  due this week and kept of closed; per team at book level, per person under a manager (by who
+  made it); the open ones late first, two (five on My work) then "View all". The generator plants
+  them (generate_events.PROMISES): a meeting note whose "what's next" is a promise logs a
+  commitment_made from the Slack form (due 7 to 21 days later), in the last 75 days, and by its
+  own ID about half kept near the date, 1 in 10 dropped, the rest open. The public site shows the
+  generator's (via cs_history, made up like its notes) and still hides any typed by a person
+  (site_test checks both). check_inputs no longer counts a commitment_made as a touch without a
+  topic. Found by hand the same day: with commitments in the data, the account page called
+  plural() before it was defined (a page error on load); plural now sits at the top of the script
+  and role_pages_test opens pages with commitments. "Suggest kept from a later document" waits for
+  the bigger corpus: today's documents hold almost no delivery lines ("as promised, here is...").
   Commitments (22 Nov 2026): "commitment" (what, due, source from [work] commitment_sources,
   doc = a document id when tracked from one) -> commitment_made with event id
   cockpit-commitment-<account>-<decided_at>, which the page uses to name it; "commitment_close"
@@ -1372,6 +1386,10 @@ Read a file's entry before changing that file, and update the entry in the same 
   Nikodem deploys from `infra/` (`cdk
   bootstrap` once, then `cdk diff` and `cdk deploy`, all with `--profile
   cairnpath`); steps in `infra/README.md`.
+  23 Nov 2026: ENGINE_FILES gains embed.py and search_export.py: search.py's meaning mode imports
+  them (#221), and engine_lambda_test's "every module the steps import is bundled" failed from #221
+  to here (missed: that test wasn't run for #221 and #222). The engine stays on keywords, so the
+  deployed Lambda never reached that import; nothing broke in AWS.
 - `tests/infra_test.py`: checks the template before anything reaches AWS
   (each safety setting above, account and region from settings, the bucket
   name output; for each Lambda: runtime, sizes from settings, its one trigger,

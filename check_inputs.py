@@ -238,7 +238,8 @@ for path in eng_files:
             try:
                 e = json.loads(line)
                 eng[e["event_name"]] += 1
-                no_topic += not (e.get("properties") or {}).get("topic")
+                # a promise (commitment_made) is internal, not a touch: it has no topic (23 Nov 2026)
+                no_topic += e["event_name"] != "commitment_made" and not (e.get("properties") or {}).get("topic")
             except (ValueError, KeyError, TypeError):
                 eng_broken += 1
 if not eng_files:
