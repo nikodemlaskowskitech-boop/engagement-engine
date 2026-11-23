@@ -25,7 +25,7 @@ reported by its type only (a message could quote the question), and the API's ac
 log has the route, never the query string. Visitors may type real names to test it.
 
 Answers carry Cache-Control, so CloudFront answers a repeated question itself (and
-Titan isn't asked twice in an hour for the same question).
+Titan isn't asked twice in [aws] search_cache_seconds for the same question).
 """
 import json
 import os
