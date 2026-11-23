@@ -336,7 +336,7 @@ AWS (run by Nikodem, signed in with `aws login --profile cairnpath`):
 - `site_cert.py`: the certificate for the demo site's own address.
 - `site_logs.py`: turns on the demo site's visit logs (us-east-1, once): no IP, no cookie; `visitors.py`: counts them.
 - `to_parquet.py`: the engine's tables for Athena.
-- `infra/lambdas/search/`: the public search on the demo site: its handler and the redacted file it carries.
+- `infra/lambdas/search/`: the public search on the demo site: its handler, the redacted file and (hybrid, when up to date) their vectors.
 
 Tests: `tests/`, one file per area (see Testing above).
 
@@ -348,7 +348,7 @@ Tests: `tests/`, one file per area (see Testing above).
   results (search.redacted, PRIVACY.md §6) built the same day; the public search on the demo site
   (#166-169) and the local MCP server (mcp_server.py) the same day; "ask about this account" (ask.py) 14 Nov 2026; vectors next to
   keywords built 22 Nov 2026 (embed.py, Titan on Bedrock; held-out recall keywords 90%, meaning 94%,
-  hybrid 96%, so hybrid for ask.py and the MCP server since 23 Nov; next grow the corpus to 45 accounts); the AI
+  hybrid 96%, so hybrid for ask.py and the MCP server since 23 Nov, and the public search too (Titan per question, kill switch [aws] search_meaning); next grow the corpus to 45 accounts); the AI
   cost demo (ai_cost.py) 23 Nov; next a remote MCP server (sign-in first), and last a live Ask box in the cockpit.
 - Bedrock quota for Claude declined again 17 Nov 2026 (new account): no need to ask; AWS
   re-evaluates by itself as usage builds. Briefs use the Anthropic API meanwhile. Lambda concurrency

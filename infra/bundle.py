@@ -10,6 +10,7 @@ versions come from requirements.txt, so the laptop and AWS always match.
 """
 
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -72,15 +73,47 @@ def bundle_slack(out=None):
     return out
 
 
-def bundle_search(out=None, deps=None):
-    """The public search function: handler, SEARCH_FILES, the redacted documents, DuckDB.
-    deps=False (or CAIRNPATH_SKIP_DEPS) leaves DuckDB out, for tests."""
+def site_vectors(out, vectors=None):
+    """Search by meaning on the site (23 Nov 2026): the laptop's vectors (embed.py, data/), copied
+    only when [aws] search_meaning is on and every redacted document the function carries has a
+    vector from [embed] model whose text hash matches: a stale or partial file would rank by old
+    text, so then the function stays on keywords. Returns "hybrid" or "keywords"."""
+    sys.path.insert(0, str(REPO))
+    import embed
+    from settings import SETTINGS
+    target = out / "vectors.jsonl"
+    if target.exists():
+        target.unlink()
+    if not SETTINGS["aws"].get("search_meaning"):
+        return "keywords"
+    docs = [json.loads(x) for x in (out / "documents.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    have = embed.load(Path(vectors) if vectors else embed.VECTORS)
+    model, dims = SETTINGS["embed"]["model"], int(SETTINGS["embed"]["dimensions"])
+    todo, _ = embed.plan(docs, have, model, dims)
+    if not docs or todo:
+        print("search: no up-to-date vectors for the site (run python embed.py), so keywords only")
+        return "keywords"
+    rows = [have[(d["account_id"], d["id"])] for d in docs]       # only the documents it carries
+    target.write_text("".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows), encoding="utf-8")
+    return "hybrid"
+
+
+def search_mode(out):
+    """What a built search bundle will do: hybrid when it carries vectors."""
+    return "hybrid" if (Path(out) / "vectors.jsonl").exists() else "keywords"
+
+
+def bundle_search(out=None, deps=None, vectors=None):
+    """The public search function: handler, SEARCH_FILES, the redacted documents, DuckDB, and
+    the documents' vectors when they're up to date (site_vectors). deps=False (or
+    CAIRNPATH_SKIP_DEPS) leaves DuckDB out, for tests; vectors = another vectors file (tests)."""
     sys.path.insert(0, str(REPO))
     from settings import SETTINGS          # where search_export.py wrote the redacted file
     out = _fresh(out or BUILD / "search", "search")
     for name in SEARCH_FILES:
         shutil.copy(REPO / name, out)
     shutil.copy(REPO / SETTINGS["search"]["site_documents_file"], out / "documents.jsonl")
+    site_vectors(out, vectors)
     if deps is None:
         deps = not os.environ.get("CAIRNPATH_SKIP_DEPS")
     if deps:

@@ -318,7 +318,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   laptop's own venv (it doesn't reinstall by itself). With it: Dependabot alerts (GitHub settings),
   the new-package rule in CLAUDE.md, the cdk CLI pinned (infra/cdk-cli-version.txt). Weighed and
   left out: pip-audit (Dependabot reads the same advisories), a laptop lock, an SBOM.
-- `infra/lambdas/search/` (13 Nov 2026): the public search on the demo site. handler.py: GET
+- `infra/lambdas/search/` (13 Nov 2026; hybrid 23 Nov 2026): the public search on the demo site.
+  Hybrid (Nikodem, 23 Nov 2026): bundle.site_vectors() copies the laptop's vectors into the bundle
+  as vectors.jsonl only when [aws] search_meaning is on and every document it carries has one
+  from the [embed] model with a matching hash (embed.plan); otherwise keywords, with a line saying
+  "run python embed.py". search_mode(bundle) tells data_stack.py, which then sets MODE, MODEL,
+  DIMS, REGION and grants bedrock:InvokeModel on that one Titan ARN (nothing else; keywords: no
+  policy). handler.rank(): keywords always; hybrid adds search.by_vector on Titan's vector of
+  the question and merges with search.fuse (the laptop's RRF); any failure there is logged by
+  type and answers with keywords. Answers say ranked_by; the page shows "Matched by words and
+  meaning". No ledger row per visitor: the throttle and cache bound the cost (THREAT_MODEL #22).
+  Before: handler.py: GET
   ?q= (empty or over [aws] search_max_chars: 400; not GET: 405), BM25 with synonyms over its
   bundled documents.jsonl (search_export.py's file), top [search] site_top_k accounts with
   their best document (citation, kind, date, title, matching line), the words matched and
@@ -412,7 +422,7 @@ Read a file's entry before changing that file, and update the entry in the same 
   row at [embed] price_per_million (llm.check_budget, llm.record_usage). search.py: meaning()
   ranks by cosine (DuckDB list_cosine_similarity), ranked() by [embed] mode: keywords (search(),
   unchanged), meaning, or hybrid (reciprocal rank fusion, rrf_k 60); accounts() follows it.
-  The public search, research.py and the Lambda stay on keywords (no model call there). Why
+  research.py stays on keywords (no model call there); the public search went hybrid 23 Nov 2026 (below). Why
   (22 Nov 2026): growing the corpus to 45 accounts crowded the top 10 and keyword recall fell
   to 89%; meaning is the fix to measure before the corpus grows. tests/embed_test.py checks
   the plumbing; tests/search_test.py's meaning section measures keywords, meaning and hybrid
@@ -421,7 +431,7 @@ Read a file's entry before changing that file, and update the entry in the same 
   hybrid 78/81 (96%); corpus 35/38, 32/38, 35/38 (the synonyms were tuned on the corpus, the
   vectors on nothing: the held-out set is the fair test). So [embed] mode = hybrid since 23 Nov
   2026, used by ask.py (one account's documents: meaning() and ranked() take account_id) and the
-  MCP server's search_documents; the public search and research.py stay on keywords. With no
+  MCP server's search_documents; research.py stays on keywords. With no
   vectors or no answer from Bedrock, ranked() says so once on stderr and answers with keywords.
   search_test's floors (laptop, real vectors): hybrid at least keywords on both sets, held-out at
   least min_heldout_recall, and no fall-back during the measurement.

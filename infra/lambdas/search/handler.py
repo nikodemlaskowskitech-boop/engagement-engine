@@ -7,15 +7,21 @@ notes already redacted on the laptop (search_export.py: the brief's redaction an
 leak check). Nothing else: its role has no access to the data bucket, the key or any
 secret, so even a flaw in this function can't reach real data.
 
-What it does: the same BM25 search as the laptop (search.py, synonyms on) over that
-file, and answers with the top [search] site_top_k accounts, each with its best
-document (citation, date, title, the matching line) and the IDs of the other matches.
+What it does: the same search as the laptop (search.py, synonyms on) over that file,
+and answers with the top [search] site_top_k accounts, each with its best document
+(citation, date, title, the matching line) and the IDs of the other matches.
+MODE=hybrid (23 Nov 2026, when the deploy carried vectors.jsonl): the question also goes
+to Titan for its vector, and the keyword and meaning lists are merged (search.fuse), as
+on the laptop. Titan in our own account, the question only, nothing stored by AWS
+(PRIVACY.md §13). Any failure there (throttled, quota, no permission) answers with the
+keywords alone: a search always answers. MODE=keywords: no model call at all.
 
 What it never does: write the question anywhere. No log line holds it, an error is
 reported by its type only (a message could quote the question), and the API's access
 log has the route, never the query string. Visitors may type real names to test it.
 
-Answers carry Cache-Control, so CloudFront answers a repeated question itself.
+Answers carry Cache-Control, so CloudFront answers a repeated question itself (and
+Titan isn't asked twice in an hour for the same question).
 """
 import json
 import os
@@ -25,8 +31,14 @@ HERE = Path(__file__).resolve().parent
 TOP_K = int(os.environ.get("TOP_K", "5"))
 MAX_CHARS = int(os.environ.get("MAX_CHARS", "200"))
 CACHE_SECONDS = int(os.environ.get("CACHE_SECONDS", "3600"))
+MODE = os.environ.get("MODE", "keywords")         # hybrid only with vectors.jsonl in the bundle
+MODEL = os.environ.get("MODEL", "")
+DIMS = int(os.environ.get("DIMS", "512"))
+REGION = os.environ.get("REGION", "")
+QUESTION_CHARS = 2000                             # far over MAX_CHARS: a guard, not a limit
 
 _con = None              # the index, built once per cold start and kept while warm
+_bedrock = None          # the Titan client, made once per cold start
 
 
 def _index():
@@ -38,8 +50,37 @@ def _index():
         rows = [json.loads(line) for line in (HERE / "documents.jsonl").read_text(encoding="utf-8").splitlines()
                 if line.strip()]
         search.add_views(con, rows=rows)
+        if MODE == "hybrid":
+            search.VECTORS_FILE = HERE / "vectors.jsonl"
+            search._vectors(con)                         # load them now, once
         _con = con
     return _con
+
+
+def embed(q):
+    """The question's vector from Titan (the same model and size as the documents'). Tests
+    replace this function: no AWS in the sandbox."""
+    global _bedrock
+    if _bedrock is None:
+        import boto3                                      # in the Lambda runtime already
+        _bedrock = boto3.client("bedrock-runtime", region_name=REGION or None)
+    body = json.dumps({"inputText": q[:QUESTION_CHARS], "dimensions": DIMS, "normalize": True})
+    return json.loads(_bedrock.invoke_model(modelId=MODEL, body=body)["body"].read())["embedding"]
+
+
+def rank(con, q, k):
+    """Keywords always; in hybrid, merged with the closest documents by meaning. Returns the
+    hits and how they were ranked (the page shows it)."""
+    import search
+    words = search.search(con, q, k=k)
+    if MODE != "hybrid":
+        return words, "keywords"
+    try:
+        near = search.by_vector(con, embed(q), k=k, query=q)
+    except Exception as e:                                # noqa: BLE001: the type only, never the message
+        print(f"meaning unavailable, keywords only: {type(e).__name__}")
+        return words, "keywords"
+    return search.fuse([words, near], k), "hybrid"
 
 
 def _reply(status, body, cache=False):
@@ -59,8 +100,7 @@ def handler(event, context=None):
     if len(q) > MAX_CHARS:
         return _reply(400, {"error": f"Questions up to {MAX_CHARS} characters"})
     try:
-        import search
-        hits = search.search(_index(), q, k=TOP_K * 5)          # enough documents to fill TOP_K accounts
+        hits, how = rank(_index(), q, TOP_K * 5)                 # enough documents to fill TOP_K accounts
     except Exception as e:                                    # noqa: BLE001: the type only, never the message
         print(f"search failed: {type(e).__name__}")
         return _reply(500, {"error": "Search unavailable, try again in a minute"})
@@ -75,4 +115,4 @@ def handler(event, context=None):
                 "matched": h["matched"], "more": []}
         elif h["id"] not in accounts[h["account_id"]]["more"]:
             accounts[h["account_id"]]["more"].append(h["id"])
-    return _reply(200, {"results": list(accounts.values())}, cache=True)
+    return _reply(200, {"results": list(accounts.values()), "ranked_by": how}, cache=True)

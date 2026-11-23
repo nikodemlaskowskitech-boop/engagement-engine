@@ -343,3 +343,11 @@ search, hybrid since 23 Nov 2026) is sent to the same model as typed, so it shou
 customer's personal details. AWS states that Bedrock doesn't store or use the inputs to train
 models; the call is logged in our AI spend ledger like every other model call.
 
+The public search on the demo site (23 Nov 2026, when the deploy carries up-to-date vectors and
+[aws] search_meaning is on) sends a visitor's question to the same model, from the search
+function in our account. It is the one exception to "only redacted text goes to Bedrock": the
+question is the visitor's own, typed to search, and the page says where it goes. Nothing keeps
+it: not our logs (errors by type only), not the access log (no query string), not
+the ledger (no row per visitor; the throttle bounds the cost, THREAT_MODEL #22), and not AWS.
+The documents' vectors it carries are numbers only, made on the laptop from the redacted file.
+

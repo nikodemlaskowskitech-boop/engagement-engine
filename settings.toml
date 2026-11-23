@@ -143,6 +143,10 @@ search_rate_per_second = 2
 search_burst = 5
 search_cache_seconds = 3600      # CloudFront keeps an answer an hour (the demo data changes rarely)
 search_max_chars = 200
+# Search by meaning on the site too (23 Nov 2026, Nikodem): with the laptop's vectors up to date at
+# deploy, the search function carries them and may call Titan (only Titan) for each question it
+# hasn't answered in the last hour; false = keywords only, and no model permission at all
+search_meaning = true
 search_max_runs = 5              # the search function runs at most this many at once (a ceiling: a flood of searches can never take the engine's or the Slack listener's capacity; 0 = no cap)
 # The data perimeter (a bucket policy): besides our four workload roles, only these may read or
 # write the bucket's data. The role you get from `aws login` (any IAM path), and the break-glass
@@ -594,7 +598,7 @@ max_chars = 20000                    # Titan takes up to 50,000 characters; our 
 # How search.py ranks: "keywords" (BM25 and the synonyms), "meaning" (vectors only) or "hybrid"
 # (both lists merged by reciprocal rank fusion). Hybrid since 23 Nov 2026, measured on the laptop:
 # held-out recall keywords 90%, meaning 94%, hybrid 96%; corpus 92%, 84%, 92%. Used by ask.py and
-# the MCP server's search; the public search and research.py stay on keywords (no model call there).
+# the MCP server's search, and the public search when [aws] search_meaning is on; research.py stays on keywords.
 mode = "hybrid"
 rrf_k = 60                           # reciprocal rank fusion: 1 / (rrf_k + rank) from each list (the usual 60)
 
