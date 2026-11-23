@@ -407,6 +407,14 @@ Read a file's entry before changing that file, and update the entry in the same 
   to 89%; meaning is the fix to measure before the corpus grows. tests/embed_test.py checks
   the plumbing; tests/search_test.py's meaning section measures keywords, meaning and hybrid
   on the corpus and held-out set, on the laptop once `python embed.py` has run.
+  Measured on the laptop 22 Nov 2026: held-out recall keywords 73/81 (90%), meaning 76/81 (94%),
+  hybrid 78/81 (96%); corpus 35/38, 32/38, 35/38 (the synonyms were tuned on the corpus, the
+  vectors on nothing: the held-out set is the fair test). So [embed] mode = hybrid since 23 Nov
+  2026, used by ask.py (one account's documents: meaning() and ranked() take account_id) and the
+  MCP server's search_documents; the public search and research.py stay on keywords. With no
+  vectors or no answer from Bedrock, ranked() says so once on stderr and answers with keywords.
+  search_test's floors (laptop, real vectors): hybrid at least keywords on both sets, held-out at
+  least min_heldout_recall, and no fall-back during the measurement.
 - `ask.py` (14 Nov 2026): one question about one account, answered in at most 150 words, every
   sentence citing [DATA] or a document ID. RAG on the laptop: search.search picks the
   account's [ask] top_k documents for the question (BM25 with the vocabulary; doc_folders says

@@ -142,20 +142,20 @@ def timeline(account_id: str, limit: int = 20) -> list:
 
 @server.tool(annotations=READ_ONLY)
 def search_documents(question: str, account_id: str = "") -> dict:
-    """Search support tickets, emails and call notes in plain words (keywords plus a CS
-    vocabulary, not meaning). Returns the best documents, each with its account, citation
+    """Search support tickets, emails and call notes in plain words: by keywords (plus a CS
+    vocabulary) and by meaning, merged (hybrid). Returns the best documents, each with its account, citation
     ID, date, title, the matching line and its text, all redacted: people are labels
     (Customer A, CS 1) per account, the company is "the customer". account_id = search
     one account's documents only."""
     if not str(question).strip():
         raise ToolError("ask a question")
     only = _mine(account_id) if account_id else None
-    hits = [h for h in search.search(search_con(), question, k=int(CONF["max_results"]) * 3, account_id=only)
+    hits = [h for h in search.ranked(search_con(), question, int(CONF["max_results"]) * 3, account_id=only)
             if h["account_id"] in scope()["accounts"]][: int(CONF["max_results"])]
     safe, held = search.redacted(search_con(), hits)
     return {"results": [{k: h[k] for k in ("account_id", "id", "kind", "date", "title", "line", "text")} for h in safe],
             "held_back": len({b["account_id"] for b in held}),
-            "note": "Keyword search: a question in unusual words finds less. Documents exist for about 30 accounts."}
+            "note": "Keywords and meaning merged ([embed] mode); keywords alone if the vectors or AWS are unavailable. Documents exist for about 30 accounts."}
 
 
 if __name__ == "__main__":

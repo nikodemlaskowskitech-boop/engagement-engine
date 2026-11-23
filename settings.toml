@@ -591,8 +591,10 @@ dimensions = 512                     # Titan offers 256, 512 or 1024; AWS measur
 price_per_million = 0.02             # USD per million input tokens, Titan Text Embeddings V2 list price (our estimate)
 max_chars = 20000                    # Titan takes up to 50,000 characters; our longest document is far under
 # How search.py ranks: "keywords" (BM25 and the synonyms), "meaning" (vectors only) or "hybrid"
-# (both lists merged by reciprocal rank fusion). Stays on keywords until the laptop's recall says otherwise.
-mode = "keywords"
+# (both lists merged by reciprocal rank fusion). Hybrid since 23 Nov 2026, measured on the laptop:
+# held-out recall keywords 90%, meaning 94%, hybrid 96%; corpus 92%, 84%, 92%. Used by ask.py and
+# the MCP server's search; the public search and research.py stay on keywords (no model call there).
+mode = "hybrid"
 rrf_k = 60                           # reciprocal rank fusion: 1 / (rrf_k + rank) from each list (the usual 60)
 
 [mcp]
