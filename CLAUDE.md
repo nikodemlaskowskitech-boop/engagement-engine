@@ -77,6 +77,7 @@ Docs-only PRs need none.
 | `handover.py`, `stories/` | `tests/handover_test.py`, `tests/leak_check_test.py`, `tests/contacts_test.py`, `tests/redaction_fixes_test.py`, `tests/handover_cache_test.py` |
 | `llm.py`, `brief.py`, `handover.py` | `tests/ai_spend_test.py` |
 | `ask.py`, [ask], or the redaction or search it uses | `tests/ask_test.py` (stand-in model, no key) |
+| `ai_cost.py`, [ask] cost_demo_sizes | `tests/ai_cost_test.py` (no model, no key) |
 | `embed.py`, [embed], `search.py`'s meaning or hybrid | `tests/embed_test.py` (stand-in, no AWS), `tests/search_test.py` (its meaning section runs on the laptop after `python embed.py`), `tests/ai_spend_test.py` |
 | `cockpit_sync.py` | `tests/cockpit_sync_test.py` |
 | `infra/`, or what an engine step imports | `tests/infra_test.py` (Nikodem: needs aws_cdk), `tests/check_lambda_test.py`, `tests/engine_lambda_test.py`, `tests/slack_lambda_test.py` |
@@ -322,6 +323,7 @@ AI:
 - `llm.py`: the provider, budgets per feature and the spend ledger.
 - `brief.py`: QBR briefs; `handover.py`: handover briefs with redaction and the leak check.
 - `ask.py`: one question about one account, answered from its facts and the documents the search picks (RAG), cited and checked.
+- `ai_cost.py`: the AI cost demo: one question to ask.py priced with RAG and with everything, no model call (AI_COST.md).
 - `embed.py`: search by meaning: one Titan vector (Bedrock) per redacted document, only what changed; search.py ranks keywords, meaning or both ([embed] mode).
 - `stories/`: three hand-written account stories and their answer key (tests only).
 
@@ -346,8 +348,8 @@ Tests: `tests/`, one file per area (see Testing above).
   results (search.redacted, PRIVACY.md §6) built the same day; the public search on the demo site
   (#166-169) and the local MCP server (mcp_server.py) the same day; "ask about this account" (ask.py) 14 Nov 2026; vectors next to
   keywords built 22 Nov 2026 (embed.py, Titan on Bedrock; held-out recall keywords 90%, meaning 94%,
-  hybrid 96%, so hybrid for ask.py and the MCP server since 23 Nov; next grow the corpus to 45 accounts); next a remote MCP server (sign-in first), an AI
-  cost demo (AI_COST.md), and last a live Ask box in the cockpit.
+  hybrid 96%, so hybrid for ask.py and the MCP server since 23 Nov; next grow the corpus to 45 accounts); the AI
+  cost demo (ai_cost.py) 23 Nov; next a remote MCP server (sign-in first), and last a live Ask box in the cockpit.
 - Bedrock quota for Claude declined again 17 Nov 2026 (new account): no need to ask; AWS
   re-evaluates by itself as usage builds. Briefs use the Anthropic API meanwhile. Lambda concurrency
   quota approved 14 Nov 2026 (1000): engine one run at a time, search capped at 5. GuardDuty trial: keep or switch off before about 5 Dec 2026.
