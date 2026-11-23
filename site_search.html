@@ -79,11 +79,11 @@ details.about li { margin: 4px 0; }
     <summary>What this searches, and what it can't do</summary>
     <ul>
       <li>It finds and ranks documents. It doesn't write an answer: read the matching line and judge.</li>
-      <li>It matches words, plus a short CS vocabulary (a "competitor" question also looks for a benchmark, an RFP, a trial). It doesn't understand meaning, so a question in unusual words finds less.</li>
+      <li>It matches words, plus a short CS vocabulary (a "competitor" question also looks for a benchmark, an RFP, a trial). It also matches by meaning: an embedding model (Amazon Titan, in our own AWS account) turns your question into numbers and finds the documents closest to it, so other wording still finds them. The two lists are merged; the line under the box says which ran.</li>
       <li>It doesn't understand dates, amounts or "not", and it doesn't read the engine's numbers: "the biggest churn risk" is a question for the cockpit's Leadership tab, which ranks accounts by ARR at risk.</li>
       <li>People appear as labels (Customer A, CS 1) and companies as "the customer": names were removed, and checked for, before the search ever saw the text. So search by topic, not by company name; the account ID opens that account in the cockpit, with its name.</li>
-      <li>It shows the top __TOP_K__ accounts. On a test set written by someone who never saw the search, the first result was right about 6 times in 10, and the top 5 held 3 of every 4 right accounts.</li>
-      <li>What you type isn't stored anywhere.</li>
+      <li>It shows the top __TOP_K__ accounts. On a test set written by someone who never saw the search, words alone put the first result right about 6 times in 10; words and meaning together find more of the right documents (90% to 96% in the top 10, measured on the laptop).</li>
+      <li>What you type isn't stored anywhere. To match by meaning it goes to the embedding model once, and AWS doesn't keep it either.</li>
     </ul>
   </details>
 </main>
@@ -138,8 +138,9 @@ async function ask(q) {
   try { body = await res.json(); } catch (e) { /* not JSON: handled below */ }
   if (!res.ok) { status.className = "warn"; status.textContent = body.error || "Something went wrong. Try again in a minute."; return; }
   const results = body.results || [];
+  const how = body.ranked_by === "hybrid" ? " Matched by words and meaning." : " Matched by words.";
   status.textContent = results.length
-    ? `${results.length} account${results.length > 1 ? "s" : ""}, best match first.`
+    ? `${results.length} account${results.length > 1 ? "s" : ""}, best match first.${how}`
     : NUMBERS.test(q)
       ? "No document matches. That reads like a question about numbers: this search reads what customers and CS wrote, not the engine's figures. "
       : "No document matches those words. Try other words, or one of the examples.";

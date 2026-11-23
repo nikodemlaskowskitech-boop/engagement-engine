@@ -184,33 +184,55 @@ def _vectors(con):
                        columns = {{account_id: 'VARCHAR', id: 'VARCHAR', vector: 'DOUBLE[]'}})""")
 
 
-def meaning(con, query, k=None, provider=None, account_id=None):
-    """The k documents closest in meaning to the question (cosine of the vectors), best first,
-    in search()'s shape. The question is embedded by the same model as the documents.
-    account_id = one account's documents only."""
-    import embed
+def by_vector(con, qv, k=None, account_id=None, query=""):
+    """The k documents closest to a question's vector (cosine), best first, in search()'s shape.
+    The vector comes from the caller: meaning() on the laptop, the public search's own call to the
+    model in AWS (23 Nov 2026). account_id = one account's documents only."""
     k = int(k or CONF["top_k"])
-    q = str(query).strip()
-    if not q:
-        return []
     only = ""
     if account_id:
         if not re.fullmatch(r"[\w-]+", account_id):
             raise ValueError(f"not an account ID: {account_id!r}")
         only = f"WHERE v.account_id = '{account_id}'"
     _vectors(con)
-    qv = "[" + ",".join(f"{x:.6f}" for x in embed.embed_query(q, provider)) + "]::DOUBLE[]"
+    lit = "[" + ",".join(f"{float(x):.6f}" for x in qv) + "]::DOUBLE[]"
     rel = con.sql(f"""
         SELECT v.account_id, v.id, d.kind, d.date, d.title,
-               round(list_cosine_similarity(v.vector, {qv}), 4) AS score, d.text
+               round(list_cosine_similarity(v.vector, {lit}), 4) AS score, d.text
         FROM doc_vectors v JOIN documents d USING (account_id, id)
         {only}
         ORDER BY score DESC, v.account_id, v.id
         LIMIT {k}""")
-    words = [w for w in re.findall(r"[a-z]+", q.lower()) if len(w) > 3]
+    words = [w for w in re.findall(r"[a-z]+", str(query).lower()) if len(w) > 3]
     return [{"account_id": a, "id": i, "kind": kind, "date": str(day), "title": title, "score": float(score),
              "matched": [], "line": _best_line(text, words)}
             for a, i, kind, day, title, score, text in rel.fetchall()]
+
+
+def meaning(con, query, k=None, provider=None, account_id=None):
+    """The k documents closest in meaning to the question: the question embedded by the same
+    model as the documents (embed.py), then by_vector()."""
+    import embed
+    q = str(query).strip()
+    if not q:
+        return []
+    _vectors(con)                                   # no vectors: fail before paying for the question's
+    return by_vector(con, embed.embed_query(q, provider), k, account_id, q)
+
+
+def fuse(lists, k):
+    """Reciprocal rank fusion: each list adds 1 / (rrf_k + rank) to a document, so one high in
+    either list rises and one high in both rises most; the first list's hit is kept (it knows the
+    words that matched). No ties: the same question, the same order."""
+    rrf = int(EMBED.get("rrf_k", 60))
+    best, fused = {}, {}
+    for hits in lists:
+        for rank, h in enumerate(hits, 1):
+            key = (h["account_id"], h["id"])
+            fused[key] = fused.get(key, 0.0) + 1.0 / (rrf + rank)
+            best.setdefault(key, h)
+    order = sorted(fused, key=lambda key: (-fused[key], key))
+    return [{**best[key], "score": round(fused[key], 5)} for key in order[:k]]
 
 
 _fell_back = False                # warn once per process, not once per question
@@ -238,16 +260,7 @@ def ranked(con, query, k=None, mode=None, synonyms=True, provider=None, account_
         return search(con, query, k, account_id, synonyms)
     if mode == "meaning":
         return by_meaning[:k]
-    rrf = int(EMBED.get("rrf_k", 60))
-    lists = [search(con, query, k * 3, account_id, synonyms), by_meaning]
-    best, fused = {}, {}
-    for hits in lists:
-        for rank, h in enumerate(hits, 1):
-            key = (h["account_id"], h["id"])
-            fused[key] = fused.get(key, 0.0) + 1.0 / (rrf + rank)
-            best.setdefault(key, h)            # the keyword hit first: it knows the words that matched
-    order = sorted(fused, key=lambda key: (-fused[key], key))   # no ties: the same question, the same order
-    return [{**best[key], "score": round(fused[key], 5)} for key in order[:k]]
+    return fuse([search(con, query, k * 3, account_id, synonyms), by_meaning], k)
 
 
 def accounts(con, query, k=None, synonyms=True, mode=None, provider=None):

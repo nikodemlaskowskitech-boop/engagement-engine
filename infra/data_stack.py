@@ -46,7 +46,7 @@ from constructs import Construct
 
 import json
 
-from bundle import ENGINE_FILES, bundle_check_inputs, bundle_engine, bundle_search, bundle_slack
+from bundle import ENGINE_FILES, bundle_check_inputs, bundle_engine, bundle_search, bundle_slack, search_mode
 from settings import SETTINGS
 
 
@@ -442,13 +442,16 @@ class DataStack(Stack):
             # Its own function, carrying only the demo documents redacted on the laptop
             # (search_export.py). Its role gets nothing beyond writing its own logs: no bucket,
             # no key, no secret. It never logs the question (see its handler).
+            search_code = bundle_search()
+            # hybrid only when the bundle carries up-to-date vectors (bundle.site_vectors)
+            meaning = search_mode(search_code) == "hybrid"
             finder = lambda_.Function(
                 self, "Search",
                 description="Public demo search over redacted demo documents (no data access)",
                 runtime=lambda_.Runtime.PYTHON_3_13,
                 architecture=lambda_.Architecture.ARM_64,
                 handler="handler.handler",
-                code=lambda_.Code.from_asset(str(bundle_search())),
+                code=lambda_.Code.from_asset(str(search_code)),
                 memory_size=aws["search_memory_mb"],
                 timeout=Duration.seconds(aws["search_timeout_seconds"]),
                 # a ceiling of its own, so a flood of searches can't use the slots the engine and
@@ -456,9 +459,20 @@ class DataStack(Stack):
                 reserved_concurrent_executions=aws["search_max_runs"] or None,
                 environment={"TOP_K": str(SETTINGS["search"]["site_top_k"]),
                              "MAX_CHARS": str(aws["search_max_chars"]),
-                             "CACHE_SECONDS": str(aws["search_cache_seconds"])},
+                             "CACHE_SECONDS": str(aws["search_cache_seconds"]),
+                             "MODE": "hybrid" if meaning else "keywords",
+                             **({"MODEL": SETTINGS["embed"]["model"],
+                                 "DIMS": str(SETTINGS["embed"]["dimensions"]),
+                                 "REGION": aws["region"]} if meaning else {})},
                 log_group=logs.LogGroup(self, "SearchLogs", retention=logs.RetentionDays.ONE_MONTH,
                                         removal_policy=RemovalPolicy.DESTROY))
+            if meaning:
+                # one model, one action: the question's vector from Titan, nothing else on Bedrock
+                # (23 Nov 2026). Still no data bucket, key or secret. The gateway throttle and the
+                # hour's cache bound what visitors can make it cost (README, cost).
+                finder.add_to_role_policy(iam.PolicyStatement(
+                    actions=["bedrock:InvokeModel"],
+                    resources=[f"arn:aws:bedrock:{aws['region']}::foundation-model/{SETTINGS['embed']['model']}"]))
             search_api = apigwv2.HttpApi(self, "SearchApi", description="The demo site's search (through CloudFront)",
                                          create_default_stage=False)
             search_api.add_routes(path="/search", methods=[apigwv2.HttpMethod.GET],

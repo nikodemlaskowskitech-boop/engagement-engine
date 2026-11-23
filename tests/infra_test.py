@@ -527,13 +527,27 @@ if aws.get("site"):
           "one function, Python 3.13 on arm64, memory and timeout from settings")
     check(fp.get("ReservedConcurrentExecutions") == (aws["search_max_runs"] or None),
           f"at most {aws['search_max_runs']} at once: a flood can't take the engine's or the Slack listener's capacity")
-    check(fv == {"TOP_K": str(SETTINGS["search"]["site_top_k"]), "MAX_CHARS": str(aws["search_max_chars"]),
-                 "CACHE_SECONDS": str(aws["search_cache_seconds"])},
-          "told only how many results, the longest question and the cache time (no bucket, no secret)", fv)
+    hybrid = fv.get("MODE") == "hybrid"
+    expect = {"TOP_K": str(SETTINGS["search"]["site_top_k"]), "MAX_CHARS": str(aws["search_max_chars"]),
+              "CACHE_SECONDS": str(aws["search_cache_seconds"]), "MODE": "hybrid" if hybrid else "keywords"}
+    if hybrid:
+        expect.update({"MODEL": SETTINGS["embed"]["model"], "DIMS": str(SETTINGS["embed"]["dimensions"]),
+                       "REGION": aws["region"]})
+    print(f"  (this build: {'hybrid, the vectors are up to date' if hybrid else 'keywords only'})")
+    check(fv == expect, "told only how many results, the longest question, the cache time and how it ranks "
+                        "(no bucket, no secret)", fv)
+    check(not hybrid or aws.get("search_meaning"), "hybrid only when [aws] search_meaning is on (the kill switch)")
     s_role = fp.get("Role", {}).get("Fn::GetAtt", [None])[0]
     s_pols = [v for v in t.find_resources("AWS::IAM::Policy").values()
               if any(r.get("Ref") == s_role for r in v["Properties"].get("Roles", []))]
-    check(s_role and not s_pols, "its role has no policy of its own: no bucket, no key, no secret", s_pols)
+    s_stmts = [st for v in s_pols for st in v["Properties"]["PolicyDocument"]["Statement"]]
+    titan = f"arn:aws:bedrock:{aws['region']}::foundation-model/{SETTINGS['embed']['model']}"
+    if hybrid:
+        check(s_role and len(s_stmts) == 1 and s_stmts[0].get("Action") == "bedrock:InvokeModel"
+              and s_stmts[0].get("Resource") == titan and s_stmts[0].get("Effect") == "Allow",
+              "its role's only policy: call Titan, one model, one action (no bucket, no key, no secret)", s_stmts)
+    else:
+        check(s_role and not s_pols, "its role has no policy of its own: no bucket, no key, no secret", s_pols)
     managed = json.dumps(t.find_resources("AWS::IAM::Role").get(s_role, {}).get("Properties", {}).get("ManagedPolicyArns"))
     check("AWSLambdaBasicExecutionRole" in managed and managed.count("arn:") <= 1,
           "...only AWS's basic one: write its own logs", managed)

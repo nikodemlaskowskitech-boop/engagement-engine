@@ -136,14 +136,17 @@ def cases(account, region):
         ("slack", "kms:GenerateDataKey", key, ALLOW, "control: the Slack listener can encrypt a click via S3", False, VIA_S3),
         ("admin", "kms:Decrypt", key, ALLOW, "control: the admin can still use the key directly", False),
         ("admin", "kms:PutKeyPolicy", key, ALLOW, "control: the admin can still fix the key's policy (no lockout)", False),
-    ] + (site_cases() + search_cases(b, i, api_key, key) if AWS.get("site") else [])
+    ] + (site_cases() + search_cases(b, i, api_key, key, region) if AWS.get("site") else [])
 
 
-def search_cases(b, i, api_key, key):
+def search_cases(b, i, api_key, key, region):
     """The public search (13 Nov 2026): it answers anyone on the internet, so its role can do
-    nothing at all with our data, keys, secrets or site. No control case on purpose: it has no
-    right to check, and the all-deny guard is the other roles' controls."""
+    nothing at all with our data, keys, secrets or site. No control case on purpose: its one
+    possible right (Titan, when the site searches by meaning, 23 Nov 2026) depends on the deploy,
+    and the all-deny guard is the other roles' controls. Any other model is refused either way."""
+    other_model = f"arn:aws:bedrock:{region}::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0"
     return [
+        ("search", "bedrock:InvokeModel", other_model, DENY, "public search: can't call any other model", False),
         ("search", "s3:GetObject", f"{b}/{i}crm_accounts.csv", DENY, "public search: can't read any data", False),
         ("search", "s3:PutObject", "arn:aws:s3:::{site}/index.html", DENY, "public search: can't change the site", False),
         ("search", "ssm:GetParameter", api_key, DENY, "public search: can't read the API key", False),
