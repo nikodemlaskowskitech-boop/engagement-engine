@@ -203,6 +203,24 @@ Read a file's entry before changing that file, and update the entry in the same 
   before anything leaves (handover.py does). handover.py reads them only through it.
   File names in [handover]. `tests/documents_test.py`: the joins, the shape, the
   citations, one way to read them, the table.
+  Cases, teams, dedup (23 Nov 2026, Nikodem: "10 emails on one case, are we showing them all?";
+  "a ticket, a CSM email and an implementation email, all in the CRM"): each document also
+  has case, team and logged_by. A case = documents joined by a key both carry, never by
+  topic or date: In-Reply-To/References, "Re:" on the same subject, a ticket number of the
+  account or an INV- number quoted in another document, a call's "Related case:" header.
+  Union-find per account; named by the oldest document's citation. team: Support (tickets),
+  CS, Implementation (an email's X-Team, a call with "(Cairnpath, Implementation" among the
+  participants). An email in the archive twice with one Message-ID (logged by two people) is
+  kept once, X-Logged-By of each copy in logged_by. The table adds case_id, team, logged_by.
+- `generate_documents.py` cases (23 Nov 2026): threads(), with its own random stream (rx) so
+  no earlier document moves: the CS owner replies to each topic's email (In-Reply-To, "Re:"),
+  quoting the topic's ticket when there is one; half the time the customer asks again; the
+  topic's call gets "Related case: <ticket>"; a stuck start brings an implementation lead (a
+  contact, side cs, so the redaction labels them CS n) onto the thread, and the CSM's reply is
+  written twice (X-Logged-By CS, then Implementation). search_key.json lists each case's
+  files; corpus_test checks documents.py makes exactly those cases. Same day: same_invoice()
+  (a subject and its body quoted two invoice numbers) and call titles by purpose (account
+  review, growth planning, onboarding check, check-in) instead of "call".
 - `generate_documents.py`: the search corpus (Phase 9, 13 Nov 2026). Support tickets,
   emails and call notes for 30 accounts of the demo book (Enterprise and Scale with a
   named owner, not the three story accounts), written to data/<[search] corpus_folder>/
@@ -347,6 +365,12 @@ Read a file's entry before changing that file, and update the entry in the same 
   files; answers, citations from the file, cacheable, same order as the laptop; 400/405/500;
   a planted name never in the logs, even on an error. infra_test.py and security_check.py
   check the rest (THREAT_MODEL.md 20-22).
+- `site_search.html` cases (23 Nov 2026): results come as accounts, each with up to 3 cases
+  (search.cases(): one line per case, its best hit, n messages, first-last date, teams, the
+  ticket's status, every document behind "Show all", "logged by CS and Implementation (kept
+  once)"); more cases are counted, not listed. One account by name or ID: its cases, newest
+  first. The handler adds "cases" to each result and to the one-account answer; the redacted
+  file carries case, team and logged_by (search_export FIELDS).
 - `site_search.html` (13 Nov 2026): the public site's search page, written by
   `roles.py --site` (write_search_page) as [search] site_page = search.html, beside the
   cockpit pages, so the engine publishes it with them (ENGINE_FILES has the template).

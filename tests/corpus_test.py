@@ -53,7 +53,12 @@ check(first == fingerprint() and first, f"two runs, the same {len(first)} files 
 
 print("\nRead one way")
 docs = documents.all_documents(CORPUS)
-n_files = len(list((CORPUS / "emails").glob("*.eml"))) + len(list((CORPUS / "calls").glob("*.txt")))
+# an email logged by two people is two files with one Message-ID: one document (23 Nov 2026)
+import email as _email                                             # noqa: E402
+ids = {str(_email.message_from_bytes(p.read_bytes())["Message-ID"]).strip() for p in (CORPUS / "emails").glob("*.eml")}
+n_copies = len(list((CORPUS / "emails").glob("*.eml"))) - len(ids)
+check(n_copies > 0, f"some emails are logged twice, as in a real CRM ({n_copies})")
+n_files = len(ids) + len(list((CORPUS / "calls").glob("*.txt")))
 with (CORPUS / SETTINGS["handover"]["support_file"]).open(encoding="utf-8") as f:
     n_files += sum(1 for _ in csv.DictReader(f))
 check(len(docs) == n_files, f"documents.py reads every document ({len(docs)})", (len(docs), n_files))
@@ -122,7 +127,9 @@ with (CORPUS / SETTINGS["handover"]["contacts_file"]).open(encoding="utf-8") as 
 known = {r["name"] for r in contacts}
 team = {r["owner_name"] for r in csv.DictReader((OUTPUTS / "cs_team.csv").open(encoding="utf-8"))}
 # handover.py labels side "cs" as CS 1, anything else as Customer A: our people must say "cs"
-check(all((r["side"] == "cs") == (r["name"] in team) for r in contacts), "our people are side 'cs', customers 'customer'",
+# our people: the CS team, and (23 Nov 2026) the implementation leads, Cairnpath staff outside the CS team
+check(all((r["side"] == "cs") == (r["name"] in team or r["email"].endswith("@cairnpath.example")) for r in contacts),
+      "our people (the CS team, the implementation leads) are side 'cs', customers 'customer'",
       [r for r in contacts if (r["side"] == "cs") != (r["name"] in team)][:3])
 names = set()
 for d in docs:
@@ -131,6 +138,25 @@ for d in docs:
     names |= set(re.findall(r"by ([A-Z]\w+ [A-Z]\w+) <", d["text"]))
 names = {n.strip() for n in names}
 check(names and names <= known, f"all {len(names)} people in the documents are in contacts.csv", names - known)
+
+print("\nCases (23 Nov 2026): one problem, however many documents")
+bad, merged = [], []
+for c in key["cases"]:
+    mine = documents.for_account(c["account_id"], CORPUS)
+    got = [x for x in mine if x["source"] in c["files"]]
+    case = {x["case"] for x in got}
+    extra = [x["source"] for x in mine if x["case"] in case and x["source"] not in c["files"]]
+    if len(got) != len(c["files"]) or len(case) != 1:
+        bad.append(c)
+    if extra:
+        merged.append((c["account_id"], extra))
+check(key["cases"] and not bad, f"each of the answer key's {len(key['cases'])} cases is one case in documents.py "
+      "(the email, its replies, the ticket they quote, the call logged against it)", bad[:2])
+check(not merged, "...and nothing else joins it: no merge by guess", merged[:2])
+check(any(len(c["files"]) >= 4 for c in key["cases"]), "some cases run to 4+ documents (worth grouping)")
+team = [x for a in documents.directory(CORPUS) for x in documents.for_account(a, CORPUS)]
+check({"Support", "CS", "Implementation"} <= {x["team"] for x in team}, "three teams write: Support, CS and Implementation")
+check(any(x["logged_by"] == ["CS", "Implementation"] for x in team), "...and an email logged by both is kept once, with both")
 
 print(f"\n{'All passed' if not failed else f'{failed} failed'}")
 sys.exit(1 if failed else 0)

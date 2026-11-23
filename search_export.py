@@ -29,7 +29,7 @@ from cairnpath_db import connect
 from settings import REPO, SETTINGS
 
 OUT = REPO / SETTINGS["search"]["site_documents_file"]
-FIELDS = ("account_id", "id", "kind", "date", "title", "text")
+FIELDS = ("account_id", "id", "kind", "date", "title", "text", "case", "team", "logged_by")   # case, team: 23 Nov 2026
 
 
 def build(con=None):
@@ -37,9 +37,10 @@ def build(con=None):
     if the leak check holds anything back."""
     con = con or connect()
     search.add_views(con)
-    every = [{"account_id": a, "id": i, "kind": k, "date": str(d), "title": t, "line": ""}
-             for a, i, k, d, t in con.sql(
-                 "SELECT account_id, id, kind, date, title FROM documents ORDER BY account_id, id").fetchall()]
+    every = [{"account_id": a, "id": i, "kind": k, "date": str(d), "title": t, "line": "", "case": c,
+              "team": tm, "logged_by": list(lb or [])}
+             for a, i, k, d, t, c, tm, lb in con.sql("""SELECT account_id, id, kind, date, title, case_id, team, logged_by
+                                                      FROM documents ORDER BY account_id, id""").fetchall()]
     safe, held = search.redacted(con, every)
     if held:
         for b in held:

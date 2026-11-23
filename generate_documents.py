@@ -388,6 +388,36 @@ ROUTINE = [
               ("c", "Not really. The team likes the new funnels and the weekly digest.")]),
 ]
 
+# Cases (23 Nov 2026): a real problem is a thread, not one message. The CS owner answers the
+# customer's email (a reply: In-Reply-To, "Re:"), linking the ticket when there is one; an open
+# one gets a "any news?" from the customer; a call about it is logged against the ticket. New
+# customers stuck at the start get the implementation lead too, on the thread, so the CSM's
+# reply is logged twice in the CRM (once by each): documents.py keeps it once.
+# {ref} = "I've linked this to ticket XX-5012. " when the topic has a ticket.
+REPLIES = {
+    "competitor": "Thanks for the heads-up. Before the comparison, let me show you what the "
+                  "experiments add-on has done for teams like yours. {ref}Could we take 30 minutes this week?",
+    "budget_cut": "Understood. Let's put a number on what the dashboards save your product team each month. "
+                  "{ref}I'll send a one-page summary before your review.",
+    "champion_leaving": "Thank you for telling me first, and congratulations. Could you introduce me "
+                        "to {c2_first} before you go? {ref}I'll set up a handover session.",
+    "data_missing": "I've raised this with our support engineers. {ref}They're comparing your SDK "
+                    "versions now; I'll update you tomorrow.",
+    "not_rolled_out": "Let's get the rollout moving. {ref}I can run a kick-off for the remaining "
+                      "teams next week.",
+    "billing_dispute": "Sorry for the surprise. {ref}I'm checking the invoice with our billing team and will "
+                       "come back to you by Friday.",
+    "more_volume": "Great news. {ref}I'll prepare options for a bigger commitment before your renewal.",
+    "onboarding_stuck": "I've asked {i_first} from our implementation team to join us and unblock "
+                        "the setup. {ref}You'll hear from them today.",
+    "security_review": "Our security team is on it. {ref}You'll have the answers by the end of "
+                       "next week.",
+}
+FOLLOW_UP = "Thanks {s_first}. Any news on this? {ref}We'd like to close it before the end of the month."
+IMPLEMENTATION = ("Hi {c_first},\n\nI'm {i_first}, I lead implementation for your account. Let's install the "
+                  "SDK together: I've booked Tuesday at 10:00 for a working session. {ref}")
+IMPL_ROLES = ["Implementation Lead", "Implementation Consultant"]
+
 # Traps: a question's words without its meaning, on healthy accounts
 TRAPS = {
     "budget_cut": ("email", ("Next year", "Hi {s_first},\n\nGood news: our budget for next year is approved, "
@@ -445,6 +475,19 @@ def pick_accounts(rng):
     return sorted(picked, key=lambda a: a["account_id"]), personality
 
 
+CALL_TITLE = {"churn_call": "account review", "growth_call": "growth planning",
+              "activation_call": "onboarding check", "check_in": "check-in"}
+
+
+def same_invoice(parts):
+    """One document, one invoice number (23 Nov 2026: a subject said INV-36164, its body
+    INV-34132, because fill() draws one per field). The draws stay as they were, so no other
+    document moves: the later fields just take the first field's number."""
+    import re
+    first = next((m.group(0) for p in parts for m in [re.search(r"INV-\d+", p)] if m), None)
+    return [re.sub(r"INV-\d+", first, p) if first else p for p in parts]
+
+
 def fill(text, people, rng):
     """Put the people (and an invoice) into a template."""
     inv = f"INV-{rng.randrange(30000, 39999)}"
@@ -452,11 +495,83 @@ def fill(text, people, rng):
     return text.format(inv=inv, amt=amt, **people)
 
 
+def threads(made, a, people, org, email_of, as_of, tz, rx, contacts, used_names, cases):
+    """One account's cases (23 Nov 2026): replies to each topic's email, the ticket linked in
+    them, a call logged against the ticket, and the implementation lead on a stuck start. Its
+    own random draws (rx), so the documents written before don't change. Records each case's
+    files in cases (the answer key) for tests/corpus_test.py."""
+    acc, s = a["account_id"], a["owner"]["owner_name"]
+    cs_mail = lambda n: email_of(n, "cairnpath.example")
+    for topic, got in made.items():
+        if topic not in REPLIES:                   # routine documents and traps: no case to follow
+            continue
+        tid = got.get("ticket")
+        ref = f"I've linked this to ticket {tid}. " if tid else ""
+        # a call joins the case only through the ticket it's logged against: no ticket, no certain link
+        files = [f"ticket {tid}", *([f"call {got['call'].name}"] if "call" in got else [])] if tid else []
+        if tid and "call" in got:                 # the call, logged against the ticket in the CRM
+            text = got["call"].read_text(encoding="utf-8")
+            got["call"].write_text(text.replace(f"CRM account: {acc}\n", f"CRM account: {acc}\nRelated case: {tid}\n", 1),
+                                   encoding="utf-8")
+        if "email" not in got:
+            if len(files) > 1:
+                cases.append({"account_id": acc, "files": files})
+            continue
+        name, subject, day, writer = got["email"]
+        root = f"<{name}.eml@demo.example>"
+        files.append(f"email {root}")
+        impl = None
+        if topic == "onboarding_stuck":            # Implementation joins: a person of our own, labelled by the redaction
+            while impl is None or impl in used_names:
+                impl = f"{rx.choice(FIRST)} {rx.choice(LAST)}"
+            used_names.add(impl)
+            contacts.append({"account_id": acc, "name": impl, "email": cs_mail(impl), "side": "cs"})
+        p = {**people, "i_first": impl.split()[0] if impl else ""}
+        sent = []
+
+        def send(sender, to, body, when, cc=None, team="CS", logged=("CS",), refs=()):
+            m_id = f"<{name}-re{len(sent) + 1}.eml@demo.example>"
+            for n, who in enumerate(logged):
+                m = EmailMessage()
+                m["From"], m["To"] = f"{sender} <{(cs_mail if sender in (s, impl) else email_of)(sender)}>", to
+                if cc:
+                    m["Cc"] = cc
+                m["Date"] = format_datetime(datetime(when.year, when.month, when.day, rx.randrange(9, 18),
+                                                     rx.choice([0, 15, 30, 45]), tzinfo=tz))
+                m["Subject"] = "Re: " + subject
+                m["Message-ID"], m["In-Reply-To"], m["References"] = m_id, refs[-1], " ".join(refs)
+                m["X-Team"], m["X-Logged-By"] = team, who
+                m.set_content(body)
+                (OUT / "emails" / f"{when}_{slug(a['account_name'])}_{topic.replace('_', '-')}-re{len(sent) + 1}"
+                                  f"{'' if n == 0 else '-copy'}.eml").write_bytes(bytes(m))
+            sent.append(m_id)
+            files.append(f"email {m_id}")
+            return m_id
+
+        def later(d, lo, hi):                      # a working day, never after the data's last day
+            d = d + timedelta(days=rx.randrange(lo, hi))
+            d += timedelta(days={5: 2, 6: 1}.get(d.weekday(), 0))
+            return min(as_of, d)
+        customer = f"{writer} <{email_of(writer)}>"
+        d1 = later(day, 1, 4)
+        body = f"Hi {writer.split()[0]},\n\n" + REPLIES[topic].format(ref=ref, **p) + f"\n\n{s}"
+        r1 = send(s, customer, body, d1, cc=f"{impl} <{cs_mail(impl)}>" if impl else None,
+                  logged=("CS", "Implementation") if impl else ("CS",), refs=(root,))
+        if impl:                                   # the implementation lead writes on the same thread
+            send(impl, customer, IMPLEMENTATION.format(ref=ref, **p) + f"\n\n{impl}", later(d1, 1, 3),
+                 cc=f"{s} <{cs_mail(s)}>", team="Implementation", logged=("Implementation",), refs=(root, r1))
+        if rx.random() < 0.5:                      # still open: the customer asks again
+            send(writer, f"{s} <{cs_mail(s)}>", FOLLOW_UP.format(ref=f"(ticket {tid}) " if tid else "", **p)
+                 + f"\n\n{writer}", later(d1, 3, 8), team="CS", logged=("CS",), refs=(root, *sent))
+        cases.append({"account_id": acc, "files": files})
+
+
 def main():
     if not DEMO:
         print("Search corpus: skipped (your own data: its documents come from your systems, not a generator)")
         return
     rng = random.Random(SEED)
+    rx = random.Random(SEED * 1000 + 1)        # the cases' own draws: every older document stays as it was
     as_of = date.fromisoformat(max(p.stem for p in (OUTPUTS / "events").glob("*.jsonl")))
     accounts, personality = pick_accounts(rng)
     for sub in ("emails", "calls"):
@@ -465,6 +580,7 @@ def main():
             old.unlink()                       # rewritten whole each time: no stale files
     directory, contacts, tickets, key = [], [], [], {q: set() for q in QUESTIONS}
     traps = {q: set() for q in TRAPS}
+    cases = []                                 # the answer key's cases: which files make one case
     used_names = set()
     meetings = []                              # every call note, as the meeting it was
     ticket_no = 5000
@@ -505,6 +621,7 @@ def main():
             topics.append(second)
         topics = [x for x in topics if x]
         docs = []
+        made = {}                              # each topic's documents: its case (23 Nov 2026)
         for topic in topics:
             key[topic].add(acc)
             for kind in rng.sample(["ticket", "email", "call"], 2):     # two of the three ways
@@ -538,7 +655,8 @@ def main():
             w_role = f_role if writer == f else c_role
             if kind == "ticket":
                 ticket_no += 1
-                subject, desc, comment = (fill(t, people, rng) for t in tpl)
+                subject, desc, comment = same_invoice([fill(t, people, rng) for t in tpl])
+                made.setdefault(topic, {})["ticket"] = f"{''.join(w[0] for w in company.split())[:2].upper()}-{ticket_no}"
                 tickets.append({"ticket_id": f"{''.join(w[0] for w in company.split())[:2].upper()}-{ticket_no}",
                                 "organization": org, "requester_name": writer, "requester_email": email_of(writer),
                                 "created_at": str(day), "updated_at": str(day + timedelta(days=rng.randrange(1, 6))),
@@ -552,27 +670,34 @@ def main():
                 if writer == f:
                     m["Cc"] = f"{c} <{email_of(c)}>"
                 m["Date"] = format_datetime(when)
-                m["Subject"] = fill(tpl[0], people, rng)
+                subject, body = same_invoice([fill(tpl[0], people, rng), fill(tpl[1], people, rng)])
+                m["Subject"] = subject
                 m["Message-ID"] = f"<{name}.eml@demo.example>"
-                m.set_content(fill(tpl[1], people, rng) + f"\n\n{writer}\n{w_role}, {org}\n{c_phone}\n")
+                m.set_content(body + f"\n\n{writer}\n{w_role}, {org}\n{c_phone}\n")
                 (OUT / "emails" / f"{name}.eml").write_bytes(bytes(m))
+                made.setdefault(topic, {})["email"] = (name, str(m["Subject"]), day, writer)
             else:
                 start, lines = 30, []
                 for who, text in tpl:
                     speaker = s if who == "s" else c
                     lines.append(f"[00:{start // 60:02d}:{start % 60:02d}] {speaker}: {fill(text, people, rng)}")
                     start += rng.randrange(20, 60)
-                title = {"routine": "check-in", "trap": "check-in"}.get(topic, "call")
+                # the call's purpose in its title, like a calendar invite (23 Nov 2026: "the customer -
+                # call" said nothing once the redaction took the company out)
+                title = {"routine": "check-in", "trap": "check-in"}.get(topic, CALL_TITLE[CALL_TOPIC[topic]])
                 meetings.append({"event_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"cairnpath-call/{name}")),
                                  "event_name": "meeting_held", "event_type": "engagement",
                                  "timestamp": when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                                  "account_id": acc, "user_id": f"{acc}_usr_01",
                                  "properties": {"owner_id": a["owner"]["owner_id"], "topic": CALL_TOPIC[topic]},
                                  "context": {"source": "cs_history"}})
+                made.setdefault(topic, {})["call"] = OUT / "calls" / f"{name}.txt"
                 (OUT / "calls" / f"{name}.txt").write_text(
                     f"Title: {company} - {title}\nDate: {when:%Y-%m-%d %H:%M}\nCRM account: {acc}\n"
                     f"Participants: {s} (Cairnpath, {'CSM' if a['owner']['owner_type'] == 'csm' else 'Scale team'}), "
                     f"{c} ({company}, {c_role})\n\n" + "\n".join(lines) + "\n", encoding="utf-8")
+
+        threads(made, a, people, org, email_of, as_of, tz, rx, contacts, used_names, cases)
 
     (OUTPUTS / "engagement" / MEETINGS_FILE).write_text(
         "".join(json.dumps(m) + "\n" for m in sorted(meetings, key=lambda m: (m["timestamp"], m["account_id"]))),
@@ -590,9 +715,10 @@ def main():
         "as_of": str(as_of),
         "note": "For testing the search only: search.py never reads this file.",
         "questions": [{"id": q, "question": text, "accounts": sorted(key[q]), "traps": sorted(traps.get(q, []))}
-                      for q, text in QUESTIONS.items()]}, indent=2) + "\n", encoding="utf-8")
+                      for q, text in QUESTIONS.items()],
+        "cases": cases}, indent=2) + "\n", encoding="utf-8")
     n_docs = len(tickets) + sum(1 for _ in (OUT / "emails").iterdir()) + sum(1 for _ in (OUT / "calls").iterdir())
-    print(f"Search corpus: {len(accounts)} accounts, {n_docs} documents in {OUT}; "
+    print(f"Search corpus: {len(accounts)} accounts, {n_docs} files in {OUT} (an email logged twice is two files); "
           f"{len(meetings)} calls logged as meetings in data/engagement/{MEETINGS_FILE}")
     for q, text in QUESTIONS.items():
         print(f"  {len(key[q]):>2} accounts  {text}")

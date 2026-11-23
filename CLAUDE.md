@@ -301,7 +301,7 @@ Engine:
 - `retention.py`: GRR, NRR, the ARR bridge and the renewal forecast.
 - `explore.py`: quick summaries for exploring.
 - `facts.py`: the facts layer: account, at_risk, timeline, tasks.
-- `documents.py`: tickets, emails and calls in one shape (raw: redact first).
+- `documents.py`: tickets, emails and calls in one shape, grouped into cases by certain keys, emails logged twice kept once (raw: redact first).
 - `qbr.py`: QBR facts packs, pseudonymised.
 - `search.py`: account search over the documents (BM25 in plain SQL), on the laptop; `redacted()` = what may leave.
 - `search_export.py`: the demo documents redacted into one committed file, all the public search sees.
