@@ -4451,9 +4451,20 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
             p: `From signal to renewal outcome, the way every account moves through the engine. The data ends ${fmt(D.as_of)}; the outcome is read looking back from six months later, as "Did it work?" does.`,
             list: journey }
         : pick && { v: "timeline", acc: pick.account_id, h: `One account, end to end: ${pick.account_name}`, p: "Usage, every CS touch, why the engine flagged it (in words, never a score), the plan and the renewal forecast." },
-      { v: "lead", el: "ld-tiles", h: "The leader's one page", p: "What's at risk, whether anyone has called, what's planned and the forecast, sorted by value. Click any number to list its accounts." },
-      views.includes("tasks") && { v: "tasks", el: "tk-funnel-panel", h: "Operational: is the work moving?", p: "Every task the engine sent to a person, from \"a person is needed\" to the right meeting, per team. Click a stage to list the tasks that stopped before it; below, the backlog in the order a CSM picks it up." },
-      views.includes("outcomes") && { v: "outcomes", h: "Did it work?", p: "Today's flags held against what really happened at renewal: caught, missed and false alarms, and how much warning they gave." },
+      // the leader's four places, each step tied to a leader's task (23 Nov 2026, the design review):
+      // report up, see where it differs, see what's coming, run the work, change the rules
+      views.includes("lead") && RET && { v: "lead", el: "cs-tiles", h: "Report up: Performance",
+        p: "What the board asks: gross and net retention, the renewals at risk in the next two quarters and the forecast. Value first, never a count of calls. Click any number to list its accounts." },
+      views.includes("lead") && RET && { v: "lead", el: "cs-teams-panel", h: "Is it the same everywhere?",
+        p: "The same retention by team. Click a team and every number on the page becomes that team's; click again on a person. Small numbers are greyed, and the headline names money, not a rank." },
+      views.includes("lead") && { v: "lead", el: "ld-signals", h: "What's coming: the signals",
+        p: "Patterns across accounts before they reach renewal: a new cohort not ramping up, themes customers raise with no action yet. One trend is planted in the demo data, and says so." },
+      views.includes("tasks") && { v: "tasks", el: "tk-funnel-panel", h: "Operational: is the work moving?",
+        p: "Every task the engine sent to a person, from \"a person is needed\" to the right meeting, per team. Click a stage to list the tasks that stopped before it; the director acts through the team lead." },
+      views.includes("tasks") && { v: "tasks", el: "op-promises-panel", h: "Where the time goes, and what we owe",
+        p: "Promises made to customers and how many are late, then which signals fired this month and the ARR met in 60 days by stage: is effort following the money?" },
+      views.includes("outcomes") && { v: "outcomes", el: "oc-rules-panel", h: "Did it work? Keep or change the rules",
+        p: "Today's flags held against what really happened at renewal, turned into decisions: each rule against its bar, keep or change, and why customers left, including what no usage signal can see." },
       { h: "A page per person, and the documents", p: "Each person gets their own page, holding only their team's data. Open a CSM's morning page, or ask the tickets, emails and call notes in plain words.",
         links: [DEMO.csm_page && [`${DEMO.csm_name}'s page (a CSM)`, DEMO.csm_page], ["Ask the documents", "search.html"]].filter(Boolean) },
     ].filter(Boolean);

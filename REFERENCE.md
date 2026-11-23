@@ -668,8 +668,7 @@ Read a file's entry before changing that file, and update the entry in the same 
   who built it or why, nor where to click first): on the public site only (roles.py --site
   puts settings.toml [demo] into the page's meta; the in-house cockpit has neither), a strip
   above the intro: built by [demo] author, [demo] why, a link to the repo's README, and on
-  the leader's page "Take the 3-minute tour": five steps (one account through the system;
-  Leadership; Tasks; Did it work?; a CSM's page and the search), Back / Next / Close, Escape
+  the leader's page "Take the 3-minute tour" (eight steps since 23 Nov 2026, below), Back / Next / Close, Escape
   closes, ?tour opens it. Step 1 since 18 Nov 2026 (recruiter review: "show one customer going
   through it"): six stages on the account's timeline, signal, task, action, reached, renewal,
   measured. The account by rule, never by name: a churn signal, its task, a call on or after
@@ -685,7 +684,11 @@ Read a file's entry before changing that file, and update the entry in the same 
   account by value, what's coming, what to pick up, know the account, it rolls up to the leader's
   page). Each step lights up the part it explains (.tour-focus) and the page gets room below so
   that part scrolls clear of the panel. The account shown: the biggest flagged one with documents.
-  The leader's tour is rewritten with the leader's page (the assessment's "Now" list).
+  The leader's tour rewritten (23 Nov 2026, the four places): eight steps, each lighting up its
+  part: one account through the system, then report up (Performance tiles), the same everywhere?
+  (by team, the zoom), what's coming (the Signals band), Operational's funnel, what we owe and
+  where the time goes (promises, signals fired, coverage), Did it work?'s keep-or-change rules,
+  and the links (a CSM's page, the search). A step whose tab the page lacks is left out.
   Two doors (18 Nov 2026, instead of a landing page: an extra page in front of the cockpit
   loses visitors): on the public site the top-left is Leader | CSM (the leader's page on
   Leadership, and [demo] csm's book, Tom Brennan: an expansion at Act, a churn Watch task
