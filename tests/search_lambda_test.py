@@ -172,6 +172,9 @@ def explicit(r, label):
           and sorted(d["id"] for d in a["documents"]) == r["acc_docs"] and a["ranked_by"] == "newest"
           and [d["date"] for d in a["documents"]] == sorted((d["date"] for d in a["documents"]), reverse=True),
           f"{label}: an account ID alone (any case, in a sentence): all its documents, newest first, nothing else", a)
+    in_cases = [d["id"] for c in a.get("cases", []) for d in c["docs"]]
+    check(sorted(in_cases) == r["acc_docs"] and len(set(in_cases)) == len(in_cases),
+          f"{label}: ...grouped into cases (23 Nov 2026): every document in exactly one", (len(in_cases), len(r["acc_docs"])))
     t = r["acc_topic"]["body"]
     check(t.get("account") == r["acc"] and t["documents"] and all(d["id"] in r["acc_docs"] for d in t["documents"]),
           f"{label}: an account ID and a topic: only that account's documents, ranked", t)
@@ -203,6 +206,9 @@ check("PermissionError" in logs_h and SECRET not in logs_h and "competitor" not 
 check(rh["error"]["status"] == 500 and SECRET not in json.dumps(rh["error"]), "an internal error: 500, without the question")
 
 print("\nAnswers")
+check(all(x.get("cases") and all(c["best"]["id"] in [d["id"] for d in c["docs"]] for c in x["cases"])
+          and len({c["case"] for c in x["cases"]}) == len(x["cases"]) for x in r["good"]["body"]["results"]),
+      "each account's results come as cases, each once, its best document inside it")
 good = r["good"]
 res = good["body"].get("results", [])
 in_file = {(a, i): t for a, i, t in r["file"]}

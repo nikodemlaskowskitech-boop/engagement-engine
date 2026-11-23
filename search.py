@@ -308,6 +308,59 @@ def account_documents(con, account_id, k=None):
              "matched": [], "line": _best_line(text, [])} for a, i, kind, day, title, text in rows]
 
 
+_TICKET_TITLE = re.compile(r"^Ticket \S+ \((\w+), (\w+)\): (.*)$")
+_PREFIX = re.compile(r"^(Email|Call): ((re|fwd?)\s*:\s*)*", re.I)
+
+
+def cases(con, hits, newest=False):
+    """The hits grouped the way a person reads them (23 Nov 2026, Nikodem: "10 emails on one
+    case, are we showing them all?"): each account once, its cases inside, each case once
+    with its best hit, its size and dates, the teams it came from, the ticket's status, and
+    every document in it (oldest first) for "show all". Accounts and cases keep the hits'
+    order (best first); newest=True orders cases by their latest document instead."""
+    if not hits:
+        return []
+    pairs = sorted({(h["account_id"], h["id"]) for h in hits})
+    where = " OR ".join(f"(d.account_id = '{a}' AND d.id = '{i}')" for a, i in pairs
+                        if re.fullmatch(r"[\w-]+", a) and re.fullmatch(r"\w+", i))
+    rows = con.sql(f"""
+        SELECT c.account_id, c.case_id, c.id, c.kind, c.date, c.title, c.team, c.logged_by
+        FROM documents c JOIN (SELECT DISTINCT d.account_id, d.case_id FROM documents d WHERE {where}) k
+             USING (account_id, case_id)
+        ORDER BY c.account_id, c.case_id, c.date, c.id""").fetchall()
+    docs, case_of = {}, {}
+    for a, case, i, kind, day, title, team, logged in rows:
+        docs.setdefault((a, case), []).append({"id": i, "kind": kind, "date": str(day), "title": title,
+                                               "team": team or "", "logged_by": list(logged or [])})
+        case_of[(a, i)] = case
+    out = {}
+    for h in hits:
+        acc = out.setdefault(h["account_id"], {"account_id": h["account_id"], "score": h["score"], "cases": {}})
+        case = case_of.get((h["account_id"], h["id"]), h["id"])
+        if case in acc["cases"]:
+            continue                                   # a later hit in a case already shown: its best stays
+        members = docs.get((h["account_id"], case), [{**{k: h[k] for k in ("id", "kind", "date", "title")},
+                                                      "team": "", "logged_by": []}])
+        tickets = [_TICKET_TITLE.match(d["title"]) for d in members if d["kind"] == "S"]
+        tickets = [t for t in tickets if t]
+        teams = {}
+        for d in members:
+            if d["team"]:
+                teams[d["team"]] = teams.get(d["team"], 0) + 1
+        acc["cases"][case] = {
+            "case": case, "title": tickets[-1].group(3) if tickets else _PREFIX.sub("", members[0]["title"]).strip(),
+            "status": tickets[-1].group(2) if tickets else "", "n": len(members),
+            "first": members[0]["date"], "last": members[-1]["date"], "teams": teams,
+            "best": {k: h[k] for k in ("id", "kind", "date", "title", "line", "matched")}, "docs": members}
+    result = []
+    for acc in out.values():
+        found = list(acc["cases"].values())
+        if newest:
+            found.sort(key=lambda c: (c["last"], c["case"]), reverse=True)
+        result.append({**acc, "cases": found})
+    return result
+
+
 def accounts(con, query, k=None, synonyms=True, mode=None, provider=None):
     """The accounts whose documents match the question best: each account once, ranked by
     its best document, with the citations that matched (k accounts). mode: see ranked()."""

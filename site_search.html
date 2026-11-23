@@ -44,7 +44,7 @@ button { font: 600 0.95rem var(--font-body); }
 #status { color: var(--ink-3); font-size: 0.9rem; min-height: 1.4em; }
 #status.warn { color: var(--warning); }
 ol.results { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 10px; }
-ol.results li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+ol.results > li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .head { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.8rem; color: var(--ink-3); }
 .head b { color: var(--ink-2); font-weight: 600; }
 .head a.acc { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
@@ -57,6 +57,14 @@ mark { background: var(--accent-soft); color: var(--ink); border-bottom: 1px sol
 .head .flag { border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--ink-2); }
 .head .flag.act { border-color: var(--critical, #c0392b); color: var(--ink); }
 .account-card { border-color: var(--accent) !important; }
+.case + .case { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.case .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.8rem; color: var(--ink-3); margin-top: 4px; }
+.case .status { border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--ink-2); }
+.cite { color: var(--ink-3); font-size: 0.8rem; margin-right: 4px; }
+details.all { margin-top: 6px; font-size: 0.85rem; color: var(--ink-2); }
+details.all summary { cursor: pointer; color: var(--ink-3); }
+details.all ul { margin: 6px 0 0; padding-left: 18px; }
+details.all li { margin: 2px 0; }
 details.about { margin-top: 34px; border-top: 1px solid var(--line); padding-top: 12px; color: var(--ink-2); font-size: 0.9rem; }
 details.about summary { cursor: pointer; color: var(--ink); font-weight: 500; }
 details.about li { margin: 4px 0; }
@@ -87,6 +95,7 @@ details.about li { margin: 4px 0; }
       <li>It doesn't understand dates, amounts or "not", and it doesn't read the engine's numbers: "the biggest churn risk" is a question for the cockpit's Leadership tab, which ranks accounts by ARR at risk.</li>
       <li>People appear as labels (Customer A, CS 1) and companies as "the customer" inside the documents: names were removed, and checked for, before the search ever saw the text. The account's name on each result comes from the cockpit. Type an account's name or ID to search that account only ("Maple Energy invoice"), or just the name to see its documents, newest first.</li>
       <li>Codes (an account ID, a ticket or invoice number) are matched as typed, by words alone: a code has no meaning to match.</li>
+      <li>One problem is one result: an email, its replies, the ticket they quote and the call logged against it form a case, shown once with its size, dates, teams and the ticket's status; "Show all" opens its history. Documents join a case only by a key they share (a reply, a ticket or invoice number), never by a guess. An email logged by two people is kept once.</li>
       <li>It shows the top __TOP_K__ accounts. On a test set written by someone who never saw the search, words alone put the first result right about 6 times in 10; words and meaning together find more of the right documents (90% to 96% in the top 10, measured on the laptop).</li>
       <li>What you type isn't stored anywhere. To match by meaning it goes to the embedding model once, and AWS doesn't keep it either.</li>
     </ul>
@@ -141,28 +150,44 @@ function resolve(q) {
   return (q.slice(0, start) + " " + best.id + " " + q.slice(start + best.n.length)).replace(/\s+/g, " ").trim();
 }
 
-// one account, asked for by name or ID: its documents only
-function showAccount(body) {
-  const docs = body.documents || [];
-  $("results").innerHTML = `<li class="account-card"><div class="head">${accountHead(body.account)}</div></li>` +
-    docs.map((d) => `
-    <li>
-      <div class="head"><span>${esc(KIND[d.kind] || d.kind)} [${esc(d.id)}]</span><span>${esc(day(d.date))}</span></div>
-      <p class="title">${highlight(d.title, d.matched)}</p>
-      <p class="line">${highlight(d.line, d.matched)}</p>
-    </li>`).join("");
+// A case (23 Nov 2026): one problem, however many messages. Its title, how big it is and where it
+// stands, the line that matched best, and the whole history behind "Show all".
+const span = (a, b) => a === b ? day(a) : `${day(a)} – ${day(b)}`;
+function caseHtml(c) {
+  const b = c.best, teams = Object.entries(c.teams || {});
+  const meta = c.n > 1 ? [`${c.n} messages`, span(c.first, c.last)] : [`${KIND[b.kind] || b.kind}`, day(b.date)];
+  if (teams.length > 1 || c.n > 1) meta.push(teams.map(([t, n]) => `${t} ${n}`).join(", "));
+  else if (teams.length) meta.push(teams[0][0]);
+  const twice = (d) => d.logged_by && d.logged_by.length > 1 ? ` · logged by ${d.logged_by.join(" and ")} (kept once)` : "";
+  return `<div class="case" data-docs="${esc((c.docs || [b]).map((d) => d.id).join(","))}">
+      <p class="title">${highlight(c.title, b.matched)}</p>
+      <div class="meta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}${c.status ? `<span class="status">ticket ${esc(c.status)}</span>` : ""}</div>
+      <p class="line"><span class="cite">[${esc(b.id)}]</span>${highlight(b.line, b.matched)}</p>
+      ${c.n > 1 ? `<details class="all"><summary>Show all ${c.n}</summary><ul>${c.docs.map((d) =>
+        `<li><span class="cite">${esc(KIND[d.kind] || d.kind)} [${esc(d.id)}]</span> ${esc(day(d.date))} · ${esc(d.team || "")}${esc(twice(d))} · ${esc(d.title.replace(/^(Email|Call): /, ""))}</li>`).join("")}</ul></details>` : ""}
+    </div>`;
 }
 
+// one account, asked for by name or ID: its cases only
+function showAccount(body) {
+  $("results").innerHTML = `<li class="account-card"><div class="head">${accountHead(body.account)}</div></li>` +
+    (body.cases || []).map((c) => `<li>${caseHtml(c)}</li>`).join("");
+}
+
+const SHOW_CASES = 3;                                    // per account; the rest are counted, not listed
 function show(results) {
   const list = $("results");
-  list.innerHTML = results.map((r) => `
+  list.innerHTML = results.map((r) => {
+    const cs = r.cases && r.cases.length ? r.cases : [{ case: r.best.id, title: r.best.title, n: 1, teams: {}, status: "",
+                                                        first: r.best.date, last: r.best.date, best: { ...r.best, matched: r.matched } }];
+    const more = cs.length - SHOW_CASES;
+    return `
     <li>
       <div class="head">${accountHead(r.account_id)}</div>
-      <div class="head"><span>${esc(KIND[r.best.kind] || r.best.kind)} [${esc(r.best.id)}]</span><span>${esc(day(r.best.date))}</span></div>
-      <p class="title">${highlight(r.best.title, r.matched)}</p>
-      <p class="line">${highlight(r.best.line, r.matched)}</p>
-      ${r.more.length ? `<p class="more">Also matched on this account: ${r.more.map(esc).join(", ")}</p>` : ""}
-    </li>`).join("");
+      ${cs.slice(0, SHOW_CASES).map(caseHtml).join("")}
+      ${more > 0 ? `<p class="more">${more} more case${more > 1 ? "s" : ""} on this account match: search its name to see them</p>` : ""}
+    </li>`;
+  }).join("");
 }
 
 async function ask(q) {
@@ -189,8 +214,9 @@ async function ask(q) {
   if (!res.ok) { status.className = "warn"; status.textContent = body.error || "Something went wrong. Try again in a minute."; return; }
   if (body.account) {                                   // one account, asked for by name or ID
     const a = ACCOUNTS[body.account], n = (body.documents || []).length, who = a ? a.n : body.account;
+    const k = (body.cases || []).length;
     status.textContent = !n ? `No documents for ${who}${a ? "" : " (this search covers " + Object.keys(ACCOUNTS).length + " accounts)"}.`
-      : `${who}: ${n} document${n > 1 ? "s" : ""}, ${body.ranked_by === "newest" ? "newest first" : "best match first"}. Only this account.`;
+      : `${who}: ${k} case${k > 1 ? "s" : ""} (${n} document${n > 1 ? "s" : ""}), ${body.ranked_by === "newest" ? "newest first" : "best match first"}. Only this account.`;
     showAccount(body);
     return;
   }

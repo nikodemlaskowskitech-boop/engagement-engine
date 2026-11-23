@@ -248,8 +248,8 @@ a real team has: each one names the customer its own way, and
 | --- | --- | --- | --- |
 | Directory | `stories/directory.csv` | `account_id` | `company`, `email_domain`, `helpdesk_org`, `handover_from`, `handover_to` |
 | Support cases | `stories/support_cases.csv` | `helpdesk_org` (the helpdesk's organisation name) | ticket_id, organization, requester_name, requester_email, created_at, updated_at, priority, type, status, subject, description, latest_comment |
-| Emails | `stories/emails/*.eml` | the sender's or recipients' `email_domain` | standard .eml files (From, To, Date, Subject, body) |
-| Call transcripts | `stories/calls/*.txt` | `CRM account: acc_xxx` in the header | Title, Date, Participants, then `[hh:mm:ss] Name: text` lines |
+| Emails | `stories/emails/*.eml` | the sender's or recipients' `email_domain` | standard .eml files (From, To, Date, Subject, body); optional In-Reply-To and References (a thread), X-Team (CS or Implementation; default CS) and X-Logged-By (who logged it in the CRM; default CS). The same Message-ID twice = one email logged by two people, kept once (23 Nov 2026) |
+| Call transcripts | `stories/calls/*.txt` | `CRM account: acc_xxx` in the header | Title, Date, Participants (an "(Your company, Implementation ...)" participant makes it Implementation's), optional `Related case: <ticket id>` (the CRM's link to a case), then `[hh:mm:ss] Name: text` lines |
 | Contacts (optional) | `stories/contacts.csv` ([handover] contacts_file) | `account_id` | account_id, name, email, side (customer or cs; empty = customer): the CRM's contact export. Redaction finds each listed person anywhere in the text, even by first name; without it, people are found only in headers, participant lists and speaker lines, and the leak check stops a brief that names anyone else |
 
 The search corpus (`generate_documents.py`, demo only) is written in the same shape

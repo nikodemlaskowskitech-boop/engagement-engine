@@ -118,12 +118,15 @@ def handler(event, context=None):
             print(f"search failed: {type(e).__name__}")
             return _reply(500, {"error": "Search unavailable, try again in a minute"})
         docs = [{k: h[k] for k in ("id", "kind", "date", "title", "line", "matched")} for h in hits]
-        return _reply(200, {"account": account, "documents": docs, "ranked_by": how}, cache=True)
+        grouped = search.cases(con, hits, newest=not rest)        # its cases, each once (23 Nov 2026)
+        return _reply(200, {"account": account, "documents": docs, "ranked_by": how,
+                            "cases": grouped[0]["cases"] if grouped else []}, cache=True)
     try:
         hits, how = rank(_index(), q, TOP_K * 5)                 # enough documents to fill TOP_K accounts
     except Exception as e:                                    # noqa: BLE001: the type only, never the message
         print(f"search failed: {type(e).__name__}")
         return _reply(500, {"error": "Search unavailable, try again in a minute"})
+    grouped = {a["account_id"]: a["cases"] for a in search.cases(_index(), hits)}
     accounts = {}
     for h in hits:
         if h["account_id"] not in accounts:
@@ -135,4 +138,6 @@ def handler(event, context=None):
                 "matched": h["matched"], "more": []}
         elif h["id"] not in accounts[h["account_id"]]["more"]:
             accounts[h["account_id"]]["more"].append(h["id"])
+    for acc in accounts.values():                  # one line per case, not per message (23 Nov 2026)
+        acc["cases"] = grouped.get(acc["account_id"], [])
     return _reply(200, {"results": list(accounts.values()), "ranked_by": how}, cache=True)

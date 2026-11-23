@@ -120,13 +120,13 @@ print(json.dumps(r))`;
       .trim().split("\n").map((l) => JSON.parse(l));
     const cites = new Set(file.map((d) => d.account_id + "|" + d.id));
     await s.click(".chip"); await s.waitForSelector("#results li", { timeout: 15000 });
-    const shown = await s.$$eval("#results li", (ls) => ls.map((l) => ({ head: [...l.querySelectorAll(".head")].map((h) => h.textContent).join(" "),
+    const shown = await s.$$eval("#results > li", (ls) => ls.map((l) => ({ head: l.querySelector(".head").textContent + " " + ((l.querySelector(".case .cite") || {}).textContent || ""),
                                                                       name: (l.querySelector(".head .name") || {}).textContent || "",
                                                                       marks: l.querySelectorAll("mark").length })));
     const ok = shown.every((x) => { const a = x.head.match(/(acc_h?\d+)/), d = x.head.match(/\[(\w+)\]/); return a && d && cites.has(a[1] + "|" + d[1]); });
     check(shown.length > 0 && shown.length <= 5 && ok, `an example question: ${shown.length} accounts, each citing a document that's in the redacted file`, JSON.stringify(shown));
     check(shown.some((x) => x.marks > 0), "the matching words are highlighted");
-    const accLinks = await s.$$eval("#results li", (ls) => ls.map((l) => [l.querySelector(".head a.acc").getAttribute("href"),
+    const accLinks = await s.$$eval("#results > li", (ls) => ls.map((l) => [l.querySelector(".head a.acc").getAttribute("href"),
                                                                           l.textContent.match(/(acc_h?\d+)/)[1]]));
     check(accLinks.length === shown.length && accLinks.every(([h, id]) => h === "index.html#" + id),
       "each result's account opens its timeline in the cockpit (16 Nov 2026 review: IDs led nowhere)", JSON.stringify(accLinks));
@@ -145,15 +145,30 @@ print(json.dumps(r))`;
     const onlyThat = async (q, what) => {
       await s.fill("#q", q); await s.click("button.go");
       await s.waitForFunction(() => /Only this account|No documents/.test(document.getElementById("status").textContent), null, { timeout: 15000 });
-      const docs = await s.$$eval("#results li:not(.account-card)", (ls) => ls.map((l) => (l.textContent.match(/\[(\w+)\]/) || [])[1]));
+      const docs = (await s.$$eval("#results .case", (cs) => cs.map((c) => c.dataset.docs))).join(",").split(",").filter(Boolean);
       const card = await s.$eval("#results li.account-card", (l) => l.textContent).catch(() => "");
       check(card.includes(ACC[pick].n) && card.includes(pick) && docs.length && docs.every((d) => byDocs[pick].includes(d)),
         `${what}: only ${ACC[pick].n}'s documents (${docs.length}), under its card`, JSON.stringify({ card, docs }));
       return docs;
     };
     const all = await onlyThat(pick, "its ID alone");
-    check(all.length === byDocs[pick].length && /newest first/.test(await s.textContent("#status")),
-      "...all of them, newest first", JSON.stringify(all));
+    check(all.length === byDocs[pick].length && new Set(all).size === all.length && /newest first/.test(await s.textContent("#status")),
+      "...all of them, each in exactly one case, newest case first", JSON.stringify(all));
+    // 23 Nov 2026 (Nikodem): "10 emails on one case, are we showing them all?": one line per case
+    const thread = file.find((d) => d.case !== d.id);                   // a document that joined an older one's case
+    const mates = file.filter((d) => d.account_id === thread.account_id && d.case === thread.case).map((d) => d.id).sort();
+    await s.fill("#q", thread.account_id); await s.click("button.go");
+    await s.waitForFunction(() => /Only this account/.test(document.getElementById("status").textContent), null, { timeout: 15000 });
+    const cards = await s.$$eval("#results .case", (cs) => cs.map((c) => ({ docs: c.dataset.docs.split(","), text: c.textContent })));
+    const card = cards.find((c) => c.docs.includes(thread.id)) || { docs: [], text: "" };
+    check(card.docs.slice().sort().join() === mates.join() && cards.filter((c) => c.docs.includes(thread.id)).length === 1,
+      `a case shows once: ${mates.join(", ")} on ${thread.account_id} are one line`, JSON.stringify(card.docs));
+    check(new RegExp(`${mates.length} messages`).test(card.text) && /Show all/.test(card.text),
+      "...saying how many messages, with the history behind 'Show all'", card.text.slice(0, 200));
+    const twice = file.find((d) => (d.logged_by || []).length > 1);
+    check(twice && twice.logged_by.join() === "CS,Implementation"
+          && file.filter((d) => d.account_id === twice.account_id && d.text === twice.text).length === 1,
+      "an email logged by the CSM and by Implementation is one document in the file, with both teams", twice && twice.logged_by);
     await onlyThat(ACC[pick].n.toUpperCase(), "its name, in any case");
     await onlyThat(`show me ${ACC[pick].n} please`, "its name inside a sentence");
     await onlyThat(`${ACC[pick].n} customer call`, "its name and a topic");

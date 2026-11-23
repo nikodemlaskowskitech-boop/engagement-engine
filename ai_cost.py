@@ -87,8 +87,9 @@ def cost(tok_in, tok_out=OUT_TOKENS):
 def report(rows):
     med = lambda k: statistics.median(r[k] for r in rows)          # noqa: E731
     rag, full = sum(r["rag_in"] for r in rows), sum(r["all_in"] for r in rows)
-    per_doc = statistics.median([round((r["all_in"] - r["rag_in"]) / (r["documents"] - r["picked"]))
-                                 for r in rows if r["documents"] > r["picked"]] or [0])
+    # whole tokens: a median of an even count is a half (23 Nov 2026: "4,059.0 tokens" once the corpus grew)
+    per_doc = round(statistics.median([round((r["all_in"] - r["rag_in"]) / (r["documents"] - r["picked"]))
+                                       for r in rows if r["documents"] > r["picked"]] or [0]))
     c_rag, c_all = cost(med("rag_in")), cost(med("all_in"))
     lines = [
         f"AI cost demo: one question to ask.py, {len(rows)} questions on the demo corpus (estimates at "

@@ -267,6 +267,9 @@ silently. The redaction keys never leave `search.py`.
   search_accounts), the same fictional names the cockpit pages show, joined beside the result,
   never put back into the text. With real data this is what any CS search does: you see the
   names of the accounts your role may see. The leak check still guards the documents.
+- **Cases and teams** (23 Nov 2026): a document's case is a citation (E1), its team and
+  logged_by are team names (Support, CS, Implementation), never a person. Implementation
+  leads are contacts on our side, so the redaction labels them CS n like the CSM.
 - **Labels are per account** (gap 6): "Customer A" on two accounts are two people.
   Each result carries its account ID, so they're never merged.
 - **The first run held back 14 (account, name) pairs**: 3 were two real people
