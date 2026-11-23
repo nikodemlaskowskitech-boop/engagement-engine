@@ -392,6 +392,16 @@ Read a file's entry before changing that file, and update the entry in the same 
   the leader's facts equal the cockpit's; as a CSM, another team's account refused and none
   in at_risk or search; search results without contact names, emails, phones, companies;
   a real stdio round trip started from another folder.
+- `ai_cost.py` (23 Nov 2026): the AI cost demo (AI_COST.md "How we'll show it"). For each corpus
+  question and each account that answers it (38 pairs), what ask.py would send built two ways,
+  redacted as ask.py does: RAG (ask.gather: the facts and the documents the search picks) and
+  everything (the same with every document of the account, search.ranked stood in for). Priced at
+  [llm] prices, the answer at [ask] max_output_tokens; tokens estimated at [ask] chars_per_token
+  (4), labelled as an estimate; then the bill for [ask] cost_demo_sizes documents; then the real
+  ask_account calls from the ledger. Search on keywords while measuring: the size depends on
+  top_k, not the mode, and no model is called. First run: RAG sends 72% of everything today (a
+  median 6 short documents, 2 picked), about $0.007 a question, 83% of it the answer; at 500
+  documents everything is about 11x. Report in data/<[outputs] ai_cost>. tests/ai_cost_test.py.
 - `embed.py` (22 Nov 2026): search by meaning. One vector per document of the committed
   redacted file (search_export.py), never the raw text: Amazon Titan Text Embeddings V2 on
   Bedrock ([embed] model, dimensions 512, in our account, [aws] region and profile), or the

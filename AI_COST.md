@@ -23,7 +23,7 @@ safe?".
 | 1 | Call only when something changed | **Done** (5 Nov 2026) | The handover cache: a brief is rewritten only when its documents, a flag, a booked QBR, the owner or the contract changed. Most days nothing has, so most days cost nothing. This is usually the biggest saving of all. |
 | 2 | Cap the output | **Done** | `[handover] max_output_tokens` = 1500. Output costs 5x input on Sonnet. A cut-off answer is never saved, so a cap that's too low shows up as a missing brief, not a broken one. |
 | 3 | Clean the text first | **Planned** | Email is the worst offender: each reply quotes the thread below it. We remove quoted replies, signatures and legal footers with plain code, no model. One rule: a quoted block is dropped only when the message it quotes is in our documents on its own. Otherwise the quote may be the only copy, and we keep it. Tokens before and after go in the ledger. |
-| 4 | Send only the relevant parts (RAG) | **Planned** | For questions ("what did they say about the competitor?"), not for the brief. A brief summarises everything, so there's no narrow question to search on. About $0.013 a question, against about $0.40 if a large account's whole history were sent. |
+| 4 | Send only the relevant parts (RAG) | **Done** (ask.py, 14 Nov 2026; measured 23 Nov) | For questions ("what did they say about the competitor?"), not for the brief: a brief summarises everything, so there's no narrow question to search on. Measured by `python ai_cost.py` on the 38 corpus questions: RAG sends 72% of the input "everything" would, about $0.007 a question either way, because demo accounts hold about 6 short documents. It pays as histories grow: at 500 documents, everything is about 11 times dearer per question and RAG costs the same. |
 | 5 | Prompt caching | **Planned, where it pays** | The model can keep the start of a prompt for 5 minutes. On Sonnet 5.5, writing it costs 1.25x the input price and each read 0.05x, so it pays once the same start is read again within 5 minutes. **Not for the brief's instructions today:** they're about 250 tokens, under the 512-token minimum, so the API would quietly ignore the cache. **Yes for the Ask box:** the same account's chunks, several questions within minutes. |
 | 6 | A cheaper model for the bulk work (routing) | **Planned, with a quality check** | Haiku 5.5 is 20x cheaper than Sonnet. It reads each document once and pulls out fields: dates, a competitor named, who spoke, the tone. Sonnet only writes the final answer. We'll check it against the answer key first: a cheap model that misses a fact costs more than it saves. |
 | 7 | Extract once, then ask with SQL | **Planned**, the same step as 6 | The fields from 6 are stored as rows. "Which accounts mentioned a competitor this quarter?" then becomes a SQL query that costs nothing, and fits our rule that SQL computes every fact. |
@@ -33,6 +33,10 @@ safe?".
 
 ## How we'll show it
 
-Each planned item is measured in the spend ledger, before and after, on the same
-questions: tokens in, tokens out, cost per question. Planned items are in the
-planner's Phase 9 ("AI cost demo").
+`python ai_cost.py` (23 Nov 2026) prices one question to ask.py on the 38 corpus
+questions, with no model call: what RAG sends against everything, the answer at its
+cap, the question's vector, and the bill as an account's history grows; once real
+questions have been asked, it sets the ledger's real token counts beside its estimate.
+Its first finding: at today's size the answer is most of the bill (about 83%), so the
+output cap (#2) saves more than retrieval does; retrieval keeps paying as histories grow.
+Each planned item is measured the same way, before and after, on the same questions.

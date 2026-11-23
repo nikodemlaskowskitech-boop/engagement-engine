@@ -502,6 +502,7 @@ history_tasks = "history_tasks.csv"
 qbr_facts = "qbr_facts.json"
 qbr_user_key = "qbr_user_key.csv"
 vectors = "vectors.jsonl"            # embed.py: one vector per redacted document (search by meaning)
+ai_cost = "ai_cost_demo.txt"         # ai_cost.py: the AI cost demo's report
 
 [search]
 # Account search over tickets, emails and call notes (Phase 9). generate_documents.py writes a
@@ -608,6 +609,10 @@ max_results = 10
 # ask.py: one question about one account, answered from its facts and documents (RAG).
 top_k = 5                  # documents the search picks for the question (an account has 3 to 8)
 max_output_tokens = 600    # about 150 words, with room; a cut-off answer is refused, not shown
+# ai_cost.py, the AI cost demo (23 Nov 2026): tokens estimated at this many characters each
+# (about 4 for English; the ledger holds the real counts), and the history sizes it projects to
+chars_per_token = 4
+cost_demo_sizes = [6, 50, 500]
 
 [pipeline]
 # The steps, in the order they depend on each other: the one list run_all.ps1 and the
