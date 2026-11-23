@@ -603,7 +603,8 @@ mode = "hybrid"
 # The floor (23 Nov 2026): a document less similar than this to the question isn't a match by
 # meaning (cosine, -1 to 1). 0 = no floor. Set from tests/search_test.py's calibration on the
 # laptop (real Titan scores): above every off-topic question's best, below most right answers.
-min_similarity = 0
+min_similarity = 0.23               # 23 Nov 2026, Titan on the laptop: off-topic best 0.115-0.214; right answers
+                                     # lowest 0.168, a quarter below 0.280, median 0.331 (22 of 27 held-out asks above)
 rrf_k = 60                           # reciprocal rank fusion: 1 / (rrf_k + rank) from each list (the usual 60)
 
 [mcp]
