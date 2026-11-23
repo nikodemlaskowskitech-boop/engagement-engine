@@ -2028,7 +2028,15 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const S = Object.fromEntries(GROUPS.map((g) => [g.key, obStats(rows.filter((r) => r.welcome_group === g.key))]));
     const w = S["welcomed"], c = S["control (no email)"];
     if (w.mSdk == null || c.mSdk == null) $("ob-finding").textContent = `${segName()}: too few new accounts to compare (${w.n} welcomed, ${c.n} in the control group).`;
-    else $("ob-finding").textContent = `${segOn() ? segName() + ": the" : "The"} email gets accounts started ${Math.round(c.mSdk - w.mSdk)} days sooner (median ${w.mSdk} vs ${c.mSdk} days to SDK), but about the same share activate: ${pct(w.act, w.old)}% vs ${pct(c.act, c.old)}%.`;
+    else {
+      // the share that activates, said as it is (23 Nov 2026): "about the same" only within 5 points,
+      // and too few to tell under MIN_COMPARE accounts in either group
+      const wp = pct(w.act, w.old), cp = pct(c.act, c.old), counts = `${w.act} of ${w.old} vs ${c.act} of ${c.old}`;
+      const tail = w.old < MIN_COMPARE || c.old < MIN_COMPARE ? `; too few to compare how many activate (${counts}).`
+        : Math.abs(wp - cp) <= 5 ? `, but about the same share activate: ${wp}% vs ${cp}% (${counts}).`
+        : wp > cp ? `, and more activate: ${wp}% vs ${cp}% (${counts}).` : `, but fewer activate: ${wp}% vs ${cp}% (${counts}).`;
+      $("ob-finding").textContent = `${segOn() ? segName() + ": the" : "The"} email gets accounts started ${Math.round(c.mSdk - w.mSdk)} days sooner (median ${w.mSdk} vs ${c.mSdk} days to SDK)` + tail;
+    }
 
     // histogram: accounts per day from signing to SDK install, one row per group
     const host = $("ob-dots"); host.innerHTML = "";
@@ -2603,7 +2611,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const rows = Object.entries(by).map(([k, xs]) => ({ k, xs, arr: xs.reduce((t, r) => t + (r.lost_arr || 0), 0), seen: xs.filter((r) => r.flagged).length }))
       .sort((a, b) => b.arr - a.arr || b.xs.length - a.xs.length);
     const blind = rows.filter((r) => r.xs.length >= 3).sort((a, b) => a.seen / a.xs.length - b.seen / b.xs.length)[0];
-    $("oc-why-finding").textContent = `${segOn() ? segName() + ": " + rows[0].k : rows[0].k.replace(/^./, (c) => c.toUpperCase())} took the most, ${money(rows[0].arr)} across ${rows[0].xs.length} ${rows[0].xs.length === 1 ? "account" : "accounts"}` +
+    $("oc-why-finding").textContent = `${segOn() ? segName() + ": " : ""}"${rows[0].k.replace(/^./, (c) => c.toUpperCase())}" took the most, ${money(rows[0].arr)} across ${rows[0].xs.length} ${rows[0].xs.length === 1 ? "account" : "accounts"}` +
       (blind && blind.seen < blind.xs.length ? `; the flags saw "${blind.k}" coming least often, ${blind.seen} of ${blind.xs.length}.` : ".");
     $("oc-why").innerHTML = `<table class="nosort"><thead><tr><th>Reason</th><th class="r">Accounts</th><th class="r">ARR lost</th><th class="r">Flagged beforehand</th></tr></thead><tbody>` +
       rows.map((r) => `<tr class="click" tabindex="0" data-k="${esc(r.k)}"><td>${esc(r.k)}</td><td class="r num">${r.xs.length}</td><td class="r num">${money(r.arr)}</td><td class="r num">${r.seen} of ${r.xs.length}${r.xs.length >= 3 ? ` (${pct(r.seen, r.xs.length)}%)` : ""}</td></tr>`).join("") + "</tbody></table>";
@@ -2839,9 +2847,10 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const OPS = (D.settings && D.settings.operational) || {};
   const SIG_WIN = OPS.signal_weeks || 4, COV_DAYS = OPS.coverage_days || 60;
   const SIG_KINDS = [
-    ["churn", "Act", "Churn Act"], ["churn", "Shelfware", "Shelfware"], ["churn", "Watch", "Churn Watch"],
-    ["expansion", "Act", "Expansion Act"], ["expansion", "Watch", "Expansion Watch"],
-    ["activation", "Stalled", "Activation stalled"], ["activation", "Silent", "Activation silent"], ["qbr", "QBR overdue", "QBR overdue"],
+    ["churn", "Act", "Churn Act", "plan for the extra calls"], ["churn", "Shelfware", "Shelfware", "plan the adoption reviews"],
+    ["churn", "Watch", "Churn Watch", "keep an eye on them"], ["expansion", "Act", "Expansion Act", "plan the growth conversations"],
+    ["expansion", "Watch", "Expansion Watch", "plan the tracking checks"], ["activation", "Stalled", "Activation stalled", "plan the onboarding calls"],
+    ["activation", "Silent", "Activation silent", "plan the onboarding calls"], ["qbr", "QBR overdue", "QBR overdue", "book the QBRs"],
   ];
   function firedBy() {
     // week index -> Set of "id|flag|status"; a signal fires where it wasn't the week before
@@ -2862,7 +2871,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const rows = SIG_KINDS.map((k) => ({ k, n: now(k), b: before(k) })).filter((r) => r.n || r.b);
     const up = rows.filter((r) => r.n - r.b >= Math.max(3, r.b * 0.5)).sort((x, y) => (y.n - y.b) - (x.n - x.b));
     $("op-sig-finding").textContent = !rows.length ? `${segName()}: no signal fired in the last ${SIG_WIN * 2} weeks.`
-      : up.length ? `${segName()}: ${up[0].k[2]} fired ${up[0].n} times in the last ${SIG_WIN} weeks, against ${up[0].b} in the ${SIG_WIN} before: plan for the extra calls.`
+      : up.length ? `${segName()}: ${up[0].k[2]} fired ${up[0].n} times in the last ${SIG_WIN} weeks, against ${up[0].b} in the ${SIG_WIN} before: ${up[0].k[3]}.`
       : `${segName()}: ${rows.reduce((t, r) => t + r.n, 0)} signals in the last ${SIG_WIN} weeks, against ${rows.reduce((t, r) => t + r.b, 0)} in the ${SIG_WIN} before: no kind jumped.`;
     $("op-sig").innerHTML = `<table><thead><tr><th>Signal</th><th class="r">Last ${SIG_WIN} weeks</th><th class="r">The ${SIG_WIN} before</th><th class="r">Change</th></tr></thead><tbody>` +
       rows.map((r) => `<tr><td>${esc(r.k[2])}</td><td class="r num">${r.n}</td><td class="r num">${r.b}</td><td class="r num">${r.n === r.b ? "–" : (r.n > r.b ? "+" : "−") + Math.abs(r.n - r.b)}</td></tr>`).join("") + "</tbody></table>";
@@ -2973,7 +2982,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const pooled = open.filter((t) => teamById[t.routed_to] && teamById[t.routed_to].owner_type === "pool").length;
     $("tk-finding").textContent = !TASKS.length
       ? "No tasks sent yet: run .\\run_all.ps1 -Actions to send them, and the cockpit shows what became of each."
-      : `${segName()}: ${n.Open} open and ${n.Claimed} claimed tasks, ${open.filter((t) => t.age_days >= REACH(tierOf(t.account_id))).length} of them late (open longer than their tier's days to reach the customer: ${REACH_TEXT}). ${pooled} sit in a shared pool queue with nobody on them.`;
+      : `${segName()}: ${n.Open} open${n.Claimed ? ` and ${n.Claimed} claimed` : ""} ${n.Open + n.Claimed === 1 ? "task" : "tasks"}, ${open.filter((t) => t.age_days >= REACH(tierOf(t.account_id))).length} of them late (past ${REACH_TEXT})` +
+        (pooled ? `; ${pooled} in a pool queue with nobody named.` : ".");
     // what the viewer can do here
     const banner = $("tk-banner");
     const msg = !TASKS.length ? "" : saveError ? saveError
@@ -3448,9 +3458,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       { label: "What happened", from: 0, to: fActual, color: "var(--ink-2)", value: `${money(fActual)} <small>${(fActual / Math.max(1, point)).toFixed(1)} pts</small>`,
         onClick: () => caseList("What happened at these renewals", withOutcome.filter((r) => r[6] > 0 || r[7] > 0).map(asRow).sort((a, b) => (b.al || 0) - (a.al || 0)), FC_COLS) },
     ], fmax);
-    const gap = fData - fActual;
     $("cs-fc-finding").textContent = ahead.length
-      ? `${money(fData)} of renewals at risk by the data's rule; in the demo's known outcomes for these renewals ${money(fActual)} was really lost, so the rule ${Math.abs(gap) < 0.1 * Math.max(1, fActual) ? "was close" : gap > 0 ? `overstated it by ${money(gap)}` : `understated it by ${money(-gap)}`}.`
+      ? `${money(fData)} of renewals at risk by the data's rule; in the demo's known outcomes for these renewals, ${money(fActual)} was really lost.`
       : "No renewals in the next two quarters in this segment.";
     $("cs-fc-note").textContent = `The data's rule counts the whole ARR at Act and the unused part at Watch and Shelfware. Owners' forecasts replace it where they set one (${ownerCalls} so far). "What happened" is the demo's own future (renewal outcomes generated with the data): it shows how predictable the number is, the point of a forecast. Upside at these renewals: ${money(fUp)}.`;
 
@@ -4224,7 +4233,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const rest = accs.filter((a) => !fl(a, "churn") && !fl(a, "expansion")).sort((a, b) => (b.arr || 0) - (a.arr || 0));
     const sumOf = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
     const atRisk = sumOf(churn, (a) => valueOf(fl(a, "churn"))), bookArr = sumOf(accs, (a) => a.arr);
-    $("mb-port-finding").textContent = `${money(atRisk)} of ${name}'s ${money(bookArr)} ARR is at risk, across ${churn.length} of ${plural(accs.length, "account")}.`;
+    $("mb-port-finding").textContent = `${money(atRisk)} at risk sits on ${churn.length} of ${plural(accs.length, "account")}; the biggest first below.`;
     // the last thing CS did on the account, whatever it was, with its date and age
     // customer-facing actions only: a task claimed or reassigned is internal, not contact
     const CS_ACTION = { meeting_held: (t) => topicName(t.topic).replace(/^follow up$/, "follow-up call"), email_sent: (t) => `email: ${topicName(t.topic)}`,

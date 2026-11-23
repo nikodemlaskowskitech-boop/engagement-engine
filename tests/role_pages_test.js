@@ -67,6 +67,19 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
   }
   const full = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "views_data.json"), "utf8"));   // the whole export, to recompute from
   console.log("\nMy work (18 Nov 2026): a CSM's queue, by cash at stake per day left");
+  {   // Programmes says what the numbers say (23 Nov 2026: James's team read "about the same: 77% vs
+      // 100%" on 2 control accounts): too few under min_compare, "about the same" only within 5 points
+    for (const f of ["leader.html", "mgr_james.html", "mgr_sophie.html"]) {
+      const { p } = await open(f, "onboarding");
+      const t = await p.textContent("#ob-finding");
+      const m = t.match(/\((\d+) of (\d+) vs (\d+) of (\d+)\)/);
+      const ok = !m ? /too few new accounts/.test(t) : (() => {
+        const [w, wn, c, cn] = m.slice(1).map(Number), wp = Math.round(100 * w / wn), cp = Math.round(100 * c / cn);
+        return wn < 10 || cn < 10 ? /too few to compare/.test(t) : Math.abs(wp - cp) <= 5 ? /about the same/.test(t) : wp > cp ? /more activate/.test(t) : /fewer activate/.test(t); })();
+      check(ok, `${f}: Programmes' verdict on activation matches its own counts`, t);
+      await p.close();
+    }
+  }
   {   // promises (23 Nov 2026): Operational by team adds up to its finding; My work lists the
       // person's own, late first, the rest one click away
     const { p, errors } = await open("leader.html", "lead");

@@ -684,6 +684,14 @@ Read a file's entry before changing that file, and update the entry in the same 
   account by value, what's coming, what to pick up, know the account, it rolls up to the leader's
   page). Each step lights up the part it explains (.tour-focus) and the page gets room below so
   that part scrolls clear of the panel. The account shown: the biggest flagged one with documents.
+  The opening sentences, a pass (23 Nov 2026, "the opening sentences last"): one proposition each,
+  no repeats down a page. Operational's opening line drops "0 claimed" and the long aside ("past 7
+  days for Enterprise, 14 for Scale"); a signal that jumped names its own next step (tracking checks
+  for Expansion Watch, not "extra calls"); a loss reason reads in quotes; the leader's forecast line
+  states what was really lost, no verdict on the rule (Nikodem, 22 Nov: at risk ahead is normal);
+  Programmes says "about the same share activate" only within 5 points, more or fewer otherwise,
+  and too few to compare under min_compare in either group (James's team read "about the same:
+  77% vs 100%" on 2 control accounts); My book's list line says where the risk sits.
   The leader's tour rewritten (23 Nov 2026, the four places): eight steps, each lighting up its
   part: one account through the system, then report up (Performance tiles), the same everywhere?
   (by team, the zoom), what's coming (the Signals band), Operational's funnel, what we owe and
