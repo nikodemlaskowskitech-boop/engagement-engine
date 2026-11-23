@@ -252,6 +252,8 @@ def ranked(con, query, k=None, mode=None, synonyms=True, provider=None, account_
     mode = mode or EMBED.get("mode", "keywords")
     if mode not in ("keywords", "meaning", "hybrid"):
         raise ValueError(f"[embed] mode must be keywords, meaning or hybrid, not {mode!r}")
+    if has_code(query):                         # a code has no meaning: only the keywords can find it
+        mode = "keywords"
     if mode == "keywords":
         return search(con, query, k, account_id, synonyms)
     try:
@@ -264,6 +266,46 @@ def ranked(con, query, k=None, mode=None, synonyms=True, provider=None, account_
     if mode == "meaning":
         return by_meaning[:k]
     return fuse([search(con, query, k * 3, account_id, synonyms), by_meaning], k)
+
+
+# --- Codes and named accounts (23 Nov 2026) ------------------------------------------------
+# Searching "acc_087" put acc_087 last: Titan sees no meaning in a code, so every "CRM account:
+# acc_..." line looked as close, and the fusion lifted them over the one exact match. Codes go
+# to the keywords alone; an account named by its ID is an explicit search of that account only
+# (Nikodem: "if I asked for a specific account, no need to show anything else").
+ACCOUNT_ID = re.compile(r"\bacc_[a-z0-9]+\b", re.I)
+CODE = re.compile(r"\b[a-z]{2,5}-\d{2,}\b|\bacc_[a-z0-9]+\b", re.I)   # DL-118, INV-36164, acc_087
+_FILLER = {"account", "accounts", "show", "me", "all", "documents", "document", "docs", "everything", "about",
+           "what", "whats", "any", "list", "give", "find", "search", "please", "can", "you", "tell", "open", "see"}
+
+
+def has_code(query):
+    return bool(CODE.search(str(query)))
+
+
+def split_account(query):
+    """("acc_087 invoice") -> ("acc_087", "invoice"); ("show me acc_087") -> ("acc_087", "");
+    no account ID -> (None, query). The page turns an account's name into its ID first."""
+    q = str(query)
+    m = ACCOUNT_ID.search(q)
+    if not m:
+        return None, q.strip()
+    rest = re.sub(r"\s+", " ", q[:m.start()] + " " + q[m.end():]).strip(" ,.:;-")
+    words = [w for w in re.findall(r"[a-z0-9]+", rest.lower())
+             if len(w) > 1 and w not in CONF["stop_words"] and w not in _FILLER]
+    return m.group(0).lower(), (rest if words else "")
+
+
+def account_documents(con, account_id, k=None):
+    """One account's documents, newest first, in search()'s shape: the answer when the
+    question only names the account."""
+    if not re.fullmatch(r"[\w-]+", account_id):
+        raise ValueError(f"not an account ID: {account_id!r}")
+    rows = con.sql(f"""SELECT account_id, id, kind, date, title, text FROM documents
+                       WHERE account_id = '{account_id}' ORDER BY date DESC, id
+                       LIMIT {int(k or CONF['top_k'])}""").fetchall()
+    return [{"account_id": a, "id": i, "kind": kind, "date": str(day), "title": title, "score": 0.0,
+             "matched": [], "line": _best_line(text, [])} for a, i, kind, day, title, text in rows]
 
 
 def accounts(con, query, k=None, synonyms=True, mode=None, provider=None):

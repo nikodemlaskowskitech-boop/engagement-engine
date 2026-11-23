@@ -15,6 +15,10 @@ to Titan for its vector, and the keyword and meaning lists are merged (search.fu
 on the laptop. Titan in our own account, the question only, nothing stored by AWS
 (PRIVACY.md §13). Any failure there (throttled, quota, no permission) answers with the
 keywords alone: a search always answers. MODE=keywords: no model call at all.
+An account ID in the question (23 Nov 2026; the page turns a name into it) makes it an explicit
+search of that account: its documents only, ranked by the rest of the question, or newest
+first when nothing else was asked. A code (an account ID, DL-118, INV-36164) goes to the
+keywords alone: Titan sees no meaning in it.
 
 What it never does: write the question anywhere. No log line holds it, an error is
 reported by its type only (a message could quote the question), and the API's access
@@ -35,6 +39,7 @@ MODE = os.environ.get("MODE", "keywords")         # hybrid only with vectors.jso
 MODEL = os.environ.get("MODEL", "")
 DIMS = int(os.environ.get("DIMS", "512"))
 REGION = os.environ.get("REGION", "")
+ACCOUNT_DOCS = 30                                 # one account, no question: its newest documents
 QUESTION_CHARS = 2000                             # far over MAX_CHARS: a guard, not a limit
 
 _con = None              # the index, built once per cold start and kept while warm
@@ -68,15 +73,16 @@ def embed(q):
     return json.loads(_bedrock.invoke_model(modelId=MODEL, body=body)["body"].read())["embedding"]
 
 
-def rank(con, q, k):
+def rank(con, q, k, account_id=None):
     """Keywords always; in hybrid, merged with the closest documents by meaning. Returns the
-    hits and how they were ranked (the page shows it)."""
+    hits and how they were ranked (the page shows it). A code (DL-118, acc_087) has no
+    meaning: keywords only, and no model call. account_id = that account's documents only."""
     import search
-    words = search.search(con, q, k=k)
-    if MODE != "hybrid":
+    words = search.search(con, q, k=k, account_id=account_id)
+    if MODE != "hybrid" or search.has_code(q):
         return words, "keywords"
     try:
-        near = search.by_vector(con, embed(q), k=k, query=q)
+        near = search.by_vector(con, embed(q), k=k, account_id=account_id, query=q)
     except Exception as e:                                # noqa: BLE001: the type only, never the message
         print(f"meaning unavailable, keywords only: {type(e).__name__}")
         return words, "keywords"
@@ -99,6 +105,20 @@ def handler(event, context=None):
         return _reply(400, {"error": "Ask a question: /search?q=..."})
     if len(q) > MAX_CHARS:
         return _reply(400, {"error": f"Questions up to {MAX_CHARS} characters"})
+    import search
+    account, rest = search.split_account(q)
+    if account:                                   # an explicit search of one account (23 Nov 2026)
+        try:
+            con = _index()
+            if rest:
+                hits, how = rank(con, rest, TOP_K * 4, account)
+            else:
+                hits, how = search.account_documents(con, account, ACCOUNT_DOCS), "newest"
+        except Exception as e:                    # noqa: BLE001: the type only, never the message
+            print(f"search failed: {type(e).__name__}")
+            return _reply(500, {"error": "Search unavailable, try again in a minute"})
+        docs = [{k: h[k] for k in ("id", "kind", "date", "title", "line", "matched")} for h in hits]
+        return _reply(200, {"account": account, "documents": docs, "ranked_by": how}, cache=True)
     try:
         hits, how = rank(_index(), q, TOP_K * 5)                 # enough documents to fill TOP_K accounts
     except Exception as e:                                    # noqa: BLE001: the type only, never the message

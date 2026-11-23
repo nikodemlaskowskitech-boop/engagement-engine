@@ -251,12 +251,36 @@ def safe_json(obj):
     return json.dumps(obj, separators=(",", ":")).replace("</", "<\\/")
 
 
-def write_search_page(out):
-    """The public site's search page (13 Nov 2026): site_search.html with the example questions
-    and limits from settings. Site only: it calls /search, which exists only there."""
+def search_accounts(export):
+    """The accounts the public search can find, as the page shows them (23 Nov 2026): name, tier,
+    ARR and open flags, for the accounts in its documents only. The documents have the company
+    removed (redaction); the name comes from the cockpit's own facts, the same fake names the
+    site already shows, so a result reads "Maple Energy", not "acc_001", and typing a name
+    finds the account."""
+    import research                                    # its rows(): the file, on the laptop and in the engine Lambda
+    ids = {d["account_id"] for d in research.rows()}
+    out = {}
+    for a in export["accounts"]:
+        if a["account_id"] in ids:
+            # "Churn Act", "Expansion Watch", "Shelfware", "QBR coming up": the cockpit's own words,
+            # the most urgent first; Activated is good news, not a flag to show
+            flags = [f"{f['flag'].capitalize()} {f['status']}" if f["status"] in ("Act", "Watch") else f["status"]
+                     for f in sorted(a.get("flags", []), key=lambda f: (f["status"] != "Act", f["flag"] != "churn"))
+                     if f.get("status") and f["status"] != "Activated"]
+            out[a["account_id"]] = {"n": a["account_name"], "t": a["tier"], "a": round(a.get("arr") or 0),
+                                    "f": flags[:2]}
+    return dict(sorted(out.items()))
+
+
+def write_search_page(out, export):
+    """The public site's search page (13 Nov 2026): site_search.html with the example questions,
+    limits from settings and the accounts it can find (search_accounts). Site only: it calls
+    /search, which exists only there."""
     search = SETTINGS["search"]
     html = (SEARCH_TEMPLATE.read_text(encoding="utf-8")
             .replace("__EXAMPLES__", safe_json(search["site_examples"]))
+            .replace("__ACCOUNTS__", safe_json(search_accounts(export)))
+            .replace("__CURRENCY__", safe_json(SETTINGS["money"]["currency"]))
             .replace("__TOP_K__", str(search["site_top_k"]))
             .replace("__MAX_CHARS__", str(SETTINGS["aws"]["search_max_chars"])))
     (out / search["site_page"]).write_text(html, encoding="utf-8")
@@ -307,7 +331,7 @@ def build(export, template=None, out=PAGES, sandbox=False):
         (out / files[pid]).write_text(text, encoding="utf-8")
         written[pid] = (files[pid], len(meta["accounts"]))
     if sandbox:
-        write_search_page(out)
+        write_search_page(out, export)
     landing = files[ROLES["leader_id"]] if ROLES["landing"] == "leader" else files[ROLES["landing"]]
     (out / "index.html").write_text((out / landing).read_text(encoding="utf-8"), encoding="utf-8")
     return written
