@@ -184,20 +184,27 @@ def _vectors(con):
                        columns = {{account_id: 'VARCHAR', id: 'VARCHAR', vector: 'DOUBLE[]'}})""")
 
 
-def meaning(con, query, k=None, provider=None):
+def meaning(con, query, k=None, provider=None, account_id=None):
     """The k documents closest in meaning to the question (cosine of the vectors), best first,
-    in search()'s shape. The question is embedded by the same model as the documents."""
+    in search()'s shape. The question is embedded by the same model as the documents.
+    account_id = one account's documents only."""
     import embed
     k = int(k or CONF["top_k"])
     q = str(query).strip()
     if not q:
         return []
+    only = ""
+    if account_id:
+        if not re.fullmatch(r"[\w-]+", account_id):
+            raise ValueError(f"not an account ID: {account_id!r}")
+        only = f"WHERE v.account_id = '{account_id}'"
     _vectors(con)
     qv = "[" + ",".join(f"{x:.6f}" for x in embed.embed_query(q, provider)) + "]::DOUBLE[]"
     rel = con.sql(f"""
         SELECT v.account_id, v.id, d.kind, d.date, d.title,
                round(list_cosine_similarity(v.vector, {qv}), 4) AS score, d.text
         FROM doc_vectors v JOIN documents d USING (account_id, id)
+        {only}
         ORDER BY score DESC, v.account_id, v.id
         LIMIT {k}""")
     words = [w for w in re.findall(r"[a-z]+", q.lower()) if len(w) > 3]
@@ -206,20 +213,33 @@ def meaning(con, query, k=None, provider=None):
             for a, i, kind, day, title, score, text in rel.fetchall()]
 
 
-def ranked(con, query, k=None, mode=None, synonyms=True, provider=None):
+_fell_back = False                # warn once per process, not once per question
+
+
+def ranked(con, query, k=None, mode=None, synonyms=True, provider=None, account_id=None):
     """The documents, ranked the [embed] mode's way: keywords (BM25), meaning (vectors) or
     hybrid (both lists merged by reciprocal rank fusion: each list adds 1 / (rrf_k + rank),
-    so a document high in either list rises, and high in both rises most)."""
+    so a document high in either list rises, and high in both rises most).
+    With no vectors yet, or no answer from the model (not signed in to AWS, offline), it
+    says so once and falls back to keywords: a search always answers (23 Nov 2026)."""
+    global _fell_back
     k = int(k or CONF["top_k"])
     mode = mode or EMBED.get("mode", "keywords")
-    if mode == "keywords":
-        return search(con, query, k, synonyms=synonyms)
-    if mode == "meaning":
-        return meaning(con, query, k, provider)
-    if mode != "hybrid":
+    if mode not in ("keywords", "meaning", "hybrid"):
         raise ValueError(f"[embed] mode must be keywords, meaning or hybrid, not {mode!r}")
+    if mode == "keywords":
+        return search(con, query, k, account_id, synonyms)
+    try:
+        by_meaning = meaning(con, query, k * 3, provider, account_id)
+    except Exception as e:                       # noqa: BLE001 (any failure: the keywords still answer)
+        if not _fell_back:
+            print(f"search: {mode} unavailable ({type(e).__name__}: {str(e)[:120]}); keywords only", file=sys.stderr)
+            _fell_back = True
+        return search(con, query, k, account_id, synonyms)
+    if mode == "meaning":
+        return by_meaning[:k]
     rrf = int(EMBED.get("rrf_k", 60))
-    lists = [search(con, query, k * 3, synonyms=synonyms), meaning(con, query, k * 3, provider)]
+    lists = [search(con, query, k * 3, account_id, synonyms), by_meaning]
     best, fused = {}, {}
     for hits in lists:
         for rank, h in enumerate(hits, 1):

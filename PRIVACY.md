@@ -338,8 +338,8 @@ embed.py turns each document into a vector with Amazon Titan Text Embeddings V2,
 own AWS account and region (eu-north-1, the [aws] profile; no API key). What it sends is only the
 redacted documents file (§6): the same text the public search already carries, so no name, email,
 phone or company leaves the laptop for this. The vectors file (data/, git-ignored) holds IDs,
-the model, a hash and the numbers: no text. A question asked by meaning is sent to the same model
-as typed, so it should be worded like any search ("who needs more capacity?"), not with a
+the model, a hash and the numbers: no text. A question asked by meaning (ask.py and the MCP server's
+search, hybrid since 23 Nov 2026) is sent to the same model as typed, so it should be worded like any search ("who needs more capacity?"), not with a
 customer's personal details. AWS states that Bedrock doesn't store or use the inputs to train
 models; the call is logged in our AI spend ledger like every other model call.
 

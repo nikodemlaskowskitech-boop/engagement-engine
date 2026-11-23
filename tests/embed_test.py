@@ -102,8 +102,18 @@ check((kw[0]["account_id"], kw[0]["id"]) in {(h["account_id"], h["id"]) for h in
 check(search.ranked(con, q, 10, "keywords") == kw, "keywords mode is exactly search(): nothing moved for it")
 acc = search.accounts(con, q, 10, mode="hybrid", provider="stand-in")
 check(len(acc) == len({a["account_id"] for a in acc}) and len(acc) <= 10, "accounts(): each account once, at most 10")
+one = search.meaning(con, q, 5, "stand-in", account_id=kw[0]["account_id"])
+check(one and all(h["account_id"] == kw[0]["account_id"] for h in one), "meaning() for one account: only that account's documents")
+check(all(h["account_id"] == kw[0]["account_id"] for h in search.ranked(con, q, 5, "hybrid", provider="stand-in", account_id=kw[0]["account_id"])),
+      "hybrid for one account: only that account's documents")
 search.VECTORS_FILE = Path(tempfile.mkdtemp()) / "none.jsonl"
 fresh = connect(); search.add_views(fresh)
+import contextlib, io                              # noqa: E401,E402
+err = io.StringIO()
+with contextlib.redirect_stderr(err):
+    fell = search.ranked(fresh, q, 10, "hybrid", provider="stand-in")
+check(fell == search.search(fresh, q, 10) and "keywords only" in err.getvalue() and search._fell_back,
+      "no vectors: hybrid says so once and answers with the keywords (a search always answers)", err.getvalue())
 try:
     search.meaning(fresh, q, 5, "stand-in")
     check(False, "no vectors file: a clear error")

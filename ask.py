@@ -64,7 +64,7 @@ def gather(con, account_id, question):
         entry = {"account_id": account_id, "company": account["account_name"],
                  "helpdesk_org": account["account_name"], "email_domain": ""}
         docs, known = [], []
-    hits = search.search(con, question, k=int(CONF["top_k"]), account_id=account_id) if docs else []
+    hits = search.ranked(con, question, int(CONF["top_k"]), account_id=account_id) if docs else []   # [embed] mode (23 Nov 2026)
     picked = {h["id"] for h in hits}
     chosen = [d for d in docs if d["id"] in picked]               # oldest first, like the brief
     clean, key = handover.cleaner(entry, team, facts, docs, known)

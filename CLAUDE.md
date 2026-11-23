@@ -345,8 +345,8 @@ Tests: `tests/`, one file per area (see Testing above).
   optimistic: written knowing the corpus; on a held-out set written apart, 72% -> 90%); redacted
   results (search.redacted, PRIVACY.md §6) built the same day; the public search on the demo site
   (#166-169) and the local MCP server (mcp_server.py) the same day; "ask about this account" (ask.py) 14 Nov 2026; vectors next to
-  keywords built 22 Nov 2026 (embed.py, Titan on Bedrock; measured on the laptop, then grow the corpus to 45
-  accounts); next a remote MCP server (sign-in first), an AI
+  keywords built 22 Nov 2026 (embed.py, Titan on Bedrock; held-out recall keywords 90%, meaning 94%,
+  hybrid 96%, so hybrid for ask.py and the MCP server since 23 Nov; next grow the corpus to 45 accounts); next a remote MCP server (sign-in first), an AI
   cost demo (AI_COST.md), and last a live Ask box in the cockpit.
 - Bedrock quota for Claude declined again 17 Nov 2026 (new account): no need to ask; AWS
   re-evaluates by itself as usage builds. Briefs use the Anthropic API meanwhile. Lambda concurrency

@@ -139,6 +139,15 @@ else:
               f"hybrid {got['hybrid']}/{want} ({got['hybrid'] / want:.0%})")
     search.VECTORS_FILE = None
     print(f"  ([embed] mode today: {SETTINGS['embed']['mode']}; held back by the leak check, held-out: {len(held_h)})")
+    # the floors for hybrid (23 Nov 2026, the mode since): never below keywords, on either set,
+    # and the held-out bar; a search that fell back to keywords measured nothing, so it fails
+    check(not search._fell_back, "every question reached the model (no fall-back to keywords)",
+          "sign in: aws login --profile cairnpath")
+    for label, want, got in rows:
+        check(got["hybrid"] >= got["keywords"], f"{label}: hybrid finds at least what keywords find ({got['hybrid']} vs {got['keywords']})")
+    held = rows[1]
+    check(held[2]["hybrid"] / held[1] >= float(CONF["min_heldout_recall"]),
+          f"held-out: hybrid recall {held[2]['hybrid'] / held[1]:.0%} at least [search] min_heldout_recall ({float(CONF['min_heldout_recall']):.0%})")
 
 print("\nRedacted results: the only form that may leave the laptop")
 import csv as _csv                                   # noqa: E402
