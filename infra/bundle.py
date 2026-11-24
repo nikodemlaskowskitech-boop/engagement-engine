@@ -104,7 +104,7 @@ def site_accounts(out, export=None):
     say how old they are. Built at deploy from the laptop's views_data.json; none = no file,
     and list_accounts answers an empty list."""
     sys.path.insert(0, str(REPO))
-    from settings import OUTPUTS
+    from settings import OUTPUTS, SETTINGS
     target = out / "accounts.json"
     if export is None:
         src = OUTPUTS / "views_data.json"
@@ -112,7 +112,8 @@ def site_accounts(out, export=None):
             return None
         export = json.loads(src.read_text(encoding="utf-8"))
     import roles
-    target.write_text(json.dumps({"as_of": export["as_of"], "accounts": roles.search_accounts(export)},
+    target.write_text(json.dumps({"as_of": export["as_of"], "currency": SETTINGS["money"]["currency"],
+                                  "accounts": roles.search_accounts(export)},
                                  separators=(",", ":")), encoding="utf-8")
     return target
 
