@@ -347,8 +347,15 @@ def cases(con, hits, newest=False):
         for d in members:
             if d["team"]:
                 teams[d["team"]] = teams.get(d["team"], 0) + 1
+        # the title: the ticket's subject, unless the talk moved on after it (24 Nov 2026: Alder Media's
+        # case was titled "Full export of historical data", an old ticket, while its emails were a
+        # contract review ahead of renewal): then the newest email's or call's subject
+        last_ticket = max((d["date"] for d in members if d["kind"] == "S"), default="")
+        later = [d for d in members if d["kind"] != "S" and d["date"] > last_ticket]
+        title = (_PREFIX.sub("", later[-1]["title"]).strip() if tickets and later
+                 else tickets[-1].group(3) if tickets else _PREFIX.sub("", members[0]["title"]).strip())
         acc["cases"][case] = {
-            "case": case, "title": tickets[-1].group(3) if tickets else _PREFIX.sub("", members[0]["title"]).strip(),
+            "case": case, "title": title,
             "status": tickets[-1].group(2) if tickets else "", "n": len(members),
             "first": members[0]["date"], "last": members[-1]["date"], "teams": teams,
             "best": {k: h[k] for k in ("id", "kind", "date", "title", "line", "matched")}, "docs": members}
