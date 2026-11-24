@@ -97,6 +97,8 @@ la = json.loads(text(r))
 check(la["count"] == len(acc["accounts"]) and la["as_of"] == acc["as_of"]
       and [x["arr"] for x in la["accounts"]] == sorted((x["arr"] for x in la["accounts"]), reverse=True)
       and all(x["name"] for x in la["accounts"]), "list_accounts: every account, biggest ARR first, with its name and the as-of date")
+check(la["currency"] == SETTINGS["money"]["currency"] and all(x["currency"] == la["currency"] for x in la["accounts"]),
+      f"...and the currency with every amount ({la['currency']}): the model shouldn't have to guess")
 churn = json.loads(text(tool("list_accounts", {"flag": "churn", "tier": "Enterprise"})))
 check(all(x["tier"] == "Enterprise" and any("churn" in f.lower() for f in x["flags"]) for x in churn["accounts"]),
       f"...filtered by tier and flag ({churn['count']} Enterprise accounts with a churn flag)")

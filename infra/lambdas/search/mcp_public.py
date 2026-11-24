@@ -5,7 +5,7 @@ has to open for anyone (Nikodem). It runs inside the public search function: sam
 same role (no data bucket, no key, no secret), same redacted file. What keeps it cheap and safe:
 
   - read-only, and only what the public site already shows: the redacted documents and the
-    account list of the search page (names, tier, ARR, open flags, as of the bundle's date);
+    account list of the search page (names, tier, ARR with its currency, open flags, as of the bundle's date);
   - keywords only: no model call, so a visitor can't run up a Bedrock bill through it;
   - its own gateway limit ([aws] mcp_rate_per_second, mcp_burst) and the function's ceiling
     of [aws] search_max_runs at once, shared with the search;
@@ -49,7 +49,8 @@ TOOLS = [
      "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}},
     {"name": "list_accounts",
      "title": "List the demo accounts",
-     "description": "The demo accounts the documents cover: name, ID, tier, ARR and open flags "
+     "description": "The demo accounts the documents cover: name, ID, tier, ARR (annual recurring revenue, "
+                    "in the currency given) and open flags "
                     "(e.g. 'Churn Act', 'Shelfware', 'QBR coming up'), biggest ARR first. Filter by "
                     "tier (Enterprise, Scale) or by words in a flag (e.g. 'churn').",
      "inputSchema": {"type": "object", "properties": {
@@ -102,8 +103,9 @@ def _account_id(text):
 
 def _card(aid):
     a = accounts()["accounts"].get(aid, {})
+    # the currency with every amount (24 Nov 2026: Claude's first answer said "I've assumed it's in euros")
     return {"account_id": aid, "name": a.get("n", ""), "tier": a.get("t", ""), "arr": a.get("a", 0),
-            "flags": a.get("f", [])}
+            "currency": accounts().get("currency", ""), "flags": a.get("f", [])}
 
 
 def _case(c, docs=False):
@@ -123,7 +125,8 @@ def call(con, name, args):
         rows = [r for r in rows if (not tier or r["tier"].lower() == tier)
                 and (not flag or any(flag in f.lower() for f in r["flags"]))]
         rows.sort(key=lambda r: (-r["arr"], r["account_id"]))
-        return {"as_of": accounts()["as_of"], "count": len(rows), "accounts": rows}
+        return {"as_of": accounts()["as_of"], "currency": accounts().get("currency", ""), "count": len(rows),
+                "accounts": rows}
     if name == "account_cases":
         aid = _account_id(args.get("account"))
         if not aid:
