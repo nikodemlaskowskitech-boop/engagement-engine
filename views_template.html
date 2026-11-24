@@ -1135,6 +1135,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const SEG_KEY = "cockpit-seg" + (PAGE ? "-" + PAGE.person : "");
   if (PAGE && PAGE.role === "manager") seg.manager = PAGE.person;                 // a manager opens on their team
   if (PAGE && (PAGE.role === "csm" || PAGE.role === "member")) seg.owner = PAGE.person;   // a CSM on their own book
+  // the search page opens in this person's order (24 Nov 2026): a leader or manager by ARR, a CSM by best match
+  if (PAGE && PAGE.role) document.addEventListener("click", (e) => {
+    const a = e.target.closest && e.target.closest('a[href="search.html"]');
+    if (a) a.setAttribute("href", "search.html?view=" + encodeURIComponent(PAGE.role));
+  }, true);
   // arriving through the switcher: the person's own defaults, never a filter saved earlier
   const SWITCHED = (() => { try { const s = sessionStorage.getItem("cockpit-switched"); sessionStorage.removeItem("cockpit-switched"); return !!s; } catch (e) { return false; } })();
   if (!SWITCHED) try { const saved = JSON.parse(localStorage.getItem(SEG_KEY) || "{}"); for (const k in seg) if (typeof saved[k] === "string") seg[k] = saved[k]; } catch (e) { /* no storage here */ }

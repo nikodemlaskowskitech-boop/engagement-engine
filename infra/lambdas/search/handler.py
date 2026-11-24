@@ -33,6 +33,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 TOP_K = int(os.environ.get("TOP_K", "5"))
+POOL = TOP_K * 2                                  # accounts returned: the page shows TOP_K of them
 MAX_CHARS = int(os.environ.get("MAX_CHARS", "200"))
 CACHE_SECONDS = int(os.environ.get("CACHE_SECONDS", "3600"))
 MODE = os.environ.get("MODE", "keywords")         # hybrid only with vectors.jsonl in the bundle
@@ -122,7 +123,9 @@ def handler(event, context=None):
         return _reply(200, {"account": account, "documents": docs, "ranked_by": how,
                             "cases": grouped[0]["cases"] if grouped else []}, cache=True)
     try:
-        hits, how = rank(_index(), q, TOP_K * 5)                 # enough documents to fill TOP_K accounts
+        # twice TOP_K accounts (24 Nov 2026): the page orders them by relevance or by ARR and
+        # shows TOP_K, so "biggest ARR first" picks among strong matches, not just the first five
+        hits, how = rank(_index(), q, POOL * 5)                  # enough documents to fill POOL accounts
     except Exception as e:                                    # noqa: BLE001: the type only, never the message
         print(f"search failed: {type(e).__name__}")
         return _reply(500, {"error": "Search unavailable, try again in a minute"})
@@ -130,7 +133,7 @@ def handler(event, context=None):
     accounts = {}
     for h in hits:
         if h["account_id"] not in accounts:
-            if len(accounts) == TOP_K:
+            if len(accounts) == POOL:
                 continue
             accounts[h["account_id"]] = {
                 "account_id": h["account_id"], "score": h["score"],
