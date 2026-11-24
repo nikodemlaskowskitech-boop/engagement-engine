@@ -498,8 +498,12 @@ class DataStack(Stack):
                 # the route first, then the stage that limits it: without this CloudFormation updated
                 # the stage first and API Gateway refused a limit on a route it didn't have yet
                 # (24 Nov 2026, the first deploy: "Unable to find Route by key POST /mcp")
+                stage = search_stage.node.default_child
+                # add_resource_dependency is the current name; add_dependency is deprecated (CDK
+                # warned on 24 Nov 2026) but kept as the fallback for an older aws-cdk-lib
+                depend = getattr(stage, "add_resource_dependency", None) or stage.add_dependency
                 for r in mcp_routes:
-                    search_stage.node.default_child.add_dependency(r.node.default_child)
+                    depend(r.node.default_child)
             # the access log: when and what we answered, never the question (the route has no
             # query string in it: "GET /search")
             search_stage.node.default_child.access_log_settings = apigwv2.CfnStage.AccessLogSettingsProperty(
