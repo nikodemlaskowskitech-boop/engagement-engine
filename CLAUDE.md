@@ -62,7 +62,8 @@ Docs-only PRs need none.
 | A PR that touches | Runs |
 | --- | --- |
 | the engine (any step, settings) | `check_inputs.py`, `check_flags.py`, `backtest.py`, `tests/pipeline_test.py`, `tests/journeys_test.py` |
-| `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py`, `tests/data_gaps_test.py` (bad data: never guess, never crash) |
+| `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py`, `tests/data_gaps_test.py` (bad data: never guess, never crash), `tests/contract_terms_test.py` (each day against the contract in force) |
+| `generate_events.py`, `generate_documents.py`, the flags, the history; after a regenerate | `tests/heroes_test.py` (the four hero accounts' two-year stories still hold; reads data/) |
 | `ingest.py` | `tests/store_test.py` |
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
 | `documents.py` | `tests/documents_test.py`, plus the handover row |
@@ -250,7 +251,9 @@ account's owner ("Risk hidden") only when a risk can still be seen without it.
 - Users are pseudonymised before anything reaches an LLM.
 - Use the data's as-of date (max event date), never today().
 - Utilisation divides by days live in the window (max 30), so new
-  accounts aren't penalised and silent days still count.
+  accounts aren't penalised and silent days still count, and each day
+  by the contract in force that day (contract_terms: a renewal that
+  changed the volume isn't a fall or a jump in usage).
 
 
 ## The shape
@@ -296,7 +299,7 @@ Engine:
 - `settings.local.toml`: a company's own data and personal settings (git-ignored).
 - `cairnpath_db.py`: `connect()` and every shared view, defined once.
 - `ingest.py`: the events store (Parquet plus a stamp of its input files).
-- `generate_events.py`: the demo data: ~500 accounts with personalities, two years (year one written apart, so today's year is unchanged).
+- `generate_events.py`: the demo data: ~500 accounts with personalities, two years (year one written apart, so today's year is unchanged), four hero accounts (HEROES) with set arcs.
 - `generate_documents.py`: the search corpus: tickets, emails, calls for 30 accounts, with an answer key.
 - `check_inputs.py`: the inputs against the data contract.
 - `flags.py`: activation, churn, expansion and QBR flags, with value at stake, and data missing.

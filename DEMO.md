@@ -112,5 +112,16 @@ file. Change the settings, rerun, and compare."
 
 - **Technical or TAM audience:** swap step 3 for 30 seconds on the threat model
   (THREAT_MODEL.md): every way in, its control, and the test that proves it.
+- **Four stories, two years each** (24 Nov 2026; `tests/heroes_test.py` keeps them true after
+  every regenerate). Pick the one that fits the audience:
+  - *Nettle Foods* (growth): signed Dec 2024, expanded at its first renewal, a June wobble
+    caught and called within two weeks, now heading past its contract (expansion Act).
+  - *Yarrow Studio* (churn caught early): a calm year and a half, then falling since summer;
+    churn Act and a call the same week, renewal in January.
+  - *Driftwood Labs* (shelfware): Shelfware in every week of two years, renewed flat twice
+    with nobody asking why; renewal in under a month. "Right-size it, keep the logo."
+  - *Alder Media* (the missed signal): a June ticket asks Support for a full data export "for
+    a vendor comparison"; in October an email mentions a competitor's contract; the CSM's last
+    meeting was in September. Search "Alder Media export", then show No meeting in 30 days.
 - **More time:** pin three accounts on Sophie's page, then switch to Lukas
   (they travel) and to James (they're left behind, and the note says so).

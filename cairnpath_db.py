@@ -213,6 +213,38 @@ def connect():
     else:
         con.sql("""CREATE VIEW renewal_history AS SELECT NULL::VARCHAR AS account_id, NULL::DATE AS renewal_date,
                    NULL::VARCHAR AS outcome, NULL::DOUBLE AS renewal_arr, NULL::DOUBLE AS arr_before WHERE false""")
+    # The contract volume in force on any day (24 Nov 2026, two years of data). The CRM holds
+    # only today's term, so an account that expanded in January looked, in every week before
+    # it, as if it used a fraction of a contract it hadn't bought yet: history.py showed Yarrow
+    # Studio as Shelfware for all of 2025. A closed renewal's ARR before and after gives the
+    # term before it: volume x arr_before / today's ARR (list price per event, so ARR moves
+    # with the volume). Terms run [valid_from, valid_to); with no renewal history, one term.
+    con.sql("""
+        CREATE VIEW contract_terms AS
+        WITH r AS (
+            SELECT h.account_id, h.renewal_date, h.arr_before,
+                   lag(h.renewal_date) OVER (PARTITION BY h.account_id ORDER BY h.renewal_date) AS prev
+            FROM renewal_history h
+            WHERE h.arr_before > 0
+        )
+        SELECT r.account_id, coalesce(r.prev, DATE '1900-01-01') AS valid_from, r.renewal_date AS valid_to,
+               CASE WHEN c.arr > 0 THEN round(c.contracted_events * r.arr_before / c.arr)
+                    ELSE c.contracted_events END AS contracted_events
+        FROM r JOIN crm_all c USING (account_id)
+        UNION ALL
+        SELECT c.account_id,
+               coalesce((SELECT max(h.renewal_date) FROM renewal_history h
+                         WHERE h.account_id = c.account_id AND h.arr_before > 0), DATE '1900-01-01'),
+               DATE '9999-12-31', c.contracted_events
+        FROM crm_all c
+    """)
+    # the volume on day d, for one account (NULL with no contract volume: data_gaps says so)
+    con.sql("""
+        CREATE MACRO contract_on(acc, d) AS (
+            SELECT t.contracted_events FROM contract_terms t
+            WHERE t.account_id = acc AND d >= t.valid_from AND d < t.valid_to)
+    """)
+
     cols = "period_start, period_end, starting_arr, new_logo_arr, expansion_arr, contraction_arr, churned_arr, ending_arr"
     if bridge_file.exists():
         con.sql(f"""CREATE VIEW arr_bridge AS
@@ -259,7 +291,7 @@ def connect():
                END AS days_measured,
                round(l.events_30d * 365
                      / least(30, a.as_of_date - f.go_live_date + 1)
-                     / c.contracted_events * 100) AS utilisation_pct
+                     / contract_on(c.account_id, a.as_of_date) * 100) AS utilisation_pct   -- the term in force
         FROM crm c
         CROSS JOIN as_of a
         LEFT JOIN first_seen f ON f.account_id = c.account_id
@@ -284,23 +316,27 @@ def connect():
             SELECT l.account_id, l.contracted_events,
                    -- month 1 has a start too: with more than 90 days of data, "older than
                    -- 60 days" was the whole history, not one month (found 12 Nov 2026)
-                   sum(e.properties.event_count) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
-                       AND e.event_date > l.as_of_date - 90 AND e.event_date <= l.as_of_date - 60) AS vol_m1,
-                   sum(e.properties.event_count) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
-                       AND e.event_date > l.as_of_date - 60 AND e.event_date <= l.as_of_date - 30) AS vol_m2,
-                   sum(e.properties.event_count) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
-                       AND e.event_date > l.as_of_date - 30) AS vol_m3,
+                   sum(e.properties.event_count / t.contracted_events) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
+                       AND e.event_date > l.as_of_date - 90 AND e.event_date <= l.as_of_date - 60) AS share_m1,
+                   sum(e.properties.event_count / t.contracted_events) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
+                       AND e.event_date > l.as_of_date - 60 AND e.event_date <= l.as_of_date - 30) AS share_m2,
+                   sum(e.properties.event_count / t.contracted_events) FILTER (WHERE e.event_name = '{USAGE_EVENT}'
+                       AND e.event_date > l.as_of_date - 30) AS share_m3,
                    count(DISTINCT e.user_id) FILTER (WHERE e.event_date > l.as_of_date - 90
                                                        AND e.event_date <= l.as_of_date - 60) AS users_m1,
                    count(DISTINCT e.user_id) FILTER (WHERE e.event_date > l.as_of_date - 30) AS users_m3
             FROM live l
             JOIN events e ON e.account_id = l.account_id
+            -- each day's volume as a share of the contract in force that day (contract_terms):
+            -- a renewal that changed the volume isn't a fall or a jump in usage
+            LEFT JOIN contract_terms t ON t.account_id = e.account_id
+                                      AND e.event_date >= t.valid_from AND e.event_date < t.valid_to
             GROUP BY l.account_id, l.contracted_events
         )
         SELECT account_id,
-               round(vol_m1 * 365 / 30 / contracted_events * 100) AS util_m1,
-               round(vol_m2 * 365 / 30 / contracted_events * 100) AS util_m2,
-               round(vol_m3 * 365 / 30 / contracted_events * 100) AS util_m3,
+               round(share_m1 * 365 / 30 * 100) AS util_m1,
+               round(share_m2 * 365 / 30 * 100) AS util_m2,
+               round(share_m3 * 365 / 30 * 100) AS util_m3,
                users_m1,
                users_m3
         FROM sums
@@ -357,11 +393,14 @@ def connect():
                          ROWS BETWEEN 29 PRECEDING AND CURRENT ROW)
         )
         SELECT r.account_id, r.event_date,
-               round(r.vol_30d * 365.0 / 30 / c.contracted_events * 100) AS util
+               round(r.vol_30d * 365.0 / 30 / t.contracted_events * 100) AS util
         FROM rolling r
         JOIN crm c USING (account_id)
+        -- the contract in force that day (contract_terms), not today's
+        JOIN contract_terms t ON t.account_id = r.account_id
+                             AND r.event_date >= t.valid_from AND r.event_date < t.valid_to
         WHERE r.days_in_window = 30          -- a full 30 days, or it isn't comparable
-          AND c.contracted_events > 0        -- no contract volume, no utilisation (flags.py's data_gaps says so)
+          AND t.contracted_events > 0        -- no contract volume, no utilisation (flags.py's data_gaps says so)
     """)
 
     # The last touch per account, for journeys ("no meeting in 30 days") and
