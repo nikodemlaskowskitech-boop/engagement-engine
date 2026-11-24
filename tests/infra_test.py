@@ -569,6 +569,13 @@ if aws.get("site"):
               and m_thr.get("ThrottlingBurstLimit") == aws["mcp_burst"]
               and aws["mcp_rate_per_second"] <= aws["search_rate_per_second"],
               f"MCP has its own, lower limit: {aws['mcp_rate_per_second']}/s, burst {aws['mcp_burst']}", m_thr)
+        m_route = next((k for k, v in t.find_resources("AWS::ApiGatewayV2::Route").items()
+                        if v["Properties"].get("RouteKey") == "POST /mcp"), None)
+        s_stage_id = next((k for k, v in t.find_resources("AWS::ApiGatewayV2::Stage").items()
+                           if v["Properties"].get("ApiId", {}).get("Ref") == s_api), None)
+        deps = t.to_json()["Resources"].get(s_stage_id, {}).get("DependsOn", [])
+        check(m_route and m_route in (deps if isinstance(deps, list) else [deps]),
+              "...and the stage waits for the route (a limit on a route that doesn't exist yet fails the deploy)", deps)
     s_fmt = s_stage.get("AccessLogSettings", {}).get("Format", "")
     check("DestinationArn" in s_stage.get("AccessLogSettings", {}) and "$context.routeKey" in s_fmt
           and not any(x in s_fmt.lower() for x in ("querystring", "$context.path", "body", "$request")),
