@@ -306,7 +306,7 @@ Engine:
 - `search.py`: account search over the documents (BM25 in plain SQL), on the laptop; `redacted()` = what may leave.
 - `search_export.py`: the demo documents redacted into one committed file, all the public search sees.
 - `research.py`: the account page's research: counts and possible themes per account, from that redacted file only.
-- `mcp_server.py`: the engine's facts and the redacted search as read-only MCP tools, local, one person's view ([mcp]).
+- `mcp_server.py`: the engine's facts and the redacted search as read-only MCP tools, local, one person's view ([mcp]; names and instructions in [mcp] and `mcp/`).
 
 Cockpit:
 - `export_views.py`: the export and `views.html` from `views_template.html`.

@@ -40,18 +40,14 @@ from mcp.types import ToolAnnotations
 import facts
 import roles
 import search
-from settings import OUTPUTS, SETTINGS
+from settings import OUTPUTS, SETTINGS, REPO
 
 CONF = SETTINGS["mcp"]
 READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 
-server = MCPServer(
-    name="cairnpath",
-    title="Cairnpath engagement engine",
-    instructions=("Customer Success facts for one person's book of business (fictional demo data): "
-                  "accounts, churn risk with reasons, timelines, and a search over support tickets, "
-                  "emails and call notes (people redacted as Customer A, CS 1). Read only. "
-                  "Cite document IDs (S1, E2, C1) and account IDs when you use them."))
+server = MCPServer(                       # its name and what it tells the model: [mcp] (24 Nov 2026)
+    name=CONF["name"], title=CONF["title"],
+    instructions=(REPO / CONF["instructions_file"]).read_text(encoding="utf-8").strip())
 
 _state = {}
 

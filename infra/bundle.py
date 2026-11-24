@@ -135,6 +135,8 @@ def bundle_search(out=None, deps=None, vectors=None):
     shutil.copy(REPO / SETTINGS["search"]["site_documents_file"], out / "documents.jsonl")
     site_vectors(out, vectors)
     shutil.copy(INFRA / "lambdas" / "search" / "mcp_public.py", out)
+    # what the public MCP server tells the model: [mcp] public_instructions_file (24 Nov 2026)
+    shutil.copy(REPO / SETTINGS["mcp"]["public_instructions_file"], out / "mcp_instructions.md")
     site_accounts(out)
     if deps is None:
         deps = not os.environ.get("CAIRNPATH_SKIP_DEPS")

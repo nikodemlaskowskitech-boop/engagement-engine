@@ -43,7 +43,7 @@ out = bundle_search(TMP / "search", deps=False, vectors=TMP / "none.jsonl")
 print("\nThe bundle")
 names = sorted(p.name for p in out.iterdir())
 check(names == sorted(["handler.py", "search.py", "documents.py", "settings.py", "settings.toml", "documents.jsonl",
-                       "mcp_public.py", "accounts.json"]),
+                       "mcp_public.py", "accounts.json", "mcp_instructions.md"]),
       "handler, search code, settings, the redacted documents, the public MCP server and the search page's "
       "accounts: nothing else", names)
 check(not (out / "handover.py").exists() and not (out / "stories").exists(),
