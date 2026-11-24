@@ -47,6 +47,9 @@ OUTPUTS = REPO / "data"             # what the engine writes always goes here
 DEMO = INPUTS.resolve() == OUTPUTS.resolve()   # the generated demo data, or a company's own
 
 
+TASK_FLAGS = tuple(SETTINGS["work"]["task_flags"])   # the flags whose rows become tasks ([work])
+
+
 def input_path(key):
     """The full path of one input named in [data] (crm_file, team_file, ...)."""
     return INPUTS / SETTINGS["data"][key]

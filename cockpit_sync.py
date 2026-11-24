@@ -60,7 +60,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from settings import SETTINGS
+from settings import SETTINGS, TASK_FLAGS
 
 DATA = Path(__file__).resolve().parent / "data"
 SOURCE = DATA / "cockpit_decisions.json"
@@ -70,7 +70,7 @@ MAX_TEXT = SETTINGS.get("cockpit", {}).get("max_text", 200)
 CALLS = {"renew", "downsize", "churn"}                  # a renewal forecast
 STEP_TYPES = {"call", "qbr", "email", "internal"}       # a next step (the page's STEP_TYPES)
 ROLES = {"owner", "manager"}
-FLAGS = {"activation", "churn", "expansion", "qbr", "journey"}   # the task flags (cairnpath_db.py flag_names)
+FLAGS = set(TASK_FLAGS)                                  # the task flags (settings.toml [work])
 WORK = SETTINGS.get("work", {})
 REASONS = set(WORK.get("decline_reasons", {}))          # why a recommendation isn't needed
 AIMS = set(WORK.get("intended_outcomes", {}))           # what a next step should achieve

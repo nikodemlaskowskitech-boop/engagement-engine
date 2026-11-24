@@ -151,8 +151,8 @@ if crm:
                     f"(they show as No CSM assigned, for CS ops): {examples(no_csm)}")
     no_pool = [r["account_id"] for r in crm if r["tier"] == TIERS["pooled"] and not r["cs_pool"].strip()]
     if no_pool:
-        say("WARN", f"CRM: {count(len(no_pool), TIERS['pooled'] + ' account')} with no cs_pool, so nobody gets "
-                    f"their tasks: {examples(no_pool)}")
+        say("WARN", f"CRM: {count(len(no_pool), TIERS['pooled'] + ' account')} with no cs_pool, so their tasks go "
+                    f"to CS ops (they show as No pool): {examples(no_pool)}")
 
 # --- 2. CS team (required when a tier has people) ---------------------------------
 print("\n2. CS team")
@@ -180,6 +180,7 @@ print("\n3. Product events")
 event_files = sorted(FOLDER.glob(FILES["events_glob"]))
 first = last = None
 by_name, broken, usage_days, users_seen, event_accounts = Counter(), 0, Counter(), set(), set()
+last_usage, last_product = {}, {}         # per account: the volume feed vs. the product
 if not event_files:
     say("ERROR", "Events: no .jsonl files in events/. Nothing can run without usage data")
 else:
@@ -204,6 +205,9 @@ else:
                 event_accounts.add(account)
                 if name == USAGE_EVENT:
                     usage_days[account] += 1
+                    last_usage[account] = max(last_usage.get(account, day), day)
+                elif e.get("event_type") == "product":
+                    last_product[account] = max(last_product.get(account, day), day)
                 if e.get("user_id"):
                     users_seen.add(account)
     say("ok", f"Events: {sum(by_name.values()):,} in {len(event_files)} files, {first} to {last} "
@@ -222,6 +226,13 @@ else:
         if gap := event_accounts - set(accounts):
             say("WARN", f"Events: {count(len(gap), 'account')} sending events but aren't in the CRM "
                         f"(they show as Handoff gap, for CS ops): {examples(gap)}")
+        gap = SETTINGS["data_quality"]["feed_gap_days"]
+        stopped = [a for a in accounts if a in last_usage and (last - last_usage[a]).days >= gap
+                   and (last - last_product.get(a, first)).days < gap]
+        if stopped:
+            say("WARN", f"Events: {count(len(stopped), 'account')} whose {USAGE_EVENT} feed stopped "
+                        f"{gap}+ days ago while product events keep coming (they show as Volume feed "
+                        f"stopped, for data engineering; no usage flags for them): {examples(stopped)}")
         quiet = {a for a in accounts if a not in event_accounts}
         if quiet:
             say("ok", f"Events: {len(quiet)} CRM accounts send no events at all (new, or Silent)")

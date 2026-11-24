@@ -73,7 +73,7 @@ from pathlib import Path
 from time import sleep
 
 from cairnpath_db import connect
-from settings import SETTINGS, input_path, output_file
+from settings import SETTINGS, TASK_FLAGS, input_path, output_file
 from slack_loop import card_blocks, card_channel, dm_target, interactive, last_touches, load_env
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -81,7 +81,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 REPO = Path(__file__).resolve().parent
 DATA = REPO / "data"
 LOG = output_file("action_log")
-FLAGS = ("activation", "churn", "expansion", "qbr", "journey")   # journey: from journeys.py
+FLAGS = TASK_FLAGS            # settings.toml [work]; journey: from journeys.py, data: gaps (flags.py)
 NOT_ACTIONS = {"none", "report"}
 COLUMNS = ["logged_on", "account_id", "flag", "status", "routed_to", "channel", "action", "outcome"]
 
@@ -195,6 +195,7 @@ team_manager = {r["owner_id"]: r["manager"] for r in team}
 SLACK_DM_REASSIGNED = SETTINGS["slack"].get("dm_reassigned", False)
 pools = {r["owner_id"] for r in team if r["owner_type"] == "pool"}
 owner_names["cs_ops"] = "CS ops"
+owner_names.update(SETTINGS["data_quality"].get("owner_names", {}))   # data engineering, ...
 owner_names["email"] = "Customer emails"
 # managers aren't owners in cs_team, only a column: mgr_james -> "James (manager)"
 for r in team:

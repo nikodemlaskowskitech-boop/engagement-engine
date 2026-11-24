@@ -174,6 +174,25 @@ PLANTED_TREND = dict(name="new-cohort shelfware", signed_days_ago=(60, 200), sha
 #   Watch three months ago, no flag today. The answer key keeps them "healthy" (their flags
 #   today) and marks them "recovered" in the planted column.
 STORY_DAYS = (45, 150)
+# Planted bad data (24 Nov 2026, Nikodem: "mimic wrong data entries or lack of it"). Real CRMs
+# have holes, and a feed can stop while the product keeps working. A few accounts get one gap
+# each, chosen by a hash of the account ID (no random draw moves): the CRM field is written
+# empty or in a format the engine can't read, or the daily volume feed stops while product
+# events keep arriving. The flags that need the missing data show "data missing" instead
+# (flags_data.csv, flags.py), and the answer key's data_issue column says what was planted,
+# for check_flags.py. One per row: (issue, tier, personality, region or None). The first and
+# the fifth hide a live risk (users falling; an open Shelfware flag), so they reach the owner.
+DATA_ISSUES = [("no_contract", "Scale", "declining", "DACH"),
+               ("no_contract", "Self-service", "healthy", None),
+               ("feed_stopped", "Scale", "healthy", None),
+               ("feed_stopped", "Enterprise", "healthy", None),
+               ("bad_renewal", "Scale", "shelfware", "DACH"),
+               ("bad_renewal", "Enterprise", "healthy", None),
+               ("no_pool", "Scale", "healthy", None)]
+FEED_STOP_DAYS = 12        # feed_stopped: no daily_event_volume in the last this many days
+# accounts the tests, the demo script and the stories name: never given a gap
+DATA_ISSUE_SPARED = {"acc_001", "acc_002", "acc_003", "acc_005", "acc_008", "acc_012", "acc_024", "acc_037",
+                     "acc_042", "acc_087", "acc_100", "acc_123", "acc_156", "acc_300"}
 RECOVERY = dict(name="recovered", share=0.07, util=(0.30, 0.66), activity=(0.35, 0.6))
 
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
@@ -466,6 +485,7 @@ def build_accounts():
     plant_recoveries(accounts)
     set_csm_since(accounts)
     set_renewal_changes(accounts)
+    plant_data_issues(accounts)
     return accounts
 
 
@@ -536,6 +556,31 @@ def plant_cohort_trend(accounts):
                 and lo <= days <= hi and zlib.crc32(acc["id"].encode()) % 100 < PLANTED_TREND["share"] * 100):
             acc["personality"], acc["planted"] = "shelfware", PLANTED_TREND["name"]
             acc["users_end"] = acc["users_start"]             # shelfware's users don't grow
+
+
+def plant_data_issues(accounts):
+    """DATA_ISSUES: one gap each for a few settled accounts (not new, not in a dip or a story)."""
+    for acc in accounts:
+        acc["data_issue"] = ""
+    for issue, tier, kind, region in DATA_ISSUES:
+        pool = [a for a in accounts if a["in_crm"] and not a.get("lost") and not a.get("dip") and not a["planted"]
+                and not a["first_year"] and not a["data_issue"] and a["tier"] == tier and a["personality"] == kind
+                and (region is None or a["region"] == region)
+                and a["id"] not in STORY_ACCOUNTS and a["id"] not in DATA_ISSUE_SPARED]
+        if pool:
+            min(pool, key=lambda a: zlib.crc32(("data" + a["id"]).encode()))["data_issue"] = issue
+
+
+def crm_cell(acc, column, value):
+    """What the CRM holds: the true value, unless a planted gap blanks or garbles it."""
+    issue = acc.get("data_issue")
+    if issue == "no_contract" and column == "contracted_events":
+        return ""                                      # never filled in
+    if issue == "bad_renewal" and column == "renewal_date":
+        return date.fromisoformat(value).strftime("%d/%m/%Y")   # typed the European way
+    if issue == "no_pool" and column == "cs_pool":
+        return ""                                      # the pool was never set
+    return value
 
 
 def plant_recoveries(accounts):
@@ -711,7 +756,7 @@ def write_crm(accounts):
             if not acc["in_crm"]:
                 continue
             start = acc["contract_start"]
-            writer.writerow({
+            row = {
                 "account_id": acc["id"],
                 "account_name": acc["name"],
                 "tier": acc["tier"],
@@ -729,7 +774,8 @@ def write_crm(accounts):
                 "status": "churned" if acc["lost"] else "active",   # churned: left at its renewal
                 "customer_since": acc["since"].isoformat(),         # first signed (renewals keep it)
                 "csm_since": acc["csm_since"].isoformat() if acc["csm_since"] else "",
-            })
+            }
+            writer.writerow({k: crm_cell(acc, k, v) for k, v in row.items()})   # planted gaps
     return path
 
 
@@ -1352,7 +1398,7 @@ def write_answer_key(accounts):
     path = OUT_DIR / "answer_key.csv"
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["account_id", "tier", "personality", "has_champion", "welcome_group", "history", "called_in_time", "planted"])
+        writer.writerow(["account_id", "tier", "personality", "has_champion", "welcome_group", "history", "called_in_time", "planted", "data_issue"])
         for acc in accounts:
             group = "welcomed" if acc["welcomed"] else "control" if acc["control"] else ""
             dip = acc["dip"]
@@ -1360,7 +1406,7 @@ def write_answer_key(accounts):
                        "new logo this year" if acc["first_year"] else "")
             writer.writerow([acc["id"], acc["tier"], "churned" if acc["lost"] else acc["personality"],
                              acc["has_champion"], group, history, bool(dip and dip["in_time"]) if dip else "",
-                             acc.get("planted", "")])
+                             acc.get("planted", ""), acc.get("data_issue", "")])
     return path
 
 
@@ -1382,6 +1428,10 @@ def write_events(accounts):
                 known = set(year_one_users(acc))
                 got = [e for e in got if not (e["event_name"] == "user_invited"
                                               and e["properties"]["invited_user"] in known)]
+            if acc.get("data_issue") == "feed_stopped" and (END_DATE - day).days < FEED_STOP_DAYS:
+                # the volume feed stopped (a pipeline problem on their side); the product didn't.
+                # Filtered after drawing, so no random draw moves
+                got = [e for e in got if e["event_name"] != "daily_event_volume"]
             rows.extend(got)
         rows.sort(key=lambda e: e["timestamp"])
         with (events_dir / f"{day.isoformat()}.jsonl").open("w") as f:
@@ -1564,4 +1614,6 @@ if __name__ == "__main__":
     print(f"Year one:   {y1_events:,} events and {y1_touches} CS meetings for {y1_accounts} accounts, "
           f"{HISTORY_START} to {START_DATE - timedelta(days=1)} ({y1_dips} dips that recover)")
     print(f"Year before (top line): {bridge_path}")
+    gaps = sorted((a["data_issue"], a["id"]) for a in accounts if a.get("data_issue"))
+    print(f"Data gaps:  {len(gaps)} planted (" + ", ".join(f"{a} {i}" for i, a in gaps) + ")")
     print(f"Outcomes:   {outcomes_path} (renewals in the {OUTCOME_HORIZON_DAYS} days after the data, for backtest.py)")

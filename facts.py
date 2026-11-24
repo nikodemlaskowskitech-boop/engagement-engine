@@ -27,9 +27,9 @@ import sys
 
 import team_report
 from cairnpath_db import connect
-from settings import output_file
+from settings import TASK_FLAGS, output_file
 
-FLAGS = ("activation", "churn", "expansion", "qbr", "journey")
+FLAGS = TASK_FLAGS            # settings.toml [work]
 
 
 def rows(con, sql):

@@ -107,7 +107,7 @@ briefs_llm_provider = "anthropic"            # who writes the briefs in AWS ("be
 api_key_parameter = "/cairnpath/anthropic-api-key"   # Parameter Store (SecureString): put_key.py fills it
 # Tables for Athena: to_parquet.py writes each to data/tables/<name>/ (outputs/tables/ in AWS),
 # and the Glue crawler turns each folder into a table in the Glue database below.
-athena_tables = ["flags_activation", "flags_churn", "flags_expansion", "flags_qbr", "flags_journey",
+athena_tables = ["flags_activation", "flags_churn", "flags_expansion", "flags_qbr", "flags_journey", "flags_data",
                  "account_value", "tasks", "crm", "cs_team", "ai_spend"]
 glue_database = "cairnpath"
 athena_workgroup = "cairnpath"
@@ -342,6 +342,10 @@ renewal_days = 120
 planted = { cohort_shelfware = "Planted in the demo data on purpose (generate_events.py), to show the method." }
 
 [work]
+# The flags whose rows become tasks (the action log, the task status, the cockpit, the page's
+# saved decisions): one list, read by actions.py, cairnpath_db.py, facts.py and cockpit_sync.py.
+# data = gaps in an account's own data (flags.py, 24 Nov 2026)
+task_flags = ["activation", "churn", "expansion", "qbr", "journey", "data"]
 # The four kinds of work (22 Nov 2026, Nikodem): a recommendation (the engine's to-do on a flag)
 # can be declined with a reason; a next step says what it should achieve; the owner checks later
 # whether it did (the team lead sees it, no approval). The keys are what the events carry.
@@ -412,6 +416,19 @@ min_climb = 3             # ...and when climbing at least this many points a mon
 breadth_growth = 0.25     # active users up this much in two months
 renewal_soon_months = 3   # renewal this close: take the growth case into the renewal
                           # (and Shelfware: call this week about the renewal itself)
+
+[data_quality]
+# Gaps in one account's own data (24 Nov 2026). The engine doesn't guess: a flag that needs
+# the missing value shows "data missing" for that account instead (flags_data.csv), the data's
+# owner gets it in their daily Slack digest, and the account's owner only when the gap hides
+# a risk we can still see (users falling, errors rising, an open churn or expansion row).
+feed_gap_days = 5              # product events still arriving, but no daily volume for this many days = the feed stopped
+crm_owner = "cs_ops"           # who fixes a CRM field (contract volume, renewal date, pool)
+events_owner = "data_eng"      # who fixes the event pipeline (the volume feed)
+risk_min_errors = 10           # a hidden risk: this many ingestion errors in 30 days, at least double the month before
+
+[data_quality.owner_names]     # owners that aren't in the CS team table
+data_eng = "Data engineering"
 
 [qbr]
 coming_up_days = 30       # a QBR in the next 30 days: prepare it
@@ -512,6 +529,7 @@ flags_churn = "flags_churn.csv"
 flags_expansion = "flags_expansion.csv"
 flags_qbr = "flags_qbr.csv"
 flags_journey = "flags_journey.csv"
+flags_data = "flags_data.csv"        # flags.py: gaps in an account's own data
 account_value = "account_value.csv"
 action_log = "action_log.csv"
 history_flags = "history_flags.csv"

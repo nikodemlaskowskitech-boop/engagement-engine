@@ -666,6 +666,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
             <div class="tablewrap" id="ld-nocsm-week"></div>
           </div>
         </div>
+        <div class="panel" id="ld-data-panel">
+          <h2>Data missing: what the flags can't see</h2>
+          <p class="finding small" id="ld-data-finding"></p>
+          <div class="examples tablewrap" id="ld-data"></div>
+          <p class="note" id="ld-data-note"></p>
+        </div>
       </div>
         <div class="panel">
           <h2>Churn: biggest ARR at risk first</h2>
@@ -1001,7 +1007,11 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     if (parent) parent.appendChild(n);
     return n;
   };
-  const day = (s) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5;
+  // a missing date (a CRM cell the engine couldn't read: flags.py data_gaps, 24 Nov 2026) is NaN
+  // days, so it falls out of every window and comparison, and reads "date unknown"
+  const day = (s) => s ? Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5 : NaN;
+  const yr4 = (s) => s ? s.slice(0, 4) : "";
+  const byDate = (x, y) => (x || "9999").localeCompare(y || "9999");   // unknown dates last
   const TL_DAYS = 90;
   // days to reach an Act account's customer, by tier: one rule for the countdown, the escalation
   // and every "in time" in the analysis (settings.toml [journeys] reach_days, 17 Nov 2026)
@@ -1027,7 +1037,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const tooFew = (groups) => groups.some((n) => n < MIN_COMPARE);
   const callGroup = (g, n) => `${n} ${/no churn call/i.test(g) ? "without a churn call" : /churn call/i.test(g) ? "with a churn call" : g.toLowerCase()}`;
   const tooFewNote = (parts) => `Too few to tell: ${parts.join(", ")}. A rate needs at least ${MIN_COMPARE} accounts in each group; with fewer, chance decides it. Click a row to see the accounts.`;                                    // the account chart's window, ending on the data's date
-  const fmt = (s) => new Date(day(s) * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const fmt = (s) => s ? new Date(day(s) * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : "date unknown";
   // A person's page holds only their team, so it can't work out a book-wide median itself:
   // roles.py computes them once (D.peer_medians, by kind of owner) and the page uses those.
   const PM = D.peer_medians || null;
@@ -1117,6 +1127,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const ownerName = Object.fromEntries(D.team.map((t) => [t.owner_id, t.owner_name]));
   ownerName.automated = "Automated email";
   ownerName.cs_ops = "CS ops";
+  Object.assign(ownerName, D.settings.data_owner_names || {});   // owners outside the team ([data_quality])
 
   // ---------------------------------------------------------------- segment
   // The part of the book someone is looking at. Two sides: people (manager,
@@ -1366,10 +1377,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const touchesBy = {};
   for (const t of D.touches) (touchesBy[t.account_id] ||= []).push(t);
 
+  const flagName = (f) => f.flag === "data" ? "data missing" : f.flag;   // the pill's word for a flag
   const severity = (f) => {
     if (f.flag === "churn") return f.status === "Act" ? "critical" : "warning";
     if (f.flag === "expansion") return f.status === "Act" ? "good" : "warning";
     if (f.flag === "journey") return "serious";
+    // data missing (flags.py data_gaps): amber when it hides a risk we can still see, else information
+    if (f.flag === "data") return f.status === "Risk hidden" ? "warning" : "neutral";
     if (f.flag === "activation") return ["Stalled", "Silent", "Handoff gap", "No CSM assigned"].includes(f.status) ? "warning" : "good";
     return "neutral";
   };
@@ -1538,7 +1552,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // facts
     const contracted = (a.contracted_events / 1e6).toLocaleString("en-GB") + "M events a year";
     const facts = [["Tier", a.tier], ["Region", a.region], ["Owner", a.owner || (a.tier === "Self-service" ? "No CSM (Self-service)" : "Not assigned")],
-      ["Contract", fmt(a.contract_start) + " " + a.contract_start.slice(0, 4) + " to " + fmt(a.renewal_date) + " " + a.renewal_date.slice(0, 4)],
+      ["Contract", fmt(a.contract_start) + " " + yr4(a.contract_start) + " to " + fmt(a.renewal_date) + " " + yr4(a.renewal_date)],
       ["Commitment", contracted], ["ARR", money(a.arr) + (a.arr_estimated ? " (estimate from list price)" : "")], ["Add-ons", a.add_ons || "None"]];
     $("tl-facts").innerHTML = facts.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
     const t = tta[id];
@@ -1552,8 +1566,9 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       `<span class="fact">${esc(a.tier)} · ${esc(a.region)}</span>` +
       `<span class="fact">Owner <b>${esc(a.owner || (a.tier === "Self-service" ? "none (Self-service)" : "not assigned"))}</b></span>` +
       `<span class="fact">ARR <b>${money(a.arr)}</b></span>` +
-      `<span class="fact">Renews <b>${fmt(a.renewal_date)} ${a.renewal_date.slice(0, 4)}</b> (${days >= 0 ? "in " + days + " days" : days + " days ago"})</span>` +
-      (topFlag ? `<span class="flag ${severity(topFlag)} inline"><span class="pill">${esc(topFlag.flag)} · ${esc(topFlag.status)}</span></span>` : `<span class="fact">No open flags</span>`);
+      (a.renewal_date ? `<span class="fact">Renews <b>${fmt(a.renewal_date)} ${yr4(a.renewal_date)}</b> (${days >= 0 ? "in " + days + " days" : days + " days ago"})</span>`
+        : `<span class="fact">Renewal <b>date unknown</b> (not readable in the CRM)</span>`) +
+      (topFlag ? `<span class="flag ${severity(topFlag)} inline"><span class="pill">${esc(flagName(topFlag))} · ${esc(topFlag.status)}</span></span>` : `<span class="fact">No open flags</span>`);
     const tc = (touchesBy[id] || []).filter((t) => day(t.date) > day(D.as_of) - TL_DAYS).length;   // the chart's window, as the sentence says
     drawNext(id);
     drawForecast(id);
@@ -1572,7 +1587,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       `<p><small>From the documents: context to check, not a forecast. <button class="link" data-goto-research>See the research</button></small></p></div>` : "";
     let body;
     if (fl.length) {
-      body = fl.map((f) => `<div><span class="flag ${severity(f)} inline"><span class="pill">${esc(f.flag)} · ${esc(f.status)}</span></span>` +
+      body = fl.map((f) => `<div><span class="flag ${severity(f)} inline"><span class="pill">${esc(flagName(f))} · ${esc(f.status)}</span></span>` +
         `<p>${esc(f.reasons)}</p>` +
         (valueOf(f) != null ? `<p><b>${money(valueOf(f))} ${f.flag === "churn" ? "ARR at risk" : "upside"}</b> · ${esc(f.value_basis)}</p>` : "") +
         (f.action ? todoHtml(a, f) : "") + `</div>`).join("") + insHtml;
@@ -1747,8 +1762,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     if (p) up.push({ date: p.due, what: `${p.kind === "step" ? "Next step" : "Next step (from the CRM)"}: ${p.type}`, who: p.note || "", overdue: (planStatus(a, p) || {}).overdue });
     if (a.next_qbr_date && a.next_qbr_date > D.as_of && !(p && p.kind === "crm")) up.push({ date: a.next_qbr_date, what: "QBR booked", who: "in the CRM" });
     up.push({ date: a.renewal_date, what: `Renewal: ${money(a.arr)}`, who: fc ? `Forecast: ${callText(fc)}` : dataRisk(a) ? `Data: ${money(dataRisk(a))} at risk` : "No forecast yet" });
-    up.sort((x, y) => x.date.localeCompare(y.date));
-    $("tl-coming").innerHTML = up.map((u) => `<li><span class="when">${fmt(u.date)}<br><span class="${u.overdue ? "bad" : ""}">${u.overdue ? (planStatus(a, p) || {}).text : ahead(u.date)}</span></span><span><b>${esc(u.what)}</b>${u.who ? `<br><small>${esc(u.who)}</small>` : ""}</span></li>`).join("");
+    up.sort((x, y) => byDate(x.date, y.date));
+    $("tl-coming").innerHTML = up.map((u) => `<li><span class="when">${fmt(u.date)}<br><span class="${u.overdue ? "bad" : ""}">${u.overdue ? (planStatus(a, p) || {}).text : u.date ? ahead(u.date) : "fix it in the CRM"}</span></span><span><b>${esc(u.what)}</b>${u.who ? `<br><small>${esc(u.who)}</small>` : ""}</span></li>`).join("");
     const lastC = done.find((d) => d.customer);
     const noPlan = !p && a.tier !== "Self-service";
     // red only when a missing plan matters: an open flag, a renewal within 90 days, or 60+ days
@@ -2512,7 +2527,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const start = day(D.as_of), buckets = [0, 1, 2, 3, 4, 5].map((b) => ({ from: start + 1 + 30 * b, to: start + 30 * (b + 1), items: [] }));
     for (const a of D.accounts.filter(inSeg)) {
       const d = day(a.renewal_date), b = Math.floor((d - start - 1) / 30);
-      if (b < 0 || b > 5) continue;
+      if (!(b >= 0 && b <= 5)) continue;                 // NaN too: a renewal date the CRM didn't give
       const cf = churnFlag(a);
       buckets[b].items.push({ ...a, churn: cf ? cf.status : "No churn flag", why: cf ? cf.reasons : "" });
     }
@@ -2541,7 +2556,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       const counts = REN_ORDER.map((s) => `${s}: ${k.items.filter((a) => a.churn === s).length}`).join("<br>");
       hover(g, `<b>Renewing ${fmt(from)} – ${fmt(to)}</b><br>${counts}<br>Click to list them`);
       g.addEventListener("click", () => {
-        const items = [...k.items].sort((a, b) => REN_ORDER.indexOf(a.churn) - REN_ORDER.indexOf(b.churn) || a.renewal_date.localeCompare(b.renewal_date));
+        const items = [...k.items].sort((a, b) => REN_ORDER.indexOf(a.churn) - REN_ORDER.indexOf(b.churn) || byDate(a.renewal_date, b.renewal_date));
         accountList($("ov-list"), $("ov-list-title"), `Renewing ${fmt(from)} – ${fmt(to)}`, items, [
           { label: "Account", get: (a) => esc(a.account_name) },
           { label: "Tier", get: (a) => esc(a.tier) },
@@ -3344,7 +3359,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     { label: "Account", get: (a) => `${esc(a.account_name)}<small><br>${esc(a.owner || "")}</small>` },
     { label: "At risk", r: true, get: (a) => money(valueOf(a.flags.find((f) => f.flag === "churn"))) },
     { label: "Status", get: (a) => esc((a.flags.find((f) => f.flag === "churn") || {}).status || "") },
-    { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${a.renewal_date.slice(0, 4)}` },
+    { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${yr4(a.renewal_date)}` },
     { label: "Action planned", get: (a) => { const p = planOf(a); return p ? planText(a, p) : '<span class="bad">none</span>'; } },
   ];
   // Trends on the Leadership page, from the weekly history: the same segment as the rest
@@ -3859,6 +3874,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       { label: "Signed", get: (a) => `${fmt(a.contract_start)}<small><br>${a.waitDays} days ago</small>` },
       { label: "ARR", r: true, get: (a) => money(a.arr) },
     ], "Every Enterprise account in this segment has a CSM.", 5);
+    drawDataGaps(accs, who);
     drawLeadTrends(STALE, who);
     drawGlossary();
     drawSignals();
@@ -3909,7 +3925,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     shortList($("ld-churn"), churn, [
       { label: "Account", get: acct },
       { label: "At risk", get: (a) => `<b>${money(valueOf(flagOf(a, "churn")))}</b><small><br>${esc(flagOf(a, "churn").status)}</small>` },
-      { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${a.renewal_date.slice(0, 4)}<small><br>${ahead(a.renewal_date)}</small>` },
+      { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${yr4(a.renewal_date)}<small><br>${ahead(a.renewal_date)}</small>` },
       { label: "Action taken", get: (a) => lastCust(a.account_id) },
       { label: "Action planned", get: planCell },
       { label: "Forecast", get: fcCell },
@@ -3918,7 +3934,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     shortList($("ld-growth"), growth, [
       { label: "Account", get: acct },
       { label: "Upside", get: (a) => `<b>${money(valueOf(flagOf(a, "expansion")))}</b><small><br>${esc(flagOf(a, "expansion").status)} · ARR ${money(a.arr)}</small>` },
-      { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${a.renewal_date.slice(0, 4)}<small><br>${ahead(a.renewal_date)}</small>` },
+      { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${yr4(a.renewal_date)}<small><br>${ahead(a.renewal_date)}</small>` },
       { label: "Action planned", get: planCell },
     ], "No expansion flag in this segment.");
     // team: meetings in 30 days and share of the book met, against the median of the same kind
@@ -4028,7 +4044,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   };
   const lastTouch = (id) => { const t = touchesBy[id]; return t && t.length ? t[t.length - 1] : null; };
   const met30 = (id) => (touchesBy[id] || []).some((t) => t.event === "meeting_held" && day(t.date) > RUN - 31);
-  const fmtFull = (s) => fmt(s) + " " + s.slice(0, 4);
+  const fmtFull = (s) => s ? fmt(s) + " " + s.slice(0, 4) : fmt(s);
   // Usage trend for one account: the sparkline uses the account's own range (at least 20
   // points tall, so a small wobble isn't blown up), and a trend marker says the change over
   // 60 days in words: a drop of 5+ points is a red down arrow, a rise a green up arrow.
@@ -4202,6 +4218,34 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     wrap.after(btn); set();
   }
 
+  // Data missing (flags.py data_gaps, 24 Nov 2026): accounts whose own data has a gap, so the
+  // flags that need it can't run. Those hiding a risk we can still see first, then by ARR.
+  function drawDataGaps(accs, who) {
+    const RISK = "Risk hidden";
+    const rows = accs.filter((a) => a.flags.some((f) => f.flag === "data")).map((a) => ({ ...a,
+      gaps: a.flags.filter((f) => f.flag === "data" && f.status !== RISK), risk: a.flags.find((f) => f.flag === "data" && f.status === RISK) }))
+      .sort((x, y) => (!!y.risk - !!x.risk) || (y.arr - x.arr) || (x.account_id < y.account_id ? -1 : 1));
+    const risky = rows.filter((a) => a.risk), arr = rows.reduce((t, a) => t + (a.arr || 0), 0);
+    $("ld-data-finding").textContent = rows.length
+      ? `${rows.length} of ${accs.length} accounts have a gap in their own data (${money(arr)} ARR the flags can only partly see)` +
+        (risky.length ? `; ${risky.length} of them hide a risk we can still see, so their owner has it too.` : ".")
+      : "No gaps: every account in this segment has the data its flags need.";
+    shortList($("ld-data"), rows, [
+      { label: "Account", get: (a) => `${esc(a.account_name)}<small><br>${esc(a.tier)}</small>` },
+      { label: "Missing", get: (a) => a.gaps.map((f) => esc(f.status)).join("<br>") +
+          (a.risk ? `<small><br><span class="flag warning inline"><span class="pill">risk hidden</span></span>${esc(a.risk.reasons.split(", and ").slice(1).join(", and "))}</small>` : "") },
+      { label: "Fix by", get: (a) => [...new Set(a.gaps.map((f) => who(f.routed_to)))].map(esc).join("<br>") },
+      { label: "ARR", r: true, get: (a) => money(a.arr) },
+    ], "No gaps: every account in this segment has the data its flags need.", 5);
+    const kinds = {};
+    for (const a of rows) for (const f of a.gaps) { const k = (kinds[f.status] ||= { n: 0, arr: 0 }); k.n++; k.arr += a.arr; }
+    $("ld-data-note").textContent = (Object.keys(kinds).length ? Object.entries(kinds).sort((x, y) => y[1].arr - x[1].arr)
+        .map(([k, v]) => `${k}: ${v.n} (${money(v.arr)})`).join(" · ") + ". " : "") +
+      "A missing contract volume, renewal date or pool, or a volume feed that stopped while the product didn't: the flags " +
+      "that need it show the gap instead of guessing. The data's owner gets each one in their daily Slack digest; the " +
+      "account's owner only when the gap hides a risk still visible (users falling, errors rising, a churn or expansion flag already open).";
+  }
+
   function shortList(host, items, cols, empty, n = 2) {
     let all = false;
     host.classList.add("managed-sort");
@@ -4349,7 +4393,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const lastMeeting = (id, topics) => { const ms = (touchesBy[id] || []).filter((t) => t.event === "meeting_held" && (!topics || topics.includes(t.topic))); return ms.length ? ms[ms.length - 1] : null; };
     const CHURN_ORDER = { Act: 0, Shelfware: 1, Watch: 2 };
     // sorted by value at stake: the biggest ARR at risk first, the biggest upside first
-    const byValue = (f) => (a, b) => (valueOf(fl(b, f)) || 0) - (valueOf(fl(a, f)) || 0) || a.renewal_date.localeCompare(b.renewal_date);
+    const byValue = (f) => (a, b) => (valueOf(fl(b, f)) || 0) - (valueOf(fl(a, f)) || 0) || byDate(a.renewal_date, b.renewal_date);
     const churn = accs.filter((a) => fl(a, "churn")).sort(byValue("churn"));
     const growth = accs.filter((a) => !fl(a, "churn") && fl(a, "expansion")).sort(byValue("expansion"));
     const rest = accs.filter((a) => !fl(a, "churn") && !fl(a, "expansion")).sort((a, b) => (b.arr || 0) - (a.arr || 0));

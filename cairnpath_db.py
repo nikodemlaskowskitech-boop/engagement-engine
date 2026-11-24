@@ -164,13 +164,18 @@ def connect():
     crm_cols = {r[0] for r in con.sql(f"DESCRIBE {crm_raw}").fetchall()}
     price = "CASE tier " + " ".join(f"WHEN '{t[k]}' THEN {money['price_per_1k'][n]}" for k, n in
                                      (("tech_touch", "Self-service"), ("pooled", "Scale"), ("named_csm", "Enterprise"))) + " END"
-    arr = (f"{money['arr_column']}::DOUBLE" if money["arr_column"] in crm_cols
+    arr = (f"try_cast({money['arr_column']} AS DOUBLE)" if money["arr_column"] in crm_cols
            else f"round({u['contract_column']} / 1000.0 * {price}, -2)")
     arr_exclude = f", {money['arr_column']}" if money["arr_column"] in crm_cols else ""
     con.sql(f"""
         CREATE VIEW crm AS
         WITH raw AS ({crm_raw})
-        SELECT * EXCLUDE (tier, {u['contract_column']}{arr_exclude}),
+        -- dates and numbers read with try_cast: one cell typed '26/06/2027' or '300,000,000'
+        -- turns the whole column into text, and every renewal sum after it would fail. The bad
+        -- cell becomes empty, and flags.py's data_gaps says so (24 Nov 2026)
+        SELECT * EXCLUDE (tier, {u['contract_column']}{arr_exclude})
+                 REPLACE (try_cast(contract_start AS DATE) AS contract_start,
+                          try_cast(renewal_date AS DATE) AS renewal_date),
                {arr}                                 AS arr,
                {'false' if money['arr_column'] in crm_cols else 'true'} AS arr_estimated,
                CASE tier WHEN '{t['tech_touch']}' THEN 'Self-service'
@@ -178,7 +183,7 @@ def connect():
                          WHEN '{t['named_csm']}'  THEN 'Enterprise'
                          ELSE tier END              AS tier,
                tier                                 AS crm_tier,
-               {u['contract_column']}::BIGINT       AS contracted_events
+               try_cast({u['contract_column']} AS BIGINT) AS contracted_events
                {'' if 'pool_owner' in crm_cols else ', NULL::VARCHAR AS pool_owner'}  -- optional: a Scale account's named owner
                {'' if 'status' in crm_cols else ", 'active' AS status"}  -- optional: churned = left at its renewal
                -- optional, for the trends (history.py): when the account first signed, and
@@ -356,6 +361,7 @@ def connect():
         FROM rolling r
         JOIN crm c USING (account_id)
         WHERE r.days_in_window = 30          -- a full 30 days, or it isn't comparable
+          AND c.contracted_events > 0        -- no contract volume, no utilisation (flags.py's data_gaps says so)
     """)
 
     # The last touch per account, for journeys ("no meeting in 30 days") and
@@ -416,12 +422,13 @@ def connect():
     #             A check-in doesn't close a churn task: the problem has to be raised.
     #   Resolved  the flag went away on its own (usage recovered, CRM fixed).
     #             CS ops tasks can only end this way: the CRM record is fixed.
+    #             So can data gaps (flag data): the data is fixed.
     #   Claimed   someone took it in Slack ("I'll take it"), nothing since
     #   (a manager can give a task to someone else in the cockpit: routed_to is then
     #    the new owner, assigned_from the old one, assigned_by the manager)
     #   (a manager's "Follow-up not picked up" task is Done once they approve the hand-back)
     #   Open      sent, nothing since
-    flag_names = ("activation", "churn", "expansion", "qbr", "journey")
+    flag_names = settings.TASK_FLAGS            # settings.toml [work]
     if settings.output_file("action_log").exists() and all(
             settings.output_file("flags_" + f).exists() for f in flag_names):
         # the flags standing today (history.py swaps in the flags as of an earlier day)
@@ -448,6 +455,9 @@ def connect():
                 FROM tasks t
                 JOIN engagement e ON e.account_id = t.account_id AND e.event_date >= t.sent_on
                 WHERE t.routed_to <> 'cs_ops'
+                  -- a data gap closes only when the data is fixed (Resolved); "Risk hidden" is a
+                  -- customer conversation, so a meeting does it
+                  AND NOT (t.flag = 'data' AND t.status <> 'Risk hidden')
                   AND CASE WHEN t.status = 'Follow-up not picked up'
                                THEN e.event_name = 'handback_approved'
                            WHEN e.event_name <> 'meeting_held' THEN false

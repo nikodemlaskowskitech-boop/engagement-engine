@@ -189,6 +189,7 @@ stateDiagram-v2
 | QBR | The QBR |
 | Activation, escalations | Any meeting |
 | CS ops (handoff gap, no CSM) | Only Resolved: the CRM record is fixed |
+| Data missing (no contract volume, renewal date, pool; volume feed stopped) | Only Resolved: the data is fixed. CS ops fixes the CRM, data engineering the feed; "Risk hidden" goes to the account's owner too, and is Done with any meeting |
 | Manager hand-back approval | The manager clicks "Approve hand-back" (Slack or the cockpit) |
 
 A manager can also give any open or claimed task of their team to someone else,

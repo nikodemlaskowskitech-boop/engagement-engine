@@ -73,8 +73,8 @@ One row per account, CSV with a header.
 | tier | text | Yes | `Enterprise`, `Scale` or `Self-service`; decides routing |
 | region | text | Yes | Sub-region; for reports and the local email hour |
 | contract_start | date | Yes | Activation window starts here |
-| renewal_date | date | Yes | Expansion and Shelfware timing ("renewal in 8 weeks") |
-| contracted_events | number | Yes | Annual committed volume: the bottom of the utilisation sum |
+| renewal_date | date | Yes | Expansion and Shelfware timing ("renewal in 8 weeks"). Write it YYYY-MM-DD: a row the engine can't read (26/06/2027) shows "Renewal date unreadable" and loses its renewal timing, never the whole column |
+| contracted_events | number | Yes | Annual committed volume: the bottom of the utilisation sum. Empty or unreadable on a row = that account shows "No contract volume" (data missing) and gets no usage flags; the run goes on |
 | add_ons | text | No | Paid add-ons, e.g. `experiments`; for the QBR pack |
 | csm_owner | text | Enterprise | The named CSM's owner_id; empty = "No CSM assigned" |
 | cs_pool | text | Scale | The pool's owner_id: the regional queue its tasks go to |
