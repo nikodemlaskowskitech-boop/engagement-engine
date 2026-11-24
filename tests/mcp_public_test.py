@@ -115,6 +115,13 @@ in_cases = sorted(d["id"] for c in ac["cases"] for d in c["documents"])
 check(ac["name"] == acc["accounts"][pick]["n"] and in_cases == sorted(d["id"] for d in docs if d["account_id"] == pick)
       and [c["last"] for c in ac["cases"]] == sorted((c["last"] for c in ac["cases"]), reverse=True),
       f"account_cases: all {len(in_cases)} of {pick}'s documents, in cases, newest case first")
+every = [c for aid in acc["accounts"] for c in json.loads(text(tool("account_cases", {"account": aid})))["cases"]]
+live = [c for c in every if c["ticket_status"] and c["latest_after_ticket"]]
+check(all("status" not in c and "ticket_status" in c for c in every)
+      and all(c["ticket_status"] is None for c in every if not any(d["kind"] == "S" for d in c["documents"])),
+      "a case says its ticket's status as ticket_status (none without a ticket), never a bare 'status' a model reads as the case's")
+check(live and all(c["last"] > max(d["date"] for d in c["documents"] if d["kind"] == "S") for c in live),
+      f"...and latest_after_ticket when messages came after the ticket ({len(live)} such cases across the demo)")
 for args, why in (({"question": ""}, "an empty question"), ({"question": "x" * 300}, "a question over 200 characters"),
                   ({"question": "invoice", "account": "acc_zz999"}, "an account the demo doesn't have"),
                   ({"question": "invoice", "account": "Acme Nowhere"}, "a name the demo doesn't have"),

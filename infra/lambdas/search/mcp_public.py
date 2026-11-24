@@ -61,8 +61,9 @@ TOOLS = [
     {"name": "account_cases",
      "title": "One account's cases",
      "description": "Every case on one demo account, newest first: its title, size, dates, the teams "
-                    "it came from (Support, CS, Implementation), the ticket's status, and each document "
-                    "in it with its ID and date.",
+                    "it came from (Support, CS, Implementation), the status of its ticket if it has one "
+                    "(ticket_status: the ticket only, not the whole case; latest_after_ticket = messages came "
+                    "after the ticket, so the case may still be live), and each document with its ID and date.",
      "inputSchema": {"type": "object", "properties": {
          "account": {"type": "string", "description": "The account's ID (acc_012) or name"}},
          "required": ["account"], "additionalProperties": False},
@@ -109,7 +110,12 @@ def _card(aid):
 
 
 def _case(c, docs=False):
-    out = {k: c[k] for k in ("case", "title", "status", "n", "first", "last", "teams")}
+    out = {k: c[k] for k in ("case", "title", "n", "first", "last", "teams")}
+    # the ticket's status, named as such (24 Nov 2026: Alder Media's competitor case said "status: solved"
+    # from an old export ticket while the renewal threat in its emails was open); none = no ticket
+    out["ticket_status"] = c["status"] or None
+    out["latest_after_ticket"] = bool(c["status"]) and c["last"] > max(
+        (d["date"] for d in c.get("docs", []) if d["kind"] == "S"), default=c["last"])
     out["best"] = {k: c["best"][k] for k in ("id", "kind", "date", "title", "line")}
     if docs:
         out["documents"] = [{k: d[k] for k in ("id", "kind", "date", "title", "team")} for d in c["docs"]]
