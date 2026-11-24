@@ -39,6 +39,22 @@ SLOW_HANDOFF_DAYS = (18, 40)   # ...this many days after the contract started (e
 # Nettle Foods growing, Driftwood Labs shelfware.
 STORY_ACCOUNTS = {"acc_024": "declining", "acc_012": "power_user", "acc_156": "shelfware"}
 STORY_RENEWALS = {"acc_024": date(2027, 1, 31), "acc_012": date(2026, 12, 15), "acc_156": date(2026, 11, 13)}
+# The four hero accounts (24 Nov 2026): the stories a demo walks through, each a two-year arc
+# that tests/heroes_test.py holds in place. The three handover stories above, plus Alder Media,
+# the signal nobody saw. Each one's renewal in today's year is set here, not drawn (the draw
+# still happens, so no other account moves), and none has a random dip in year one: its
+# year-one is the calm before its story.
+#   Nettle Foods    signed Dec 2024, ramped, expanded at its first renewal (Dec 2025); a June
+#                   wobble caught and recovered; now heading past its contract (expansion Act)
+#   Yarrow Studio   a calm year, expanded in Jan 2026; falling since summer, caught early
+#                   (churn Act and a call the same week), renewal Jan 2027
+#   Driftwood Labs  bought 106M events in 2023, never used a quarter of them, renewed flat
+#                   twice: Shelfware every week of two years, renewal 13 Nov 2026 (right-size)
+#   Alder Media     signed Jan 2025, expanded Jan 2026; a June ticket asks for a full export
+#                   "for a vendor comparison", an October email about a competitor's contract,
+#                   and no meeting in 30 days: the missed signal (its documents: the corpus)
+HEROES = {"acc_012": ("expanded", 1.5), "acc_024": ("expanded", 1.6),
+          "acc_156": ("renewed", 1.0), "acc_042": ("expanded", 1.8)}   # today's year's renewal: outcome, ARR after / before
 SEED = 42                      # same seed = same data every run
 END_DATE = date(2026, 10, 18)  # last day of data ("today" for the flags = the day after)
 DAYS = 365                     # a year of history, so trends and "as of" views have something to show
@@ -508,6 +524,9 @@ def set_renewal_changes(accounts):
         arr = arr_of(acc)
         before = (arr if outcome == "renewed" else
                   arr / rng.uniform(*EXPAND_BY) if outcome == "expanded" else arr / rng.uniform(*DOWNSIZE_TO))
+        if acc["id"] in HEROES:                       # the story's renewal, after the same draws
+            outcome, grew = HEROES[acc["id"]]
+            before = arr / grew
         acc["renewal_change"] = (outcome, int(round(before, -2)))
 
 
@@ -828,7 +847,14 @@ def events_for_day(acc, day_index, day, pool):
                 out.append(event(random.choice(p["features"]), "product", day, acc["id"], user))
 
     # System: how many events the customer sent us today (this is what they pay for)
-    daily_contract = acc["contract"] / 365
+    # Before an in-year renewal that changed the ARR, they were on the term before it, and used
+    # it at the same rate (24 Nov 2026: usage had jumped or sagged at every such renewal, and the
+    # engine now reads each day against the contract in force: cairnpath_db's contract_terms).
+    # Scaled after the draw below, so no random draw moves
+    contract = acc["contract"]
+    if acc.get("renewal_change") and day < acc["contract_start"]:
+        contract = contract * acc["renewal_change"][1] / max(1, arr_of(acc))
+    daily_contract = contract / 365
     utilisation = util_plan(acc, day_index)
     volume = int(daily_contract * utilisation * random.uniform(0.85, 1.15))
     out.append(event("daily_event_volume", "system", day, acc["id"],
@@ -1468,6 +1494,8 @@ def year_one_events(accounts):
         dip = None
         if rng.random() < YEAR_ONE_DIPS["share"]:
             dip = rng.randint(*YEAR_ONE_DIPS["start"])
+            if acc["id"] in HEROES:
+                dip = None                              # a hero's year one is calm (drawn all the same)
         plan[acc["id"]] = dict(acc=acc, p=p, contract=contract, dip=dip,
                                util=min(1.1, lerp(p["util"], 0, acc) * acc["util_factor"]),
                                activity=lerp(p["activity"], 0, acc), errors=p["errors"][0],

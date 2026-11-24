@@ -100,6 +100,15 @@ Read a file's entry before changing that file, and update the entry in the same 
   that was already there are drawn as before but not written. The events folder now spans 730
   days; ingest, flags and the windows are unchanged; history.py replays both years (about 3x
   slower: 22s -> 65s in the sandbox).
+- `generate_events.py` heroes and terms (24 Nov 2026): HEROES, four accounts a demo walks
+  through, each with its two-year arc (Nettle Foods growth, Yarrow Studio churn caught early,
+  Driftwood Labs shelfware renewed flat twice, Alder Media the missed signal). Their renewal in
+  today's year is set (outcome and ratio) after the same draw, and their year one has no random
+  dip (drawn all the same; year one's other accounts move a little, today's year doesn't). Most
+  of the arcs were already there by chance; tests/heroes_test.py now holds them in place,
+  chapter by chapter, against what a full run wrote (history, renewals, meetings, the corpus).
+  Usage before an in-year renewal that changed the ARR is now sent at the same rate of the
+  term before (it had jumped or sagged at the renewal), scaled after the draw.
 - `generate_events.py` planted bad data (24 Nov 2026): DATA_ISSUES gives a few settled accounts
   one gap each, picked by a hash of the account ID (no random draw moves; accounts the tests,
   the demo and the stories name are spared): contracted_events left empty, renewal_date typed
@@ -183,6 +192,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   its story makes likely, by a hash) on churned and downsized rows; backtest carries it and Did
   it work? shows "Why they left, and what the flags saw". The regenerate moved some numbers
   (DEMO.md checked: reached in time 60% vs 43% on 14 and 15 accounts; the backtest caught 32 of 50).
+- `cairnpath_db.py` contract_terms (24 Nov 2026, two years of data): the contract volume in
+  force on any day. The CRM holds only today's term, so every week before an expansion read
+  usage against a contract not yet bought: history.py had Yarrow Studio Shelfware, then churn
+  Watch ("53%, then 52%, then 32%, falling"), all through 2025, and healthy accounts carried
+  650 churn Watch weeks in 2025 (90 after the fix, most of them real year-one dips). A closed
+  renewal's ARR before and after gives the term before it (volume x arr_before / today's ARR:
+  list price per event). daily_util_30d joins the term of each day, monthly_usage sums each
+  day's share of its own term (a month that straddles a renewal is neither a fall nor a jump),
+  utilisation uses contract_on(account, as_of) (also right inside history.py's replay).
+  Year-one renewals are only in the finance bridge, so year one is one term.
+  tests/contract_terms_test.py.
 - `cairnpath_db.py` try_cast (24 Nov 2026, planted bad data): the crm view reads contract_start,
   renewal_date, the contract volume and ARR with try_cast. One cell typed '26/06/2027' turns
   read_csv_auto's whole column into text, and every date sum after it fails; now the bad cell is
