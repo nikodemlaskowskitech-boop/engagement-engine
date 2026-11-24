@@ -82,7 +82,7 @@ Docs-only PRs need none.
 | `cockpit_sync.py` | `tests/cockpit_sync_test.py` |
 | `infra/`, or what an engine step imports | `tests/infra_test.py` (Nikodem: needs aws_cdk), `tests/check_lambda_test.py`, `tests/engine_lambda_test.py`, `tests/slack_lambda_test.py` |
 | `slack_loop.py`, `listener.py` | `tests/slack_lambda_test.py` |
-| `infra/lambdas/search/`, `search.py`, `documents.py` | `tests/search_lambda_test.py` |
+| `infra/lambdas/search/`, `search.py`, `documents.py` | `tests/search_lambda_test.py`, `tests/mcp_public_test.py` (the public MCP server, with a real MCP client session) |
 | `infra/bundle.py`, `infra/lock_lambda.py`, `infra/locks/`, a pin a Lambda uses | `tests/lambda_lock_test.py` |
 | `upload.py` / `pull_clicks.py` / `site_cert.py` / `put_key.py` / `request_briefs.py` | its own `tests/<name>_test.py` |
 | `guardduty_report.py` / `access_report.py` | its own `tests/<name>_test.py` |
@@ -336,7 +336,7 @@ AWS (run by Nikodem, signed in with `aws login --profile cairnpath`):
 - `site_cert.py`: the certificate for the demo site's own address.
 - `site_logs.py`: turns on the demo site's visit logs (us-east-1, once): no IP, no cookie; `visitors.py`: counts them.
 - `to_parquet.py`: the engine's tables for Athena.
-- `infra/lambdas/search/`: the public search on the demo site: its handler, the redacted file and (hybrid, when up to date) their vectors.
+- `infra/lambdas/search/`: the public search on the demo site: its handler, the redacted file and (hybrid, when up to date) their vectors; `mcp_public.py`, the public remote MCP server (POST /mcp, keywords only).
 
 Tests: `tests/`, one file per area (see Testing above).
 
@@ -349,7 +349,7 @@ Tests: `tests/`, one file per area (see Testing above).
   (#166-169) and the local MCP server (mcp_server.py) the same day; "ask about this account" (ask.py) 14 Nov 2026; vectors next to
   keywords built 22 Nov 2026 (embed.py, Titan on Bedrock; held-out recall keywords 90%, meaning 94%,
   hybrid 96%, so hybrid for ask.py and the MCP server since 23 Nov, and the public search too (Titan per question, kill switch [aws] search_meaning); next grow the corpus to 45 accounts); the AI
-  cost demo (ai_cost.py) 23 Nov; next a remote MCP server (sign-in first), and last a live Ask box in the cockpit.
+  cost demo (ai_cost.py) 23 Nov; the public remote MCP server (POST /mcp, no sign-in, keywords only) 24 Nov; last a live Ask box in the cockpit.
 - Bedrock quota for Claude declined again 17 Nov 2026 (new account): no need to ask; AWS
   re-evaluates by itself as usage builds. Briefs use the Anthropic API meanwhile. Lambda concurrency
   quota approved 14 Nov 2026 (1000): engine one run at a time, search capped at 5. GuardDuty trial: keep or switch off before about 5 Dec 2026.

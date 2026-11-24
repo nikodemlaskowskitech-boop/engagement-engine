@@ -98,6 +98,25 @@ def site_vectors(out, vectors=None):
     return "hybrid"
 
 
+def site_accounts(out, export=None):
+    """The public MCP server's account list (24 Nov 2026): the search page's own accounts (name,
+    tier, ARR, open flags; roles.search_accounts) with the export's as-of date, so its answers
+    say how old they are. Built at deploy from the laptop's views_data.json; none = no file,
+    and list_accounts answers an empty list."""
+    sys.path.insert(0, str(REPO))
+    from settings import OUTPUTS
+    target = out / "accounts.json"
+    if export is None:
+        src = OUTPUTS / "views_data.json"
+        if not src.exists():
+            return None
+        export = json.loads(src.read_text(encoding="utf-8"))
+    import roles
+    target.write_text(json.dumps({"as_of": export["as_of"], "accounts": roles.search_accounts(export)},
+                                 separators=(",", ":")), encoding="utf-8")
+    return target
+
+
 def search_mode(out):
     """What a built search bundle will do: hybrid when it carries vectors."""
     return "hybrid" if (Path(out) / "vectors.jsonl").exists() else "keywords"
@@ -114,6 +133,8 @@ def bundle_search(out=None, deps=None, vectors=None):
         shutil.copy(REPO / name, out)
     shutil.copy(REPO / SETTINGS["search"]["site_documents_file"], out / "documents.jsonl")
     site_vectors(out, vectors)
+    shutil.copy(INFRA / "lambdas" / "search" / "mcp_public.py", out)
+    site_accounts(out)
     if deps is None:
         deps = not os.environ.get("CAIRNPATH_SKIP_DEPS")
     if deps:

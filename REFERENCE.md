@@ -365,6 +365,22 @@ Read a file's entry before changing that file, and update the entry in the same 
   files; answers, citations from the file, cacheable, same order as the laptop; 400/405/500;
   a planted name never in the logs, even on an error. infra_test.py and security_check.py
   check the rest (THREAT_MODEL.md 20-22).
+- `infra/lambdas/search/mcp_public.py` (24 Nov 2026, Nikodem: public, no sign-in, a CV demo):
+  the remote MCP server, POST /mcp on the site's address, inside the search function (handler.py
+  sends /mcp to it when env MCP=on). Stateless Streamable HTTP with plain JSON answers:
+  initialize (the client's version when we know it, else 2025-06-18), ping, tools/list,
+  tools/call; notifications get 202. Three read-only tools: search_documents (keywords only,
+  never Titan, the hits grouped into cases, an account by ID or name), list_accounts (the
+  search page's accounts from accounts.json, written into the bundle at deploy by
+  bundle.site_accounts from views_data.json, with its as-of date), account_cases (every case,
+  newest first, with its documents). Refusals are tool errors with a reason (isError);
+  unknown tools and methods JSON-RPC errors. Guards: POST only, application/json, one message,
+  16 KB; arguments never logged. infra: a POST /mcp route on the search API with its own
+  throttle (RouteSettings, [aws] mcp_rate_per_second, mcp_burst), a CloudFront /mcp behaviour
+  (all methods, HTTPS only, CachingDisabled, an origin request policy passing Accept,
+  Content-Type and the Mcp-* headers only), output McpUrl; [aws] mcp_public = false removes
+  them. Why inside the search function: same role, bundle and redacted file, no new IAM.
+  tests/mcp_public_test.py includes a real session with the official MCP client over HTTP.
 - `site_search.html` order and recency (24 Nov 2026, Nikodem: one order for the leader, another
   for the CSM): relevance decides what's in, the view only orders and trims. The handler returns
   twice [search] site_top_k accounts (POOL); the page shows site_top_k, "Best match" in the

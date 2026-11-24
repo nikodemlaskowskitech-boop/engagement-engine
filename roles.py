@@ -282,6 +282,7 @@ def write_search_page(out, export):
             .replace("__ACCOUNTS__", safe_json(search_accounts(export)))
             .replace("__CURRENCY__", safe_json(SETTINGS["money"]["currency"]))
             .replace("__AS_OF__", safe_json(export["as_of"]))
+            .replace("__MCP__", safe_json(bool(SETTINGS["aws"].get("mcp_public"))))
             .replace("__TOP_K__", str(search["site_top_k"]))
             .replace("__MAX_CHARS__", str(SETTINGS["aws"]["search_max_chars"])))
     (out / search["site_page"]).write_text(html, encoding="utf-8")

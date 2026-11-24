@@ -99,6 +99,12 @@ def _reply(status, body, cache=False):
 
 def handler(event, context=None):
     method = (event.get("requestContext") or {}).get("http", {}).get("method", "GET")
+    path = event.get("rawPath") or (event.get("requestContext") or {}).get("http", {}).get("path", "")
+    if path == "/mcp":                            # the public MCP server (24 Nov 2026): mcp_public.py
+        if method != "POST" or os.environ.get("MCP") != "on":
+            return _reply(405, {"error": "POST only"} if os.environ.get("MCP") == "on" else {"error": "Not here"})
+        import mcp_public
+        return mcp_public.handle(event, _index)
     if method not in ("GET", "HEAD"):
         return _reply(405, {"error": "GET only"})
     q = ((event.get("queryStringParameters") or {}).get("q") or "").strip()
