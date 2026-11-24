@@ -120,6 +120,8 @@ live = [c for c in every if c["ticket_status"] and c["latest_after_ticket"]]
 check(all("status" not in c and "ticket_status" in c for c in every)
       and all(c["ticket_status"] is None for c in every if not any(d["kind"] == "S" for d in c["documents"])),
       "a case says its ticket's status as ticket_status (none without a ticket), never a bare 'status' a model reads as the case's")
+check(all(c["title"] == re.sub(r"^(Email|Call): (Re: )*", "", [d for d in c["documents"] if d["kind"] != "S"][-1]["title"])
+          for c in live), "...titled by the newest email or call, not the old ticket (what the case is about now)")
 check(live and all(c["last"] > max(d["date"] for d in c["documents"] if d["kind"] == "S") for c in live),
       f"...and latest_after_ticket when messages came after the ticket ({len(live)} such cases across the demo)")
 for args, why in (({"question": ""}, "an empty question"), ({"question": "x" * 300}, "a question over 200 characters"),
