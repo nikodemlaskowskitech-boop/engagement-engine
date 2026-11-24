@@ -203,6 +203,10 @@ Read a file's entry before changing that file, and update the entry in the same 
   utilisation uses contract_on(account, as_of) (also right inside history.py's replay).
   Year-one renewals are only in the finance bridge, so year one is one term.
   tests/contract_terms_test.py.
+  Speed (same day): history.py went from 56 s to 89 s in the sandbox (202 s on the laptop):
+  monthly_usage joined every event of two years to its term. Now it joins only the last 90
+  days (every sum is in them), and utilisation joins the term instead of a per-row macro
+  (contract_on, removed): 61 s, outputs identical.
 - `cairnpath_db.py` try_cast (24 Nov 2026, planted bad data): the crm view reads contract_start,
   renewal_date, the contract volume and ARR with try_cast. One cell typed '26/06/2027' turns
   read_csv_auto's whole column into text, and every date sum after it fails; now the bad cell is
