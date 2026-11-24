@@ -102,6 +102,7 @@ details.about li { margin: 4px 0; }
       <li>It matches words, plus a short CS vocabulary (a "competitor" question also looks for a benchmark, an RFP, a trial). It also matches by meaning: an embedding model (Amazon Titan, in our own AWS account) turns your question into numbers and finds the documents closest to it, so other wording still finds them. The two lists are merged; the line under the box says which ran.</li>
       <li>It doesn't understand dates, amounts or "not", and it doesn't read the engine's numbers: "the biggest churn risk" is a question for the cockpit's Leadership tab, which ranks accounts by ARR at risk.</li>
       <li>People appear as labels (Customer A, CS 1) and companies as "the customer" inside the documents: names were removed, and checked for, before the search ever saw the text. The account's name on each result comes from the cockpit. Type an account's name or ID to search that account only ("Maple Energy invoice"), or just the name to see its documents, newest first.</li>
+      <li id="mcp-line" hidden>Use it from your own AI assistant: add <code id="mcp-url"></code> as an MCP connector (in Claude: Settings, Connectors, Add custom connector). Read-only, no sign-in, matched by words only; the same demo documents and accounts as this page.</li>
       <li>Codes (an account ID, a ticket or invoice number) are matched as typed, by words alone: a code has no meaning to match.</li>
       <li>One problem is one result: an email, its replies, the ticket they quote and the call logged against it form a case, shown once with its size, dates, teams and the ticket's status; "Show all" opens its history. Documents join a case only by a key they share (a reply, a ticket or invoice number), never by a guess. An email logged by two people is kept once.</li>
       <li>It shows the top __TOP_K__ accounts. On a test set written by someone who never saw the search, words alone put the first result right about 6 times in 10; words and meaning together find more of the right documents (90% to 96% in the top 10, measured on the laptop).</li>
@@ -127,6 +128,9 @@ const KIND = { S: "Ticket", E: "Email", C: "Call" };
 // a question about the engine's numbers, not about what was written (for the empty-result hint)
 const NUMBERS = /\b(biggest|largest|most|top|how (many|much)|arr|revenue|value|forecast|at risk|renewals?|churn(ing)?|ranking|total)\b/i;
 const $ = (id) => document.getElementById(id);
+if (__MCP__ && location.protocol === "https:") {          // the public MCP server (24 Nov 2026), on this same address
+  $("mcp-url").textContent = location.origin + "/mcp"; $("mcp-line").hidden = false;
+}
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const day = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 

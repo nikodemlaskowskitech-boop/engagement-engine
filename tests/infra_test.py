@@ -529,7 +529,8 @@ if aws.get("site"):
           f"at most {aws['search_max_runs']} at once: a flood can't take the engine's or the Slack listener's capacity")
     hybrid = fv.get("MODE") == "hybrid"
     expect = {"TOP_K": str(SETTINGS["search"]["site_top_k"]), "MAX_CHARS": str(aws["search_max_chars"]),
-              "CACHE_SECONDS": str(aws["search_cache_seconds"]), "MODE": "hybrid" if hybrid else "keywords"}
+              "CACHE_SECONDS": str(aws["search_cache_seconds"]), "MODE": "hybrid" if hybrid else "keywords",
+              "MCP": "on" if aws.get("mcp_public") else "off"}
     if hybrid:
         expect.update({"MODEL": SETTINGS["embed"]["model"], "DIMS": str(SETTINGS["embed"]["dimensions"]),
                        "REGION": aws["region"]})
@@ -554,30 +555,52 @@ if aws.get("site"):
     check(not any(c["LambdaFunctionArn"].get("Fn::GetAtt", [None])[0] == s_id for c in lam),
           "never woken by the bucket")
     s_api = next((k for k, v in all_apis.items() if "search" in v["Properties"].get("Description", "").lower()), None)
-    check([r["RouteKey"] for r in on_api("AWS::ApiGatewayV2::Route", s_api)] == ["GET /search"],
-          "its own API, one route: GET /search (no POST, nothing else)")
+    mcp_on = bool(aws.get("mcp_public"))
+    check(sorted(r["RouteKey"] for r in on_api("AWS::ApiGatewayV2::Route", s_api)) == ["GET /search"] + (["POST /mcp"] if mcp_on else []),
+          "its own API: GET /search" + (", and POST /mcp for the public MCP server (24 Nov 2026)" if mcp_on else " (no POST, nothing else)"))
     s_stage = (on_api("AWS::ApiGatewayV2::Stage", s_api) or [{}])[0]
     s_thr = s_stage.get("DefaultRouteSettings", {})
     check(s_thr.get("ThrottlingRateLimit") == aws["search_rate_per_second"]
           and s_thr.get("ThrottlingBurstLimit") == aws["search_burst"],
           f"one rate limit for everyone: {aws['search_rate_per_second']}/s, burst {aws['search_burst']}", s_thr)
+    if mcp_on:
+        m_thr = s_stage.get("RouteSettings", {}).get("POST /mcp", {})
+        check(m_thr.get("ThrottlingRateLimit") == aws["mcp_rate_per_second"]
+              and m_thr.get("ThrottlingBurstLimit") == aws["mcp_burst"]
+              and aws["mcp_rate_per_second"] <= aws["search_rate_per_second"],
+              f"MCP has its own, lower limit: {aws['mcp_rate_per_second']}/s, burst {aws['mcp_burst']}", m_thr)
     s_fmt = s_stage.get("AccessLogSettings", {}).get("Format", "")
     check("DestinationArn" in s_stage.get("AccessLogSettings", {}) and "$context.routeKey" in s_fmt
           and not any(x in s_fmt.lower() for x in ("querystring", "$context.path", "body", "$request")),
           "an access log that never holds the question (no query string, no path, no body)", s_fmt)
     s_perms = [v["Properties"] for v in t.find_resources("AWS::Lambda::Permission").values()
                if v["Properties"].get("FunctionName", {}).get("Fn::GetAtt", [None])[0] == s_id]
-    check(len(s_perms) == 1 and s_perms[0]["Principal"] == "apigateway.amazonaws.com"
-          and s_api in json.dumps(s_perms[0].get("SourceArn")),
-          "only its own API may call it", s_perms)
+    check(len(s_perms) == 1 + mcp_on and all(p["Principal"] == "apigateway.amazonaws.com"
+                                             and s_api in json.dumps(p.get("SourceArn")) for p in s_perms),
+          "only its own API may call it (one permission per route)", s_perms)
     cbs = dist.get("CacheBehaviors", [])
     s_beh = next((b for b in cbs if b.get("PathPattern") == "/search"), {})
     s_origin = next((o for o in dist.get("Origins", []) if o.get("Id") == s_beh.get("TargetOriginId")), {})
-    check(len(cbs) == 1 and s_beh and sorted(s_beh.get("AllowedMethods", [])) == ["GET", "HEAD"]
+    check(len(cbs) == 1 + mcp_on and s_beh and sorted(s_beh.get("AllowedMethods", [])) == ["GET", "HEAD"]
           and s_beh.get("ViewerProtocolPolicy") == "redirect-to-https"
           and s_origin.get("CustomOriginConfig", {}).get("OriginProtocolPolicy") == "https-only"
           and s_api in json.dumps(s_origin.get("DomainName")),
           "CloudFront sends /search (and only that) to the search API, HTTPS all the way, GET and HEAD only", s_beh)
+    if mcp_on:
+        m_beh = next((b for b in cbs if b.get("PathPattern") == "/mcp"), {})
+        orps = {k: v["Properties"]["OriginRequestPolicyConfig"] for k, v in t.find_resources("AWS::CloudFront::OriginRequestPolicy").items()}
+        orp = orps.get(next((k for k in orps if k in json.dumps(m_beh.get("OriginRequestPolicyId"))), None), {})
+        check(m_beh and m_beh.get("TargetOriginId") == s_beh.get("TargetOriginId") and "POST" in m_beh.get("AllowedMethods", [])
+              and m_beh.get("ViewerProtocolPolicy") == "https-only"
+              and m_beh.get("CachePolicyId") == "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+              and next(iter(rhps)) in json.dumps(m_beh.get("ResponseHeadersPolicyId")),
+              "/mcp goes to the same API, POST allowed, HTTPS only, never cached, the same security headers", m_beh)
+        check(sorted(orp.get("HeadersConfig", {}).get("Headers", [])) == sorted(
+                  ["Accept", "Content-Type", "Mcp-Protocol-Version", "Mcp-Session-Id"])
+              and orp.get("CookiesConfig", {}).get("CookieBehavior") == "none"
+              and orp.get("QueryStringsConfig", {}).get("QueryStringBehavior") == "none",
+              "...passing on the body and MCP's own headers only: no cookies, no query string", orp)
+        check("McpUrl" in t.find_outputs("*"), "prints the MCP address after deploy")
     check(next(iter(rhps)) in json.dumps(s_beh.get("ResponseHeadersPolicyId")),
           "answers get the same security headers as the pages")
     cps = {k: v["Properties"]["CachePolicyConfig"] for k, v in t.find_resources("AWS::CloudFront::CachePolicy").items()}

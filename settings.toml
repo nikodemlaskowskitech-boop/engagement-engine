@@ -148,6 +148,12 @@ search_max_chars = 200
 # deploy, the search function carries them and may call Titan (only Titan) for each question it
 # hasn't answered in the last hour; false = keywords only, and no model permission at all
 search_meaning = true
+# The public remote MCP server (24 Nov 2026, Nikodem: public, no sign-in, it's a CV demo): POST /mcp
+# on the site's address, answered by the search function (same role: no data access), keywords only
+# (no model call). Its own gateway limit, under the search's; false + cdk deploy removes the route.
+mcp_public = true
+mcp_rate_per_second = 1
+mcp_burst = 3
 search_max_runs = 5              # the search function runs at most this many at once (a ceiling: a flood of searches can never take the engine's or the Slack listener's capacity; 0 = no cap)
 # The data perimeter (a bucket policy): besides our four workload roles, only these may read or
 # write the bucket's data. The role you get from `aws login` (any IAM path), and the break-glass

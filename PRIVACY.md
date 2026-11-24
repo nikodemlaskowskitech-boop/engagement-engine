@@ -267,6 +267,10 @@ silently. The redaction keys never leave `search.py`.
   search_accounts), the same fictional names the cockpit pages show, joined beside the result,
   never put back into the text. With real data this is what any CS search does: you see the
   names of the accounts your role may see. The leak check still guards the documents.
+- **The public MCP server** (24 Nov 2026): the same redacted file as the public search, and
+  the search page's account list (fictional names, tier, ARR, flags). Keywords only, so a
+  question sent to it reaches no model of ours; the client's own model (e.g. Claude) reads the
+  answers, which hold nothing the public site doesn't show. Arguments are never logged.
 - **Cases and teams** (23 Nov 2026): a document's case is a citation (E1), its team and
   logged_by are team names (Support, CS, Implementation), never a person. Implementation
   leads are contacts on our side, so the redaction labels them CS n like the CSM.

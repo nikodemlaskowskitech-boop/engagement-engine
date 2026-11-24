@@ -42,8 +42,10 @@ TMP = Path(tempfile.mkdtemp())
 out = bundle_search(TMP / "search", deps=False, vectors=TMP / "none.jsonl")
 print("\nThe bundle")
 names = sorted(p.name for p in out.iterdir())
-check(names == sorted(["handler.py", "search.py", "documents.py", "settings.py", "settings.toml", "documents.jsonl"]),
-      "handler, search code, settings and the redacted documents: nothing else", names)
+check(names == sorted(["handler.py", "search.py", "documents.py", "settings.py", "settings.toml", "documents.jsonl",
+                       "mcp_public.py", "accounts.json"]),
+      "handler, search code, settings, the redacted documents, the public MCP server and the search page's "
+      "accounts: nothing else", names)
 check(not (out / "handover.py").exists() and not (out / "stories").exists(),
       "no redaction code, no stories, no contacts: it only ever holds redacted text")
 check((out / "documents.jsonl").read_bytes() == (ROOT / SETTINGS["search"]["site_documents_file"]).read_bytes(),

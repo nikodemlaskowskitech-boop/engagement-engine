@@ -461,6 +461,7 @@ class DataStack(Stack):
                              "MAX_CHARS": str(aws["search_max_chars"]),
                              "CACHE_SECONDS": str(aws["search_cache_seconds"]),
                              "MODE": "hybrid" if meaning else "keywords",
+                             "MCP": "on" if aws.get("mcp_public") else "off",
                              **({"MODEL": SETTINGS["embed"]["model"],
                                  "DIMS": str(SETTINGS["embed"]["dimensions"]),
                                  "REGION": aws["region"]} if meaning else {})},
@@ -477,6 +478,10 @@ class DataStack(Stack):
                                          create_default_stage=False)
             search_api.add_routes(path="/search", methods=[apigwv2.HttpMethod.GET],
                                   integration=integrations.HttpLambdaIntegration("SearchQueries", finder))
+            if aws.get("mcp_public"):
+                # the public MCP server (24 Nov 2026): one more route on the same function, POST only
+                search_api.add_routes(path="/mcp", methods=[apigwv2.HttpMethod.POST],
+                                      integration=integrations.HttpLambdaIntegration("McpCalls", finder))
             search_logs = logs.LogGroup(self, "SearchApiAccessLogs", retention=logs.RetentionDays.ONE_MONTH,
                                         removal_policy=RemovalPolicy.DESTROY)
             search_stage = search_api.add_stage(
@@ -484,6 +489,11 @@ class DataStack(Stack):
                 # one limit for everyone: a flood is cut off at the gateway, before the function
                 throttle=apigwv2.ThrottleSettings(rate_limit=aws["search_rate_per_second"],
                                                   burst_limit=aws["search_burst"]))
+            if aws.get("mcp_public"):
+                # its own, lower limit: MCP clients may call in bursts, and the search page comes first
+                search_stage.node.default_child.add_property_override("RouteSettings", {
+                    "POST /mcp": {"ThrottlingRateLimit": aws["mcp_rate_per_second"],
+                                  "ThrottlingBurstLimit": aws["mcp_burst"]}})
             # the access log: when and what we answered, never the question (the route has no
             # query string in it: "GET /search")
             search_stage.node.default_child.access_log_settings = apigwv2.CfnStage.AccessLogSettingsProperty(
@@ -503,14 +513,31 @@ class DataStack(Stack):
                 min_ttl=Duration.seconds(0), default_ttl=Duration.seconds(0),
                 max_ttl=Duration.seconds(aws["search_cache_seconds"]),
                 enable_accept_encoding_gzip=True, enable_accept_encoding_brotli=True)
+            search_origin = origins.HttpOrigin(Fn.select(2, Fn.split("/", search_api.api_endpoint)),
+                                               protocol_policy=cloudfront.OriginProtocolPolicy.HTTPS_ONLY)
             site.add_behavior(
                 "/search",
-                origins.HttpOrigin(Fn.select(2, Fn.split("/", search_api.api_endpoint)),
-                                   protocol_policy=cloudfront.OriginProtocolPolicy.HTTPS_ONLY),
+                search_origin,
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 allowed_methods=cloudfront.AllowedMethods.ALLOW_GET_HEAD,
                 cache_policy=search_cache,
                 response_headers_policy=headers)
+            if aws.get("mcp_public"):
+                # /mcp: never cached (each call is a POST with a body), and only the headers MCP
+                # uses are passed on: no cookies, no query string
+                site.add_behavior(
+                    "/mcp", search_origin,
+                    viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+                    allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+                    cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+                    origin_request_policy=cloudfront.OriginRequestPolicy(
+                        self, "McpRequests", comment="MCP calls: the body and MCP's own headers only",
+                        header_behavior=cloudfront.OriginRequestHeaderBehavior.allow_list(
+                            "Accept", "Content-Type", "Mcp-Protocol-Version", "Mcp-Session-Id"),
+                        query_string_behavior=cloudfront.OriginRequestQueryStringBehavior.none(),
+                        cookie_behavior=cloudfront.OriginRequestCookieBehavior.none()),
+                    response_headers_policy=headers)
+                CfnOutput(self, "McpUrl", value="https://" + (domain or site.distribution_domain_name) + "/mcp")
             CfnOutput(self, "SearchFunction", value=finder.function_name)
             CfnOutput(self, "SearchUrl", value="https://" + (domain or site.distribution_domain_name) + "/search?q=")
             CfnOutput(self, "SiteUrl", value="https://" + (domain or site.distribution_domain_name))
