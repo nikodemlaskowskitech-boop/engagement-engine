@@ -108,7 +108,7 @@ out["long"] = call("x" * (handler.MAX_CHARS + 1))
 out["post"] = call("hello", "POST")
 rows = [json.loads(l) for l in open("documents.jsonl", encoding="utf-8")]
 out["file"] = [[r["account_id"], r["id"], r["title"]] for r in rows]
-out["laptop"] = [a["account_id"] for a in search.accounts(handler._index(), "Which accounts are evaluating a competitor?", handler.TOP_K)]
+out["laptop"] = [a["account_id"] for a in search.accounts(handler._index(), "Which accounts are evaluating a competitor?", handler.POOL)]
 # one account asked for by ID (23 Nov 2026): its documents only
 acc = rows[0]["account_id"]
 out["acc"] = acc
@@ -127,19 +127,19 @@ if handler.MODE == "hybrid":
 if handler.MODE == "hybrid":
     q = "Which accounts are evaluating a competitor?"
     con = handler._index()
-    want = search.fuse([search.search(con, q, k=handler.TOP_K * 5),
-                        search.by_vector(con, standin(q), k=handler.TOP_K * 5, query=q)], handler.TOP_K * 5)
+    want = search.fuse([search.search(con, q, k=handler.POOL * 5),
+                        search.by_vector(con, standin(q), k=handler.POOL * 5, query=q)], handler.POOL * 5)
     seen = []
     for h in want:
         if h["account_id"] not in seen:
             seen.append(h["account_id"])
-    out["laptop"] = seen[:handler.TOP_K]
+    out["laptop"] = seen[:handler.POOL]
     def no_titan(q):
         raise PermissionError("AccessDenied for " + q)
     handler.embed = no_titan
     out["no_titan"] = call(sys.argv[1])
     out["no_titan_good"] = call("Which accounts are evaluating a competitor?")
-    out["keywords"] = [a["account_id"] for a in search.accounts(con, "Which accounts are evaluating a competitor?", handler.TOP_K)]
+    out["keywords"] = [a["account_id"] for a in search.accounts(con, "Which accounts are evaluating a competitor?", handler.POOL)]
 def boom(*a, **k):
     raise ValueError("failed on: " + sys.argv[1])
 search.search = boom
@@ -212,8 +212,9 @@ check(all(x.get("cases") and all(c["best"]["id"] in [d["id"] for d in c["docs"]]
 good = r["good"]
 res = good["body"].get("results", [])
 in_file = {(a, i): t for a, i, t in r["file"]}
-check(good["status"] == 200 and 0 < len(res) <= int(SETTINGS["search"]["site_top_k"]),
-      f"a question: 200 and at most {SETTINGS['search']['site_top_k']} accounts", (good["status"], len(res)))
+check(good["status"] == 200 and 0 < len(res) <= 2 * int(SETTINGS["search"]["site_top_k"]),
+      f"a question: 200 and at most twice {SETTINGS['search']['site_top_k']} accounts (the page orders them and shows "
+      f"{SETTINGS['search']['site_top_k']})", (good["status"], len(res)))
 check(all(in_file.get((x["account_id"], x["best"]["id"])) == x["best"]["title"] and x["best"]["line"] and x["best"]["date"]
           for x in res), "each with its best document: a real citation from the file, its date and the matching line")
 check(good["cache"] == f"public, max-age={SETTINGS['aws']['search_cache_seconds']}", "cacheable by CloudFront", good["cache"])

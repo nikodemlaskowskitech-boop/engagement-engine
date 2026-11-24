@@ -57,6 +57,10 @@ mark { background: var(--accent-soft); color: var(--ink); border-bottom: 1px sol
 .head .flag { border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--ink-2); }
 .head .flag.act { border-color: var(--critical, #c0392b); color: var(--ink); }
 .account-card { border-color: var(--accent) !important; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0 0; font-size: 0.8rem; color: var(--ink-3); }
+.controls .sep { margin-left: 10px; }
+.controls button { font: inherit; color: var(--ink-2); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+.controls button[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
 .case + .case { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .case .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.8rem; color: var(--ink-3); margin-top: 4px; }
 .case .status { border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--ink-2); }
@@ -84,6 +88,10 @@ details.about li { margin: 4px 0; }
   </form>
   <div class="examples" id="examples"><span>Try:</span></div>
 
+  <div class="controls" id="controls" hidden>
+    <span>Order</span><button type="button" data-order="match">Best match</button><button type="button" data-order="value">Biggest ARR</button>
+    <span class="sep">From</span><button type="button" data-since="0">All time</button><button type="button" data-since="180">6 months</button><button type="button" data-since="90">90 days</button>
+  </div>
   <p id="status" role="status" aria-live="polite"></p>
   <ol class="results" id="results"></ol>
 
@@ -106,6 +114,14 @@ details.about li { margin: 4px 0; }
 const EXAMPLES = __EXAMPLES__;
 // the accounts it can find (23 Nov 2026): name, tier, ARR, open flags; the names are the cockpit's
 const ACCOUNTS = __ACCOUNTS__;
+const AS_OF = __AS_OF__;                                // the data's last day: "90 days" counts back from it
+// How to order and how far back (24 Nov 2026, Nikodem): a leader reads by money, a CSM by relevance,
+// so the page opens by role (?view=leader|manager from their cockpit page) and either can switch.
+// Relevance decides what's in (the search returns its strong matches); these only order and trim them.
+const params = new URLSearchParams(location.search);
+const VIEW = { order: params.get("order") || (["leader", "manager"].includes(params.get("view")) ? "value" : "match"),
+               since: +(params.get("since") || 0) };
+let LAST = null;                                        // the last answer: re-ordered without asking again
 const CURRENCY = __CURRENCY__;
 const KIND = { S: "Ticket", E: "Email", C: "Call" };
 // a question about the engine's numbers, not about what was written (for the empty-result hint)
@@ -159,7 +175,7 @@ function caseHtml(c) {
   if (teams.length > 1 || c.n > 1) meta.push(teams.map(([t, n]) => `${t} ${n}`).join(", "));
   else if (teams.length) meta.push(teams[0][0]);
   const twice = (d) => d.logged_by && d.logged_by.length > 1 ? ` · logged by ${d.logged_by.join(" and ")} (kept once)` : "";
-  return `<div class="case" data-docs="${esc((c.docs || [b]).map((d) => d.id).join(","))}">
+  return `<div class="case" data-docs="${esc((c.docs || [b]).map((d) => d.id).join(","))}" data-last="${esc(c.last || b.date)}">
       <p class="title">${highlight(c.title, b.matched)}</p>
       <div class="meta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}${c.status ? `<span class="status">ticket ${esc(c.status)}</span>` : ""}</div>
       <p class="line"><span class="cite">[${esc(b.id)}]</span>${highlight(b.line, b.matched)}</p>
@@ -174,6 +190,7 @@ function showAccount(body) {
     (body.cases || []).map((c) => `<li>${caseHtml(c)}</li>`).join("");
 }
 
+const SHOW = __TOP_K__;                                  // accounts shown; the search returns twice as many to order from
 const SHOW_CASES = 3;                                    // per account; the rest are counted, not listed
 function show(results) {
   const list = $("results");
@@ -190,6 +207,62 @@ function show(results) {
   }).join("");
 }
 
+function recent(cases) {                                // the cases with a message in the window ("From")
+  if (!VIEW.since) return cases;
+  const from = new Date(Date.parse(AS_OF) - VIEW.since * 864e5).toISOString().slice(0, 10);
+  return cases.filter((c) => (c.last || c.best.date) >= from);
+}
+
+function keepUrl() {                                    // the question and the view, so the page can be shared as seen
+  const p = new URLSearchParams({ q: LAST ? LAST.q : $("q").value.trim() });
+  if (params.get("view")) p.set("view", params.get("view"));
+  if (VIEW.order !== "match") p.set("order", VIEW.order);
+  if (VIEW.since) p.set("since", VIEW.since);
+  history.replaceState(null, "", "?" + p);
+}
+
+function controls() {
+  for (const b of $("controls").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", b.dataset.order ? b.dataset.order === VIEW.order : +b.dataset.since === VIEW.since);
+  }
+  $("controls").querySelector("[data-order]").parentNode.querySelectorAll("[data-order]").forEach((b) => { b.hidden = !!(LAST && LAST.body.account); });
+}
+$("controls").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.order) VIEW.order = b.dataset.order; else VIEW.since = +b.dataset.since;
+  controls(); keepUrl(); if (LAST) render();
+});
+
+function render() {
+  const { q, body } = LAST, status = $("status");
+  const span = VIEW.since ? ` in the ${VIEW.since === 90 ? "last 90 days" : "last 6 months"}` : "";
+  if (body.account) {                                   // one account, asked for by name or ID
+    const a = ACCOUNTS[body.account], n = (body.documents || []).length, who = a ? a.n : body.account;
+    const cs = recent(body.cases || []), k = cs.length;
+    status.textContent = !n ? `No documents for ${who}${a ? "" : " (this search covers " + Object.keys(ACCOUNTS).length + " accounts)"}.`
+      : !k ? `${who}: no case${span}. Try "All time".`
+      : `${who}: ${k} case${k > 1 ? "s" : ""}${span}, ${body.ranked_by === "newest" ? "newest first" : "best match first"}. Only this account.`;
+    showAccount({ ...body, cases: cs });
+    return;
+  }
+  let results = (body.results || []).map((r) => ({ ...r, cases: recent(r.cases && r.cases.length ? r.cases : []) }))
+    .filter((r) => !VIEW.since || r.cases.length);
+  if (VIEW.order === "value") results = results.slice().sort((x, y) => ((ACCOUNTS[y.account_id] || {}).a || 0) - ((ACCOUNTS[x.account_id] || {}).a || 0));
+  results = results.slice(0, SHOW);
+  const how = body.ranked_by === "hybrid" ? " Matched by words and meaning." : " Matched by words.";
+  status.textContent = results.length
+    ? `${results.length} account${results.length > 1 ? "s" : ""}${span}, ${VIEW.order === "value" ? "biggest ARR first (among the best matches)" : "best match first"}.${how}`
+    : (body.results || []).length ? `No match${span}. Try "All time".`
+    : NUMBERS.test(q)
+      ? "No document matches. That reads like a question about numbers: this search reads what customers and CS wrote, not the engine's figures. "
+      : "Nothing in the documents is close to that question, in words or in meaning. Try other words, or one of the examples.";
+  if (!(body.results || []).length && NUMBERS.test(q)) {  // 16 Nov 2026: "what is my biggest churn" found nothing, with no reason why
+    const a = document.createElement("a"); a.href = "index.html#lead"; a.textContent = "See the biggest risks on Leadership.";
+    status.append(a);
+  }
+  show(results);
+}
+
 async function ask(q) {
   q = q.trim();
   const status = $("status");
@@ -197,7 +270,8 @@ async function ask(q) {
   status.className = "";
   if (!q) { status.textContent = "Type a question first."; return; }
   $("q").value = q;
-  history.replaceState(null, "", "?q=" + encodeURIComponent(q));     // a question you can share
+  LAST = null;
+  keepUrl();                                                          // a question you can share
   status.textContent = "Searching…";
   let res;
   try {
@@ -212,26 +286,10 @@ async function ask(q) {
   let body = {};
   try { body = await res.json(); } catch (e) { /* not JSON: handled below */ }
   if (!res.ok) { status.className = "warn"; status.textContent = body.error || "Something went wrong. Try again in a minute."; return; }
-  if (body.account) {                                   // one account, asked for by name or ID
-    const a = ACCOUNTS[body.account], n = (body.documents || []).length, who = a ? a.n : body.account;
-    const k = (body.cases || []).length;
-    status.textContent = !n ? `No documents for ${who}${a ? "" : " (this search covers " + Object.keys(ACCOUNTS).length + " accounts)"}.`
-      : `${who}: ${k} case${k > 1 ? "s" : ""} (${n} document${n > 1 ? "s" : ""}), ${body.ranked_by === "newest" ? "newest first" : "best match first"}. Only this account.`;
-    showAccount(body);
-    return;
-  }
-  const results = body.results || [];
-  const how = body.ranked_by === "hybrid" ? " Matched by words and meaning." : " Matched by words.";
-  status.textContent = results.length
-    ? `${results.length} account${results.length > 1 ? "s" : ""}, best match first.${how}`
-    : NUMBERS.test(q)
-      ? "No document matches. That reads like a question about numbers: this search reads what customers and CS wrote, not the engine's figures. "
-      : "Nothing in the documents is close to that question, in words or in meaning. Try other words, or one of the examples.";
-  if (!results.length && NUMBERS.test(q)) {               // 16 Nov 2026: "what is my biggest churn" found nothing, with no reason why
-    const a = document.createElement("a"); a.href = "index.html#lead"; a.textContent = "See the biggest risks on Leadership.";
-    status.append(a);
-  }
-  show(results);
+  LAST = { q, body };
+  $("controls").hidden = false;
+  controls();
+  render();
 }
 
 for (const text of EXAMPLES) {
@@ -241,7 +299,8 @@ for (const text of EXAMPLES) {
   $("examples").appendChild(b);
 }
 $("ask").addEventListener("submit", (e) => { e.preventDefault(); ask($("q").value); });
-const first = new URLSearchParams(location.search).get("q");
+controls();
+const first = params.get("q");
 if (first) ask(first);
 </script>
 </body>

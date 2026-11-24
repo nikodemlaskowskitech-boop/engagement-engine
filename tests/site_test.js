@@ -175,6 +175,32 @@ print(json.dumps(r))`;
     await s.fill("#q", "acc_999"); await s.click("button.go");
     await s.waitForFunction(() => /No documents/.test(document.getElementById("status").textContent), null, { timeout: 15000 });
     check(!(await s.$("#results li:not(.account-card)")), "an account with no documents: says so, shows nothing else");
+    // 24 Nov 2026 (Nikodem): a leader reads by money, a CSM by relevance; and how far back
+    const Q = "Which accounts are disputing an invoice?";
+    const read = async () => s.$$eval("#results > li", (ls) => ls.map((l) => ({ id: l.textContent.match(/(acc_h?\d+)/)[1],
+      lasts: [...l.querySelectorAll(".case")].map((c) => c.dataset.last) })));
+    await s.goto(base + "search.html?view=leader&q=" + encodeURIComponent(Q));
+    await s.waitForSelector("#results > li", { timeout: 20000 });
+    const byValue = await read(), ARR = (id) => (ACC[id] || {}).a || 0;
+    check(/biggest ARR first/.test(await s.textContent("#status")) && (await s.getAttribute('[data-order="value"]', "aria-pressed")) === "true"
+          && byValue.every((x, i) => !i || ARR(byValue[i - 1].id) >= ARR(x.id)),
+      "from a leader's page: biggest ARR first, among the best matches", JSON.stringify(byValue.map((x) => [x.id, ARR(x.id)])));
+    await s.click('[data-order="match"]'); await s.waitForTimeout(150);
+    const byMatch = await read();
+    check(/best match first/.test(await s.textContent("#status")) && byMatch.length === byValue.length && /order/.test(s.url()) === false,
+      "...one click: best match first (no new request; the address follows)", s.url());
+    await s.goto(base + "search.html?view=csm&q=" + encodeURIComponent(Q));
+    await s.waitForSelector("#results > li", { timeout: 20000 });
+    check((await s.getAttribute('[data-order="match"]', "aria-pressed")) === "true" && /best match first/.test(await s.textContent("#status")),
+      "from a CSM's page: best match first");
+    const asOf = await s.evaluate(() => AS_OF), cut = new Date(Date.parse(asOf) - 90 * 864e5).toISOString().slice(0, 10);
+    await s.click('[data-since="90"]'); await s.waitForTimeout(150);
+    const recent = await read();
+    check(/last 90 days/.test(await s.textContent("#status")) && recent.every((x) => x.lasts.length && x.lasts.every((d) => d >= cut))
+          && /since=90/.test(s.url()),
+      `"90 days": only cases with a message since ${cut} (the data's last day ${asOf}, not today)`, JSON.stringify(recent));
+    await s.click('[data-since="0"]'); await s.waitForTimeout(150);
+    check((await read()).length >= recent.length && !/since=/.test(s.url()), "...'All time' brings the older ones back");
     await s.fill("#q", "   "); await s.click("button.go"); await s.waitForTimeout(150);
     check(/Type a question/.test(await s.textContent("#status")) && !(await s.$("#results li")), "an empty question: a hint, no request");
     await s.fill("#q", "__busy__"); await s.click("button.go"); await s.waitForTimeout(400);
@@ -309,6 +335,13 @@ print(json.dumps(r))`;
       const L = await q.evaluate(() => ({ line: document.getElementById("ld-ops-line").hidden ? "" : document.getElementById("ld-ops-finding").textContent,
         lists: !document.getElementById("ld-ops-reach").hidden || !document.getElementById("ld-ops-grid").hidden }));
       check(!L.lists && /past their reach deadline|late \(open past|with no CSM/.test(L.line), "the leader: no queue lists, one line on where a manager is needed", L.line);
+      // 24 Nov 2026: the leader's link to the search opens it by ARR (the CSM's by best match)
+      const sHref = await q.evaluate(() => {
+        const a = document.querySelector('a[href="search.html"]'); if (!a) return "";
+        document.addEventListener("click", (e) => e.preventDefault(), { once: true });
+        a.click(); return a.getAttribute("href");
+      });
+      check(sHref === "search.html?view=leader", "the leader's link to the search opens it in the leader's order", sHref);
       // one clock for a late task (the definitions pass, 22 Nov 2026): the line and Tasks agree
       const lineLate = +((L.line.match(/(\d+) tasks? late/) || [])[1] || 0);
       await q.click("#tab-tasks"); await q.waitForTimeout(300);

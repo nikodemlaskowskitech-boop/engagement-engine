@@ -365,6 +365,15 @@ Read a file's entry before changing that file, and update the entry in the same 
   files; answers, citations from the file, cacheable, same order as the laptop; 400/405/500;
   a planted name never in the logs, even on an error. infra_test.py and security_check.py
   check the rest (THREAT_MODEL.md 20-22).
+- `site_search.html` order and recency (24 Nov 2026, Nikodem: one order for the leader, another
+  for the CSM): relevance decides what's in, the view only orders and trims. The handler returns
+  twice [search] site_top_k accounts (POOL); the page shows site_top_k, "Best match" in the
+  search's order or "Biggest ARR" (the account's ARR, among those strong matches). It opens by
+  ?view= (leader or manager: ARR; anyone else: best match); views_template.html adds ?view=<role>
+  to its search.html links on a click. "From": all time, 6 months or 90 days, counted back from
+  the data's as-of date (__AS_OF__ from the export, never today), keeping cases with a message
+  in the window. The address keeps order and since, so a view can be shared as seen; no new
+  request when either changes (CloudFront still caches by q only).
 - `site_search.html` cases (23 Nov 2026): results come as accounts, each with up to 3 cases
   (search.cases(): one line per case, its best hit, n messages, first-last date, teams, the
   ticket's status, every document behind "Show all", "logged by CS and Implementation (kept
