@@ -84,6 +84,19 @@ Read a file's entry before changing that file, and update the entry in the same 
   to the next have names in [outputs]: `output_file(name)` / `out_sql(name)`,
   never a path typed into SQL. `tests/pipeline_test.py`: both lists from one
   source, every step a real script, no typed hand-off path left.
+- `generate_events.py` year one (24 Nov 2026, Nikodem: two years of history): write_year_one()
+  adds the year before START_DATE (HISTORY_START) after everything else, with its own random
+  streams (SEED+21 usage, SEED+22 CS history), so today's year is exactly as before: the same
+  flags, values, outcomes and action log (checked file by file). Accounts known to the CRM and
+  customers then (in_year_one): usage at the level they started today's year at (a renewed
+  account at its previous contract), accounts signed in year one onboard and ramp up, about 1
+  in 10 has a dip that recovers (YEAR_ONE_DIPS); an Enterprise QBR about every quarter, a Scale
+  check-in about every four months, a kickoff or onboarding workshop after signing, owned by
+  another CSM of the region before csm_since. No notes or promises; year one's renewals stay in
+  the finance bridge for now (the hero accounts get theirs). Today's day-one invites of a team
+  that was already there are drawn as before but not written. The events folder now spans 730
+  days; ingest, flags and the windows are unchanged; history.py replays both years (about 3x
+  slower: 22s -> 65s in the sandbox).
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
   (18 Nov 2026: meetings carry what a CSM would log in Slack, for Last in My work: meeting_log()
   gives about 8 in 10 an outcome from slack_loop.OUTCOMES, at risk mostly for the at-risk
@@ -549,6 +562,8 @@ Read a file's entry before changing that file, and update the entry in the same 
   snapshot instead (a CRM change can't be replayed); the replay is the demo's
   backfill. cairnpath_db.py reads the action log and today's flags through views
   (action_log, open_flags) so history.py can swap them.
+- `retention.py` "this year" (24 Nov 2026): the 365 days to the as-of date, or from the first day
+  of data when there's less; with two years of data it had become both years.
 - `retention.py`: GRR and NRR by the standard definitions (12 Nov 2026, from a
   senior CS leader's feedback: tie the work to the top line). Cohort = the
   customers of day one at their ARR that day; GRR = what they pay now, each capped
@@ -616,6 +631,11 @@ Read a file's entry before changing that file, and update the entry in the same 
   usage, so it shows the method, not proof). Runs after team_report.py (uses time_to_action).
   Not done yet: replaying the flags as of an earlier date (needs a longer
   data window).
+- `journeys.py` signal day (24 Nov 2026): "churn Act since <day>" is the first day over the line
+  after the account last came back for [journeys] signal_return_days (14) in a row, not the
+  first crossing ever. Two years of data showed the bug (Alder Media "since 2025-02-16", a dip a
+  year earlier), and it was there in one year too: acc_163 read "since 2026-02-20", a 7-day
+  blip, for a run that began 2026-09-11. tests/journeys_test.py checks every dated row.
 - `journeys.py`: rules on the last touch (run `flags.py` first). "Email
   never opened": Self-service stalled/silent, getting-started email 5+ days
   old and unopened -> CS ops checks the contact. "No meeting in 30 days":
@@ -649,6 +669,10 @@ Read a file's entry before changing that file, and update the entry in the same 
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- `export_views.py` page window (24 Nov 2026): page_window() keeps the page's daily utilisation,
+  touches and weekly history to the last [cockpit] page_days (365); two years of data took
+  views_data.json from 1.5 to 2.4 MB, back to 1.6. The engine, Athena and the MCP servers keep
+  everything (facts.timeline returns the older touches too).
 - `export_views.py`: everything the views need, to `data/views_data.json`
   (run `generate_events.py`, `flags.py` and `journeys.py` first). Reuses the
   reports' SQL through `team_report.add_views(con)` and

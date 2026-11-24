@@ -48,6 +48,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 UNOPENED_AFTER_DAYS = SETTINGS["journeys"]["unopened_after_days"]   # all in settings.toml
 NO_MEETING_DAYS = SETTINGS["journeys"]["no_meeting_days"]
+RETURN_DAYS = SETTINGS["journeys"]["signal_return_days"]
 HANDBACK_DAYS = SETTINGS["follow_ups"]["handback_after_days"]
 
 con = connect()
@@ -60,14 +61,31 @@ con.sql(f"""
         UNION ALL
         SELECT *, 'expansion' AS flag FROM read_csv_auto('{out_sql('flags_expansion')}') WHERE status = 'Act'
     ),
+    act_side AS (
+        SELECT f.account_id, f.flag, u.event_date,
+               (f.flag = 'churn' AND u.util < 40) OR (f.flag = 'expansion' AND u.util >= 80) AS over
+        FROM acts f JOIN daily_util_30d u USING (account_id)
+    ),
+    act_out_spells AS (
+        -- stretches of consecutive days back on the other side of the line
+        SELECT account_id, flag, min(event_date) AS spell_from, max(event_date) AS spell_to,
+               count(*) AS spell_days
+        FROM (SELECT *, event_date - CAST(row_number() OVER (PARTITION BY account_id, flag ORDER BY event_date) AS INTEGER) AS grp
+              FROM act_side WHERE NOT over)
+        GROUP BY account_id, flag, grp
+    ),
     act_signal AS (
-        -- the day each Act account first crossed its flag's line
-        SELECT f.account_id, f.flag,
-               min(u.event_date) FILTER (WHERE (f.flag = 'churn' AND u.util < 40)
-                                            OR (f.flag = 'expansion' AND u.util >= 80)) AS signal_date
-        FROM acts f
-        JOIN daily_util_30d u USING (account_id)
-        GROUP BY f.account_id, f.flag
+        -- the day each Act account crossed its flag's line this time: the first day over it
+        -- after the last real return (two weeks or more back on the other side). 24 Nov 2026:
+        -- with two years of data the first crossing ever was a dip a year earlier (Alder Media
+        -- read "churn Act since 2025-02-16"); a few days' wobble at the line doesn't restart it
+        SELECT s.account_id, s.flag,
+               min(s.event_date) FILTER (WHERE s.over AND s.event_date > coalesce(r.last_return, DATE '1900-01-01'))
+                   AS signal_date
+        FROM act_side s
+        LEFT JOIN (SELECT account_id, flag, max(spell_to) AS last_return FROM act_out_spells
+                   WHERE spell_days >= {RETURN_DAYS} GROUP BY account_id, flag) r USING (account_id, flag)
+        GROUP BY s.account_id, s.flag
     ),
     email_never_opened AS (
         SELECT f.account_id, f.account_name, f.tier, f.region,

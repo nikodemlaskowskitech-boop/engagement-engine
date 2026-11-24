@@ -232,6 +232,8 @@ min_days = 90      # ...as long as this many days of data lie behind it (the chu
 # Decisions saved in the published cockpit (cockpit_sync.py checks every one again: never trust the page).
 max_text = 200        # notes and reasons are cut to this many characters (the page's own limit)
 open_no_flags_up_to = 15   # My book: "No flags" accounts listed open when the book is this small or smaller (else folded, risk first)
+page_days = 365           # the page's series (daily utilisation, touches, weekly history) cover this many days back
+                          # from the as-of date; the engine keeps everything (24 Nov 2026: two years of data)
 stale_task_days = 14      # Tasks: an Open task turns amber (needs attention) once it has waited this long; before that it's neutral
 below_median_points = 10  # Leadership: "book met" turns red only this many points below the median (one point on a book of 7 is noise)
 my_week_days = 14         # My work's "next N days": QBRs, renewals, next steps and reach deadlines coming up (20 Nov 2026)
@@ -433,6 +435,10 @@ no_meeting_days = 30      # an Act account should have had a conversation by now
 # disagree. Set centrally by the CS leader; never per team (no drift across the book).
 reach_days = { Enterprise = 7, Scale = 14 }
 reach_days_other = 14     # any other tier (Self-service has no human contact: unused in practice)
+# An Act signal's day ("churn Act since ...") is the first day over the line after the account last
+# came back for at least this many days in a row (24 Nov 2026: with two years of data the first
+# crossing ever could be a dip a year earlier; a few days' wobble at the line doesn't restart it)
+signal_return_days = 14
 
 [team_report]
 early_days = 14           # a call this many days before the signal still counts (as 0 days)

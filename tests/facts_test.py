@@ -39,6 +39,9 @@ print("\nOne account: the cockpit's facts")
 churn_act = [a for a in D["accounts"] if any(f["flag"] == "churn" and f["status"] == "Act" for f in a["flags"])]
 for acc in [churn_act[0]["account_id"], D["accounts"][0]["account_id"]]:
     a = facts.account(con, acc)
+    # the page keeps the last [cockpit] page_days of the daily series (24 Nov 2026): the facts
+    # layer has them all, and its tail is the page's
+    a = {**a, "util": a["util"][len(a["util"]) - len(book[acc]["util"]):]}
     same = {k: a[k] for k in book[acc]} == book[acc]
     check(same, f"{acc}: every field the cockpit has, the same value", [k for k in book[acc] if a.get(k) != book[acc][k]])
 check(facts.account(con, "acc_nope") is None, "an account not in the book: None, not an error")
@@ -80,8 +83,11 @@ print("\nThe timeline")
 acc = churn_act[0]["account_id"]
 tl = facts.timeline(con, acc)
 check([x["date"] for x in tl] == sorted((x["date"] for x in tl), reverse=True), "newest first")
-check(len([x for x in tl if x["kind"] == "touch"]) == len([t for t in D["touches"] if t["account_id"] == acc]),
-      "every customer touch the cockpit shows")
+cut = D["util_dates"][0] if D["util_dates"] else ""
+check(len([x for x in tl if x["kind"] == "touch" and str(x["date"]) >= cut])
+      >= len([t for t in D["touches"] if t["account_id"] == acc]) > 0
+      and len([x for x in tl if x["kind"] == "touch"]) >= len([t for t in D["touches"] if t["account_id"] == acc]),
+      "every customer touch the cockpit shows (the page's window), and the timeline keeps the older ones")
 
 print("\nOnly IDs reach the SQL")
 for bad in ("acc_1'; DROP TABLE crm; --", "acc_1) OR (1=1"):

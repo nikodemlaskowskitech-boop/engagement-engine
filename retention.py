@@ -95,9 +95,10 @@ def add_views(con):
                sum(end_arr) / sum(start_arr)                                    AS nrr
         FROM cohort
     """)
-    # This year: from the first day of data to the as-of date. Read once and written
-    # into the views as dates: scanning a year of events in every query is slow.
-    d0, d1 = con.sql("SELECT min(event_date), max(event_date) FROM events").fetchone()
+    # This year: the 365 days to the as-of date (or from the first day of data, when there's
+    # less). 24 Nov 2026: with two years of data "this year" had become both years. Read once
+    # and written into the views as dates: scanning the events in every query is slow.
+    d0, d1 = con.sql("SELECT greatest(min(event_date), max(event_date) - 364), max(event_date) FROM events").fetchone()
     period = f"(SELECT DATE '{d0}' AS d0, DATE '{d1}' AS d1)"
     con.sql("""
         CREATE VIEW retention_year AS

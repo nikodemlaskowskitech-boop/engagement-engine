@@ -279,6 +279,30 @@ export = {
 }
 export["slack_cards"] = slack_cards(con, export)     # the preview of each open task's Slack card
 
+
+def page_window(export, days):
+    """The page shows the last [cockpit] page_days of the series (24 Nov 2026: two years of data
+    took the page from 1.5 to 2.4 MB). The engine, Athena and the MCP servers keep everything;
+    the page's daily utilisation, its touches and its weekly history start at the cutoff."""
+    if not days:
+        return export
+    from datetime import date, timedelta
+    cut = (date.fromisoformat(export["as_of"]) - timedelta(days=int(days) - 1)).isoformat()
+    first = next((i for i, d in enumerate(export["util_dates"]) if d >= cut), len(export["util_dates"]))
+    export["util_dates"] = export["util_dates"][first:]
+    for a in export["accounts"]:
+        a["util"] = a["util"][first:]
+    export["touches"] = [t for t in export["touches"] if str(t["date"]) >= cut]
+    h = export["history"]
+    w0 = next((i for i, d in enumerate(h["weeks"]) if str(d) >= cut), len(h["weeks"]))
+    h["weeks"] = h["weeks"][w0:]
+    h["flags"] = [[r[0] - w0, *r[1:]] for r in h["flags"] if r[0] >= w0]
+    h["tasks"] = [[r[0] - w0, *r[1:]] for r in h["tasks"] if r[0] >= w0]
+    return export
+
+
+export = page_window(export, SETTINGS["cockpit"].get("page_days"))
+
 out = DATA / "views_data.json"
 data_json = json.dumps(export, separators=(",", ":"))
 out.write_text(data_json, encoding="utf-8")
