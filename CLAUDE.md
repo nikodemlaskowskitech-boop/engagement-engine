@@ -60,7 +60,7 @@ Docs-only PRs need none.
 
 | A PR that touches | Runs |
 | --- | --- |
-| the engine (any step, settings) | `check_inputs.py`, `check_flags.py`, `backtest.py`, `tests/pipeline_test.py` |
+| the engine (any step, settings) | `check_inputs.py`, `check_flags.py`, `backtest.py`, `tests/pipeline_test.py`, `tests/journeys_test.py` |
 | `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py` |
 | `ingest.py` | `tests/store_test.py` |
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
@@ -288,7 +288,7 @@ Engine:
 - `settings.local.toml`: a company's own data and personal settings (git-ignored).
 - `cairnpath_db.py`: `connect()` and every shared view, defined once.
 - `ingest.py`: the events store (Parquet plus a stamp of its input files).
-- `generate_events.py`: the demo data: ~500 accounts with personalities, a year.
+- `generate_events.py`: the demo data: ~500 accounts with personalities, two years (year one written apart, so today's year is unchanged).
 - `generate_documents.py`: the search corpus: tickets, emails, calls for 30 accounts, with an answer key.
 - `check_inputs.py`: the inputs against the data contract.
 - `flags.py`: activation, churn, expansion and QBR flags, with value at stake.

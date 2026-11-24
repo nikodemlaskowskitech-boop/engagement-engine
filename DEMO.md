@@ -1,7 +1,7 @@
 # Demo walkthrough (about 3½ minutes)
 
 A script to say out loud, with the clicks in brackets. The numbers are from the
-demo data as of 18 Oct 2026, a year of history; after a regenerate, check them on the pages first.
+demo data as of 18 Oct 2026, two years of history (the pages show the last year); after a regenerate, check them on the pages first.
 
 **Before you start:** open the cockpit on the leader's page, either the public
 site (https://cairnpath.nikodem-laskowski.com, no login, saves stay in your

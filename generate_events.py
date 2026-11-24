@@ -45,6 +45,14 @@ DAYS = 365                     # a year of history, so trends and "as of" views 
 ARC_DAYS = 90                  # each account's current story (declining, power user...) plays out
                                # over the last 90 days; before that it sits at its normal level
 START_DATE = END_DATE - timedelta(days=DAYS - 1)
+# Year one (24 Nov 2026, Nikodem: two years of history): the year before START_DATE, written
+# after everything else with its own random streams, so today's year stays exactly as it was
+# (every tested number holds). Usage, onboardings, a few dips that recover, QBRs and
+# check-ins; its renewals stay in the finance bridge (arr_bridge_history.csv) for now.
+YEAR_ONE_DAYS = 365
+HISTORY_START = START_DATE - timedelta(days=YEAR_ONE_DAYS)
+YEAR_ONE_DIPS = dict(share=0.10, start=(30, 250), bottom=0.5, fall=30, recover=40)
+YEAR_ONE_MEETINGS = {"Enterprise": ("qbr", 91), "Scale": ("check_in", 120)}   # topic, every this many days
 OUT_DIR = Path("data")
 
 REGIONS = ["UK&I", "DACH", "France & Benelux", "Nordics"]
@@ -1367,13 +1375,152 @@ def write_events(accounts):
         day = START_DATE + timedelta(days=day_index)
         rows = []
         for acc in accounts:
-            rows.extend(events_for_day(acc, day_index, day, pools[acc["id"]]))
+            got = events_for_day(acc, day_index, day, pools[acc["id"]])
+            if day_index == 0 and in_year_one(acc):
+                # its team was already there in year one: drawn as before (nothing else moves),
+                # but not written as new invites on day one of today's year
+                known = set(year_one_users(acc))
+                got = [e for e in got if not (e["event_name"] == "user_invited"
+                                              and e["properties"]["invited_user"] in known)]
+            rows.extend(got)
         rows.sort(key=lambda e: e["timestamp"])
         with (events_dir / f"{day.isoformat()}.jsonl").open("w") as f:
             for row in rows:
                 f.write(json.dumps(row) + "\n")
         total += len(rows)
     return total
+
+
+# --- Year one: the year before START_DATE --------------------------------------------
+def year_one_users(acc):
+    """The users an account had in year one: the team it started today's year with."""
+    return [f"{acc['id']}_usr_{i:02d}" for i in range(1, acc["users_start"] + 1)]
+
+
+def in_year_one(acc):
+    """A customer some time in year one, known to the CRM, and not one that never onboarded."""
+    return acc["in_crm"] and acc["since"] < START_DATE and not persona(acc).get("silent")
+
+
+def year_one_events(accounts):
+    """Usage in year one: the level each account started today's year at, steady, with daily
+    noise; accounts that signed during year one onboard and ramp up like new customers; about
+    one in ten has a dip that recovers. Its own random stream."""
+    rng = random.Random(SEED + 21)
+    plan = {}
+    for acc in accounts:
+        if not in_year_one(acc):
+            continue
+        p = persona(acc)
+        contract = acc["contract"]
+        if acc.get("renewal_change") and acc["contract_start"] >= START_DATE:
+            contract = contract * acc["renewal_change"][1] / max(1, arr_of(acc))   # the term before its renewal
+        dip = None
+        if rng.random() < YEAR_ONE_DIPS["share"]:
+            dip = rng.randint(*YEAR_ONE_DIPS["start"])
+        plan[acc["id"]] = dict(acc=acc, p=p, contract=contract, dip=dip,
+                               util=min(1.1, lerp(p["util"], 0, acc) * acc["util_factor"]),
+                               activity=lerp(p["activity"], 0, acc), errors=p["errors"][0],
+                               users=year_one_users(acc))
+    days = {}
+    for i in range(YEAR_ONE_DAYS):
+        day = HISTORY_START + timedelta(days=i)
+        rows = []
+        for aid, a in plan.items():
+            acc, p = a["acc"], a["p"]
+            onboard = onboard_day_of(acc)
+            if day < onboard:
+                continue
+            if day == onboard:
+                rows.append(event("sdk_installed", "product", day, aid, a["users"][0]))
+            live = (day - onboard).days
+            team = a["users"] if onboard < HISTORY_START else a["users"][:min(len(a["users"]), 1 + live * len(a["users"]) // 10)]
+            if onboard >= HISTORY_START and 0 < live <= 10 and len(team) > 1 and team[-1] not in a.get("invited", set()):
+                a.setdefault("invited", set()).add(team[-1])
+                rows.append(event("user_invited", "product", day, aid, team[0], {"invited_user": team[-1]}))
+            level = 1.0
+            if a["dip"] is not None and i >= a["dip"]:
+                d = YEAR_ONE_DIPS
+                j = i - a["dip"]
+                level = (1 - (1 - d["bottom"]) * min(1, j / d["fall"]) if j <= d["fall"]
+                         else d["bottom"] + (1 - d["bottom"]) * min(1, (j - d["fall"]) / d["recover"]))
+            act = a["activity"] * level ** 2 * WEEKDAY_ACTIVITY[day.weekday()]
+            for n, user in enumerate(team):
+                champion = acc["has_champion"] and n == 0
+                if rng.random() < (min(0.95, act * 1.8) if champion else min(1.0, act)):
+                    for _ in range(rng.randint(5, 12) if champion else rng.randint(1, 4)):
+                        rows.append(event(rng.choice(p["features"]), "product", day, aid, user))
+            ramp = 1.0 if onboard < HISTORY_START else min(1.0, 0.2 + 0.8 * live / 30)
+            volume = int(a["contract"] / 365 * a["util"] * ramp * level * rng.uniform(0.85, 1.15))
+            rows.append(event("daily_event_volume", "system", day, aid, properties={"event_count": volume}))
+            if rng.random() < a["errors"]:
+                for _ in range(rng.randint(1, 3)):
+                    rows.append(event("ingestion_error", "system", day, aid, properties={"error_code": rng.choice(
+                        ["SCHEMA_MISMATCH", "AUTH_EXPIRED", "PAYLOAD_TOO_LARGE"])}))
+        days[day] = rows
+    return days, plan
+
+
+def year_one_owner(acc, day, team):
+    """Who owned the account on a day of year one: its owner today, or before the CSM took it
+    (csm_since), another CSM of the same region (the CRM's owner history)."""
+    owner = acc["csm"] or acc["member"] or acc["pool"]
+    if acc["csm"] and acc["csm_since"] and day < acc["csm_since"]:
+        others = sorted(t["owner_id"] for t in team if t["owner_type"] == "csm" and t["region"] == acc["region"]
+                        and t["owner_id"] != acc["csm"])
+        return others[sum(map(ord, acc["id"])) % len(others)] if others else owner
+    return owner
+
+
+def year_one_engagement(accounts, plan):
+    """CS history in year one: an Enterprise account's QBR about every quarter, a Scale account's
+    check-in about every four months, a kickoff (Enterprise) or onboarding workshop (Scale) after
+    signing. No notes or promises: what a CRM keeps from that long ago. Own random stream."""
+    rng = random.Random(SEED + 22)
+    team = [dict(owner_id=o[0], owner_type=o[2], region=o[3]) for o in CS_TEAM] if isinstance(CS_TEAM[0], tuple) else \
+        [dict(owner_id=t["owner_id"], owner_type=t["owner_type"], region=t["region"]) for t in CS_TEAM]
+    out = {}
+    for aid, a in plan.items():
+        acc = a["acc"]
+        if acc["tier"] not in YEAR_ONE_MEETINGS:
+            continue
+        topic, every = YEAR_ONE_MEETINGS[acc["tier"]]
+        day = max(HISTORY_START, acc["since"]) + timedelta(days=rng.randint(5, 20))
+        if acc["since"] >= HISTORY_START:              # signed in year one: a first meeting to start
+            first = "kickoff" if acc["tier"] == "Enterprise" else "onboarding_workshop"
+            name = "meeting_held" if first == "kickoff" else "workshop_attended"
+            owner = acc["pool"] if name == "workshop_attended" and acc["pool"] else year_one_owner(acc, day, team)
+            e = cs_event(rng, name, local_time(rng, nearest_weekday(day), acc["region"], 10), acc, owner, first, a["users"][0])
+            out.setdefault(day, []).append(e)
+            day += timedelta(days=every)
+        while day < START_DATE:
+            d = nearest_weekday(day)
+            if d < START_DATE:
+                e = cs_event(rng, "meeting_held", local_time(rng, d, acc["region"], rng.choice([10, 11, 14, 15])),
+                             acc, year_one_owner(acc, d, team), topic, a["users"][0])
+                out.setdefault(d, []).append(e)
+            day += timedelta(days=every + rng.randint(-10, 10))
+    return out
+
+
+def write_year_one(accounts):
+    """Year one's events and CS history, into the same daily files (dates before START_DATE)."""
+    days, plan = year_one_events(accounts)
+    meetings = year_one_engagement(accounts, plan)
+    n = m = 0
+    for day, rows in days.items():
+        if rows:
+            rows.sort(key=lambda e: e["timestamp"])
+            with (OUT_DIR / "events" / f"{day.isoformat()}.jsonl").open("w") as f:
+                f.writelines(json.dumps(r) + "\n" for r in rows)
+            n += len(rows)
+    for day, rows in meetings.items():
+        rows.sort(key=lambda e: e["timestamp"])
+        path = OUT_DIR / "engagement" / f"{date.fromisoformat(rows[0]['timestamp'][:10]).isoformat()}.jsonl"
+        with path.open("a") as f:
+            f.writelines(json.dumps(r) + "\n" for r in rows)
+        m += len(rows)
+    return n, m, len(plan), sum(1 for a in plan.values() if a["dip"] is not None)
 
 
 if __name__ == "__main__":
@@ -1392,6 +1539,7 @@ if __name__ == "__main__":
     tasks, claimed, slipped = write_task_history(accounts)
     history_path, renewals_in_year = write_renewal_history(accounts)
     bridge_path = write_arr_bridge_history(accounts)
+    y1_events, y1_touches, y1_accounts, y1_dips = write_year_one(accounts)
     print(f"Accounts:   {len(accounts)} ({sum(a['in_crm'] for a in accounts)} in the CRM)")
     print(f"CS team:    {team_path}")
     print(f"CRM table:  {crm_path}")
@@ -1413,5 +1561,7 @@ if __name__ == "__main__":
     print(f"This year (accounts that were customers on day one): GRR "
           f"{100 * sum(min(now(a), arr_at_start(a)) for a in cohort) / s0:.1f}%, "
           f"NRR {100 * sum(now(a) for a in cohort) / s0:.1f}% on {s0 / 1e6:.1f}M starting ARR")
+    print(f"Year one:   {y1_events:,} events and {y1_touches} CS meetings for {y1_accounts} accounts, "
+          f"{HISTORY_START} to {START_DATE - timedelta(days=1)} ({y1_dips} dips that recover)")
     print(f"Year before (top line): {bridge_path}")
     print(f"Outcomes:   {outcomes_path} (renewals in the {OUTCOME_HORIZON_DAYS} days after the data, for backtest.py)")
