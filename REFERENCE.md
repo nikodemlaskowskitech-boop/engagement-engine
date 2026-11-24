@@ -397,7 +397,9 @@ Read a file's entry before changing that file, and update the entry in the same 
 - `site_search.html` cases (23 Nov 2026): results come as accounts, each with up to 3 cases
   (search.cases(): one line per case, its best hit, n messages, first-last date, teams, the
   ticket's status, every document behind "Show all", "logged by CS and Implementation (kept
-  once)"); more cases are counted, not listed. One account by name or ID: its cases, newest
+  once)"); more cases are counted, not listed. A case's title is its ticket's subject, unless emails
+  or calls came after the ticket (24 Nov 2026: then the newest one's subject, what the case is about
+  now). One account by name or ID: its cases, newest
   first. The handler adds "cases" to each result and to the one-account answer; the redacted
   file carries case, team and logged_by (search_export FIELDS).
 - `site_search.html` (13 Nov 2026): the public site's search page, written by
