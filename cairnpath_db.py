@@ -238,12 +238,6 @@ def connect():
                DATE '9999-12-31', c.contracted_events
         FROM crm_all c
     """)
-    # the volume on day d, for one account (NULL with no contract volume: data_gaps says so)
-    con.sql("""
-        CREATE MACRO contract_on(acc, d) AS (
-            SELECT t.contracted_events FROM contract_terms t
-            WHERE t.account_id = acc AND d >= t.valid_from AND d < t.valid_to)
-    """)
 
     cols = "period_start, period_end, starting_arr, new_logo_arr, expansion_arr, contraction_arr, churned_arr, ending_arr"
     if bridge_file.exists():
@@ -291,9 +285,12 @@ def connect():
                END AS days_measured,
                round(l.events_30d * 365
                      / least(30, a.as_of_date - f.go_live_date + 1)
-                     / contract_on(c.account_id, a.as_of_date) * 100) AS utilisation_pct   -- the term in force
+                     / t.contracted_events * 100) AS utilisation_pct
         FROM crm c
         CROSS JOIN as_of a
+        -- the term in force today (a join: the per-row macro made history.py 2.4x slower)
+        LEFT JOIN contract_terms t ON t.account_id = c.account_id
+                                  AND a.as_of_date >= t.valid_from AND a.as_of_date < t.valid_to
         LEFT JOIN first_seen f ON f.account_id = c.account_id
         LEFT JOIN last_30 l    ON l.account_id = c.account_id
     """)
@@ -327,6 +324,7 @@ def connect():
                    count(DISTINCT e.user_id) FILTER (WHERE e.event_date > l.as_of_date - 30) AS users_m3
             FROM live l
             JOIN events e ON e.account_id = l.account_id
+                         AND e.event_date > l.as_of_date - 90   -- every sum below is in the last 90 days
             -- each day's volume as a share of the contract in force that day (contract_terms):
             -- a renewal that changed the volume isn't a fall or a jump in usage
             LEFT JOIN contract_terms t ON t.account_id = e.account_id
