@@ -75,7 +75,8 @@ def card_channel(owner_id, demo_user):
 
 def flag_label(flag, status):
     """'churn *Act*', but just '*QBR coming up*' when the status already names the flag."""
-    return f"*{status}*" if flag.lower() in status.lower() else f"{flag} *{status}*"
+    name = "data missing" if flag == "data" else flag      # a gap in the account's own data (flags.py)
+    return f"*{status}*" if flag.lower() in status.lower() else f"{name} *{status}*"
 
 
 def card_blocks(task, owner_name, last_touch=None, day=None):

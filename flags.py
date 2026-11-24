@@ -67,6 +67,13 @@ Flag 4, QBR (Enterprise only):
   QBR overdue     live 4+ months, last QBR 120+ days ago (or never), and
                   nothing booked in the next 30 days: book one
 
+Data missing (24 Nov 2026): gaps in one account's own data. A missing or
+unreadable contract volume, renewal date or pool, or a volume feed that stopped
+while product events keep coming. The flags that need the value don't guess:
+the account shows the gap instead (data/flags_data.csv), to the data's owner
+([data_quality]), and to the account's owner too when the gap hides a risk we
+can still see (users falling, errors rising, an open churn or expansion row).
+
 Run:  python flags.py
 """
 
@@ -91,6 +98,11 @@ CHURN_MIN_ERRORS = SETTINGS["churn"]["min_errors"]
 RAMP_DAYS = SETTINGS["churn"]["ramp_days"]
 # renewal this close: act now (used by Shelfware and expansion)
 RENEWAL_SOON_MONTHS = SETTINGS["expansion"]["renewal_soon_months"]
+
+DQ = SETTINGS["data_quality"]
+FEED_GAP_DAYS = DQ["feed_gap_days"]
+CONTRACT = SETTINGS["utilisation"]["contract_column"]
+USAGE_EVENT = SETTINGS["utilisation"]["usage_event"]
 
 EXP_AT_CAP = SETTINGS["expansion"]["at_cap"]
 EXP_HIGH = SETTINGS["expansion"]["high"]
@@ -195,7 +207,7 @@ def add_views(con):
                    CASE
                        WHEN status = 'Activating'   THEN 'none'
                        WHEN tier = 'Self-service'   THEN 'automated'
-                       WHEN tier = 'Scale'          THEN cs_pool
+                       WHEN tier = 'Scale'          THEN coalesce(cs_pool, 'cs_ops')
                        -- no CSM yet: CS ops gets one task, on the "No CSM assigned"
                        -- row below; this row waits for the new CSM to pick it up
                        WHEN csm_owner IS NULL       THEN 'none'
@@ -250,6 +262,20 @@ def add_views(con):
         UNION ALL SELECT * FROM missing_csm
     """)
 
+    # The volume feed stopped while the product didn't: daily_event_volume missing for
+    # FEED_GAP_DAYS+ days, product events still arriving. Utilisation would read as a fall
+    # (quiet days count as zero), so the usage rules skip these accounts and data_gaps says why.
+    con.sql(f"""
+        CREATE VIEW feed_gaps AS
+        SELECT e.account_id, a.as_of_date,
+               max(e.event_date) FILTER (WHERE e.event_name = '{USAGE_EVENT}') AS last_volume,
+               max(e.event_date) FILTER (WHERE e.event_type = 'product')       AS last_product
+        FROM events e, as_of a
+        GROUP BY e.account_id, a.as_of_date
+        HAVING last_volume <= a.as_of_date - {FEED_GAP_DAYS}
+           AND last_product > a.as_of_date - {FEED_GAP_DAYS}
+    """)
+
     con.sql(f"""
         CREATE VIEW churn_trend AS
         WITH base AS (
@@ -286,7 +312,8 @@ def add_views(con):
         ),
         scored AS (
             SELECT *,
-                   util_m3 < {CHURN_UTIL_BELOW} AND util_m3 < util_m2 AND util_m2 < util_m1 AS util_falling,
+                   util_m3 < {CHURN_UTIL_BELOW} AND util_m3 < util_m2 AND util_m2 < util_m1
+                       AND account_id NOT IN (SELECT account_id FROM feed_gaps)               AS util_falling,
                    wau_avg > 0 AND wau_now <= (1 - {CHURN_BREADTH_DROP}) * wau_avg
                        AND wau_avg - wau_now >= {CHURN_BREADTH_MIN_USERS}                  AS breadth_dropping,
                    err_now >= {CHURN_MIN_ERRORS} AND err_now > err_before                  AS errors_rising
@@ -323,7 +350,7 @@ def add_views(con):
                -- report for analysis rather than to an automated email.
                CASE
                    WHEN tier = 'Self-service' THEN 'report'
-                   WHEN tier = 'Scale'        THEN cs_pool
+                   WHEN tier = 'Scale'        THEN coalesce(cs_pool, 'cs_ops')
                    ELSE coalesce(csm_owner, 'cs_ops')
                END AS routed_to,
                CASE
@@ -363,9 +390,10 @@ def add_views(con):
                format('Never ramped up: utilisation {{}}% now and never above {{}}% since {{}}; '
                       || '{{}}M events a year bought; renewal {{}}',
                       u.util_now::INT, u.util_max::INT, strftime(u.seen_since, '%d %b'),
-                      (l.contracted_events // 1000000)::INT, strftime(l.renewal_date::DATE, '%d %b %Y')) AS reasons,
+                      (l.contracted_events // 1000000)::INT,
+                      coalesce(strftime(l.renewal_date::DATE, '%d %b %Y'), 'date unknown')) AS reasons,
                CASE WHEN l.tier = 'Self-service' THEN 'automated'     -- one-to-many: an email
-                    WHEN l.tier = 'Scale'        THEN l.cs_pool
+                    WHEN l.tier = 'Scale'        THEN coalesce(l.cs_pool, 'cs_ops')
                     ELSE coalesce(l.csm_owner, 'cs_ops') END AS routed_to,
                CASE WHEN l.tier = 'Self-service' THEN
                         'Send the use-case inspiration email: how other teams use Cairnpath, '
@@ -387,6 +415,7 @@ def add_views(con):
         FROM live l
         JOIN util u USING (account_id)
         WHERE u.util_max < {CHURN_UTIL_BELOW}
+          AND l.account_id NOT IN (SELECT account_id FROM feed_gaps)   -- the feed stopped: not their usage
     """)
 
     con.sql("""
@@ -443,7 +472,7 @@ def add_views(con):
                -- so Self-service rows go to the Self-service report for analysis.
                CASE
                    WHEN tier = 'Self-service' THEN 'report'
-                   WHEN tier = 'Scale'        THEN cs_pool
+                   WHEN tier = 'Scale'        THEN coalesce(cs_pool, 'cs_ops')
                    ELSE coalesce(csm_owner, 'cs_ops')
                END AS routed_to,
                CASE
@@ -460,6 +489,7 @@ def add_views(con):
                END AS action
         FROM scored
         WHERE volume_signal
+          AND account_id NOT IN (SELECT account_id FROM feed_gaps)     -- the feed stopped: volume unknown
     """)
 
     con.sql(f"""
@@ -519,6 +549,93 @@ def add_views(con):
                END AS action
         FROM qbr_schedule
         WHERE qbr_coming_up OR qbr_overdue
+    """)
+
+    # Gaps in an account's own data: the flags that need the missing value can't be
+    # computed, so the account shows "data missing" here instead of a wrong flag (or none).
+    # One row per gap to the data's owner ([data_quality]: CRM fields -> CS ops, the volume
+    # feed -> data engineering), plus one row to the account's owner when the gap hides a
+    # risk we can still see: users falling, ingestion errors rising, or an open churn or
+    # expansion row (the missing value could make it worse, or move the renewal).
+    con.sql(f"""
+        CREATE VIEW data_gaps AS
+        WITH gaps AS (
+            SELECT account_id, 'No contract volume' AS status, 'crm' AS source,
+                   '{CONTRACT} is empty or unreadable in the CRM: no utilisation, so falling usage, '
+                   || 'Shelfware and expansion volume are not checked' AS reasons,
+                   'Fill in {CONTRACT} in the CRM (the order form has it)' AS action
+            FROM crm WHERE coalesce(contracted_events, 0) <= 0
+            UNION ALL
+            SELECT account_id, 'Renewal date unreadable', 'crm',
+                   'renewal_date is empty or not a date (YYYY-MM-DD) in the CRM: no renewal timing, '
+                   || 'so no "renewal soon" actions and no renewal forecast',
+                   'Fix renewal_date in the CRM (YYYY-MM-DD)'
+            FROM crm WHERE renewal_date IS NULL
+            UNION ALL
+            SELECT account_id, 'No pool', 'crm',
+                   'Scale account with an empty cs_pool: its tasks go to CS ops instead of a pool',
+                   'Set cs_pool in the CRM'
+            FROM crm WHERE tier = 'Scale' AND cs_pool IS NULL
+            UNION ALL
+            SELECT g.account_id, 'Volume feed stopped', 'events',
+                   format('No {USAGE_EVENT} since {{}}, product events until {{}}: utilisation would read as a '
+                          || 'fall, so falling usage, Shelfware and expansion volume are not checked',
+                          strftime(g.last_volume, '%d %b'), strftime(g.last_product, '%d %b')),
+                   format('Find why the volume feed stopped on {{}} (their pipeline or ours); the usage '
+                          || 'flags wait for it', strftime(g.last_volume, '%d %b'))
+            FROM feed_gaps g JOIN crm c USING (account_id)
+        ),
+        errors AS (
+            SELECT e.account_id,
+                   count(*) FILTER (WHERE e.event_date > a.as_of_date - 30)                     AS err_now,
+                   count(*) FILTER (WHERE e.event_date <= a.as_of_date - 30
+                                      AND e.event_date >  a.as_of_date - 60)                    AS err_before
+            FROM events e, as_of a
+            WHERE e.event_name = 'ingestion_error' AND e.account_id IN (SELECT account_id FROM gaps)
+            GROUP BY e.account_id
+        ),
+        open_rows AS (
+            SELECT account_id, string_agg(f || ' ' || status, ', ' ORDER BY f) AS open_flags
+            FROM (SELECT account_id, 'churn' AS f, status FROM churn
+                  UNION ALL SELECT account_id, 'expansion', status FROM expansion)
+            GROUP BY account_id
+        ),
+        seen AS (
+            -- what can still be seen without the missing value, in words
+            SELECT g.account_id,
+                   concat_ws('; ',
+                       CASE WHEN w.wau_avg > 0 AND w.wau_now <= (1 - {CHURN_BREADTH_DROP}) * w.wau_avg
+                                 AND w.wau_avg - w.wau_now >= {CHURN_BREADTH_MIN_USERS}
+                            THEN format('{{}} weekly active users vs. {{}} on average ({{}}%)', w.wau_now,
+                                        round(w.wau_avg, 1), round((w.wau_now / w.wau_avg - 1) * 100)::INT) END,
+                       -- errors alone are noise in the churn rule; here they're the one sign left,
+                       -- so a stricter bar: many, and at least double the month before
+                       CASE WHEN r.err_now >= {DQ["risk_min_errors"]} AND r.err_now >= 2 * r.err_before
+                            THEN format('{{}} ingestion errors in 30 days ({{}} the month before)',
+                                        r.err_now, r.err_before) END,
+                       CASE WHEN o.open_flags IS NOT NULL THEN o.open_flags || ' already open' END) AS risk
+            FROM (SELECT DISTINCT account_id FROM gaps) g
+            LEFT JOIN weekly_users w USING (account_id)
+            LEFT JOIN errors r USING (account_id)
+            LEFT JOIN open_rows o USING (account_id)
+        )
+        SELECT c.account_id, c.account_name, c.tier, c.region, g.status,
+               g.reasons || CASE WHEN s.risk <> '' THEN '. Still visible: ' || s.risk ELSE '' END AS reasons,
+               CASE g.source WHEN 'crm' THEN '{DQ["crm_owner"]}' ELSE '{DQ["events_owner"]}' END AS routed_to,
+               g.action
+        FROM gaps g JOIN crm c USING (account_id) JOIN seen s USING (account_id)
+        UNION ALL
+        SELECT c.account_id, c.account_name, c.tier, c.region, 'Risk hidden' AS status,
+               format('{{}}, and {{}}', string_agg(g.status, ' and ' ORDER BY g.status), s.risk) AS reasons,
+               CASE WHEN c.tier = 'Scale' THEN coalesce(c.cs_pool, 'cs_ops')
+                    ELSE coalesce(c.csm_owner, 'cs_ops') END AS routed_to,
+               'Talk to the customer now, don''t wait for the data fix: the missing value could hide a '
+               || 'bigger drop or an early renewal' AS action
+        FROM gaps g JOIN crm c USING (account_id) JOIN seen s USING (account_id)
+        WHERE s.risk <> '' AND c.tier <> 'Self-service'      -- Self-service: no owner to warn
+          -- no pool or CSM: the owner would be CS ops, who already has the gap
+          AND coalesce(CASE WHEN c.tier = 'Scale' THEN c.cs_pool ELSE c.csm_owner END, 'cs_ops') <> 'cs_ops'
+        GROUP BY c.account_id, c.account_name, c.tier, c.region, c.cs_pool, c.csm_owner, s.risk
     """)
 
 
@@ -641,6 +758,19 @@ def main():
 
     con.sql(f"COPY (SELECT * FROM qbr ORDER BY status, account_id) TO '{out_sql('flags_qbr')}' (HEADER)")
     print("\nSaved every row to data/flags_qbr.csv")
+
+
+    # --- Data gaps -------------------------------------------------------------------
+
+
+    print("\n\nData missing: gaps in an account's own data (the flags that need it wait)")
+    con.sql("""
+        SELECT d.routed_to, d.status, d.account_id, d.account_name, c.arr::BIGINT AS arr, d.reasons
+        FROM data_gaps d JOIN crm c USING (account_id)
+        ORDER BY d.status = 'Risk hidden' DESC, d.routed_to, d.status, d.account_id
+    """).show(max_rows=100, max_width=320)
+    con.sql(f"COPY (SELECT * FROM data_gaps ORDER BY status, account_id) TO '{out_sql('flags_data')}' (HEADER)")
+    print("Saved every row to data/flags_data.csv")
 
 
 if __name__ == "__main__":

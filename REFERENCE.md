@@ -50,6 +50,9 @@ Read a file's entry before changing that file, and update the entry in the same 
   renders them): coverage table, overview, Self-service journey, Scale
   queue and hand-back, Enterprise QBR first, action status. Update it when
   routing, follow-ups or escalations change.
+- `check_inputs.py` feed check (24 Nov 2026): a WARN for accounts whose daily_event_volume
+  stopped [data_quality] feed_gap_days+ days ago while product events keep coming (they show as
+  Volume feed stopped). The no-pool warning now says their tasks go to CS ops.
 - `check_inputs.py`: checks a folder of inputs against the data contract
   before anything runs (plain Python, no DuckDB): missing columns, duplicate
   IDs, unreadable dates, tiers or regions not in settings, accounts in the
@@ -97,6 +100,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   that was already there are drawn as before but not written. The events folder now spans 730
   days; ingest, flags and the windows are unchanged; history.py replays both years (about 3x
   slower: 22s -> 65s in the sandbox).
+- `generate_events.py` planted bad data (24 Nov 2026): DATA_ISSUES gives a few settled accounts
+  one gap each, picked by a hash of the account ID (no random draw moves; accounts the tests,
+  the demo and the stories name are spared): contracted_events left empty, renewal_date typed
+  dd/mm/yyyy, cs_pool left empty (crm_cell(), at write time), or the daily_event_volume feed
+  stopped for the last FEED_STOP_DAYS (filtered after the draw). The answer key's data_issue
+  column names them for check_flags.py. Every other file is unchanged (checked: the CRM differs
+  in those 5 cells, the events only in the 12 days of the two stopped feeds).
 - `generate_events.py`: ~500 fake accounts with personalities (healthy,
   (18 Nov 2026: meetings carry what a CSM would log in Slack, for Last in My work: meeting_log()
   gives about 8 in 10 an outcome from slack_loop.OUTCOMES, at risk mostly for the at-risk
@@ -173,6 +183,11 @@ Read a file's entry before changing that file, and update the entry in the same 
   its story makes likely, by a hash) on churned and downsized rows; backtest carries it and Did
   it work? shows "Why they left, and what the flags saw". The regenerate moved some numbers
   (DEMO.md checked: reached in time 60% vs 43% on 14 and 15 accounts; the backtest caught 32 of 50).
+- `cairnpath_db.py` try_cast (24 Nov 2026, planted bad data): the crm view reads contract_start,
+  renewal_date, the contract volume and ARR with try_cast. One cell typed '26/06/2027' turns
+  read_csv_auto's whole column into text, and every date sum after it fails; now the bad cell is
+  empty and flags.py's data_gaps names it. daily_util_30d leaves out accounts with no contract
+  volume (no utilisation rather than a null one). flag_names = settings.TASK_FLAGS.
 - `cairnpath_db.py`: shared DuckDB setup. `connect()` returns a connection
   with the views events (schema declared explicitly), engagement (the CS
   history, same schema), crm (today's book: churned accounts left out), crm_all
@@ -603,6 +618,25 @@ Read a file's entry before changing that file, and update the entry in the same 
   with an Open CS ops task (and its age) only until its CSM came.
 - `explore.py`: DuckDB summaries by tier, region and CSM, plus CS
   engagement week by week and meetings by owner.
+- `flags.py` data missing (24 Nov 2026, Nikodem: "mimic wrong data entries or lack of it", then
+  flag it, show it and push it to Slack). Views feed_gaps (the daily_event_volume feed stopped
+  [data_quality] feed_gap_days+ days ago while product events keep coming) and data_gaps (a
+  missing or unreadable contract volume, renewal date or Scale pool, or a stopped feed), saved
+  to `data/flags_data.csv` as a sixth task flag, "data". The rule: never guess. The usage rules
+  skip a stopped feed (quiet days would read as a fall, so no falling usage, Shelfware or
+  expansion volume); no contract volume gives no utilisation at all (daily_util_30d leaves it
+  out too); an unreadable renewal date leaves "renewal soon" out ("renewal date unknown" in the
+  reasons). One row per gap to the data's owner ([data_quality] crm_owner = CS ops, events_owner
+  = data engineering): a line in their daily Slack digest. A second row, "Risk hidden", to the
+  account's owner (pool or CSM; never Self-service) only when a risk can still be seen without
+  the missing value: users falling (the churn breadth rule), ingestion errors at
+  risk_min_errors+ and at least double the month before (stricter than churn: here they're the
+  one sign left), or a churn or expansion row already open. In the demo: Meridian Banking (no
+  contract volume, 45 errors against 13: it was churn Act) and Brightwater Labs (renewal
+  unreadable: Shelfware whose "renewal in 3 weeks, call this week" became a slow adoption
+  review). Planting it found two real bugs, both fixed: a Scale account with no pool routed
+  its tasks to nobody (now coalesce(cs_pool, 'cs_ops') everywhere), and a null utilisation
+  crashed export_views. Not replayed by history.py: when a CRM cell broke isn't in the data.
 - `flags.py`: the activation, churn and expansion flags. One row per
   flagged account, with reasons, routed_to and action; saved to
   `data/flags_activation.csv`, `data/flags_churn.csv` and
@@ -676,6 +710,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- `views_template.html` data missing (24 Nov 2026): Leadership's ops grid has a third panel,
+  "Data missing: what the flags can't see": the accounts with a gap, those hiding a risk first,
+  then by ARR, with what's missing, who fixes it and the ARR, and the count and ARR per kind of
+  gap. The pill reads "data missing" (amber when the risk is hidden, else information blue). A
+  date the CRM didn't give is NaN days (day()), "date unknown" (fmt()), and sorts last
+  (byDate()), so it falls out of every window instead of crashing the page (it did, in the
+  renewals chart). export_views passes [data_quality.owner_names] for "Data engineering".
 - `export_views.py` page window (24 Nov 2026): page_window() keeps the page's daily utilisation,
   touches and weekly history to the last [cockpit] page_days (365); two years of data took
   views_data.json from 1.5 to 2.4 MB, back to 1.6. The engine, Athena and the MCP servers keep
@@ -1140,6 +1181,12 @@ Read a file's entry before changing that file, and update the entry in the same 
   The CSM door opens on Anna Whitfield (21 Nov 2026, was Tom: 7 of 9 accounts gone quiet, a poor
   first impression): a queue, risk at Act and Shelfware, insights, renewals below the book's rate.
   Re-check after a regenerate ([demo] csm).
+- `actions.py` and the task flags (24 Nov 2026): one list, settings.toml [work] task_flags
+  (settings.TASK_FLAGS), read by actions.py, cairnpath_db.py, facts.py and cockpit_sync.py;
+  it had been typed in four places. "data" joins it: each gap is a digest line for its owner
+  (owner names outside the team from [data_quality.owner_names]); "Risk hidden" is a card when
+  its owner is interactive. A data task closes as Resolved, when the data is fixed.
+  slack_loop.flag_label says "data missing".
 - `actions.py`: turns flag rows into actions, once only (run `flags.py`
   first). Checks `data/action_log.csv` by account, flag and status, then
   logs each new action. Queue tasks for CSMs, pools and CS ops post to

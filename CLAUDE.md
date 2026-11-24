@@ -34,6 +34,7 @@ read a file's entry there before changing the file, and update it in the same PR
   Never pick the release from the last 2 weeks. The cdk CLI: `npm install -g aws-cdk@<the
   version in infra/cdk-cli-version.txt>`.
 - Thresholds and time windows live in `settings.toml`, not in the scripts.
+  The flags whose rows become tasks are one list there too ([work] task_flags).
 - Integrations are configuration, not code: anything tied to one workspace,
   account or environment (Slack channels and member IDs, URLs, the LLM model
   and price, AWS region and bucket) lives in its own `settings.toml` section
@@ -61,7 +62,7 @@ Docs-only PRs need none.
 | A PR that touches | Runs |
 | --- | --- |
 | the engine (any step, settings) | `check_inputs.py`, `check_flags.py`, `backtest.py`, `tests/pipeline_test.py`, `tests/journeys_test.py` |
-| `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py` |
+| `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py`, `tests/data_gaps_test.py` (bad data: never guess, never crash) |
 | `ingest.py` | `tests/store_test.py` |
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
 | `documents.py` | `tests/documents_test.py`, plus the handover row |
@@ -234,6 +235,13 @@ One JSON event per line, one file per day in `data/events/`.
    log), the flag is raised again as a normal task, never handed to a QBR
    again, and a newly booked QBR no longer holds back the escalation.
 
+Plus data missing (`flags_data.csv`, task flag "data"): a gap in an account's own
+data (contract volume, renewal date or Scale pool missing or unreadable in the CRM,
+or the volume feed stopped while product events keep coming). Never guess: the flags
+that need the value skip the account and the gap shows instead, to the data's owner
+([data_quality]: CS ops or data engineering) in their daily digest, and to the
+account's owner ("Risk hidden") only when a risk can still be seen without it.
+
 ## Design rules
 
 - SQL computes every fact; the LLM only writes them up.
@@ -291,7 +299,7 @@ Engine:
 - `generate_events.py`: the demo data: ~500 accounts with personalities, two years (year one written apart, so today's year is unchanged).
 - `generate_documents.py`: the search corpus: tickets, emails, calls for 30 accounts, with an answer key.
 - `check_inputs.py`: the inputs against the data contract.
-- `flags.py`: activation, churn, expansion and QBR flags, with value at stake.
+- `flags.py`: activation, churn, expansion and QBR flags, with value at stake, and data missing.
 - `check_flags.py`: the flags against the generator's answer key.
 - `journeys.py`: rules on the last touch (unopened email, no meeting, hand-backs).
 - `team_report.py`: time to action, action status, the one "called" rule.

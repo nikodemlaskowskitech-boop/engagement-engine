@@ -49,7 +49,7 @@ if not DEMO:
     sys.exit(0)
 
 key = {r["account_id"]: r for r in read("answer_key.csv")}
-flags = {name: read(f"flags_{name}.csv") for name in ("activation", "churn", "expansion")}
+flags = {name: read(f"flags_{name}.csv") for name in ("activation", "churn", "expansion", "data")}
 
 # Utilisation now (last 30 days), to explain expansion misses
 con = connect()
@@ -118,7 +118,8 @@ print("\n2. Checks (counts next to percentages: small groups mislead)\n")
 problems = []
 
 for label, flag, statuses, p, min_pct in EXPECTATIONS:
-    should = [a for a, r in key.items() if r["personality"] == p]
+    # a planted data gap (DATA_ISSUES) blinds the flag on purpose: checked on its own below
+    should = [a for a, r in key.items() if r["personality"] == p and not r.get("data_issue")]
     if flag == "activation" and p != "handoff_gap":      # handoff gaps have no contract date
         should = [a for a in should if a in in_activation_scope]
     hit = {r["account_id"] for r in flags[flag] if r["status"] in statuses}
@@ -183,6 +184,28 @@ if recovered:
     print(f"  {'PASS ' if ok else 'CHECK'}  Recovered accounts: {len(recovered) - len(still)} of {len(recovered)} carry no churn flag today")
     for a in still:
         problems.append(("Recovered", "still flagged", a, ""))
+
+# Planted data gaps (generate_events.DATA_ISSUES, 24 Nov 2026): each shows as its own "data
+# missing" status (flags_data.csv), nothing else does, and the ones that hide a risk we can
+# still see reach the account's owner too.
+GAP_STATUS = {"no_contract": "No contract volume", "bad_renewal": "Renewal date unreadable",
+              "no_pool": "No pool", "feed_stopped": "Volume feed stopped"}
+gaps = {a: r["data_issue"] for a, r in key.items() if r.get("data_issue")}
+if gaps:
+    seen = {(r["account_id"], r["status"]) for r in flags["data"]}
+    found = [a for a, issue in gaps.items() if (a, GAP_STATUS[issue]) in seen]
+    stray = sorted({r["account_id"] for r in flags["data"] if r["account_id"] not in gaps})
+    print(f"  {'PASS ' if len(found) == len(gaps) and not stray else 'CHECK'}  Planted data gaps show as "
+          f"data missing: {len(found)} of {len(gaps)} ({share(len(found), len(gaps))}, target 100%)"
+          + (f"; also {len(stray)} accounts with no planted gap" if stray else ""))
+    for a in gaps:
+        if a not in found:
+            problems.append(("Data gaps", "missed", a, gaps[a]))
+    for a in stray:
+        problems.append(("Data gaps", "false alarm", a, ""))
+    risky = sorted(r["account_id"] for r in flags["data"] if r["status"] == "Risk hidden")
+    print(f"  {'PASS ' if risky else 'CHECK'}  Gaps that hide a visible risk reach the account's owner: "
+          f"{len(risky)} ({', '.join(risky) or 'none'}; target 1+)")
 
 # --- 3. Every miss and false alarm, by name -------------------------------------
 
