@@ -478,10 +478,11 @@ class DataStack(Stack):
                                          create_default_stage=False)
             search_api.add_routes(path="/search", methods=[apigwv2.HttpMethod.GET],
                                   integration=integrations.HttpLambdaIntegration("SearchQueries", finder))
+            mcp_routes = []
             if aws.get("mcp_public"):
                 # the public MCP server (24 Nov 2026): one more route on the same function, POST only
-                search_api.add_routes(path="/mcp", methods=[apigwv2.HttpMethod.POST],
-                                      integration=integrations.HttpLambdaIntegration("McpCalls", finder))
+                mcp_routes = search_api.add_routes(path="/mcp", methods=[apigwv2.HttpMethod.POST],
+                                                   integration=integrations.HttpLambdaIntegration("McpCalls", finder))
             search_logs = logs.LogGroup(self, "SearchApiAccessLogs", retention=logs.RetentionDays.ONE_MONTH,
                                         removal_policy=RemovalPolicy.DESTROY)
             search_stage = search_api.add_stage(
@@ -494,6 +495,11 @@ class DataStack(Stack):
                 search_stage.node.default_child.add_property_override("RouteSettings", {
                     "POST /mcp": {"ThrottlingRateLimit": aws["mcp_rate_per_second"],
                                   "ThrottlingBurstLimit": aws["mcp_burst"]}})
+                # the route first, then the stage that limits it: without this CloudFormation updated
+                # the stage first and API Gateway refused a limit on a route it didn't have yet
+                # (24 Nov 2026, the first deploy: "Unable to find Route by key POST /mcp")
+                for r in mcp_routes:
+                    search_stage.node.default_child.add_dependency(r.node.default_child)
             # the access log: when and what we answered, never the question (the route has no
             # query string in it: "GET /search")
             search_stage.node.default_child.access_log_settings = apigwv2.CfnStage.AccessLogSettingsProperty(

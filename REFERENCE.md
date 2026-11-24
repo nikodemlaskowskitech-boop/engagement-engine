@@ -381,6 +381,10 @@ Read a file's entry before changing that file, and update the entry in the same 
   Content-Type and the Mcp-* headers only), output McpUrl; [aws] mcp_public = false removes
   them. Why inside the search function: same role, bundle and redacted file, no new IAM.
   tests/mcp_public_test.py includes a real session with the official MCP client over HTTP.
+  First deploy (24 Nov 2026) failed: CloudFormation updated the stage (RouteSettings for POST /mcp)
+  before creating the route, API Gateway refused it, and the rollback failed the same way
+  (UPDATE_ROLLBACK_FAILED). Fix: the stage DependsOn the route (infra_test checks it). Recovery
+  that day: continue-update-rollback skipping the stage (its update had never applied).
 - `site_search.html` order and recency (24 Nov 2026, Nikodem: one order for the leader, another
   for the CSM): relevance decides what's in, the view only orders and trims. The handler returns
   twice [search] site_top_k accounts (POOL); the page shows site_top_k, "Best match" in the
