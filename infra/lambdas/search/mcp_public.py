@@ -24,16 +24,16 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"]     # newest first; we answer in the client's when we know it
 MAX_BODY = 16_000                                          # bytes: a tool call is a few hundred
-MAX_ROWS = 10                                              # accounts per answer
-QUESTION_CHARS = 200                                       # like the site's search box
 
-INSTRUCTIONS = (
-    "Cairnpath is a demo: every company, person and number in it is fictional and generated. "
-    "These tools read the demo's support tickets, emails and call notes (people's names removed: "
-    "Customer A, CS 1) and the demo accounts' names, tier, ARR and open flags. Documents are grouped "
-    "into cases (one problem, however many messages). Search matches words, not meaning. Cite a "
-    "document by its account and ID (acc_012 E1). Numbers like churn risk come from the engine and "
-    "are shown as flags; the documents hold what customers and CS wrote.")
+def _conf():
+    """[mcp] public_* and the instructions text, bundled at deploy (settings.toml, mcp_instructions.md)."""
+    from settings import SETTINGS
+    c = SETTINGS["mcp"]
+    return {"name": c["public_name"], "title": c["public_title"], "rows": int(c["public_max_results"]),
+            "chars": int(SETTINGS["aws"]["search_max_chars"]),
+            "instructions": (HERE / "mcp_instructions.md").read_text(encoding="utf-8").strip()}
+
+
 
 TOOLS = [
     {"name": "search_documents",
@@ -144,8 +144,8 @@ def call(con, name, args):
         q = re.sub(r"\s+", " ", str(args.get("question") or "")).strip()
         if not q:
             raise Refused("Ask something: the question is empty.")
-        if len(q) > QUESTION_CHARS:
-            raise Refused(f"Keep the question under {QUESTION_CHARS} characters.")
+        if len(q) > _conf()["chars"]:
+            raise Refused(f"Keep the question under {_conf()['chars']} characters.")
         aid = _account_id(args.get("account"))
         if not aid:
             aid, q = search.split_account(q)          # an ID inside the question works too, as on the site
@@ -153,8 +153,9 @@ def call(con, name, args):
             aid = aid or ""
         if aid and not q:
             raise Refused("That only names an account: use account_cases for all its cases.")
-        hits = search.search(con, q, k=MAX_ROWS * 5, account_id=aid or None)   # keywords: no model call
-        grouped = search.cases(con, hits)[:MAX_ROWS]
+        rows = _conf()["rows"]
+        hits = search.search(con, q, k=rows * 5, account_id=aid or None)   # keywords: no model call
+        grouped = search.cases(con, hits)[:rows]
         return {"question": q, "matched_by": "words", "results": [
             {**_card(g["account_id"]), "cases": [_case(c) for c in g["cases"][:3]]} for g in grouped]}
     raise KeyError(name)
@@ -173,8 +174,8 @@ def _rpc(con, msg):
         asked = params.get("protocolVersion")
         return ok({"protocolVersion": asked if asked in VERSIONS else VERSIONS[0],
                    "capabilities": {"tools": {"listChanged": False}},
-                   "serverInfo": {"name": "cairnpath-demo", "title": "Cairnpath demo (fictional data)", "version": "1.0"},
-                   "instructions": INSTRUCTIONS})
+                   "serverInfo": {"name": _conf()["name"], "title": _conf()["title"], "version": "1.0"},
+                   "instructions": _conf()["instructions"]})
     if method == "ping":
         return ok({})
     if method == "tools/list":

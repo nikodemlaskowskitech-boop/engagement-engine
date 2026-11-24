@@ -1,0 +1,1 @@
+Customer Success facts for one person's book of business (fictional demo data): accounts, churn risk with reasons, timelines, and a search over support tickets, emails and call notes (people redacted as Customer A, CS 1). Read only. Cite document IDs (S1, E2, C1) and account IDs when you use them.

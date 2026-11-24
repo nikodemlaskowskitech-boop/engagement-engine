@@ -626,6 +626,17 @@ rrf_k = 60                           # reciprocal rank fusion: 1 / (rrf_k + rank
 # and how many rows a tool returns at most. Set your own in settings.local.toml.
 person = "leader"
 max_results = 10
+# What each server calls itself and tells the model (24 Nov 2026: out of the code, so another
+# company's setup is a settings change): the instructions are plain text files next to settings.
+name = "cairnpath"
+title = "Cairnpath engagement engine"
+instructions_file = "mcp/local_instructions.md"
+# The public remote MCP server (infra/lambdas/search/mcp_public.py): its own name, instructions and
+# how many accounts an answer lists; questions are as long as the search box's ([aws] search_max_chars)
+public_name = "cairnpath-demo"
+public_title = "Cairnpath demo (fictional data)"
+public_instructions_file = "mcp/public_instructions.md"
+public_max_results = 10
 
 [ask]
 # ask.py: one question about one account, answered from its facts and documents (RAG).

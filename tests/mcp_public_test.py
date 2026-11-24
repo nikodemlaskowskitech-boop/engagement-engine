@@ -73,6 +73,10 @@ print("\nThe protocol (stateless Streamable HTTP, JSON answers)")
 s, b = post(rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}))
 check(s == 200 and b["result"]["protocolVersion"] == "2025-06-18" and "tools" in b["result"]["capabilities"]
       and "fictional" in b["result"]["instructions"], "initialize: our version, tools, and instructions that say it's fictional", b)
+conf = SETTINGS["mcp"]
+check(b["result"]["serverInfo"]["name"] == conf["public_name"] and b["result"]["serverInfo"]["title"] == conf["public_title"]
+      and b["result"]["instructions"] == (ROOT / conf["public_instructions_file"]).read_text(encoding="utf-8").strip(),
+      "its name, title and instructions come from [mcp] and its text file, not the code")
 s, b = post(rpc("initialize", {"protocolVersion": "2099-01-01", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}))
 check(b["result"]["protocolVersion"] == "2025-06-18", "a version we don't know: we answer with our newest")
 s, b = post({"jsonrpc": "2.0", "method": "notifications/initialized"})

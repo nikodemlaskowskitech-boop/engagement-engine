@@ -378,6 +378,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   files; answers, citations from the file, cacheable, same order as the laptop; 400/405/500;
   a planted name never in the logs, even on an error. infra_test.py and security_check.py
   check the rest (THREAT_MODEL.md 20-22).
+- MCP servers' configuration (24 Nov 2026, Nikodem: "the same principle as all other configs,
+  portability and customisation in mind"): each server's name, title and the instructions it
+  gives the model come from [mcp] (name, title, instructions_file; public_name, public_title,
+  public_instructions_file) and the plain-text files in mcp/; the public server's answer size
+  is [mcp] public_max_results and its question length the search box's [aws] search_max_chars.
+  bundle.py copies the public instructions into the search bundle (mcp_instructions.md). Next,
+  with the Ask box: one tool registry for both servers and the Ask box (each tool defined once).
 - `infra/lambdas/search/mcp_public.py` (24 Nov 2026, Nikodem: public, no sign-in, a CV demo):
   the remote MCP server, POST /mcp on the site's address, inside the search function (handler.py
   sends /mcp to it when env MCP=on). Stateless Streamable HTTP with plain JSON answers:
