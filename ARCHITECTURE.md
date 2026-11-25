@@ -99,3 +99,67 @@ regressions; the AWS side is all code, least privilege, with its own tests.
    server calls the facts layer.
 
 Each step keeps every test green and changes nothing a user can see, except speed.
+
+# Second review (25 Nov 2026)
+
+Twelve days and about 100 PRs after the first review: Phase 9 (search, redaction, two MCP
+servers, ask.py, vectors), two years of data, data missing and growth. Same format: each
+finding gets **Do now**, **Later** (with the trigger), **Not worth it**, or **Nikodem to
+decide**. The README's two diagrams were redrawn with it (they were 12 days behind).
+
+## What changed in the shape
+
+- **Four ways in from the internet, not one:** Slack's clicks, the public site, its
+  search (GET /search) and the public MCP server (POST /mcp). Each is throttled at the
+  gateway, and the search function can't read the data bucket, a key or a secret.
+- **Two model providers:** the Claude API for text (briefs, ask.py), Bedrock Titan for
+  vectors (embed.py on the laptop, and each public search question). Bedrock's Claude quota
+  was declined twice, so this is a workaround, not a choice.
+- **The laptop does more:** embeddings, the redacted search file, the local MCP server and
+  Slack's task cards all start there.
+- The first review's foundations held: the events store (A), the named hand-off files and
+  one step list (B), facts.py (C) and documents.py (D) carried all of Phase 9 without a rebuild.
+
+## Measured
+
+The engine in the sandbox today, by step (seconds, store already built):
+
+| Step | Seconds | Share |
+|---|---|---|
+| history.py | 105 | 60% |
+| flags.py | 28 | 16% |
+| export_views.py, twice | 29 | 17% |
+| backtest.py | 9 | 5% |
+| the other seven | 18 | 10% |
+
+On the laptop, history took 146 seconds on 25 Nov. The last AWS timing is the first
+review's: 502 seconds on 13 Nov with three briefs, history 46 of them. Since then the store
+(A) took most of flags' time away, but the data doubled to two years and growth is replayed
+every week. **We don't know today's AWS run time.** The limit is 900 seconds.
+
+| Size | 13 Nov | 25 Nov |
+|---|---|---|
+| The cockpit template | 3,150 lines | 4,853 lines |
+| The cockpit page | about 1.5 MB (one year of data) | 2.0 MB (two years, the page cut to the last year) |
+| Test files | 28 | 53 (about 10,000 lines) |
+| CLAUDE.md | 19 KB after G | 27 KB, 26 KB after this review |
+
+## Findings and decisions
+
+| # | Finding | Decision | Why |
+|---|---|---|---|
+| K | **History is the new bottleneck.** It replays the flags every week for two years (92 replays) from scratch; the page shows only the last 53. Growth made each replay heavier (churn is now materialised once a week to hold it at 105 s, not 231 s). | **Do now: measure** the AWS run (run.json's step_seconds) after the next deploy. **Later**, when AWS's history passes 300 s or the run 600 s: replay only the page's weeks on a daily run, and the full two years on a regenerate (the hero test and Athena need them). | A guess at AWS's time is how the first review got the bottleneck wrong (it named history; it was flags). Measure, then cut. The cut is cheap and keeps the outputs identical on a regenerate. |
+| L | **export_views.py runs twice** (about 15 s each): the second only picks up handover's "brief out of date" marks, because handover reads the first export. | **Not worth it** until K's trigger | 8% of the run. If time gets tight, a handovers-only export takes it to about 1 s. |
+| M | **A rule went into the page again.** Growth's "addressed" (a meeting or a next step since the signal began) is JavaScript only (addressedIn, 25 Nov). The rule is consistent on every tab, but the MCP servers and the Ask box can't answer "is this growth addressed?". "Planned", "overdue" and the forecast gap are the same (fix E). | **Later: with the Ask box**, its first reader. facts.py gets `addressed` and the page reads it from the export. | The decisions it needs already come back as events (cockpit_sync.py), so SQL can compute it. The Ask box is the trigger E was waiting for. |
+| N | **The cockpit grew 54% in 12 days** to 4,853 lines in one file. Fix H's trigger, the Ask box, is next. | **Do next, before the Ask box:** split the template into a few source files (styles, shared helpers, one per tab) that export_views.py joins into the same one page. | The output stays one file, so the public site, the tests and roles.py don't change. Only the editing gets easier, and the Ask box arrives as its own file. |
+| O | **Admin as a separate microservice?** (Nikodem's question.) Today the admin works from the laptop (request_briefs.py, put_key.py). | **Nikodem to decide.** Recommended: a separate admin Lambda and route in the same CDK app, behind sign-in (Cognito), with its own narrow role (start the briefs, read the spend). Not a separate service with its own deploy. | What a separate service would give, a smaller blast radius, comes from its own role and route. What it costs: a second pipeline, a contract between stacks to keep in step, and no gain a user sees at 500 accounts. Split a service off when a different team owns it. |
+| P | **Four ways in** (see above). | **No change** | THREAT_MODEL.md covers each (ways in 1 to 10, threats 23 and 25), with tests. The only model cost a stranger can cause is Titan per search question: throttled, cached and with a kill switch. |
+| Q | **The docs drifted.** The README's diagram was 12 days behind; CLAUDE.md grew back to 27 KB, mostly a changelog in "Planned next". | **Done in this review:** the diagrams redrawn, "Planned next" trimmed (the detail moved word for word to REFERENCE.md), and a rule in CLAUDE.md's map: a new AWS resource or way in updates the README's diagrams in the same PR. | Fix G's lesson again: the short page stays short only if something stops it from growing. |
+| R | **Two providers, and the laptop as a second control plane** (embeddings, Slack cards, the local MCP server). | **Not worth it** for the demo | Bedrock Claude would make it one provider: the code is ready, the quota isn't. Moving actions.py into AWS is what a real deployment needs (README, honest limits), not the demo. |
+
+## Order
+
+1. Deploy what's merged and read AWS's step times (K).
+2. Nikodem decides O.
+3. N: split the cockpit's source, the page byte for byte the same.
+4. The Ask box, with M (addressed in facts.py) and, if O says so, the admin Lambda.

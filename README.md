@@ -58,6 +58,8 @@ What we do, and don't do, to keep AI costs down, with the reason for each: [AI_C
 | Churn risk | Utilisation falling for two months, weekly active users dropping, and rising ingestion errors as a sign of a technical cause; plus Shelfware: live 60+ days and never above 40% utilisation (the rollout never happened) | Same routing, with Watch and Act levels; Shelfware asks for an adoption review (Self-service: a use-case inspiration email) |
 | Expansion | Accounts heading over their contract with a growing team, plus volume rising without users (often over-tracking) | CSMs and pools investigate and build the growth case; Sales only signs |
 | QBR | Enterprise QBRs in the next 30 days (with a facts pack per account) and QBRs overdue with nothing booked | Named CSMs |
+| Growth | Whitespace with a hook, never "they don't use it, sell it": an add-on's precursor behaviour, dashboards read by far more people than log in, an add-on bought and never used | Raised at the next QBR or meeting; a task only when nothing is booked; "not a fit" pauses it for six months |
+| Data missing | A gap in an account's own data (contract volume, renewal date, a feed that stopped): the flags that need it skip the account rather than guess | CS ops or data engineering, and the owner when a risk is hidden |
 
 Every flag shows the numbers behind it (for example *"Utilisation 52%, then
 39%, then 27%"*), who it is routed to and what to do next.
@@ -72,58 +74,108 @@ emails and call transcripts, every claim cited and checked.
 ## Architecture
 
 It runs in two places with the same code: a laptop (Windows, `run_all.ps1`) and
-AWS (eu-north-1, all of it as code in [`infra/`](infra/), CDK in Python).
+AWS (eu-north-1, all of it as code in [`infra/`](infra/), CDK in Python). Both
+run the same steps, in the order of one list in `settings.toml` ([pipeline]).
+Redrawn 25 Nov 2026; the review behind it is in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+**1. The engine: data in, flags and pages out.**
+
+```mermaid
+flowchart TB
+  subgraph laptop["Laptop"]
+    direction LR
+    gen["generate_events.py<br/>generate_documents.py<br/>(or your own exports)"]
+    run["run_all.ps1<br/>the same engine, locally"]
+    up["upload.py<br/>only what changed"]
+    rb["request_briefs.py<br/>(admin only)"]
+    key["put_key.py"]
+    mcp["mcp_server.py<br/>local MCP, one person's view"]
+  end
+  subgraph aws["AWS, eu-north-1"]
+    direction LR
+    s3[("Data bucket<br/>own KMS key, versioned,<br/>data perimeter")]
+    chk["Check Lambda<br/>check_inputs.py"]
+    eng["Engine Lambda<br/>ingest, flags, journeys, history,<br/>reports, cockpit export"]
+    sch["Daily schedule<br/>(safety net)"]
+    sl["Slack Lambda, behind<br/>API Gateway POST /slack/actions<br/>signature checked"]
+    ssm["Parameter Store<br/>API key, Slack secrets"]
+    ath["Athena + Glue<br/>ad-hoc SQL"]
+    sec["GuardDuty, Access Analyzer,<br/>Cost Anomaly Detection"]
+  end
+  slack(("Slack"))
+  llm(("Claude API<br/>briefs, on request"))
+  desk(("Claude Desktop"))
+
+  gen --> run
+  gen --> up -->|"inputs/ + marker"| s3
+  s3 -->|marker| chk -->|verdict| s3
+  s3 -->|"verdict OK or WARN"| eng
+  sch --> eng
+  rb -->|"briefs: true"| eng
+  eng -->|"outputs/"| s3
+  eng -.->|"redacted text only"| llm
+  key --> ssm
+  ssm -.-> eng
+  ssm -.-> sl
+  run -->|"task cards (actions.py)"| slack
+  slack -->|button clicks| sl -->|"state/clicks/"| s3
+  s3 --> ath
+  run --> mcp --> desk
+```
+
+**2. The public demo: what anyone with the address can reach.** Nothing here
+can read the data bucket.
 
 ```mermaid
 flowchart LR
   subgraph laptop["Laptop"]
-    gen["generate_events.py<br/>(or your own exports)"]
-    up["upload.py"]
-    rb["request_briefs.py<br/>(admin only)"]
+    exp["search_export.py<br/>the demo documents,<br/>redacted, committed"]
+    emb["embed.py<br/>one vector per<br/>redacted document"]
   end
-  subgraph aws["AWS, eu-north-1"]
-    s3[("S3 bucket<br/>own KMS key, versioned,<br/>data perimeter")]
-    chk["Check Lambda<br/>check_inputs.py"]
-    eng["Engine Lambda<br/>DuckDB: flags, journeys,<br/>reports, cockpit export"]
-    sch["Daily schedule<br/>(safety net)"]
-    api["API Gateway<br/>/slack/actions"]
-    sl["Slack Lambda<br/>signature checked"]
-    ssm["Parameter Store<br/>API key, Slack secrets"]
-    ath["Athena + Glue<br/>ad-hoc SQL"]
+  subgraph aws["AWS"]
+    eng["Engine Lambda"]
+    site[("Site bucket<br/>sandbox role pages")]
+    cf["CloudFront<br/>HTTPS, security headers,<br/>cached answers"]
+    gw["API Gateway<br/>GET /search, POST /mcp<br/>throttled"]
+    fn["Search Lambda<br/>/search: keywords + meaning<br/>/mcp: keywords only<br/>no bucket, key or secret"]
+    logs[("Visit logs<br/>no IP, no cookie")]
   end
-  slack(("Slack"))
-  llm(("Claude API"))
-  cockpit["Cockpit page<br/>views.html"]
+  titan(("Bedrock Titan<br/>embeddings"))
+  web(("Visitors"))
+  mcpc(("MCP clients"))
 
-  gen --> up -->|"inputs/ + marker"| s3
-  s3 -->|marker| chk -->|"verdict"| s3
-  s3 -->|verdict OK or WARN| eng
-  sch --> eng
-  rb -->|"briefs: true"| eng
-  eng -->|"outputs/"| s3
-  eng -.->|"only on request,<br/>redacted text"| llm
-  ssm -.-> eng
-  ssm -.-> sl
-  slack -->|button clicks| api --> sl -->|"state/clicks/"| s3
-  s3 --> ath
-  s3 --> cockpit
+  eng -->|"roles.py --site:<br/>write pages only"| site --> cf
+  exp -->|"bundled at cdk deploy"| fn
+  emb -.->|"redacted text"| titan
+  emb -->|"vectors, bundled"| fn
+  web --> cf
+  mcpc --> cf
+  cf -->|"/search, /mcp"| gw --> fn
+  fn -.->|"/search only:<br/>the question's vector"| titan
+  cf --> logs
 ```
 
 **One run, step by step.**
 1. `upload.py` sends only new or changed input files, then a small marker file.
 2. The marker wakes the **check Lambda**: missing columns, bad dates, unknown
    tiers. ERROR stops everything downstream (the gate).
-3. The check's verdict wakes the **engine Lambda**: it pulls the inputs, the
-   action log and the Slack clicks, runs the same scripts as the laptop
-   (flags, journeys, team report, backtest, onboarding, cockpit export), checks
-   for free whether each AI brief is out of date, and writes Parquet tables for
-   Athena. `run.json` is written last, so whoever reads it sees a finished run.
+3. The check's verdict wakes the **engine Lambda**. It reads the events once
+   into a Parquet store (`ingest.py`), then runs the same steps as the laptop:
+   flags (activation, churn, expansion, QBR, data missing, growth), journeys,
+   team report, backtest, onboarding, the year replayed week by week
+   (`history.py`), and the cockpit export. It checks for free whether each AI
+   brief is out of date, writes the public site's sandbox pages and Parquet
+   tables for Athena. `run.json` is written last, with each step's seconds, so
+   whoever reads it sees a finished run.
 4. A **daily schedule** reruns the engine only if a run was missed or failed,
    or Slack clicks came in since.
 5. **Slack clicks** ("I'll take it", "Log call") go to their own small Lambda
    behind API Gateway and become CS history on the next run.
 6. **AI briefs** are written only when the admin asks (`request_briefs.py`).
-   Nothing a user clicks, uploads or saves can make the model run.
+   Nothing a user clicks, uploads or saves can make the model run. The one
+   model call a visitor can cause is the public search's: their question turns
+   into a vector (Titan, a tiny fraction of a cent), throttled, cached, and
+   with a kill switch in settings.
 
 ## Run it
 
@@ -136,7 +188,7 @@ goes to `data\last_run.txt`. Step by step:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python generate_events.py   # ~500 accounts, 90 days of events
+python generate_events.py   # ~500 accounts, two years of events
 python check_inputs.py      # are the inputs complete? what will and won't work
 # your own data instead of the fake one: see "Running on your own data" in DATA_CONTRACT.md
 python explore.py           # the book of business at a glance

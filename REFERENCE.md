@@ -7,6 +7,15 @@ Read a file's entry before changing that file, and update the entry in the same 
 
 ## Files
 
+- Phase 9 so far (moved word for word from CLAUDE.md "Planned next", 25 Nov 2026):
+  Phase 9, AI on unstructured data: account search built 13 Nov 2026 (BM25 in SQL,
+  the corpus; recall 57% on keywords, 95% with the [search.synonyms] vocabulary (18 Nov: three wordings per topic),
+  optimistic: written knowing the corpus; on a held-out set written apart, 72% -> 90%); redacted
+  results (search.redacted, PRIVACY.md §6) built the same day; the public search on the demo site
+  (#166-169) and the local MCP server (mcp_server.py) the same day; "ask about this account" (ask.py) 14 Nov 2026; vectors next to
+  keywords built 22 Nov 2026 (embed.py, Titan on Bedrock; held-out recall keywords 90%, meaning 94%,
+  hybrid 96%, so hybrid for ask.py and the MCP server since 23 Nov, and the public search too (Titan per question, kill switch [aws] search_meaning); the corpus grown to 45 accounts in six voices 25 Nov: keywords with synonyms 95% -> 92%, the meaning search to measure on the laptop); the AI
+  cost demo (ai_cost.py) 23 Nov; the public remote MCP server (POST /mcp, no sign-in, keywords only) 24 Nov; last a live Ask box in the cockpit.
 - `DATA_CONTRACT.md`: the inputs, their columns and meaning, which
   are required, what stops working without each, and what is still
   hard-coded. Update it whenever an input or a column changes.
