@@ -63,7 +63,7 @@ Docs-only PRs need none.
 | --- | --- |
 | the engine (any step, settings) | `check_inputs.py`, `check_flags.py`, `backtest.py`, `tests/pipeline_test.py`, `tests/journeys_test.py` |
 | `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py`, `tests/data_gaps_test.py` (bad data: never guess, never crash), `tests/contract_terms_test.py` (each day against the contract in force) |
-| `generate_events.py`, `generate_documents.py`, the flags, the history; after a regenerate | `tests/heroes_test.py` (the four hero accounts' two-year stories still hold; reads data/) |
+| `generate_events.py`, `generate_documents.py`, the flags, the history; after a regenerate | `tests/heroes_test.py` (the four hero accounts' two-year stories still hold; reads data/), `tests/growth_hooks_test.py` (the planted growth hooks are there, and only there) |
 | `ingest.py` | `tests/store_test.py` |
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
 | `documents.py` | `tests/documents_test.py`, plus the handover row |
@@ -153,8 +153,9 @@ One JSON event per line, one file per day in `data/events/`.
   timestamp (UTC), account_id
 - Product events only: user_id
 - Optional: properties, context
-- Product events: sdk_installed, chart_created, dashboard_shared,
-  cohort_created, experiment_launched, user_invited, data_export
+- Product events: sdk_installed, chart_created, dashboard_shared
+  (properties.viewers: how many people it went to), cohort_created,
+  experiment_launched (only with the experiments add-on), user_invited, data_export
 - System events: daily_event_volume (properties.event_count),
   ingestion_error (properties.error_code)
 - Derived in SQL, never emitted: first event / go-live date
