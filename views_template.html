@@ -39,6 +39,7 @@
                                deutan). A neutral by design, so under the chroma floor, and 2.8:1 on
                                the panel: its bars always carry a total and sit beside a legend */
   --viz-touch: #B9B3A5;     /* light stone: emails and workshops on the timeline (shape tells which) */
+  --viz-pending: #636B62;   /* "not yet" next to --good (growth addressed): OKLab 24, CVD 23+ in dark */
   --viz-measure: #7FA6CF;   /* steel blue: an amount over time (utilisation, a sieve stage, days) */
   --viz-measure-soft: #52708D;   /* the same, as a backdrop (weekly active users), 3:1 on the panel */
   --viz-label: #050706;     /* a count printed inside a coloured segment */
@@ -70,6 +71,7 @@
      (validated on #FFFDF8: all 3:1+, neighbours ΔE 15+); the light stone and the steel blue were
      2:1 on paper, so they darken here. Tooltips stay dark in both themes. */
   --viz-touch: #857F72; --viz-measure: #3F72A8; --viz-measure-soft: #7896B6;
+  --viz-pending: #948E80;   /* "not yet" next to --good: the stone is too close to the green in light mode (OKLab 8, CVD 4); this is 19 and 15+, 3.2:1 */
   color-scheme: light;
 }
 
@@ -678,10 +680,22 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
           <p class="finding small" id="ld-churn-finding"></p>
           <div class="examples tablewrap" id="ld-churn"></div>
         </div>
-        <div class="panel">
-          <h2>Growth: biggest upside first</h2>
+        <div class="panel" id="ld-growth-panel">
+          <h2>Growth: where the opportunity is, and are we on it</h2>
           <p class="finding small" id="ld-growth-finding"></p>
+          <div class="tablewrap"><table id="ld-growth-mix"></table></div>
+          <h3 id="ld-growth-mix-title" hidden></h3>
+          <div class="tablewrap" id="ld-growth-mix-list"></div>
+          <h3>Biggest first</h3>
           <div class="examples tablewrap" id="ld-growth"></div>
+          <div class="trend-block" id="ld-growth-trend-block">
+            <h3>Over the year, week by week: accounts with growth in play</h3>
+            <div class="trend-chart" id="ld-growth-trend"></div>
+            <div class="legend" id="ld-growth-legend"></div>
+            <h3 id="ld-growth-week-title">Click a week to list the accounts</h3>
+            <div class="tablewrap" id="ld-growth-week"></div>
+          </div>
+          <p class="note" id="ld-growth-note"></p>
         </div>
       <div class="panel">
         <h2>Team: in front of customers, against the median</h2>
@@ -1396,22 +1410,29 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   const GROWTH = D.settings.growth || { not_a_fit: {}, pause_days: 180 };
   const growthOf = (a) => (a.flags || []).find((x) => x.flag === "growth");
   const openHook = (f) => !!f && !f.status.startsWith("Held") && f.status !== "Not a fit";
-  function growthSince(id) {
-    const on = new Set(HIST.flags.filter((r) => r[1] === id && r[2] === "growth").map((r) => r[0]));
-    let w = HIST.weeks.length - 1;
-    if (!on.has(w)) return D.as_of;
+  // the first week of the run a flag is in at week w (default: now); not flagged that week = that day
+  function flagSince(id, flag, w = HIST.weeks.length - 1) {
+    const on = new Set(HIST.flags.filter((r) => r[1] === id && r[2] === flag).map((r) => r[0]));
+    if (!on.has(w)) return w === HIST.weeks.length - 1 ? D.as_of : HIST.weeks[w];
     while (w > 0 && on.has(w - 1)) w--;
     return HIST.weeks[w];
+  }
+  const growthSince = (id) => flagSince(id, "growth");
+  // addressed between two dates (one rule for the account page and the leader's trend):
+  // a meeting held, or a next step planned
+  function addressedIn(id, since, end = D.as_of) {
+    const met = (touchesBy[id] || []).filter((t) => t.event === "meeting_held" && t.date >= since && t.date <= end).slice(-1)[0];
+    if (met) return { k: "raised", date: met.date };
+    const plan = (nextSteps[id] || []).filter((p) => { const d = (p.decided_at || "").slice(0, 10); return d >= since && d <= end; }).slice(-1)[0];
+    return plan ? { k: "planned", date: (plan.decided_at || "").slice(0, 10), due: plan.due } : null;
   }
   function growthState(a) {
     const f = growthOf(a); if (!f) return null;
     if (f.status === "Not a fit") return { k: "notfit", text: "not a fit", f };
     if (f.status.startsWith("Held")) return { k: "held", text: f.status.replace("Held: ", "held back: "), f };
-    const since = growthSince(a.account_id);
-    const met = (touchesBy[a.account_id] || []).filter((t) => t.event === "meeting_held" && t.date >= since).slice(-1)[0];
-    if (met) return { k: "raised", text: `raised ${fmt(met.date)}`, f, since };
-    const plan = (nextSteps[a.account_id] || []).filter((p) => (p.decided_at || "").slice(0, 10) >= since).slice(-1)[0];
-    if (plan) return { k: "planned", text: `planned${plan.due ? ` for ${fmt(plan.due)}` : ""}`, f, since };
+    const since = growthSince(a.account_id), done = addressedIn(a.account_id, since, "9999");
+    if (done && done.k === "raised") return { k: "raised", text: `raised ${fmt(done.date)}`, f, since };
+    if (done) return { k: "planned", text: `planned${done.due ? ` for ${fmt(done.due)}` : ""}`, f, since };
     return { k: "open", text: f.routed_to === "none" ? "rides on the next engagement" : "open", f, since };
   }
 
@@ -3851,6 +3872,99 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     $("sg-cross-note").textContent = "Any one of these is common; together they ask for a conversation before the renewal does. A rule over facts on the page, not a prediction.";
     $("ld-signals").parentElement.querySelectorAll("[data-open-acc]").forEach((b) => b.addEventListener("click", () => openAccount(b.dataset.openAcc)));
   }
+  // Growth for the leader (25 Nov 2026, whitespace step 3, Nikodem: "a top-level overview, key
+  // accounts, where the opportunity is, are we doing anything to address it, the historical trend").
+  // In play = an expansion signal or a growth hook not held back. Addressed = the account page's rule
+  // (addressedIn): a meeting held or a next step planned since the signal began, or not a fit.
+  // An unused add-on is a risk, not upside: its own row, never added to the euros in play.
+  const GKINDS = [
+    { k: "volume", name: "Volume above the contract", of: (a) => a.flags.find((x) => x.flag === "expansion"), worth: "upside" },
+    { k: "addon", name: "Add-on hook", of: (a) => a.flags.find((x) => x.flag === "growth" && x.status === "Add-on hook"), worth: "list price" },
+    { k: "people", name: "People hook", of: (a) => a.flags.find((x) => x.flag === "growth" && x.status === "People hook"), worth: "no price" },
+    { k: "unused", name: "Add-on bought, not used", of: (a) => a.flags.find((x) => x.flag === "growth" && x.status === "Unused add-on"), worth: "at risk at renewal" },
+  ];
+  const isAddressed = (a, f) => f.status === "Not a fit" || !!addressedIn(a.account_id, flagSince(a.account_id, f.flag), "9999");
+  const upsideOf = (a) => (valueOf(a.flags.find((x) => x.flag === "expansion")) || 0) +
+    (valueOf(a.flags.find((x) => x.flag === "growth" && x.status === "Add-on hook")) || 0);
+  function drawLeadGrowth(accs, person, acct, planCell) {
+    const mine = accs.filter(person);
+    const rows = GKINDS.map((g) => { const xs = mine.filter((a) => g.of(a));
+      return { ...g, xs, n: xs.length, v: g.worth === "no price" ? null : xs.reduce((t, a) => t + (valueOf(g.of(a)) || 0), 0),
+        done: xs.filter((a) => isAddressed(a, g.of(a))).length }; });
+    const held = mine.filter((a) => { const f = a.flags.find((x) => x.flag === "growth"); return f && f.status.startsWith("Held"); });
+    const inPlay = mine.filter((a) => GKINDS.slice(0, 3).some((g) => g.of(a)));
+    const flagsIn = (a) => GKINDS.slice(0, 3).map((g) => g.of(a)).filter(Boolean);
+    const doneAcc = inPlay.filter((a) => flagsIn(a).some((f) => isAddressed(a, f)));
+    const up = rows[0].v, addon = rows[1].v;
+    const pct = (n, d) => d ? `${n} of ${d} (${Math.round(100 * n / d)}%)` : "0";
+    $("ld-growth-finding").textContent = inPlay.length
+      ? `${segOn() ? segName() + ": " : ""}${money(up + addon)} in play across ${plural(inPlay.length, "account")} (${money(up)} volume upside, ${money(addon)} in add-ons at list price); ${pct(doneAcc.length, inPlay.length)} addressed.`
+      : `${segName()}: no growth in play in this segment.`;
+    $("ld-growth-mix").innerHTML = `<tr><th>Where it is</th><th class="r">Accounts</th><th class="r">Value</th><th class="r">Addressed</th></tr>` +
+      rows.map((r) => `<tr class="click" tabindex="0" data-k="${r.k}"><td>${esc(r.name)}</td><td class="r num">${r.n}</td>` +
+        `<td class="r num">${r.v == null ? '<span class="muted">no price</span>' : `${money(r.v)}<small><br>${esc(r.worth)}</small>`}</td>` +
+        `<td class="r num">${r.n ? pct(r.done, r.n) : "–"}</td></tr>`).join("") +
+      (held.length ? `<tr class="click" tabindex="0" data-k="held"><td colspan="4"><small class="muted">${plural(held.length, "growth hook")} held back (churn risk, data missing, or the basics first), not counted</small></td></tr>` : "");
+    const MIX_COLS = [
+      { label: "Account", get: acct },
+      { label: "What", get: (a) => `<small>${esc((GKINDS.map((g) => g.of(a)).find(Boolean) || a.flags.find((x) => x.flag === "growth") || {}).reasons || "")}</small>` },
+      { label: "State", get: (a) => stateCell(a) },
+    ];
+    $("ld-growth-mix-title").hidden = true; $("ld-growth-mix-list").innerHTML = "";
+    $("ld-growth-mix").querySelectorAll("tr.click").forEach((tr) => {
+      const go = () => { const r = rows.find((x) => x.k === tr.dataset.k);
+        $("ld-growth-mix-title").hidden = false;
+        accountList($("ld-growth-mix-list"), $("ld-growth-mix-title"), r ? r.name : "Held back", r ? r.xs : held, MIX_COLS, false); };
+      tr.addEventListener("click", go); tr.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    });
+    // the state of an account's growth: the hook's state, else the expansion's (addressed or not)
+    function stateCell(a) {
+      const gs = growthState(a);
+      if (gs && gs.k !== "held") return esc(gs.text);
+      const e = a.flags.find((x) => x.flag === "expansion");
+      if (!e) return gs ? esc(gs.text) : "–";
+      const d = addressedIn(a.account_id, flagSince(a.account_id, "expansion"), "9999");
+      return d ? (d.k === "raised" ? `raised ${fmt(d.date)}` : `planned${d.due ? ` for ${fmt(d.due)}` : ""}`) : '<span class="bad">not yet</span>';
+    }
+    // biggest first: volume upside plus an add-on's list price; a people hook has no price, so it sorts last
+    const top = inPlay.slice().sort((a, b) => upsideOf(b) - upsideOf(a) || a.account_name.localeCompare(b.account_name));
+    shortList($("ld-growth"), top, [
+      { label: "Account", get: acct },
+      { label: "In play", get: (a) => `<b>${upsideOf(a) ? money(upsideOf(a)) : '<span class="muted">no price</span>'}</b><small><br>${esc(flagsIn(a).map((f) => f.flag === "expansion" ? "Expansion " + f.status : f.status).join(" + "))} · ARR ${money(a.arr)}</small>` },
+      { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${yr4(a.renewal_date)}<small><br>${ahead(a.renewal_date)}</small>` },
+      { label: "Addressed", get: stateCell },
+      { label: "Action planned", get: planCell },
+    ], "No growth in play in this segment.", 5);
+    // the trend: accounts with growth in play each week, addressed by the end of that week or not.
+    // The history keeps statuses, not values, so this counts accounts; the euros are today's only.
+    const has = HIST.weeks.length > 1;
+    $("ld-growth-trend-block").hidden = !has;
+    $("ld-growth-note").textContent = `Volume upside: forecast usage above the contract at renewal. Add-on: its list price, an estimate, not a forecast. A people hook has no price. An add-on bought and not used is a renewal risk, so it is never counted as upside. Addressed: a meeting held or a next step planned since the signal began, or marked not a fit. The trend counts accounts (Enterprise and Scale): the weekly history keeps statuses, not values. On the demo data the growth hooks were planted in the last few months, so the early weeks are nearly empty.`;
+    if (!has) return;
+    const W = HIST.weeks.length;
+    const inPlayRow = (r) => (r[2] === "expansion" || (r[2] === "growth" && ["Add-on hook", "People hook", "Not a fit"].includes(r[3]))) && histIn(r[1]) && (byId[r[1]] || offBook[r[1]] || {}).tier !== "Self-service";
+    const byWeek = HIST.weeks.map(() => new Map());
+    for (const r of HIST.flags) if (inPlayRow(r)) (byWeek[r[0]].get(r[1]) || byWeek[r[0]].set(r[1], []).get(r[1])).push(r);
+    const weekDone = (i, id, rs) => rs.some((r) => r[3] === "Not a fit" || !!addressedIn(id, flagSince(id, r[2], i), HIST.weeks[i]));
+    const per = byWeek.map((m, i) => [...m].map(([id, rs]) => ({ account_id: id, done: weekDone(i, id, rs), what: rs.map((r) => r[2] === "expansion" ? "Expansion " + r[3] : r[3]).join(" + ") })));
+    const GCATS = [{ k: "done", name: "Addressed", color: "var(--good)" }, { k: "not", name: "Not yet", color: "var(--viz-pending)" }];
+    const tw = Math.min(440, $("ld-growth-trend").clientWidth || 440);
+    stackChart($("ld-growth-trend"), { W: tw, H: 140, cats: GCATS, unit: "account", totals: "last",
+      aria: "Accounts with growth in play, addressed or not, week by week",
+      bars: per.map((xs, i) => ({ label: weekLabel(i), tip: `Week ending ${fmtFull(HIST.weeks[i])}`,
+        counts: { done: xs.filter((x) => x.done).length, not: xs.filter((x) => !x.done).length },
+        onClick: () => accountList($("ld-growth-week"), $("ld-growth-week-title"), `Growth in play, week ending ${fmtFull(HIST.weeks[i])}`,
+          xs.slice().sort((a, b) => a.done - b.done), [
+            { label: "Account", get: (x) => nameOf(x.account_id) },
+            { label: "What", get: (x) => esc(x.what) },
+            { label: "Addressed", get: (x) => x.done ? "yes" : '<span class="bad">not yet</span>' },
+          ], false) })) });
+    stackLegend($("ld-growth-legend"), GCATS);
+    $("ld-growth-week-title").textContent = "Click a week to list the accounts"; $("ld-growth-week").innerHTML = "";
+    const now = per[W - 1], then = per[Math.max(0, W - 5)];
+    const share = (xs) => xs.length ? `${xs.filter((x) => x.done).length} of ${xs.length}` : "none";
+    $("ld-growth-finding").textContent += ` Four weeks ago: ${share(then)} addressed.`;
+  }
   function drawLeadership() {
     if (!$("view-lead")) return;                     // not on this person's page
     const accs = D.accounts.filter(inSeg), person = (a) => a.tier !== "Self-service";
@@ -3858,6 +3972,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const churn = accs.filter((a) => flagOf(a, "churn") && person(a)).sort((a, b) => (valueOf(flagOf(b, "churn")) || 0) - (valueOf(flagOf(a, "churn")) || 0));
     const growth = accs.filter((a) => flagOf(a, "expansion") && person(a)).sort((a, b) => (valueOf(flagOf(b, "expansion")) || 0) - (valueOf(flagOf(a, "expansion")) || 0));
     const sum = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
+    const hooksOpen = accs.filter((a) => person(a) && openHook(flagOf(a, "growth")));
     const atRisk = sum(churn, (a) => valueOf(flagOf(a, "churn"))), upside = sum(growth, (a) => valueOf(flagOf(a, "expansion")));
     const bookArr = sum(accs.filter(person), (a) => a.arr), wholeArr = sum(accs, (a) => a.arr);
     // Enterprise and Scale ARR, owned or not: the part with no owner yet is said, so it reconciles
@@ -3947,7 +4062,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
         `<span class="v">${st.v}</span> <span class="l">${st.l}</span> <span class="r">${st.r}</span> <span class="u">${esc(st.u)}</span></button>`).join("") +
       `</div><div class="tiles">` +
       tile("ARR at risk", money(atRisk), `${churn.length} accounts · ${act.length} at Act`, act.length > 0) +
-      tile("Upside", money(upside), `${growth.length} accounts with an expansion flag`, false) +
+      tile("Upside", money(upside), `${growth.length} accounts with an expansion flag` + (hooksOpen.length ? ` · ${plural(hooksOpen.length, "growth hook")} open` : ""), false) +
       tile("Forecast ≠ data", gaps.length, "owner's forecast a quarter of the ARR from the data", gaps.length > 0) + `</div>`;
     $("ld-trail-panel").hidden = true;
     drawExposure(churn, atRisk, accs.filter(person));
@@ -3973,13 +4088,7 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       { label: "Action planned", get: planCell },
       { label: "Forecast", get: fcCell },
     ], "No account at churn risk in this segment.");
-    $("ld-growth-finding").textContent = growth.length ? `${growth.filter((a) => flagOf(a, "expansion").status === "Act").length} at Act (usage and users growing); ${growth.filter((a) => !planned(a)).length} with no next step planned.` : "";
-    shortList($("ld-growth"), growth, [
-      { label: "Account", get: acct },
-      { label: "Upside", get: (a) => `<b>${money(valueOf(flagOf(a, "expansion")))}</b><small><br>${esc(flagOf(a, "expansion").status)} · ARR ${money(a.arr)}</small>` },
-      { label: "Renewal", get: (a) => `${fmt(a.renewal_date)} ${yr4(a.renewal_date)}<small><br>${ahead(a.renewal_date)}</small>` },
-      { label: "Action planned", get: planCell },
-    ], "No expansion flag in this segment.");
+    drawLeadGrowth(accs, person, acct, planCell);
     // team: meetings in 30 days and share of the book met, against the median of the same kind
     const people = D.team.filter((t) => (!seg.manager || t.manager === seg.manager) && (!seg.team || t.region === seg.team) && (!seg.owner || t.owner_id === seg.owner));
     const stat = (t) => { const book = accountsOf(t.owner_id);

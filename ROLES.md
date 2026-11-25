@@ -48,6 +48,7 @@ count it.
 | Performance on Leadership (GRR, NRR, the forecast; was the Business case tab) | Yes, by team, then by person | Their team, by person | No | No |
 | Tabs | Leadership (Performance first), Operational (CS team inside), Did it work? (the rules), Account, Programmes | Operational (CS team inside), Leadership, Did it work? (the rules), Book of business, Account, Programmes | My book, My work, Account | My book, My work, Account |
 | Opens on | Leadership | Operational | My book | My book |
+| Growth on Leadership (25 Nov 2026: in play by kind, biggest first, addressed or not, week by week) | Yes | Their team's accounts | No | No |
 | Data missing (Leadership, 24 Nov 2026: accounts with a gap in their own data, ARR, who fixes it) | Yes | Their team's accounts | No | No |
 | The queue | Operational: the funnel per team, the backlog by team, read-only | Operational: the funnel per person, the backlog with decisions | My work (by cash at stake, 18 Nov 2026) | My work |
 
