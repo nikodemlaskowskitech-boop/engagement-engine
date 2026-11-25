@@ -33,7 +33,7 @@ import flags
 
 STEP_DAYS = SETTINGS["history"]["step_days"]          # one snapshot every this many days
 MIN_DAYS = SETTINGS["history"]["min_days"]            # a replay needs a full churn window behind it
-FLAGS = ("activation", "churn", "expansion", "qbr")    # journeys are escalations of these: not replayed
+FLAGS = ("activation", "churn", "expansion", "qbr", "growth")    # journeys are escalations of these: not replayed
 
 
 def main():
@@ -133,8 +133,11 @@ def replay(con, w, has_log):
         LEFT JOIN q USING (account_id)
         WHERE coalesce(c.customer_since, c.contract_start) <= {d}     -- had signed by w
     """)
+    # churn once per week: growth reads it too (flags.py's churn_status), and the rules are the slow part
+    con.sql("CREATE OR REPLACE TABLE wk_churn AS SELECT * FROM churn")
+    con.sql("CREATE OR REPLACE VIEW churn_status AS SELECT account_id, status FROM wk_churn")
     con.sql("CREATE OR REPLACE TABLE wk_flags AS " + " UNION ALL ".join(
-        f"SELECT account_id, '{f}' AS flag, status, routed_to FROM {f}" for f in FLAGS))
+        f"SELECT account_id, '{f}' AS flag, status, routed_to FROM {'wk_churn' if f == 'churn' else f}" for f in FLAGS))
     con.sql(f"INSERT INTO hist_flags SELECT {d}, * FROM wk_flags")
     if not has_log:
         return

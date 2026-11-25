@@ -1390,6 +1390,31 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     return "neutral";
   };
 
+  // Growth hooks (flags.py view growth, 25 Nov 2026): "no hook, no pitch". A hook is open unless
+  // held back or marked not a fit; since = the first week of its current run (history.py), so
+  // "addressed" means raised in a meeting since then, a next step planned since then, or not a fit.
+  const GROWTH = D.settings.growth || { not_a_fit: {}, pause_days: 180 };
+  const growthOf = (a) => (a.flags || []).find((x) => x.flag === "growth");
+  const openHook = (f) => !!f && !f.status.startsWith("Held") && f.status !== "Not a fit";
+  function growthSince(id) {
+    const on = new Set(HIST.flags.filter((r) => r[1] === id && r[2] === "growth").map((r) => r[0]));
+    let w = HIST.weeks.length - 1;
+    if (!on.has(w)) return D.as_of;
+    while (w > 0 && on.has(w - 1)) w--;
+    return HIST.weeks[w];
+  }
+  function growthState(a) {
+    const f = growthOf(a); if (!f) return null;
+    if (f.status === "Not a fit") return { k: "notfit", text: "not a fit", f };
+    if (f.status.startsWith("Held")) return { k: "held", text: f.status.replace("Held: ", "held back: "), f };
+    const since = growthSince(a.account_id);
+    const met = (touchesBy[a.account_id] || []).filter((t) => t.event === "meeting_held" && t.date >= since).slice(-1)[0];
+    if (met) return { k: "raised", text: `raised ${fmt(met.date)}`, f, since };
+    const plan = (nextSteps[a.account_id] || []).filter((p) => (p.decided_at || "").slice(0, 10) >= since).slice(-1)[0];
+    if (plan) return { k: "planned", text: `planned${plan.due ? ` for ${fmt(plan.due)}` : ""}`, f, since };
+    return { k: "open", text: f.routed_to === "none" ? "rides on the next engagement" : "open", f, since };
+  }
+
   // accounts worth a look: the stories the reports surface
   const tta = Object.fromEntries(D.time_to_action.map((r) => [r.account_id, r]));
   // Picked from the segment, so with Mia selected the chips are Mia's accounts.
@@ -1591,7 +1616,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     if (fl.length) {
       body = fl.map((f) => `<div><span class="flag ${severity(f)} inline"><span class="pill">${esc(flagName(f))} · ${esc(f.status)}</span></span>` +
         `<p>${esc(f.reasons)}</p>` +
-        (valueOf(f) != null ? `<p><b>${money(valueOf(f))} ${f.flag === "churn" ? "ARR at risk" : "upside"}</b> · ${esc(f.value_basis)}</p>` : "") +
+        (valueOf(f) != null ? `<p><b>${money(valueOf(f))} ${f.flag === "churn" ? "ARR at risk" : f.status === "Unused add-on" ? "at risk at renewal" : "upside"}</b> · ${esc(f.value_basis)}</p>` : "") +
+        (f.flag === "growth" && growthState(a) ? `<p><small>Growth: ${esc(growthState(a).text)}${growthState(a).since ? ` · hook seen since ${fmt(growthState(a).since)}` : ""}</small></p>` : "") +
         (f.action ? todoHtml(a, f) : "") + `</div>`).join("") + insHtml;
     } else {
       // last value against 30 days before, from the chart's own series
@@ -1614,17 +1640,25 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
   // snooze date passes. The leader sees declines by rule, which tells noise from neglect.
   function todoHtml(a, f) {
     const d = declinedOf(a.account_id, f.flag, f.status);
-    if (d) return `<p class="todo declined"><b>To do:</b> <s>${esc(f.action)}</s><br><small>Not needed: ${esc(WORK.decline_reasons[d.reason] || d.reason)}` +
+    if (d) return `<p class="todo declined"><b>To do:</b> <s>${esc(f.action)}</s><br><small>${f.flag === "growth" ? "Not a fit" : "Not needed"}: ${esc(GROWTH.not_a_fit[d.reason] || WORK.decline_reasons[d.reason] || d.reason)}` +
       `${d.reason === "later" && d.due ? ` until ${fmt(d.due)}` : ""}${d.note ? ` · ${esc(d.note)}` : ""} (${esc(ownerName[d.by] || managerName(d.by) || d.by)}, ${whenText(d.decided_at)})</small></p>`;
     const can = dbState === "ready" && forecastRole(a, "decline");
+    // a growth hook already raised or planned: the to-do becomes closing the loop (25 Nov 2026)
+    const gs = f.flag === "growth" ? growthState(a) : null;
+    if (gs && (gs.k === "raised" || gs.k === "planned"))
+      return `<p class="todo"><b>To do:</b> ${gs.k === "raised" ? `Raised at the meeting on ${esc(gs.text.replace("raised ", ""))}: what came of it? Plan the next step, or mark it not a fit.`
+        : `Next step ${esc(gs.text)}: see it through, then say what came of it.`}` +
+        (can ? ` <button class="link" data-decline="${esc(f.flag)}|${esc(f.status)}">Not a fit?</button>` : "") + `</p><div class="decline-form" hidden></div>`;
     return `<p class="todo"><b>To do:</b> ${esc(f.action)}` +
-      (can ? ` <button class="link" data-decline="${esc(f.flag)}|${esc(f.status)}">Not needed?</button>` : "") + `</p><div class="decline-form" hidden></div>`;
+      (can && f.status !== "Not a fit" && !f.status.startsWith("Held") ? ` <button class="link" data-decline="${esc(f.flag)}|${esc(f.status)}">${f.flag === "growth" ? "Not a fit?" : "Not needed?"}</button>` : "") + `</p><div class="decline-form" hidden></div>`;
   }
   function wireDeclines(a) {
     $("tl-why").querySelectorAll("[data-decline]").forEach((b) => b.addEventListener("click", () => {
       const [flag, status] = b.dataset.decline.split("|"), form = b.closest("p").nextElementSibling;
       form.hidden = false; b.hidden = true;
-      form.innerHTML = `<div class="fc-form"><select class="dc-reason" aria-label="Why isn't it needed?">${Object.entries(WORK.decline_reasons).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>` +
+      // a growth hook takes the "not a fit" reasons, and pauses for pause_days by itself (no snooze date)
+      const REASONS = flag === "growth" ? GROWTH.not_a_fit : WORK.decline_reasons;
+      form.innerHTML = `<div class="fc-form"><select class="dc-reason" aria-label="Why isn't it needed?">${Object.entries(REASONS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>` +
         `<input class="dc-due" type="date" min="${new Date((TODAY + 1) * 864e5).toISOString().slice(0, 10)}" aria-label="Snooze until" hidden>` +
         `<input class="dc-note" type="text" maxlength="200" placeholder="A note (needed for Other)" aria-label="Note">` +
         `<button class="small primary dc-save">Save</button><button class="small dc-cancel">Cancel</button></div><p class="note dc-msg" role="alert"></p>`;
@@ -3141,13 +3175,18 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     panel.hidden = false;
     $("tk-week-title").textContent = `Next ${WEEK_DAYS} days: ${w.length}`;
     const n = (k) => w.filter((x) => x.what === k).length;
+    const hooks = new Set(w.filter((x) => !x.what.startsWith("Reach by") && openHook(growthOf(x.a)) && growthState(x.a).k === "open").map((x) => x.a.account_id)).size;
     $("tk-week-finding").textContent = !w.length ? `Nothing booked or due in the next ${WEEK_DAYS} days.`
       : `${money(arr)} of ARR has something booked or due: ${[["QBR", "QBR"], ["Renewal", "renewal"]].filter(([k]) => n(k)).map(([k, l]) => plural(n(k), l)).concat(
           w.some((x) => x.what.startsWith("Reach by")) ? [plural(w.filter((x) => x.what.startsWith("Reach by")).length, "reach deadline")] : [],
-          w.some((x) => !["QBR", "Renewal"].includes(x.what) && !x.what.startsWith("Reach by")) ? [plural(w.filter((x) => !["QBR", "Renewal"].includes(x.what) && !x.what.startsWith("Reach by")).length, "next step")] : []).join(", ")}.`;
+          w.some((x) => !["QBR", "Renewal"].includes(x.what) && !x.what.startsWith("Reach by")) ? [plural(w.filter((x) => !["QBR", "Renewal"].includes(x.what) && !x.what.startsWith("Reach by")).length, "next step")] : []).join(", ")}.` +
+        (hooks ? ` ${plural(hooks, "account")} with a growth hook to raise there.` : "");
     shortList($("tk-week"), w, [
       { label: "When", get: (x) => `${fmt(x.date)}<small><br>in ${Math.round(day(x.date) - RUN)} d</small>` },
-      { label: "What", get: (x) => `${esc(x.what)}${x.note ? `<small><br>${esc(x.note)}</small>` : ""}` },
+      { label: "What", get: (x) => `${esc(x.what)}${x.note ? `<small><br>${esc(x.note)}</small>` : ""}` +
+          // a growth hook rides on this engagement (25 Nov 2026): the prep reminder, not a task
+          (!x.what.startsWith("Reach by") && openHook(growthOf(x.a)) && growthState(x.a).k === "open"
+            ? `<small><br><span class="flag good inline"><span class="pill">growth hook to raise</span></span>${esc(growthOf(x.a).status)}</small>` : "") },
       { label: "Account", get: (x) => `<button class="link" data-open="${esc(x.a.account_id)}">${nameOf(x.a.account_id)}</button>` },
       { label: "ARR", r: true, get: (x) => money(x.a.arr) },
     ], "", 5);
@@ -4315,11 +4354,15 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const kUp = kAccs.reduce((t, a) => t + (valueOf(expOf(a)) || 0), 0);
     const kUpN = kAccs.filter((a) => expOf(a)).length;
     const kUpAct = kAccs.filter((a) => (expOf(a) || {}).status === "Act").reduce((t, a) => t + (valueOf(expOf(a)) || 0), 0);
+    // growth hooks beside it, labelled apart: an add-on's list price is a guess, not a forecast
+    const kHooks = kAccs.filter((a) => openHook(growthOf(a)));
+    const kHookUp = kHooks.filter((a) => growthOf(a).status === "Add-on hook").reduce((t, a) => t + (valueOf(growthOf(a)) || 0), 0);
     $("mb-kpi").innerHTML =
       tile("My book", money(kArr), `${plural(kAccs.length, "account")}${ref.arr ? ` · ${pct(kArr, ref.arr)}% of the book` : ""}`, false) +
       tile("ARR at risk", money(kRisk), `${kArr ? pct(kRisk, kArr) : 0}% of my ARR` +
         (kActArr ? ` · ${money(kReached)} of ${money(kActArr)} at Act reached in time` : " · none at Act"), kActArr > kReached) +
-      tile("Upside in play", money(kUp), kUpN ? `${plural(kUpN, "account")} with a growth signal${kUpAct ? ` · ${money(kUpAct)} at Act` : ""}${kUp ? "" : " · none forecast above contract yet"}` : "no growth signal", false) +
+      tile("Upside in play", money(kUp), (kUpN ? `${plural(kUpN, "account")} with a growth signal${kUpAct ? ` · ${money(kUpAct)} at Act` : ""}${kUp ? "" : " · none forecast above contract yet"}` : "no growth signal") +
+        (kHooks.length ? ` · ${plural(kHooks.length, "growth hook")} open${kHookUp ? ` (${money(kHookUp)} in add-ons, list price)` : ""}` : ""), false) +
       tile("ARR met in 30 days", p100(kArr ? kMet / kArr : null), `${money(kMet)} of ${money(kArr)} · median for ${kind}: ${p100(medMetV)}`,
         medMetV != null && kArr && kMet / kArr < medMetV) +
       tile(`Renewals, next ${fdays} days`, grr == null ? "–" : `${p100(grr)} kept`,
@@ -4399,8 +4442,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // sorted by value at stake: the biggest ARR at risk first, the biggest upside first
     const byValue = (f) => (a, b) => (valueOf(fl(b, f)) || 0) - (valueOf(fl(a, f)) || 0) || byDate(a.renewal_date, b.renewal_date);
     const churn = accs.filter((a) => fl(a, "churn")).sort(byValue("churn"));
-    const growth = accs.filter((a) => !fl(a, "churn") && fl(a, "expansion")).sort(byValue("expansion"));
-    const rest = accs.filter((a) => !fl(a, "churn") && !fl(a, "expansion")).sort((a, b) => (b.arr || 0) - (a.arr || 0));
+    // growth: an expansion signal, or a growth hook (25 Nov 2026); the flag the row shows: expansion first
+    const gFlag = (a) => fl(a, "expansion") ? "expansion" : fl(a, "growth") ? "growth" : null;
+    const gVal = (a) => valueOf(fl(a, gFlag(a))) || 0;
+    const byGrowth = (a, b) => gVal(b) - gVal(a) || byDate(a.renewal_date, b.renewal_date);
+    const growth = accs.filter((a) => !fl(a, "churn") && gFlag(a)).sort(byGrowth);
+    const rest = accs.filter((a) => !fl(a, "churn") && !gFlag(a)).sort((a, b) => (b.arr || 0) - (a.arr || 0));
     const sumOf = (xs, f) => xs.reduce((t, x) => t + (f(x) || 0), 0);
     const atRisk = sumOf(churn, (a) => valueOf(fl(a, "churn"))), bookArr = sumOf(accs, (a) => a.arr);
     $("mb-port-finding").textContent = `${money(atRisk)} at risk sits on ${churn.length} of ${plural(accs.length, "account")}; the biggest first below.`;
@@ -4416,13 +4463,14 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     };
     const row = (a, f, topics) => {
       const flag = f ? fl(a, f) : null, m = f ? lastMeeting(a.account_id, topics) : null;
-      const sev = flag ? (f === "churn" ? (flag.status === "Act" ? "critical" : "warning") : "good") : "";
+      const sev = flag ? (f === "churn" ? (flag.status === "Act" ? "critical" : "warning") : severity(flag)) : "";
+      const gs = f === "growth" ? growthState(a) : null;
       const v = flag ? valueOf(flag) : null, fc = (forecasts[a.account_id] || []).slice(-1)[0], gap = fc && forecastGap(a, fc);
-      const valueCell = `<b>${money(v != null ? v : a.arr)}</b><small><br>${v != null ? (f === "churn" ? "at risk" : "upside") + " of " + money(a.arr) : "ARR"}` +
+      const valueCell = `<b>${money(v != null ? v : a.arr)}</b><small><br>${v != null ? (f === "churn" || (flag && flag.status === "Unused add-on") ? "at risk" : "upside") + " of " + money(a.arr) : "ARR"}` +
         (fc ? `<br>${fc.role === "manager" ? "Manager" : "Owner"}: ${esc(callText(fc))}${gap ? ' <span class="bad">≠ data</span>' : ""}` : "") + "</small>";
       return `<tr class="click" tabindex="0" data-id="${esc(a.account_id)}"><td>${esc(a.account_name)}<small><br>${esc(a.tier)}</small></td><td class="num">${valueCell}</td><td>${spark(a.util)}</td>` +
         `<td>${fmtFull(a.renewal_date)}<small><br>in ${Math.round(day(a.renewal_date) - RUN)} d</small></td>` +
-        `<td>${flag ? `<div class="flag ${sev}"><span class="pill">${esc(flag.status)}</span><p>${esc(flag.reasons)}</p></div>` : '<span class="muted">no flags</span>'}${insightHtml(a.account_id, f)}</td>` +
+        `<td>${flag ? `<div class="flag ${sev}"><span class="pill">${esc(flag.status)}</span><p>${esc(flag.reasons)}</p>${gs ? `<p><small>Growth: ${esc(gs.text)}</small></p>` : ""}</div>` : '<span class="muted">no flags</span>'}${insightHtml(a.account_id, f)}</td>` +
         `<td>${lastActionCell(a.account_id)}${f && !m ? `<small class="muted"><br>no ${f === "churn" ? "churn" : "growth"} call or QBR yet</small>` : ""}</td>` +
         `<td>${(() => { const p = planOf(a); if (p) return planText(a, p) + (p.note ? `<small><br>${esc(p.note)}</small>` : "");
           return f ? `<span class="${flag && flag.status === "Act" ? "bad" : "muted"}">no next step recorded</span>` : ""; })()}</td></tr>`;
@@ -4432,9 +4480,13 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // All | Churn | Growth (20 Nov 2026, Nikodem: the leader reports growth and churn apart)
     const PV = [["all", "All"], ["churn", "Churn"], ["growth", "Growth"]];
     const upAll = sumOf(growth, (a) => valueOf(fl(a, "expansion"))) + sumOf(churn, (a) => valueOf(fl(a, "expansion")));
+    const gAll = accs.filter((a) => gFlag(a)), hookAccs = accs.filter((a) => openHook(fl(a, "growth")));
+    const hookUp = sumOf(hookAccs.filter((a) => fl(a, "growth").status === "Add-on hook"), (a) => valueOf(fl(a, "growth")));
     const portText = { all: $("mb-port-finding").textContent,
       churn: $("mb-port-finding").textContent,
-      growth: `${money(upAll)} of upside in ${name}'s book, across ${plural(accs.filter((a) => fl(a, "expansion")).length, "account")}; growth stays with CS, Sales signs.` };
+      growth: `${money(upAll)} of upside in ${name}'s book, across ${plural(accs.filter((a) => fl(a, "expansion")).length, "account")}` +
+        (hookAccs.length ? `, and ${plural(hookAccs.length, "growth hook")} open (${money(hookUp)} in add-ons, list price)` : "") +
+        `; growth stays with CS, Sales signs.` };
     const drawPortView = () => {
       $("mb-port-view").innerHTML = PV.map(([k, l]) => `<button class="chip${mbPortView === k ? " on" : ""}" aria-pressed="${mbPortView === k}" data-pv="${k}">${l}</button>`).join("");
       $("mb-port-view").querySelectorAll("[data-pv]").forEach((b) => b.addEventListener("click", () => { mbPortView = b.dataset.pv; drawPortView(); drawPort(); }));
@@ -4444,8 +4496,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
       $("mb-port").innerHTML = `<table><thead><tr><th>Account</th><th>Value</th><th>Utilisation, 90 days</th><th>Renewal</th><th>Why</th><th>Last action</th><th>Action planned</th></tr></thead><tbody>` +
         (mbPortView !== "growth" ? `<tr class="group"><td colspan="7">Churn risk (${churn.length})</td></tr>` + churn.map((a) => row(a, "churn", ["churn_call", "qbr"])).join("") : "") +
         // Growth view: every account with an expansion signal, including those also at churn risk
-        (mbPortView !== "churn" ? `<tr class="group"><td colspan="7">Growth (${mbPortView === "growth" ? accs.filter((a) => fl(a, "expansion")).length : growth.length})</td></tr>` +
-          (mbPortView === "growth" ? accs.filter((a) => fl(a, "expansion")).sort(byValue("expansion")) : growth).map((a) => row(a, "expansion", ["growth_call", "qbr"])).join("") : "") +
+        (mbPortView !== "churn" ? `<tr class="group"><td colspan="7">Growth (${mbPortView === "growth" ? gAll.length : growth.length})</td></tr>` +
+          (mbPortView === "growth" ? gAll.slice().sort(byGrowth) : growth).map((a) => row(a, gFlag(a), ["growth_call", "qbr"])).join("") : "") +
         (mbPortView === "all" ? `<tr class="group"><td colspan="7">No flags (${rest.length})${restIns ? ` · ${restIns} with an insight` : ""} <button class="link" data-rest>${restOpen ? "hide" : "show"}</button></td></tr>` + (restOpen ? rest.map((a) => row(a, null)).join("") : "") : "") +
         "</tbody></table>";
       wireInsights($("mb-port"));

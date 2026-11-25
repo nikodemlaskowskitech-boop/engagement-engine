@@ -73,6 +73,7 @@ ROLES = {"owner", "manager"}
 FLAGS = set(TASK_FLAGS)                                  # the task flags (settings.toml [work])
 WORK = SETTINGS.get("work", {})
 REASONS = set(WORK.get("decline_reasons", {}))          # why a recommendation isn't needed
+GROWTH_REASONS = set(SETTINGS["growth"]["not_a_fit"])   # why a growth hook isn't a fit (25 Nov 2026)
 AIMS = set(WORK.get("intended_outcomes", {}))           # what a next step should achieve
 RESULTS = set(WORK.get("outcome_results", {}))          # did it
 SOURCES = set(WORK.get("commitment_sources", {}))       # where a promise was made
@@ -181,7 +182,7 @@ def problem(d, accounts, team, kinds=None):
     if kind == "decline":
         if d.get("flag") not in FLAGS or not d.get("status"):
             return "not a known flag, or no status"
-        if d.get("reason") not in REASONS:
+        if d.get("reason") not in (REASONS | GROWTH_REASONS if d["flag"] == "growth" else REASONS):
             return f"unknown reason {str(d.get('reason'))[:30]!r}"
         if d["reason"] == "later" and not is_day(d.get("due")):
             return "a snooze needs a date"

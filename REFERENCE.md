@@ -641,6 +641,9 @@ Read a file's entry before changing that file, and update the entry in the same 
   snapshot instead (a CRM change can't be replayed); the replay is the demo's
   backfill. cairnpath_db.py reads the action log and today's flags through views
   (action_log, open_flags) so history.py can swap them.
+  Growth (25 Nov 2026) is replayed too. It reads churn_status, so each week churn is
+  materialised once (wk_churn) and both read it: history_flags stays byte-identical, about
+  112s in the sandbox (61s before growth, 231s before materialising).
 - `retention.py` "this year" (24 Nov 2026): the 365 days to the as-of date, or from the first day
   of data when there's less; with two years of data it had become both years.
 - `retention.py`: GRR and NRR by the standard definitions (12 Nov 2026, from a
@@ -675,8 +678,18 @@ Read a file's entry before changing that file, and update the entry in the same 
   with an Open CS ops task (and its age) only until its CSM came.
 - `explore.py`: DuckDB summaries by tier, region and CSM, plus CS
   engagement week by week and meetings by owner.
+- `flags.py` growth, the CSM side (25 Nov 2026, whitespace step 3 of 3; Nikodem: "Enterprise: no
+  task, the hook rides on the next engagement, and a task only if nothing is booked within 60 days";
+  "addressed" = raised in a meeting, a next step planned, or not a fit). Enterprise with a QBR or a
+  next step due within [growth] qbr_window_days: routed 'none', "Raise it at the QBR (in N days)";
+  nothing booked: a task, "book a conversation". Not a fit: a recommendation_declined with topic
+  growth pauses the line for pause_days (180), status "Not a fit", the reason and the date it comes
+  back in the reasons. The five reasons are [growth] not_a_fit (Already discussed, Not now, Basics
+  first, Doesn't fit their use, Relationship). The hold-backs read a small view churn_status and
+  the gap conditions inline, not data_gaps: joining data_gaps made history 4x slower.
+  account_value now = account_value_flags plus growth's add-on value.
 - `flags.py` growth hooks (25 Nov 2026, whitespace step 2 of 3; Nikodem: "you won't pitch something
-  without a hook"). View growth_hooks -> `data/flags_growth.csv`, task flag "growth". Three hooks
+  without a hook"). View growth -> `data/flags_growth.csv`, task flag "growth". Three hooks
   from the last [growth] hook_days: Unused add-on (bought, no experiment; a renewal risk, ranked
   first), Add-on hook (cohorts at least addon_cohort_share of all actions, addon_min_cohorts+ by
   addon_min_builders+ people, no add-on), People hook (a dashboard went to people_min_viewers+ and
@@ -784,6 +797,14 @@ Read a file's entry before changing that file, and update the entry in the same 
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- `views_template.html` growth for the CSM (25 Nov 2026, whitespace step 3): growthState() reads a
+  growth line and the account's history: not a fit, held, raised (a meeting since the hook was first
+  seen), planned (a next step since), or open. The account page's Why shows "Growth: <state> · hook
+  seen since <date>" and an Unused add-on's value as "at risk at renewal"; the to-do has "Not a fit?"
+  with the growth reasons, and once raised it asks what came of it. My week marks an engagement
+  "growth hook to raise"; My book groups growth hooks with expansion; the Upside tile adds "N growth
+  hooks open (€X in add-ons, list price)", apart from the expansion count (role_pages_test checks
+  both). The leader's view and the trend are the next PR.
 - `views_template.html` My work (25 Nov 2026): marking a CSM's last to-do not needed left "nothing
   to pick up" and no trace of it; the "marked not needed" note now stays. Found when the bigger
   corpus left Anna with one to-do; tests/site_test.js goes back to the account page when the

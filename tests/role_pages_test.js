@@ -301,8 +301,11 @@ const meta = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8").match(
     const upside = mine.reduce((t, a) => t + (((a.flags || []).find((x) => x.flag === "expansion") || {}).value || 0), 0);
     check(tiles[2].k === "Upside in play" && tiles[2].v === eurTxt(upside), `${f}: upside in play ${eurTxt(upside)}, apart from the risk`, JSON.stringify(tiles[2]));
     const nGrow = mine.filter((a) => (a.flags || []).some((x) => x.flag === "expansion")).length;
-    check(nGrow ? tiles[2].r.startsWith(`${nGrow} account`) : tiles[2].r === "no growth signal",
-      `${f}: the upside tile counts the same ${nGrow} account(s) the Growth view lists, even at €0 upside`, tiles[2].r);
+    // growth hooks (25 Nov 2026) sit beside it, labelled apart: their add-on value is a list price, not a forecast
+    const nHook = mine.filter((a) => (a.flags || []).some((x) => x.flag === "growth" && !x.status.startsWith("Held") && x.status !== "Not a fit")).length;
+    check((nGrow ? tiles[2].r.startsWith(`${nGrow} account`) : tiles[2].r.startsWith("no growth signal"))
+      && (nHook ? tiles[2].r.includes(`${nHook} growth hook`) : !tiles[2].r.includes("growth hook")),
+      `${f}: the upside tile counts the same ${nGrow} account(s) with an expansion signal, even at €0 upside, and ${nHook} growth hook(s) apart`, tiles[2].r);
     // insights beside "Why": the first theme from the account's documents, risk first on a churn row, growth
     // first on a growth row; none without documents; the flag's status is the export's, untouched
     await p.click("#mb-port-view [data-pv=all]"); await p.waitForTimeout(100);

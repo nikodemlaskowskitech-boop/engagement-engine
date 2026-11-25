@@ -152,6 +152,10 @@ check(not run([{**DEC, "by": "csm_tom"}])[0], "someone else's account: refused")
 check(len(run([{**DEC, "by": "mgr_sophie", "role": "manager"}])[0]) == 1 and not run([{**DEC, "by": "mgr_james", "role": "manager"}])[0],
       "the team lead may decline on their team's account, another team's lead may not")
 check(not run([{**DEC, "flag": "gossip"}])[0], "an unknown flag is refused")
+GDEC = {**DEC, "flag": "growth", "status": "Add-on hook", "reason": "not_now"}
+check(len(run([GDEC])[0]) == 1 and run([GDEC])[0][0]["properties"]["outcome"] == "not_now",
+      "a growth hook takes a \"not a fit\" reason ([growth] not_a_fit, 25 Nov 2026)")
+check(not run([{**DEC, "reason": "not_now"}])[0], "...which a churn to-do doesn't")
 STEP = {**REAL[1], "intended": "volume"}
 ev = run([STEP])[0]
 check(len(ev) == 1 and ev[0]["properties"]["intended"] == "volume", "a next step carries what it should achieve", ev)

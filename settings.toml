@@ -434,8 +434,11 @@ basics_min_util = 40              # Scale: utilisation under this = the basics f
 qbr_window_days = 60              # Enterprise: a QBR this close is where to raise it
 renewal_window_days = 90          # a renewal this close: raise it with the renewal
 # "Not a fit" (Nikodem, 25 Nov 2026): each pauses that account's growth line for pause_days
-not_a_fit = ["Already discussed", "Not now (timing or budget)", "Basics first", "Doesn't fit their use", "Relationship"]
-pause_days = 180
+not_a_fit = { discussed = "Already discussed", not_now = "Not now (timing or budget)", basics = "Basics first", no_fit = "Doesn't fit their use", relationship = "Relationship" }
+pause_days = 180                  # 6 months (Nikodem, 25 Nov 2026)
+# Enterprise (Nikodem, 25 Nov 2026): a hook rides on the next engagement booked within
+# qbr_window_days (a QBR or a planned next step), no separate task; a task only when nothing is
+# booked. "Addressed" = raised in a meeting since the hook appeared, a next step planned, or not a fit.
 
 [data_quality]
 # Gaps in one account's own data (24 Nov 2026). The engine doesn't guess: a flag that needs
