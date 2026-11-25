@@ -436,6 +436,10 @@ renewal_window_days = 90          # a renewal this close: raise it with the rene
 # "Not a fit" (Nikodem, 25 Nov 2026): each pauses that account's growth line for pause_days
 not_a_fit = { discussed = "Already discussed", not_now = "Not now (timing or budget)", basics = "Basics first", no_fit = "Doesn't fit their use", relationship = "Relationship" }
 pause_days = 180                  # 6 months (Nikodem, 25 Nov 2026)
+# "Addressed" lasts a quarter (Nikodem, 25 Nov 2026): a meeting or a plan counts for this many
+# days, then the line is "lapsed" (raised once, not again) until someone raises it again. The
+# QBR cadence and the hook's own window (hook_days); "not a fit" is a decision, so it lasts longer.
+addressed_days = 90
 # Enterprise (Nikodem, 25 Nov 2026): a hook rides on the next engagement booked within
 # qbr_window_days (a QBR or a planned next step), no separate task; a task only when nothing is
 # booked. "Addressed" = raised in a meeting since the hook appeared, a next step planned, or not a fit.

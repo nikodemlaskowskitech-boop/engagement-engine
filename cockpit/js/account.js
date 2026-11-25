@@ -46,22 +46,39 @@
     while (w > 0 && on.has(w - 1)) w--;
     return HIST.weeks[w];
   }
-  const growthSince = (id) => flagSince(id, "growth");
   // addressed between two dates (one rule for the account page and the leader's trend):
   // a meeting held, or a next step planned
-  function addressedIn(id, since, end = D.as_of) {
-    const met = (touchesBy[id] || []).filter((t) => t.event === "meeting_held" && t.date >= since && t.date <= end).slice(-1)[0];
-    if (met) return { k: "raised", date: met.date };
-    const plan = (nextSteps[id] || []).filter((p) => { const d = (p.decided_at || "").slice(0, 10); return d >= since && d <= end; }).slice(-1)[0];
-    return plan ? { k: "planned", date: (plan.decided_at || "").slice(0, 10), due: plan.due } : null;
+  // a meeting or a plan counts for [growth] addressed_days (a quarter), then it has "lapsed".
+  // end = a past week's last day (the trend); none = now, with what was saved here since the export
+  const ADDR_DAYS = GROWTH.addressed_days ?? 90;
+  const daysBefore = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") - n * 864e5).toISOString().slice(0, 10);
+  function addressedIn(id, since, end = null) {
+    const top = end || "9999", fresh = daysBefore(end || D.as_of, ADDR_DAYS);
+    const mets = (touchesBy[id] || []).filter((t) => t.event === "meeting_held" && t.date >= since && t.date <= top);
+    const plans = (nextSteps[id] || []).filter((p) => { const d = (p.decided_at || "").slice(0, 10); return d >= since && d <= top; });
+    const met = mets.slice(-1)[0], plan = plans.slice(-1)[0];
+    const pDate = plan && (plan.decided_at || "").slice(0, 10), pLast = plan && (plan.due && plan.due > pDate ? plan.due : pDate);
+    if (met && met.date >= fresh) return { k: "raised", date: met.date };
+    if (plan && pLast >= fresh) return { k: "planned", date: pDate, due: plan.due };
+    if (met || plan) return { k: "lapsed", date: [met && met.date, pDate].filter(Boolean).sort().slice(-1)[0] };
+    return null;
   }
+  const isOn = (d) => !!d && d.k !== "lapsed";      // raised or planned, within the quarter
+  // the engine's answer first (facts.addressed, 25 Nov 2026: one rule for the page, the MCP servers
+  // and the Ask box); the page's own check only adds what was saved here after the export
+  const sinceOf = (a, f) => (f.addressed && f.addressed.since) || flagSince(a.account_id, f.flag);
+  const doneOf = (a, f) => { const e = f.addressed && ["raised", "planned"].includes(f.addressed.k) ? f.addressed : null;
+    if (e) return e;
+    const own = addressedIn(a.account_id, sinceOf(a, f));
+    return isOn(own) ? own : (f.addressed && f.addressed.k === "lapsed" ? f.addressed : own); };
   function growthState(a) {
     const f = growthOf(a); if (!f) return null;
     if (f.status === "Not a fit") return { k: "notfit", text: "not a fit", f };
     if (f.status.startsWith("Held")) return { k: "held", text: f.status.replace("Held: ", "held back: "), f };
-    const since = growthSince(a.account_id), done = addressedIn(a.account_id, since, "9999");
+    const since = sinceOf(a, f), done = doneOf(a, f);
     if (done && done.k === "raised") return { k: "raised", text: `raised ${fmt(done.date)}`, f, since };
-    if (done) return { k: "planned", text: `planned${done.due ? ` for ${fmt(done.due)}` : ""}`, f, since };
+    if (done && done.k === "planned") return { k: "planned", text: `planned${done.due ? ` for ${fmt(done.due)}` : ""}`, f, since };
+    if (done) return { k: "lapsed", text: `lapsed: last raised ${fmt(done.date)} ${yr4(done.date)}, over ${ADDR_DAYS} days ago`, f, since };
     return { k: "open", text: f.routed_to === "none" ? "rides on the next engagement" : "open", f, since };
   }
 

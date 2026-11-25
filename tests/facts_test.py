@@ -89,6 +89,22 @@ check(len([x for x in tl if x["kind"] == "touch" and str(x["date"]) >= cut])
       and len([x for x in tl if x["kind"] == "touch"]) >= len([t for t in D["touches"] if t["account_id"] == acc]),
       "every customer touch the cockpit shows (the page's window), and the timeline keeps the older ones")
 
+print("\nGrowth addressed (fix M, 25 Nov 2026): one rule, in the engine")
+from datetime import date as _d, timedelta as _td
+done = facts.addressed(con)
+_asof = _d.fromisoformat(facts.as_of(con))
+_fresh = _asof - _td(days=facts.DAYS)
+lines = [(a["account_id"], f["flag"], f) for a in facts.accounts(con) for f in a["flags"] if f["flag"] in facts.ADDRESSED_FLAGS]
+check(lines and all("addressed" in f and f["addressed"] == done[(i, fl)] for i, fl, f in lines),
+      f"every expansion and growth line carries its addressed state ({len(lines)} lines)")
+on = [v for v in done.values() if v["k"] in ("raised", "planned")]
+check(all(v["date"] >= v["since"] for v in on) and all(_d.fromisoformat(v["date"]) >= _fresh for v in done.values() if v["k"] == "raised"),
+      f"raised = a meeting since the signal began and in the last {facts.DAYS} days ({len(on)} on it)")
+lapsed = [v for v in done.values() if v["k"] == "lapsed"]
+check(all(_d.fromisoformat(v["date"]) < _fresh for v in lapsed),
+      f"lapsed = raised once, but more than {facts.DAYS} days ago ({len(lapsed)} lapsed)", lapsed[:2])
+check(all(v["since"] <= str(_asof) for v in done.values()), "since is never after the as-of date")
+
 print("\nOnly IDs reach the SQL")
 for bad in ("acc_1'; DROP TABLE crm; --", "acc_1) OR (1=1"):
     try:
