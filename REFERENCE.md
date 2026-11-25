@@ -806,6 +806,21 @@ Read a file's entry before changing that file, and update the entry in the same 
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- `cockpit/` and `cockpit_template.py` (25 Nov 2026, ARCHITECTURE.md fix N; Nikodem: "let's go
+  ahead"): views_template.html, 4,853 lines in one file, cut at whole lines into 18 parts:
+  page_head.html, style.css, page_body.html (the markup) and 15 script parts under cockpit/js/, one
+  per tab or shared piece (core, segment, account, onboarding, team, book, lists, overview,
+  outcomes, tasks, mywork, leadership, shared, mybook, search_tour). cockpit_template.template()
+  joins them in PARTS order into exactly the old file (checked: all 38 pages byte for byte the
+  same). The parts are not modules: the script is one function, so a part may use what an earlier
+  one defined, and order matters. export_views.py, roles.py and the engine bundle read it through
+  cockpit_template.py. Entries below keep the old name, views_template.html.
+  Found on the way: tests/engine_lambda_test.py had failed on main since #245. Its stand-in bucket
+  kept its own list of inputs and missed renewal_history.csv, so the contract in force differed
+  and flags_churn.csv came out one point different (35% vs 34%); it also expected an ai_spend table
+  that to_parquet.py rightly skips until the first model call. The test now takes upload.py's own
+  list (local_inputs()) and names the first differing line. AWS itself was never affected:
+  upload.py sends the file.
 - `views_template.html` growth for the leader (25 Nov 2026, whitespace step 3, PR B; Nikodem: "overview
   top level with key accounts, where is the opportunity, are we doing anything to address that, what
   is the historical trend"). Leadership's growth panel: the finding (euros in play = volume upside +

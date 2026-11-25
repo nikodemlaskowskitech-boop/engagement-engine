@@ -104,17 +104,12 @@ class FakeS3:
 
 
 def bucket_with_demo(status):
-    """The demo inputs as upload.py lays them out, the action log, and the check's verdict."""
-    objs, data = {}, REPO / "data"
-    for key in ("crm_file", "team_file", "holdout_file", "outcomes_file"):
-        if (data / D[key]).exists():
-            objs[INPUTS + D[key]] = (data / D[key]).read_bytes()
-    for g in (D["events_glob"], D["engagement_glob"]):
-        for p in data.glob(g):
-            objs[INPUTS + p.relative_to(data).as_posix()] = p.read_bytes()
+    """The demo inputs exactly as upload.py lays them out (its own list, so the two can't drift:
+    until 25 Nov 2026 this kept its own and missed renewal_history.csv, so the contract in force
+    differed from the laptop's), the action log, and the check's verdict."""
+    import upload
+    objs = {key: path.read_bytes() for key, path in upload.local_inputs().items()}
     objs[INPUTS + MARKER] = b"{}"
-    if (data / "action_log.csv").exists():
-        objs[STATE + "action_log.csv"] = (data / "action_log.csv").read_bytes()
     objs[CHECK] = json.dumps({"status": status, "errors": 1 if status == "ERROR" else 0,
                               "warnings": 2, "checked_at": "2026-11-03T00:00:00Z"}).encode()
     return objs
@@ -195,8 +190,11 @@ if not REAL:
     check(s3.objects.get(OUTPUTS + "tables/flags_churn/flags_churn.parquet") == b"PAR1\x00\xff",
           "uploads tables in their own folders (outputs/tables/<name>/), binary files intact")
 else:
-    check(all(OUTPUTS + f"tables/{t}/{t}.parquet" in s3.objects for t in AWS["athena_tables"]),
-          "uploads a Parquet table per [aws] athena_tables entry, each in its own folder")
+    # ai_spend is skipped until the first model call writes its ledger (to_parquet.py): none here
+    want_tables = [t for t in AWS["athena_tables"] if t != "ai_spend"]
+    check(all(OUTPUTS + f"tables/{t}/{t}.parquet" in s3.objects for t in want_tables),
+          "uploads a Parquet table per [aws] athena_tables entry, each in its own folder (ai_spend once there is a ledger)",
+          [t for t in want_tables if OUTPUTS + f"tables/{t}/{t}.parquet" not in s3.objects])
 check(not any(n.startswith("store/") for n in out_names) and not any("/store/" in k for k in s3.objects),
       "never uploads ingest.py's events store (the inputs again, rebuilt every run)", out_names)
 check(not ({"crm_accounts.csv", "action_log.csv", "cs_team.csv"} & set(out_names)),
@@ -209,8 +207,10 @@ if REAL:
     # order on another machine (account_value.csv did, until account_id broke the ties)
     for name in ("flags_activation.csv", "flags_churn.csv", "flags_expansion.csv", "flags_qbr.csv",
                  "account_value.csv", "flags_journey.csv"):
-        same = s3.objects[OUTPUTS + name] == (REPO / "data" / name).read_bytes()
-        check(same, f"{name} matches the laptop's, byte for byte")
+        got, want = s3.objects[OUTPUTS + name].decode("utf-8").splitlines(), (REPO / "data" / name).read_text(encoding="utf-8").splitlines()
+        first = next((f"line {i + 1}: AWS {a!r} vs laptop {b!r}" for i, (a, b) in enumerate(zip(got, want)) if a != b),
+                     f"{len(got)} lines vs {len(want)}")
+        check(s3.objects[OUTPUTS + name] == (REPO / "data" / name).read_bytes(), f"{name} matches the laptop's, byte for byte", first)
 
 print("\nEngine Lambda: the daily schedule (a safety net)")
 sched = {"trigger": "schedule"}

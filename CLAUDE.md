@@ -74,7 +74,7 @@ Docs-only PRs need none.
 | `search_export.py`, its committed file, or anything that changes the redaction or the documents | `tests/search_export_test.py` (stale file = FAIL: run `python search_export.py`) |
 | `mcp_server.py`, [mcp], or what it calls (`facts.py`, `search.py`, `roles.py`) | `tests/mcp_server_test.py` |
 | `retention.py` | `tests/retention_test.py` |
-| the cockpit (`views_template.html`, `export_views.py`, `roles.py`, [roles], `site_search.html`) | `node tests/cockpit_test.js` (about a minute), `python roles.py --site` then `node tests/site_test.js`, `tests/roles_test.py`, `node tests/role_pages_test.js`, `tests/peer_median_test.py` |
+| the cockpit (`cockpit/`, `cockpit_template.py`, `export_views.py`, `roles.py`, [roles], `site_search.html`) | `node tests/cockpit_test.js` (about a minute), `python roles.py --site` then `node tests/site_test.js`, `tests/roles_test.py`, `node tests/role_pages_test.js`, `tests/peer_median_test.py` |
 | roles, routing, money or the segment bar; before a demo, after a regenerate | `node tests/scenarios_test.js` (about two minutes; results go to the acceptance page) |
 | `handover.py`, `stories/` | `tests/handover_test.py`, `tests/leak_check_test.py`, `tests/contacts_test.py`, `tests/redaction_fixes_test.py`, `tests/handover_cache_test.py` |
 | `llm.py`, `brief.py`, `handover.py` | `tests/ai_spend_test.py` |
@@ -334,8 +334,8 @@ Engine:
 - `mcp_server.py`: the engine's facts and the redacted search as read-only MCP tools, local, one person's view ([mcp]; names and instructions in [mcp] and `mcp/`).
 
 Cockpit:
-- `export_views.py`: the export and `views.html` from `views_template.html`.
-- `views_template.html`: the cockpit page (the look and charts: see REFERENCE.md).
+- `export_views.py`: the export and `views.html` from the cockpit's template.
+- `cockpit/` + `cockpit_template.py`: the cockpit page's source in parts (styles, markup, one script part per tab), joined in order into the one page (the look and charts: see REFERENCE.md; until 25 Nov 2026 one file, views_template.html).
 - `roles.py`: one page per person, plus the sandbox site (`--site`, with the search page from `site_search.html`).
 - `cockpit_sync.py`: the page's saved decisions back into events, checked again.
 
@@ -369,12 +369,12 @@ Tests: `tests/`, one file per area (see Testing above).
 
 - Phase 9, AI on unstructured data: search, redaction, the public search and MCP servers, ask.py,
   vectors (hybrid since 23 Nov), the AI cost demo: built 13-25 Nov 2026 (recall numbers and dates in
-  REFERENCE.md, "Phase 9 so far"). Last: a live Ask box in the cockpit, after the cockpit split
-  (ARCHITECTURE.md, second review).
+  REFERENCE.md, "Phase 9 so far"). Last: a live Ask box in the cockpit, with the admin function in its own stack
+  (ARCHITECTURE.md, second review, M and O).
 - Bedrock quota for Claude declined again 17 Nov 2026 (new account): no need to ask; AWS
   re-evaluates by itself as usage builds. Briefs use the Anthropic API meanwhile. Lambda concurrency
   quota approved 14 Nov 2026 (1000): engine one run at a time, search capped at 5. GuardDuty trial: keep or switch off before about 5 Dec 2026.
 - Later (ARCHITECTURE.md): rules out of the page tab by tab, every script as
-  `add_views` + `main()`, events uploaded as Parquet, the cockpit split.
+  `add_views` + `main()`, events uploaded as Parquet.
 - Parked: AI to assist CS (a draft, not a bot that acts), calls recorded but never
   logged (spec, Feature requests), long-history handover briefs, maturity score and journey stage as QBR inputs. Detail in REFERENCE.md.

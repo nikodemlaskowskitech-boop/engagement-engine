@@ -2,7 +2,7 @@
 
 Written as a black box from ROLES.md, settings.toml ([roles], [tiers]) and the
 inputs (data/cs_team.csv, data/crm_accounts.csv) only, without reading the
-implementation (export_views.py, views_template.html, cockpit_sync.py source).
+implementation (export_views.py, cockpit/, cockpit_sync.py source).
 
 What is tested:
   1. Pages exist: one per manager, CSM and pool member, leader.html, and
