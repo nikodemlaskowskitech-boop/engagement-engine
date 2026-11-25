@@ -49,7 +49,7 @@ if not DEMO:
     sys.exit(0)
 
 key = {r["account_id"]: r for r in read("answer_key.csv")}
-flags = {name: read(f"flags_{name}.csv") for name in ("activation", "churn", "expansion", "data")}
+flags = {name: read(f"flags_{name}.csv") for name in ("activation", "churn", "expansion", "data", "growth")}
 
 # Utilisation now (last 30 days), to explain expansion misses
 con = connect()
@@ -206,6 +206,26 @@ if gaps:
     risky = sorted(r["account_id"] for r in flags["data"] if r["status"] == "Risk hidden")
     print(f"  {'PASS ' if risky else 'CHECK'}  Gaps that hide a visible risk reach the account's owner: "
           f"{len(risky)} ({', '.join(risky) or 'none'}; target 1+)")
+
+# Growth hooks (generate_events.GROWTH_HOOKS, 25 Nov 2026): each planted hook shows as its own
+# line, or held back where the answer key says so; no line without a planted hook (no hook,
+# no pitch), except an add-on really bought and never used, which is a fact, not a guess.
+HOOK_STATUS = {("addon", "show"): "Add-on hook", ("people", "show"): "People hook",
+               ("unused_addon", "show"): "Unused add-on", ("addon", "held_churn"): "Held: churn risk",
+               ("addon", "held_core"): "Held: basics first"}
+hooks = {a: (r["growth_hook"], r["hook_expected"]) for a, r in key.items() if r.get("growth_hook")}
+if hooks:
+    got = {r["account_id"]: r["status"] for r in flags["growth"]}
+    right = [a for a, h in hooks.items() if got.get(a) == HOOK_STATUS[h]]
+    extra = sorted(a for a, st in got.items() if a not in hooks and st != "Unused add-on")
+    print(f"  {'PASS ' if len(right) == len(hooks) and not extra else 'CHECK'}  Planted growth hooks show (or are held back) "
+          f"as planned: {len(right)} of {len(hooks)} ({share(len(right), len(hooks))}, target 100%)"
+          + (f"; also {len(extra)} lines with no planted hook" if extra else ""))
+    for a in hooks:
+        if a not in right:
+            problems.append(("Growth hooks", "missed", a, f"{hooks[a]} -> {got.get(a, 'nothing')}"))
+    for a in extra:
+        problems.append(("Growth hooks", "no hook planted", a, got[a]))
 
 # --- 3. Every miss and false alarm, by name -------------------------------------
 

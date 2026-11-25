@@ -107,7 +107,7 @@ briefs_llm_provider = "anthropic"            # who writes the briefs in AWS ("be
 api_key_parameter = "/cairnpath/anthropic-api-key"   # Parameter Store (SecureString): put_key.py fills it
 # Tables for Athena: to_parquet.py writes each to data/tables/<name>/ (outputs/tables/ in AWS),
 # and the Glue crawler turns each folder into a table in the Glue database below.
-athena_tables = ["flags_activation", "flags_churn", "flags_expansion", "flags_qbr", "flags_journey", "flags_data",
+athena_tables = ["flags_activation", "flags_churn", "flags_expansion", "flags_qbr", "flags_journey", "flags_data", "flags_growth",
                  "account_value", "tasks", "crm", "cs_team", "ai_spend"]
 glue_database = "cairnpath"
 athena_workgroup = "cairnpath"
@@ -344,8 +344,8 @@ planted = { cohort_shelfware = "Planted in the demo data on purpose (generate_ev
 [work]
 # The flags whose rows become tasks (the action log, the task status, the cockpit, the page's
 # saved decisions): one list, read by actions.py, cairnpath_db.py, facts.py and cockpit_sync.py.
-# data = gaps in an account's own data (flags.py, 24 Nov 2026)
-task_flags = ["activation", "churn", "expansion", "qbr", "journey", "data"]
+# data = gaps in an account's own data (flags.py, 24 Nov 2026); growth = whitespace (25 Nov 2026)
+task_flags = ["activation", "churn", "expansion", "qbr", "journey", "data", "growth"]
 # The four kinds of work (22 Nov 2026, Nikodem): a recommendation (the engine's to-do on a flag)
 # can be declined with a reason; a next step says what it should achieve; the owner checks later
 # whether it did (the team lead sees it, no approval). The keys are what the events carry.
@@ -416,6 +416,26 @@ min_climb = 3             # ...and when climbing at least this many points a mon
 breadth_growth = 0.25     # active users up this much in two months
 renewal_soon_months = 3   # renewal this close: take the growth case into the renewal
                           # (and Shelfware: call this week about the renewal itself)
+
+[growth]
+# Whitespace (25 Nov 2026, Nikodem: "you won't pitch something without a hook"). A growth line
+# needs a behaviour seen in the last hook_days, written as the question to open with; one line
+# per account at a time; held back (shown, not a task) at churn risk, with data missing, or, on
+# Scale, before the basics work. The CSM investigates, Product owns upgrade messages.
+hook_days = 90
+addon = "experiments"             # the add-on the hooks point at (CRM add_ons)
+addon_share_of_arr = 0.15         # its list price, as a share of the account's ARR (our estimate)
+addon_cohort_share = 0.45         # add-on hook: cohorts are at least this share of all actions...
+addon_min_cohorts = 20            # ...with at least this many cohorts...
+addon_min_builders = 3            # ...built by at least this many people
+people_min_viewers = 8            # people hook: a dashboard went to this many people or more,
+                                  # and to at least twice as many as log in in a week
+basics_min_util = 40              # Scale: utilisation under this = the basics first, no add-on talk
+qbr_window_days = 60              # Enterprise: a QBR this close is where to raise it
+renewal_window_days = 90          # a renewal this close: raise it with the renewal
+# "Not a fit" (Nikodem, 25 Nov 2026): each pauses that account's growth line for pause_days
+not_a_fit = ["Already discussed", "Not now (timing or budget)", "Basics first", "Doesn't fit their use", "Relationship"]
+pause_days = 180
 
 [data_quality]
 # Gaps in one account's own data (24 Nov 2026). The engine doesn't guess: a flag that needs
@@ -530,6 +550,7 @@ flags_expansion = "flags_expansion.csv"
 flags_qbr = "flags_qbr.csv"
 flags_journey = "flags_journey.csv"
 flags_data = "flags_data.csv"        # flags.py: gaps in an account's own data
+flags_growth = "flags_growth.csv"    # flags.py: whitespace, the growth hooks
 account_value = "account_value.csv"
 action_log = "action_log.csv"
 history_flags = "history_flags.csv"

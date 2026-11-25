@@ -1385,6 +1385,8 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     // data missing (flags.py data_gaps): amber when it hides a risk we can still see, else information
     if (f.flag === "data") return f.status === "Risk hidden" ? "warning" : "neutral";
     if (f.flag === "activation") return ["Stalled", "Silent", "Handoff gap", "No CSM assigned"].includes(f.status) ? "warning" : "good";
+    // growth hooks (flags.py growth_hooks): an unused add-on is a renewal risk; a hook is growth; held back, information
+    if (f.flag === "growth") return f.status === "Unused add-on" ? "warning" : f.status.startsWith("Held") ? "neutral" : "good";
     return "neutral";
   };
 

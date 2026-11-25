@@ -66,7 +66,7 @@ def events_from_json():
             timestamp:  'TIMESTAMP',
             account_id: 'VARCHAR',
             user_id:    'VARCHAR',
-            properties: 'STRUCT(event_count BIGINT, invited_user VARCHAR, error_code VARCHAR)',
+            properties: 'STRUCT(event_count BIGINT, invited_user VARCHAR, error_code VARCHAR, viewers INTEGER)',
             context:    'STRUCT(sdk_version VARCHAR, source VARCHAR)'
         }})"""
 
@@ -83,8 +83,11 @@ def event_files():
 
 
 def inputs_fingerprint(files=None):
-    """Each event file's name, size and time changed: any edit, new or missing file shows."""
-    out = []
+    """Each event file's name, size and time changed: any edit, new or missing file shows.
+    The schema too (25 Nov 2026: a new property in the schema left a store built before it
+    looking fresh, and every step failed on the missing key)."""
+    import hashlib
+    out = [["schema", hashlib.md5(events_from_json().encode()).hexdigest()[:12], 0]]
     for f in (event_files() if files is None else files):
         st = os.stat(f)
         out.append([Path(f).name, st.st_size, st.st_mtime_ns])

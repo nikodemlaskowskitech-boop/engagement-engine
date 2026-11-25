@@ -655,7 +655,9 @@ def feature_mix(acc, rows, day):
         e["event_name"] = name
         if name == "dashboard_shared":         # how many people the dashboard went to
             e["properties"] = {**e["properties"],
-                               "viewers": 8 + coin(e, "v") % 13 if recent and hook == "people" else 1 + coin(e, "v") % 4}
+                               # people hook: to well over twice the team that logs in
+                               "viewers": 2 * acc["users_end"] + 4 + coin(e, "v") % 10 if recent and hook == "people"
+                               else 1 + coin(e, "v") % 4}
     return rows
 
 
