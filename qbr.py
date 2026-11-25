@@ -123,7 +123,7 @@ errors = rows(f"""
 def open_flags(account_id):
     """Every row flags.py raised for this account, read from its result files."""
     found = []
-    for flag in ("activation", "churn", "expansion"):
+    for flag in ("activation", "churn", "expansion", "growth"):   # growth: the hook to raise (25 Nov 2026)
         path = output_file("flags_" + flag)
         if not path.exists():
             sys.exit(f"{path} is missing: run python flags.py first")

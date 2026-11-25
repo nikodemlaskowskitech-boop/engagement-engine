@@ -101,6 +101,9 @@ RENEWAL_SOON_MONTHS = SETTINGS["expansion"]["renewal_soon_months"]
 
 DQ = SETTINGS["data_quality"]
 GR = SETTINGS["growth"]
+# the reason's words: the growth list (the cockpit), else the general one (a Slack "Not needed")
+NOT_A_FIT_SQL = "CASE paused_why " + " ".join(f"WHEN '{k}' THEN '{v.replace(chr(39), chr(39) * 2)}'" for k, v in
+                                             {**SETTINGS["work"]["decline_reasons"], **GR["not_a_fit"]}.items()) + " ELSE paused_why END"
 FEED_GAP_DAYS = DQ["feed_gap_days"]
 CONTRACT = SETTINGS["utilisation"]["contract_column"]
 USAGE_EVENT = SETTINGS["utilisation"]["usage_event"]
@@ -494,7 +497,7 @@ def add_views(con):
     """)
 
     con.sql(f"""
-        CREATE VIEW account_value AS
+        CREATE VIEW account_value_flags AS
         WITH base AS (
             SELECT c.account_id, c.arr, c.arr_estimated, u.utilisation_pct AS util,
                    m.util_m1, m.util_m3, (c.renewal_date - a.as_of_date) / 30.0 AS months_to_renewal
@@ -645,8 +648,11 @@ def add_views(con):
     # shown but not a task (routed 'none'): at churn Watch or Act, with data missing, and on Scale
     # an add-on hook before the basics work (utilisation under basics_min_util, or Shelfware).
     # Self-service rows go to the report: no pitch to people with no CSM.
+    # churn's statuses, as growth reads them: history.py points this at the week's churn, worked
+    # out once, so the churn rules don't run twice a week (25 Nov 2026: 61 s -> 231 s)
+    con.sql("CREATE VIEW churn_status AS SELECT account_id, status FROM churn")
     con.sql(f"""
-        CREATE VIEW growth_hooks AS
+        CREATE VIEW growth AS
         WITH recent AS (
             SELECT e.account_id,
                    count(*) FILTER (WHERE e.event_type = 'product')                       AS actions,
@@ -700,8 +706,27 @@ def add_views(con):
             SELECT account_id, string_agg(hook, ', ' ORDER BY rank) AS also FROM ranked WHERE n > 1 GROUP BY account_id
         ),
         one AS (SELECT r.*, a.also FROM ranked r LEFT JOIN also a USING (account_id) WHERE r.n = 1),
+        booked AS (                               -- the next engagement within the window: a QBR or a next step
+            SELECT b.account_id,
+                   least(CASE WHEN b.days_to_next_qbr BETWEEN 0 AND {GR["qbr_window_days"]} THEN b.days_to_next_qbr END,
+                         min(try_cast(e.properties.due AS DATE) - a.as_of_date)) AS days,
+                   CASE WHEN b.days_to_next_qbr BETWEEN 0 AND {GR["qbr_window_days"]}
+                             AND b.days_to_next_qbr <= coalesce(min(try_cast(e.properties.due AS DATE) - a.as_of_date), 9999)
+                        THEN 'the QBR' ELSE 'the planned next step' END AS what
+            FROM base b CROSS JOIN as_of a
+            LEFT JOIN engagement e ON e.account_id = b.account_id AND e.event_name = 'next_step_set'
+                 AND try_cast(e.properties.due AS DATE) BETWEEN a.as_of_date AND a.as_of_date + {GR["qbr_window_days"]}
+            GROUP BY b.account_id, b.days_to_next_qbr
+        ),
+        paused AS (                               -- "not a fit", with a reason: quiet for pause_days
+            SELECT e.account_id, max(e."timestamp")::DATE AS on_day, arg_max(e.properties.outcome, e."timestamp") AS reason
+            FROM engagement e, as_of a
+            WHERE e.event_name = 'recommendation_declined' AND e.properties.topic = 'growth'
+              AND e."timestamp"::DATE > a.as_of_date - {GR["pause_days"]}
+            GROUP BY e.account_id
+        ),
         held AS (
-            SELECT o.*,
+            SELECT o.*, bk.days AS booked_days, bk.what AS booked_what, pz.on_day AS paused_on, pz.reason AS paused_why,
                    CASE WHEN ch.status IN ('Watch', 'Act') THEN 'Held: churn risk'
                         WHEN dg.account_id IS NOT NULL THEN 'Held: data missing'
                         WHEN o.tier = 'Scale' AND o.hook = 'Add-on hook'
@@ -710,11 +735,16 @@ def add_views(con):
                    END AS held,
                    ch.status AS churn_status
             FROM one o
-            LEFT JOIN churn ch USING (account_id)
-            LEFT JOIN (SELECT DISTINCT account_id FROM data_gaps) dg USING (account_id)
+            LEFT JOIN churn_status ch USING (account_id)
+            -- a gap in the account's data (data_gaps' conditions, without its costly "still visible")
+            LEFT JOIN (SELECT account_id FROM crm WHERE coalesce(contracted_events, 0) <= 0 OR renewal_date IS NULL
+                                                     OR (tier = 'Scale' AND cs_pool IS NULL)
+                       UNION SELECT account_id FROM feed_gaps) dg USING (account_id)
+            LEFT JOIN booked bk USING (account_id)
+            LEFT JOIN paused pz USING (account_id)
         )
         SELECT account_id, account_name, tier, region,
-               coalesce(held, hook) AS status,
+               CASE WHEN paused_on IS NOT NULL THEN 'Not a fit' ELSE coalesce(held, hook) END AS status,
                evidence
                || CASE WHEN hook <> 'People hook'
                        THEN format('; {GR["addon"]} add-on about €{{}}k a year at list', round(arr * {GR["addon_share_of_arr"]} / 1000)::INT)
@@ -723,12 +753,25 @@ def add_views(con):
                || CASE held WHEN 'Held: churn risk' THEN format('. Held back: churn {{}} first', churn_status)
                             WHEN 'Held: data missing' THEN '. Held back: the data first'
                             WHEN 'Held: basics first' THEN '. Held back: the basics first (utilisation or Shelfware)'
-                            ELSE '' END AS reasons,
-               CASE WHEN held IS NOT NULL THEN 'none'
+                            ELSE '' END
+               || CASE WHEN paused_on IS NOT NULL
+                       THEN format('. Not a fit: {{}} ({{}}); back after {{}}', {NOT_A_FIT_SQL}, strftime(paused_on, '%d %b'),
+                                   strftime(paused_on + {GR["pause_days"]}, '%d %b %Y'))
+                       ELSE '' END AS reasons,
+               CASE WHEN held IS NOT NULL OR paused_on IS NOT NULL THEN 'none'
                     WHEN tier = 'Self-service' THEN 'report'
+                    -- Enterprise: rides on the engagement already booked, no separate task
+                    WHEN tier = 'Enterprise' AND booked_days IS NOT NULL THEN 'none'
                     WHEN tier = 'Scale' THEN coalesce(cs_pool, 'cs_ops')
                     ELSE coalesce(csm_owner, 'cs_ops') END AS routed_to,
-               CASE WHEN held IS NOT NULL THEN 'No growth conversation now: ' || lower(replace(held, 'Held: ', ''))
+               CASE WHEN paused_on IS NOT NULL THEN 'Nothing for now: paused after "not a fit"'
+                    WHEN held IS NOT NULL THEN 'No growth conversation now: ' || lower(replace(held, 'Held: ', ''))
+                    WHEN tier = 'Enterprise' AND booked_days IS NOT NULL
+                    THEN format('Raise it at {{}} (in {{}} days), no separate task. Open with: "{{}}" Investigate, don''t pitch; '
+                                || 'if it isn''t a fit, say why (it pauses for {GR["pause_days"]} days)', booked_what, booked_days, opener)
+                    WHEN tier = 'Enterprise'
+                    THEN format('Nothing booked in {GR["qbr_window_days"]} days: book a conversation. Open with: "{{}}" '
+                                || 'Investigate, don''t pitch; if it isn''t a fit, say why (it pauses for {GR["pause_days"]} days)', opener)
                     ELSE format('Open with: "{{}}" Raise it {{}}. Investigate, don''t pitch; if it isn''t a fit, '
                                 || 'say why (it pauses for {GR["pause_days"]} days)', opener,
                                 CASE WHEN tier = 'Enterprise' AND days_to_next_qbr BETWEEN 0 AND {GR["qbr_window_days"]}
@@ -737,6 +780,20 @@ def add_views(con):
                                      THEN format('with the renewal ({{}} days)', days_to_renewal)
                                      ELSE 'at the next check-in' END) END AS action
         FROM held
+    """)
+
+    # What a hook is worth: the add-on's rough list price (an estimate). Upside on an add-on hook,
+    # at risk at renewal on an unused one; a people hook is adoption, no amount
+    con.sql(f"""
+        CREATE VIEW account_value AS
+        SELECT * FROM account_value_flags
+        UNION ALL
+        SELECT g.account_id, 'growth', g.status, c.arr, c.arr_estimated,
+               round(c.arr * {GR["addon_share_of_arr"]}, -2),
+               CASE WHEN g.status = 'Unused add-on' THEN 'The {GR["addon"]} add-on, unused, at its renewal (list price, an estimate)'
+                    ELSE 'The {GR["addon"]} add-on at list price (an estimate)' END
+        FROM growth g JOIN crm c USING (account_id)
+        WHERE g.reasons LIKE '%add-on about%'
     """)
 
 
@@ -880,9 +937,9 @@ def main():
     print("\n\nGrowth hooks: whitespace with a hook (no hook, no pitch); held back = shown, not a task")
     con.sql("""
         SELECT routed_to, status, account_id, account_name, tier, reasons
-        FROM growth_hooks ORDER BY status LIKE 'Held%', routed_to, status, account_id
+        FROM growth ORDER BY status LIKE 'Held%', routed_to, status, account_id
     """).show(max_rows=100, max_width=320)
-    con.sql(f"COPY (SELECT * FROM growth_hooks ORDER BY status, account_id) TO '{out_sql('flags_growth')}' (HEADER)")
+    con.sql(f"COPY (SELECT * FROM growth ORDER BY status, account_id) TO '{out_sql('flags_growth')}' (HEADER)")
     print("Saved every row to data/flags_growth.csv")
 
 

@@ -40,7 +40,7 @@ count it.
 | ARR, ARR at risk, upside | Yes | Yes | Yes | Yes |
 | Colleagues' renewal forecasts | Yes | Yes | Yes, read-only | Yes, read-only |
 | Set a forecast or next step | No | Team's accounts | Own accounts | Own accounts |
-| Mark a to-do not needed, check a next step's aim | No | Team's accounts | Own accounts | Own accounts |
+| Mark a to-do not needed (a growth hook: Not a fit, paused 180 days), check a next step's aim | No | Team's accounts | Own accounts | Own accounts |
 | Reassign a task, approve a hand-back | No | Team's tasks | No | No |
 | Confirm a handover brief | No | Team's accounts | Own accounts (outgoing owner) | Own accounts |
 | "Did it work?" | By owner | By owner, their team | No (not a CSM tab since 21 Nov 2026) | No |

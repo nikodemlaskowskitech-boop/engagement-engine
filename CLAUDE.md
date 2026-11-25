@@ -249,8 +249,10 @@ a hook, never "they don't use it, sell it". A hook is a behaviour of the last 90
 days: an add-on's precursor (cohort-heavy, no experiments add-on), dashboards read
 by far more people than log in, or an add-on bought and never used (a renewal
 risk). One line per account, with the question to open with and when to raise it
-(the QBR, the renewal, the next check-in); the QBR takes it over like churn and
-expansion. Held back (shown, not a task) at churn Watch or Act, with data
+(the QBR, the renewal, the next check-in). Enterprise: no task, the hook rides on the
+next QBR or next step within 60 days; a task only when nothing is booked. "Addressed" =
+raised in a meeting, a next step planned, or Not a fit (five reasons, [growth] not_a_fit;
+pauses the line 180 days). Held back (shown, not a task) at churn Watch or Act, with data
 missing, and on Scale an add-on before the basics work. Self-service: the report.
 
 ## Design rules

@@ -268,6 +268,7 @@ export = {
                  "research_days": SETTINGS["research"]["days"],
                  "research_growth_themes": SETTINGS["research"]["growth_themes"],
                  "work": SETTINGS["work"],
+                 "growth": {k: SETTINGS["growth"][k] for k in ("not_a_fit", "pause_days", "qbr_window_days", "addon")},
                  "signals": SETTINGS["signals"], "operational": SETTINGS["operational"],    # Leadership's Signals band (22 Nov 2026)          # decline reasons, intended outcomes, results (22 Nov 2026)
                  "too_late_days": SETTINGS["backtest"]["too_late_days"], "rule_bars": {k: SETTINGS["backtest"][k] for k in ("min_recall", "min_precision", "max_too_late")},
                  "churn_line": SETTINGS["churn"]["util_below"],
