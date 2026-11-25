@@ -24,7 +24,7 @@ from settings import SETTINGS, OUTPUTS
 
 ROLES = SETTINGS["roles"]
 PAGES = OUTPUTS / "pages"
-TEMPLATE = Path(__file__).resolve().parent / "views_template.html"
+from cockpit_template import template as cockpit_template   # noqa: E402
 SEARCH_TEMPLATE = Path(__file__).resolve().parent / "site_search.html"   # the public site's search page
 
 # what each part of the export is keyed by: rows with an account_id outside the scope go
@@ -291,7 +291,7 @@ def write_search_page(out, export):
 def build(export, template=None, out=PAGES, sandbox=False):
     """Write one page per person, leader.html and index.html (the landing page).
     sandbox=True: the public demo site's pages (forms save in the visitor's browser only)."""
-    template = template or TEMPLATE.read_text(encoding="utf-8")
+    template = template or cockpit_template()   # cockpit/: the page in parts (cockpit_template.py)
     everyone = {ROLES["leader_id"]: {"role": "leader", "name": ROLES["leader_name"], "manager": None},
                 **people(export["team"])}
     files = {pid: ("leader.html" if p["role"] == "leader" else f"{pid}.html") for pid, p in everyone.items()}

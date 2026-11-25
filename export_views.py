@@ -1,6 +1,6 @@
 """
 Export everything the four views need to one file: data/views_data.json,
-and build the views page from it: data/views.html (views_template.html with
+and build the views page from it: data/views.html (cockpit/, joined by cockpit_template.py, with
 the data inside, so it opens in any browser, offline).
 
 The views page only draws; every number is computed here, in SQL, with the
@@ -311,7 +311,8 @@ out.write_text(data_json, encoding="utf-8")
 
 # The page: the template with the data dropped into its <script> tag ("</" is
 # escaped so no account name can ever close the tag early)
-template = (Path(__file__).resolve().parent / "views_template.html").read_text(encoding="utf-8")
+from cockpit_template import template as cockpit_template   # cockpit/: the page in parts
+template = cockpit_template()
 page = DATA / "views.html"
 page.write_text("<!doctype html>\n<meta charset=\"utf-8\">\n"
                 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
