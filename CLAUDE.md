@@ -251,8 +251,9 @@ by far more people than log in, or an add-on bought and never used (a renewal
 risk). One line per account, with the question to open with and when to raise it
 (the QBR, the renewal, the next check-in). Enterprise: no task, the hook rides on the
 next QBR or next step within 60 days; a task only when nothing is booked. "Addressed" =
-raised in a meeting, a next step planned, or Not a fit (five reasons, [growth] not_a_fit;
-pauses the line 180 days). Held back (shown, not a task) at churn Watch or Act, with data
+raised in a meeting or a next step planned since the hook began, within the last 90 days
+([growth] addressed_days: a quarter; older = "lapsed"), or Not a fit (five reasons, [growth]
+not_a_fit; pauses the line 180 days). The engine computes it (facts.addressed). Held back (shown, not a task) at churn Watch or Act, with data
 missing, and on Scale an add-on before the basics work. Self-service: the report.
 
 ## Design rules
@@ -325,7 +326,7 @@ Engine:
 - `history.py`: flags and tasks replayed week by week.
 - `retention.py`: GRR, NRR, the ARR bridge and the renewal forecast.
 - `explore.py`: quick summaries for exploring.
-- `facts.py`: the facts layer: account, at_risk, timeline, tasks.
+- `facts.py`: the facts layer: account, at_risk, timeline, tasks, and whether growth in play is addressed.
 - `documents.py`: tickets, emails and calls in one shape, grouped into cases by certain keys, emails logged twice kept once (raw: redact first).
 - `qbr.py`: QBR facts packs, pseudonymised.
 - `search.py`: account search over the documents (BM25 in plain SQL), on the laptop; `redacted()` = what may leave.

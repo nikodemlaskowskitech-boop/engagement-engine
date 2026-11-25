@@ -458,7 +458,8 @@
   // Growth for the leader (25 Nov 2026, whitespace step 3, Nikodem: "a top-level overview, key
   // accounts, where the opportunity is, are we doing anything to address it, the historical trend").
   // In play = an expansion signal or a growth hook not held back. Addressed = the account page's rule
-  // (addressedIn): a meeting held or a next step planned since the signal began, or not a fit.
+  // (addressedIn): a meeting held or a next step planned since the signal began, within the last
+  // [growth] addressed_days (older: lapsed), or not a fit.
   // An unused add-on is a risk, not upside: its own row, never added to the euros in play.
   const GKINDS = [
     { k: "volume", name: "Volume above the contract", of: (a) => a.flags.find((x) => x.flag === "expansion"), worth: "upside" },
@@ -466,7 +467,7 @@
     { k: "people", name: "People hook", of: (a) => a.flags.find((x) => x.flag === "growth" && x.status === "People hook"), worth: "no price" },
     { k: "unused", name: "Add-on bought, not used", of: (a) => a.flags.find((x) => x.flag === "growth" && x.status === "Unused add-on"), worth: "at risk at renewal" },
   ];
-  const isAddressed = (a, f) => f.status === "Not a fit" || !!addressedIn(a.account_id, flagSince(a.account_id, f.flag), "9999");
+  const isAddressed = (a, f) => f.status === "Not a fit" || isOn(doneOf(a, f));
   const upsideOf = (a) => (valueOf(a.flags.find((x) => x.flag === "expansion")) || 0) +
     (valueOf(a.flags.find((x) => x.flag === "growth" && x.status === "Add-on hook")) || 0);
   function drawLeadGrowth(accs, person, acct, planCell) {
@@ -503,11 +504,13 @@
     // the state of an account's growth: the hook's state, else the expansion's (addressed or not)
     function stateCell(a) {
       const gs = growthState(a);
+      if (gs && gs.k === "lapsed") return `<span class="bad">lapsed</span><small><br>${esc(gs.text.replace(/^lapsed: /, ""))}</small>`;
       if (gs && gs.k !== "held") return esc(gs.text);
       const e = a.flags.find((x) => x.flag === "expansion");
       if (!e) return gs ? esc(gs.text) : "–";
-      const d = addressedIn(a.account_id, flagSince(a.account_id, "expansion"), "9999");
-      return d ? (d.k === "raised" ? `raised ${fmt(d.date)}` : `planned${d.due ? ` for ${fmt(d.due)}` : ""}`) : '<span class="bad">not yet</span>';
+      const d = doneOf(a, e);
+      return !d ? '<span class="bad">not yet</span>' : d.k === "raised" ? `raised ${fmt(d.date)}` : d.k === "planned" ? `planned${d.due ? ` for ${fmt(d.due)}` : ""}`
+        : `<span class="bad">lapsed</span><small><br>last raised ${fmt(d.date)} ${yr4(d.date)}</small>`;
     }
     // biggest first: volume upside plus an add-on's list price; a people hook has no price, so it sorts last
     const top = inPlay.slice().sort((a, b) => upsideOf(b) - upsideOf(a) || a.account_name.localeCompare(b.account_name));
@@ -522,13 +525,13 @@
     // The history keeps statuses, not values, so this counts accounts; the euros are today's only.
     const has = HIST.weeks.length > 1;
     $("ld-growth-trend-block").hidden = !has;
-    $("ld-growth-note").textContent = `Volume upside: forecast usage above the contract at renewal. Add-on: its list price, an estimate, not a forecast. A people hook has no price. An add-on bought and not used is a renewal risk, so it is never counted as upside. Addressed: a meeting held or a next step planned since the signal began, or marked not a fit. The trend counts accounts (Enterprise and Scale): the weekly history keeps statuses, not values. On the demo data the growth hooks were planted in the last few months, so the early weeks are nearly empty.`;
+    $("ld-growth-note").textContent = `Volume upside: forecast usage above the contract at renewal. Add-on: its list price, an estimate, not a forecast. A people hook has no price. An add-on bought and not used is a renewal risk, so it is never counted as upside. Addressed: a meeting held or a next step planned since the signal began, in the last ${ADDR_DAYS} days (older: lapsed, raised once and not since), or marked not a fit. The trend counts accounts (Enterprise and Scale): the weekly history keeps statuses, not values. On the demo data the growth hooks were planted in the last few months, so the early weeks are nearly empty.`;
     if (!has) return;
     const W = HIST.weeks.length;
     const inPlayRow = (r) => (r[2] === "expansion" || (r[2] === "growth" && ["Add-on hook", "People hook", "Not a fit"].includes(r[3]))) && histIn(r[1]) && (byId[r[1]] || offBook[r[1]] || {}).tier !== "Self-service";
     const byWeek = HIST.weeks.map(() => new Map());
     for (const r of HIST.flags) if (inPlayRow(r)) (byWeek[r[0]].get(r[1]) || byWeek[r[0]].set(r[1], []).get(r[1])).push(r);
-    const weekDone = (i, id, rs) => rs.some((r) => r[3] === "Not a fit" || !!addressedIn(id, flagSince(id, r[2], i), HIST.weeks[i]));
+    const weekDone = (i, id, rs) => rs.some((r) => r[3] === "Not a fit" || isOn(addressedIn(id, flagSince(id, r[2], i), HIST.weeks[i])));
     const per = byWeek.map((m, i) => [...m].map(([id, rs]) => ({ account_id: id, done: weekDone(i, id, rs), what: rs.map((r) => r[2] === "expansion" ? "Expansion " + r[3] : r[3]).join(" + ") })));
     const GCATS = [{ k: "done", name: "Addressed", color: "var(--good)" }, { k: "not", name: "Not yet", color: "var(--viz-pending)" }];
     const tw = Math.min(440, $("ld-growth-trend").clientWidth || 440);

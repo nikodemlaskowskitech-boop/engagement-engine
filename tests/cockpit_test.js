@@ -1127,6 +1127,14 @@ const segment = async (page, values) => {
     const ids = await page.$$eval("#ld-growth tr.click", (t) => t.map((x) => x.dataset.id));
     const v = ids.map((id) => { const a = D.accounts.find((x) => x.account_id === id); return val(f(a, "expansion")) + val(f(a, "growth", "Add-on hook")); });
     check(ids.length === inPlay.length && v.every((x, i) => !i || v[i - 1] >= x), `biggest first, all ${inPlay.length} in play`, v.join(","));
+    // addressed comes from the engine (facts.addressed, 25 Nov 2026): the page shows the same state
+    const cells = await page.$$eval("#ld-growth tr.click", (t) => t.map((x) => [x.dataset.id, x.cells[3].textContent]));
+    const stateOf = (a) => { const fs = a.flags.filter((x) => ["growth", "expansion"].includes(x.flag) && x.addressed);
+      const g = fs.find((x) => x.flag === "growth" && !x.status.startsWith("Held")) || fs.find((x) => x.flag === "expansion");
+      return g && g.addressed ? g.addressed.k : null; };
+    const wrong = cells.filter(([id, txt]) => { const k = stateOf(D.accounts.find((x) => x.account_id === id));
+      return k === "raised" ? !txt.startsWith("raised") : k === "planned" ? !txt.startsWith("planned") : k === "lapsed" ? !txt.startsWith("lapsed") : !/^(open|not yet|rides)/.test(txt); });
+    check(cells.length && !wrong.length, `the Addressed column says what the engine says, account by account (${cells.length})`, JSON.stringify(wrong.slice(0, 3)));
     // the trend: one bar per week, today's total = the accounts in play today
     const W = D.history.weeks.length;
     const bars = await page.$$eval("#ld-growth-trend g.bar", (gs) => gs.length);

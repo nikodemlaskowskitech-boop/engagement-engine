@@ -27,7 +27,7 @@ import sys
 
 import team_report
 from cairnpath_db import connect
-from settings import TASK_FLAGS, output_file
+from settings import SETTINGS, TASK_FLAGS, output_file
 
 FLAGS = TASK_FLAGS            # settings.toml [work]
 
@@ -86,6 +86,75 @@ def flags_by_account():
     return flags
 
 
+ADDRESSED_FLAGS = ("expansion", "growth")     # growth in play: is anyone on it? (25 Nov 2026)
+DAYS = SETTINGS["growth"]["addressed_days"]    # how long a meeting or a plan counts
+
+
+def addressed(con):
+    """Growth in play, addressed or not (25 Nov 2026, ARCHITECTURE.md fix M: the rule lived only
+    in the cockpit's script, so the MCP servers and the Ask box couldn't answer it).
+    {(account_id, flag): {"since", "k", "date", "due"}} for today's expansion and growth lines.
+    since = the first week of the run the flag is in now (history.py's weekly replay), or today
+    when the replay hasn't seen it yet. Addressed = a meeting held since then ("raised"), else a
+    next step planned since then ("planned"), within [growth] addressed_days (a quarter); older
+    than that it is "lapsed" (raised once, not since); else a growth line marked not a fit
+    ("not_a_fit"); k is None while nobody was ever on it. The cockpit reads this; its own copy only adds decisions
+    saved in the page after the export, and the weekly trend."""
+    hist = output_file("history_flags")
+    hist_tasks = output_file("history_tasks")
+    flagged = "SELECT NULL::DATE AS week, NULL::VARCHAR AS account_id, NULL::VARCHAR AS flag WHERE false"
+    weeks = "SELECT NULL::DATE AS week WHERE false"
+    if hist.exists() and hist_tasks.exists():
+        h = str(hist).replace("\\", "/")
+        t = str(hist_tasks).replace("\\", "/")
+        # the same weeks and rows as the cockpit's history (export_views.history: no Activated/Activating)
+        flagged = (f"SELECT week::DATE AS week, account_id, flag FROM read_csv('{h}', header = true, all_varchar = true) "
+                   "WHERE status NOT IN ('Activated', 'Activating')")
+        weeks = f"SELECT week FROM ({flagged}) UNION SELECT week::DATE FROM read_csv('{t}', header = true, all_varchar = true)"
+    found = {}
+    for flag in ADDRESSED_FLAGS:
+        path = output_file("flags_" + flag)
+        if not path.exists():
+            continue
+        p = str(path).replace("\\", "/")
+        for account_id, status, since, k, date, due in con.sql(f"""
+            WITH wk AS (SELECT week, row_number() OVER (ORDER BY week) AS i FROM ({weeks}) GROUP BY week),
+            fl AS (SELECT DISTINCT f.account_id, w.i, w.week FROM ({flagged}) f JOIN wk w USING (week)
+                   WHERE f.flag = '{flag}'),
+            runs AS (SELECT account_id, i, week, i - row_number() OVER (PARTITION BY account_id ORDER BY i) AS grp FROM fl),
+            now_run AS (SELECT account_id, min(week) AS since FROM runs r
+                        WHERE grp = (SELECT grp FROM runs x WHERE x.account_id = r.account_id
+                                     AND x.i = (SELECT max(i) FROM wk))
+                        GROUP BY account_id),
+            today AS (SELECT o.account_id, o.status, coalesce(n.since, a.as_of_date) AS since
+                      FROM read_csv('{p}', header = true, all_varchar = true) o
+                      CROSS JOIN as_of a LEFT JOIN now_run n USING (account_id)),
+            met AS (SELECT t.account_id, max(e.event_date) AS date FROM today t
+                    JOIN engagement e ON e.account_id = t.account_id AND e.event_name = 'meeting_held'
+                         AND e.event_date >= t.since
+                    GROUP BY t.account_id),
+            planned AS (SELECT t.account_id, arg_max(e."timestamp"::DATE, e."timestamp") AS date,
+                               arg_max(e.properties.due, e."timestamp") AS due FROM today t
+                        JOIN engagement e ON e.account_id = t.account_id AND e.event_name = 'next_step_set'
+                             AND e."timestamp"::DATE >= t.since
+                        GROUP BY t.account_id)
+            -- a plan counts until its due date, a meeting from its day: each for addressed_days
+            SELECT t.account_id, t.status, t.since,
+                   CASE WHEN m.date >= a.as_of_date - {DAYS} THEN 'raised'
+                        WHEN greatest(p.date, try_cast(p.due AS DATE)) >= a.as_of_date - {DAYS} THEN 'planned'
+                        WHEN t.status = 'Not a fit' THEN 'not_a_fit'
+                        WHEN m.date IS NOT NULL OR p.date IS NOT NULL THEN 'lapsed' END AS k,
+                   coalesce(CASE WHEN m.date >= a.as_of_date - {DAYS} THEN m.date END,
+                            CASE WHEN greatest(p.date, try_cast(p.due AS DATE)) >= a.as_of_date - {DAYS} THEN p.date END,
+                            greatest(m.date, p.date)) AS date,
+                   CASE WHEN NOT coalesce(m.date >= a.as_of_date - {DAYS}, false) THEN p.due END AS due
+            FROM today t CROSS JOIN as_of a LEFT JOIN met m USING (account_id) LEFT JOIN planned p USING (account_id)
+            ORDER BY t.account_id""").fetchall():
+            found[(account_id, flag)] = {"since": str(since), "k": k, "date": str(date) if date else None,
+                                         "due": str(due) if due else None}
+    return found
+
+
 def accounts(con, where=""):
     """Every account in today's book (or those matching a SQL condition on c./t.): its
     CRM facts, owner and manager, 30-day utilisation per day, weekly active users for
@@ -103,6 +172,11 @@ def accounts(con, where=""):
             GROUP BY ALL""").fetchall():
         wau.setdefault(account_id, [0] * 13)[12 - weeks_ago] = users      # oldest week first
     flags = flags_by_account()
+    done = addressed(con)
+    for account_id, fls in flags.items():
+        for fl in fls:
+            if (account_id, fl["flag"]) in done:
+                fl["addressed"] = done[(account_id, fl["flag"])]
     out = rows(con, f"""
         SELECT c.account_id, c.account_name, c.tier, c.region, c.contract_start, c.renewal_date,
                c.contracted_events, c.add_ons, c.last_qbr_date, c.next_qbr_date,

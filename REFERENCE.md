@@ -806,6 +806,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- `facts.py` addressed (25 Nov 2026, ARCHITECTURE.md fix M): whether growth in play is addressed,
+  in SQL, for every expansion and growth line: since (the first week of its current run in
+  history.py's replay, gaps and islands; today if the replay hasn't seen it), then raised (a
+  meeting since then), planned (a next step since then, counting until its due date) or, older
+  than [growth] addressed_days, lapsed; not_a_fit for a paused line. Each line carries it as
+  flags[].addressed, so the cockpit, the MCP servers and the Ask box read one answer. The page's
+  addressedIn() stays only for decisions saved in the page after the export and for the weekly
+  trend, with the same window; cockpit_test checks the page shows the engine's state account by
+  account. Found when the rule moved: with two years of history, two Scale accounts counted as
+  addressed by a meeting 16 months old (the page had hidden it only because it holds one year).
+  Nikodem: 90 days, a quarter (the QBR cadence and the hook's own window); not a fit keeps 180.
 - `cockpit/` and `cockpit_template.py` (25 Nov 2026, ARCHITECTURE.md fix N; Nikodem: "let's go
   ahead"): views_template.html, 4,853 lines in one file, cut at whole lines into 18 parts:
   page_head.html, style.css, page_body.html (the markup) and 15 script parts under cockpit/js/, one
