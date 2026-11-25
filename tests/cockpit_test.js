@@ -1100,6 +1100,42 @@ const segment = async (page, values) => {
     await p2.close();
   }
 
+  // --- Growth for the leader (25 Nov 2026): in play, by kind, addressed, the trend -----------
+  console.log("\nGrowth for the leader");
+  {
+    const people = D.accounts.filter((a) => a.tier !== "Self-service");
+    const f = (a, fl, st) => a.flags.find((x) => x.flag === fl && (!st || x.status === st));
+    const val = (x) => (x && typeof x.value === "number" ? x.value : 0);
+    const inPlay = people.filter((a) => f(a, "expansion") || f(a, "growth", "Add-on hook") || f(a, "growth", "People hook"));
+    const up = people.reduce((t, a) => t + val(f(a, "expansion")), 0), addon = people.reduce((t, a) => t + val(f(a, "growth", "Add-on hook")), 0);
+    const unused = people.filter((a) => f(a, "growth", "Unused add-on"));
+    const { page, errors } = await open(browser, { width: 1300 });
+    await tab(page, "lead");
+    const fin = await page.textContent("#ld-growth-finding");
+    check(fin.startsWith(`${money(up + addon)} in play across ${inPlay.length} account`) && fin.includes(`${money(up)} volume upside`) && fin.includes(`${money(addon)} in add-ons`),
+      `in play = volume upside + add-on hooks at list price (${money(up + addon)}, ${inPlay.length} accounts); an unused add-on is not upside`, fin);
+    const mix = await page.$$eval("#ld-growth-mix tr[data-k]", (rs) => rs.map((r) => ({ k: r.dataset.k, n: r.cells.length > 1 ? +r.cells[1].textContent : null })));
+    const want = { volume: people.filter((a) => f(a, "expansion")).length, addon: people.filter((a) => f(a, "growth", "Add-on hook")).length,
+      people: people.filter((a) => f(a, "growth", "People hook")).length, unused: unused.length };
+    check(Object.entries(want).every(([k, n]) => (mix.find((m) => m.k === k) || {}).n === n), `the mix counts each kind (${JSON.stringify(want)})`, JSON.stringify(mix));
+    // a row lists its accounts
+    await page.click('#ld-growth-mix tr[data-k="unused"]'); await page.waitForTimeout(100);
+    const listed = await listAll(page, "ld-growth-mix-list");
+    check(listed === unused.length, `the unused add-on row lists its ${unused.length} accounts`, `${listed}`);
+    // biggest first, the people hook (no price) last
+    const more = await page.$("#ld-growth [data-more]"); if (more) await more.click();
+    const ids = await page.$$eval("#ld-growth tr.click", (t) => t.map((x) => x.dataset.id));
+    const v = ids.map((id) => { const a = D.accounts.find((x) => x.account_id === id); return val(f(a, "expansion")) + val(f(a, "growth", "Add-on hook")); });
+    check(ids.length === inPlay.length && v.every((x, i) => !i || v[i - 1] >= x), `biggest first, all ${inPlay.length} in play`, v.join(","));
+    // the trend: one bar per week, today's total = the accounts in play today
+    const W = D.history.weeks.length;
+    const bars = await page.$$eval("#ld-growth-trend g.bar", (gs) => gs.length);
+    const tot = await page.$$eval("#ld-growth-trend text.tot", (ts) => ts.map((t) => +t.textContent));
+    check(bars === W && tot.length === 1, `the growth trend has one bar per week (${W}), today's total printed`, `${bars} bars, ${JSON.stringify(tot)}`);
+    check(!errors.length, "no script errors on the growth panel", errors.join("; "));
+    await page.close();
+  }
+
   await browser.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

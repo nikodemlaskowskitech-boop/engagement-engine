@@ -191,8 +191,11 @@ const due = (days) => new Date(Date.parse(D.as_of) + days * 864e5).toISOString()
     for (const h of ["#ld-churn", "#ld-growth"]) { const m = await p.$(h + " [data-more]"); if (m) await m.click(); }
     const order = async (h, f) => (await p.$$eval(h + " tr.click", (t) => t.map((x) => x.dataset.id))).map((id) => value(byId[id], f));
     const sorted = (xs) => xs.every((v, i) => i === 0 || xs[i - 1] >= v);
-    const c = await order("#ld-churn", "churn"), g = await order("#ld-growth", "expansion");
-    record("s14", sorted(c) && sorted(g) && c.length && g.length, `churn list (${c.length}) by ARR at risk, growth list (${g.length}) by upside, biggest first`); await p.close();
+    const c = await order("#ld-churn", "churn");
+    // growth (25 Nov 2026): volume upside plus an add-on hook's list price; a people hook has no price
+    const inPlay = (a) => (a.flags || []).reduce((t, f) => t + ((f.flag === "expansion" || (f.flag === "growth" && f.status === "Add-on hook")) && typeof f.value === "number" ? f.value : 0), 0);
+    const g = (await p.$$eval("#ld-growth tr.click", (t) => t.map((x) => x.dataset.id))).map((id) => inPlay(byId[id]));
+    record("s14", sorted(c) && sorted(g) && c.length && g.length, `churn list (${c.length}) by ARR at risk, growth list (${g.length}) by what's in play, biggest first`); await p.close();
   });
   await run("s15", async () => {
     const p = await open(browser); await tab(p, "outcomes"); await p.click("#oc-value tr[data-k='Act']"); await p.waitForTimeout(200);

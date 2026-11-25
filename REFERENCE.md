@@ -797,6 +797,18 @@ Read a file's entry before changing that file, and update the entry in the same 
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- `views_template.html` growth for the leader (25 Nov 2026, whitespace step 3, PR B; Nikodem: "overview
+  top level with key accounts, where is the opportunity, are we doing anything to address that, what
+  is the historical trend"). Leadership's growth panel: the finding (euros in play = volume upside +
+  add-on hooks at list price, across N accounts, K of N addressed, and four weeks ago); a mix table
+  by kind (volume, add-on hook, people hook, and an add-on bought and not used, a renewal risk never
+  counted as upside), each row listing its accounts; the biggest five first (View all), with
+  addressed and the action planned; and the year week by week, accounts in play addressed or not.
+  One rule for "addressed" everywhere: addressedIn() (a meeting held or a next step planned since
+  the signal began, flagSince() from the history) or not a fit. The trend counts accounts: the
+  history keeps statuses, not values. "Not yet" has its own colour, --viz-pending: the stone was
+  too close to the green in light mode (OKLab 8, colour-blind 4); now 19 and 15+. The Upside tile
+  adds the open hooks. cockpit_test checks the euros, the mix, the order and the trend.
 - `views_template.html` growth for the CSM (25 Nov 2026, whitespace step 3): growthState() reads a
   growth line and the account's history: not a fit, held, raised (a meeting since the hook was first
   seen), planned (a next step since), or open. The account page's Why shows "Growth: <state> · hook
