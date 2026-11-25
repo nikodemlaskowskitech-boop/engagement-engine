@@ -264,6 +264,25 @@ Read a file's entry before changing that file, and update the entry in the same 
   CS, Implementation (an email's X-Team, a call with "(Cairnpath, Implementation" among the
   participants). An email in the archive twice with one Message-ID (logged by two people) is
   kept once, X-Logged-By of each copy in logged_by. The table adds case_id, team, logged_by.
+- `generate_documents.py` voices and scale (25 Nov 2026, the persona matrix; Nikodem: "mix and
+  match certain styles and personas"). `doc_personas.py` holds six ways customers write (plain,
+  brisk, formal, warm, blunt, second_language): each topic's email in each voice, the same facts
+  in other words, written by Claude and reviewed like code (nothing generated at run time), a
+  voice around each ticket (subject kept: Support triages on it), and a sign-off. Which customer
+  writes in which voice: pick_voice(), greedy pairwise (the voice covering the most unseen pairs
+  of voice x topic, region, tier; no random draw), the method from hamelsmu/evals-skills'
+  dimensions and tuples. Coverage: tier 12 of 12, region 22 of 24, topic 45 of 54 (where a topic
+  has fewer accounts than voices, not every pair can exist). Names: the customer's region's list
+  (doc_personas.NAMES, curated, instead of a fake-name package: no new dependency); addresses
+  ASCII (mailbox()). 45 accounts (30 before), and Alder Media always in (HERO_DOCS): its first
+  year's ordinary documents and its story's on its story's days. What the scale and the voices
+  did to the search (tests/search_test.py, keywords at top 10): recall with synonyms 95% of 38
+  -> 92% of 52; keywords alone 55% -> 60%; precision 40% -> 53%. Misses: a brisk competitor
+  ticket, a formal and a warm capacity request, a warm stuck start. No synonym was added for
+  them: that would be tuning the vocabulary to the test. The meaning search (embed.py, on the
+  laptop) is the fair measure of whether vectors close the gap. search_test's per-question
+  check is now "at least as many right accounts with synonyms": in a top 10 the synonyms'
+  extra matches can push one right account out while bringing two in (capacity: 4 -> 6 of 8).
 - `generate_documents.py` cases (23 Nov 2026): threads(), with its own random stream (rx) so
   no earlier document moves: the CS owner replies to each topic's email (In-Reply-To, "Re:"),
   quoting the topic's ticket when there is one; half the time the customer asks again; the
@@ -734,6 +753,10 @@ Read a file's entry before changing that file, and update the entry in the same 
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- `views_template.html` My work (25 Nov 2026): marking a CSM's last to-do not needed left "nothing
+  to pick up" and no trace of it; the "marked not needed" note now stays. Found when the bigger
+  corpus left Anna with one to-do; tests/site_test.js goes back to the account page when the
+  queue empties.
 - `views_template.html` data missing (24 Nov 2026): Leadership's ops grid has a third panel,
   "Data missing: what the flags can't see": the accounts with a gap, those hiding a risk first,
   then by ARR, with what's missing, who fixes it and the ARR, and the count and ARR per kind of

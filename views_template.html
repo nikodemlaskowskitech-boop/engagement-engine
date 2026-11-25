@@ -3236,10 +3236,12 @@ svg.spark { display: inline-block; width: 90px; height: 22px; vertical-align: mi
     const live = Q.filter(liveT), stake = live.reduce((n, t) => n + (stakeOf(t).up ? 0 : stakeOf(t).v), 0);
     const up = live.reduce((n, t) => n + (stakeOf(t).up ? stakeOf(t).v : 0), 0);
     const late = live.filter((t) => { const s = t.status === "Act" ? reachOf(t.account_id, t.flag) : null; return s && !s.reached && s.left < 0; }).length;
-    $("tk-finding").textContent = !live.length ? `${segName()}: nothing to pick up.`
+    // the note on what was marked not needed stays when that emptied the queue (25 Nov 2026: a
+    // CSM's last to-do marked not needed left "nothing to pick up" and no trace of it)
+    const offNote = off.length ? ` ${plural(off.length, "recommendation")} marked not needed, on ${off.length === 1 ? "its" : "their"} account page.` : "";
+    $("tk-finding").textContent = (!live.length ? `${segName()}: nothing to pick up.`
       : `${segName()}: ${live.length} to work, ${money(stake)} at risk${up ? ` and ${money(up)} of upside` : ""}` +
-        (late ? `; ${late} past ${late === 1 ? "its" : "their"} days to reach.` : ".") +
-        (off.length ? ` ${plural(off.length, "recommendation")} marked not needed, on ${off.length === 1 ? "its" : "their"} account page.` : "");
+        (late ? `; ${late} past ${late === 1 ? "its" : "their"} days to reach.` : ".")) + offNote;
     host.innerHTML = `<table class="queue keep-order"><thead><tr><th>Account</th><th class="r">ARR</th><th class="r">At stake</th><th>Why</th><th>Reach by</th><th>Last</th><th>Next</th><th>Status</th></tr></thead><tbody>` +
       Q.map((t, i) => {
         const a = byId[t.account_id] || {}, st = stakeOf(t), last = lastOf(t.account_id), plan = a.account_id ? planOf(a) : null;

@@ -372,7 +372,10 @@ print(json.dumps(r))`;
       const after = await ids(), fin = await w.textContent("#tk-finding");
       check(needNote && /Not needed: Already handled elsewhere/.test(why) && /Marked not needed/.test(hist) && after.length === before.length - 1 && !after.includes(before[0]) && /marked not needed/.test(fin),
         `a CSM marks a to-do not needed (\"Other\" asks for a note): it leaves My work (${before.length} -> ${after.length}) and the history says so`, `${why.slice(0, 160)} | ${fin}`);
-      await w.click(`table.queue [data-open="${after[0] || before[1]}"]`).catch(() => {}); await w.waitForTimeout(500);
+      // the next to-do; when that was the only one (25 Nov 2026, the data changed), back to the same account's page
+      if (after[0]) await w.click(`table.queue [data-open="${after[0]}"]`);
+      else await w.click("#tab-timeline");          // the account page it was on
+      await w.waitForTimeout(500);
       await w.fill("#ns-due", await w.getAttribute("#ns-due", "min")); await w.selectOption("#ns-aim", "volume"); await w.click("#ns-save"); await w.waitForTimeout(500);
       const asked = !!(await w.$('#tl-next [data-aim="partly"]'));
       if (asked) { await w.click('#tl-next [data-aim="partly"]'); await w.waitForTimeout(500); }

@@ -30,6 +30,7 @@ from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import format_datetime
 
+import doc_personas as voices
 from settings import DEMO, OUTPUTS, SETTINGS
 
 SEED = 7                                   # its own seed: the events don't move when this changes
@@ -38,8 +39,19 @@ HAND = SETTINGS["handover"]
 OUT = OUTPUTS / CONF["corpus_folder"]
 STORY_ACCOUNTS = {"acc_024", "acc_012", "acc_156"}   # stories/ already covers these
 
-# How many accounts of each personality get documents (Enterprise and Scale, named owner)
-PICK = {"declining": 9, "slipping": 4, "shelfware": 4, "power_user": 5, "healthy": 4, "new_customer": 4}
+# How many accounts of each personality get documents (Enterprise and Scale, named owner).
+# 45 since 25 Nov 2026 (30 before): every declining and slipping account the book has
+PICK = {"declining": 10, "slipping": 4, "shelfware": 7, "power_user": 8, "healthy": 10, "new_customer": 6}
+# Alder Media, the hero whose signal sat in Support (generate_events.HEROES): always in the
+# corpus, with its story's documents on its story's days instead of drawn ones, and a first
+# year of ordinary ones: (day, topic, kind, wording). tests/heroes_test.py reads them.
+# (topic "routine" with a source: an old, settled thing, in no question's answers)
+HERO_DOCS = {"acc_042": [("2025-02-11", "routine", "ticket", ("onboarding_stuck", 2)),
+                         ("2025-05-20", "routine", "email", ("routine", 3)),
+                         ("2025-09-16", "routine", "call", ("routine", 5)),
+                         ("2026-03-04", "routine", "ticket", ("routine", 2)),
+                         ("2026-06-27", "competitor", "ticket", ("competitor", 0)),
+                         ("2026-10-06", "competitor", "email", ("competitor", 0))]}
 # What each personality's documents talk about: a main topic (taken in turn when there are
 # several, so every question has accounts to find) and, half the time, a second one.
 # Healthy accounts mostly have only routine documents: the ones a search must not return.
@@ -445,6 +457,25 @@ PHONE = {"UK&I": "+44 20 5550 {:04d}", "DACH": "+49 30 5550 {:04d}",
 TZ = {region: timezone(timedelta(hours=h)) for region, h in SETTINGS["regions"]["utc_offset"].items()}
 
 
+def mailbox(name):
+    """An address's local part from a name: Amélie O'Brien -> amelie.obrien"""
+    import unicodedata
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return "".join(ch for ch in plain.lower().replace(" ", ".") if ch.isalnum() or ch == ".")
+
+
+def pick_voice(seen, topics, region, tier):
+    """The voice this customer writes in (doc_personas): the one that covers the most pairs not
+    seen yet (voice and topic, voice and region, voice and tier); ties go to the voice used least,
+    then to list order. Greedy pairwise, no random draw."""
+    def new(v):
+        return sum((v, x) not in seen for x in [*(("topic", t) for t in topics), ("region", region), ("tier", tier)])
+    v = max(voices.VOICES, key=lambda v: (new(v), -seen.get(v, 0), -voices.VOICES.index(v)))
+    seen.update({(v, x): True for x in [*(("topic", t) for t in topics), ("region", region), ("tier", tier)]})
+    seen[v] = seen.get(v, 0) + 1
+    return v
+
+
 def slug(text):
     return "".join(ch if ch.isalnum() else "-" for ch in text.lower()).strip("-")
 
@@ -471,7 +502,9 @@ def pick_accounts(rng):
             book.setdefault(personality.get(a["account_id"]), []).append({**a, "owner": team[owner]})
     picked = []
     for kind, n in PICK.items():
-        picked += rng.sample(sorted(book.get(kind, []), key=lambda a: a["account_id"]), n)
+        pool = sorted(book.get(kind, []), key=lambda a: a["account_id"])
+        heroes = [a for a in pool if a["account_id"] in HERO_DOCS]       # always in, the rest drawn
+        picked += heroes + rng.sample([a for a in pool if a["account_id"] not in HERO_DOCS], n - len(heroes))
     return sorted(picked, key=lambda a: a["account_id"]), personality
 
 
@@ -523,7 +556,7 @@ def threads(made, a, people, org, email_of, as_of, tz, rx, contacts, used_names,
         impl = None
         if topic == "onboarding_stuck":            # Implementation joins: a person of our own, labelled by the redaction
             while impl is None or impl in used_names:
-                impl = f"{rx.choice(FIRST)} {rx.choice(LAST)}"
+                impl = f"{rx.choice(FIRST)} {rx.choice(LAST)}"          # our own people: any region
             used_names.add(impl)
             contacts.append({"account_id": acc, "name": impl, "email": cs_mail(impl), "side": "cs"})
         p = {**people, "i_first": impl.split()[0] if impl else ""}
@@ -587,6 +620,8 @@ def main():
     healthy_seen = 0
     turn = {}                                  # how many of each personality so far
     used = {}                                  # how many times each topic's wording was used
+    seen = {}                                  # the voice pairs covered so far (pick_voice)
+    voice_of = {}
 
     for a in accounts:
         acc, region, company = a["account_id"], a["region"], a["account_name"]
@@ -595,15 +630,17 @@ def main():
         directory.append({"account_id": acc, "company": company, "email_domain": domain,
                           "helpdesk_org": org, "handover_from": "", "handover_to": ""})
 
+        first, last = voices.NAMES[region]    # the customer's people: names of their region
+
         def person(roles):
             while True:
-                name = f"{rng.choice(FIRST)} {rng.choice(LAST)}"
+                name = f"{rng.choice(first)} {rng.choice(last)}"
                 if name not in used_names:        # one person, one name across the corpus
                     used_names.add(name)
                     return name, rng.choice(roles)
         (c, c_role), (c2, c2_role), (f, f_role) = person(ROLES), person(ROLES2), person(FINANCE)
         s = a["owner"]["owner_name"]
-        email_of = lambda n, d=domain: n.lower().replace(" ", ".") + "@" + d
+        email_of = lambda n, d=domain: mailbox(n) + "@" + d
         for name, role in ((c, c_role), (c2, c2_role), (f, f_role)):
             contacts.append({"account_id": acc, "name": name, "email": email_of(name), "side": "customer"})
         contacts.append({"account_id": acc, "name": s, "email": email_of(s, "cairnpath.example"), "side": "cs"})
@@ -620,6 +657,9 @@ def main():
         if rng.random() < 0.5 and second not in topics:
             topics.append(second)
         topics = [x for x in topics if x]
+        if acc in HERO_DOCS:                   # the hero's story, not the draws (drawn all the same)
+            topics = sorted({t for _, t, _, _ in HERO_DOCS[acc] if t != "routine"})
+        voice = voice_of[acc] = pick_voice(seen, topics, region, a["tier"])
         docs = []
         made = {}                              # each topic's documents: its case (23 Nov 2026)
         for topic in topics:
@@ -640,9 +680,17 @@ def main():
         # nothing before the customer signed (16 Nov 2026: four call notes came before it, so
         # their meetings did too); the same random draws as before, so other accounts don't move
         since = date.fromisoformat(a["customer_since"] or a["contract_start"])
+        fixed = {}                             # a hero's documents on its story's days
+        if acc in HERO_DOCS:
+            docs = []
+            for when_s, topic, kind, (src, w) in HERO_DOCS[acc]:
+                fixed[len(docs)] = date.fromisoformat(when_s)
+                docs.append((topic, kind, WORDINGS[src][kind][w] if src != "routine" else ROUTINE[w][1]))
+                if topic != "routine":
+                    key[topic].add(acc)
         for n, (topic, kind, tpl) in enumerate(docs):
             back = rng.randrange(5, 120)
-            day = as_of - timedelta(days=back)
+            day = fixed.get(n) or as_of - timedelta(days=back)
             if day <= since:                   # a young account: spread over its own days instead
                 day = since + timedelta(days=1 + back % max(1, (as_of - since).days - 1))
             if kind == "call":                 # meetings never at weekends (generate_events' rule)
@@ -653,15 +701,18 @@ def main():
             name = f"{day}_{slug(company)}_{topic.replace('_', '-')}-{n}"
             writer = f if topic == "billing_dispute" or (topic == "budget_cut" and kind == "email") else c
             w_role = f_role if writer == f else c_role
+            sign = voices.SIGN_OFF[voice].format(c_first=writer.split()[0])
             if kind == "ticket":
                 ticket_no += 1
                 subject, desc, comment = same_invoice([fill(t, people, rng) for t in tpl])
+                pre, hello, bye = voices.TICKET[voice]          # the writer's voice around the text
+                subject, desc = pre + subject, hello + desc + bye
                 made.setdefault(topic, {})["ticket"] = f"{''.join(w[0] for w in company.split())[:2].upper()}-{ticket_no}"
                 tickets.append({"ticket_id": f"{''.join(w[0] for w in company.split())[:2].upper()}-{ticket_no}",
                                 "organization": org, "requester_name": writer, "requester_email": email_of(writer),
                                 "created_at": str(day), "updated_at": str(day + timedelta(days=rng.randrange(1, 6))),
                                 "priority": rng.choice(["P2", "P3", "P4"]), "type": "question",
-                                "status": rng.choice(["open", "solved"]), "subject": subject,
+                                "status": "solved" if n in fixed else rng.choice(["open", "solved"]), "subject": subject,
                                 "description": desc, "latest_comment": f"{comment} (agent Sam Ortiz)"})
             elif kind == "email":
                 m = EmailMessage()
@@ -670,10 +721,12 @@ def main():
                 if writer == f:
                     m["Cc"] = f"{c} <{email_of(c)}>"
                 m["Date"] = format_datetime(when)
+                if topic in voices.EMAILS and voice != "plain":  # the same facts in the writer's voice
+                    tpl = voices.EMAILS[topic][voice]
                 subject, body = same_invoice([fill(tpl[0], people, rng), fill(tpl[1], people, rng)])
                 m["Subject"] = subject
                 m["Message-ID"] = f"<{name}.eml@demo.example>"
-                m.set_content(body + f"\n\n{writer}\n{w_role}, {org}\n{c_phone}\n")
+                m.set_content(body + (f"\n\n{sign}\n" if sign else "\n\n") + f"{writer}\n{w_role}, {org}\n{c_phone}\n")
                 (OUT / "emails" / f"{name}.eml").write_bytes(bytes(m))
                 made.setdefault(topic, {})["email"] = (name, str(m["Subject"]), day, writer)
             else:
@@ -716,12 +769,16 @@ def main():
         "note": "For testing the search only: search.py never reads this file.",
         "questions": [{"id": q, "question": text, "accounts": sorted(key[q]), "traps": sorted(traps.get(q, []))}
                       for q, text in QUESTIONS.items()],
+        "voices": dict(sorted(voice_of.items())),     # who writes in which voice (doc_personas)
         "cases": cases}, indent=2) + "\n", encoding="utf-8")
     n_docs = len(tickets) + sum(1 for _ in (OUT / "emails").iterdir()) + sum(1 for _ in (OUT / "calls").iterdir())
     print(f"Search corpus: {len(accounts)} accounts, {n_docs} files in {OUT} (an email logged twice is two files); "
           f"{len(meetings)} calls logged as meetings in data/engagement/{MEETINGS_FILE}")
     for q, text in QUESTIONS.items():
         print(f"  {len(key[q]):>2} accounts  {text}")
+    for kind, values in (("topic", QUESTIONS), ("region", SUFFIX), ("tier", ("Enterprise", "Scale"))):
+        got = sum((v, (kind, x)) in seen for v in voices.VOICES for x in values)
+        print(f"  voices x {kind}: {got} of {len(voices.VOICES) * len(values)} pairs written")
 
 
 if __name__ == "__main__":

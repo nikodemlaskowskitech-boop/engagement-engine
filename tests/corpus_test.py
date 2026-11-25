@@ -99,7 +99,8 @@ check(routine == set(by_acc), "every account has routine documents", set(by_acc)
 with (OUTPUTS / "crm_accounts.csv").open(encoding="utf-8") as f:
     book = {r["account_id"]: r for r in csv.DictReader(f)}
 check(all(a in book and book[a]["status"] != "churned" for a in by_acc), "every corpus account is in today's book")
-check(len(by_acc) == 30, f"{len(by_acc)} accounts")
+from generate_documents import PICK               # noqa: E402
+check(len(by_acc) == sum(PICK.values()), f"{len(by_acc)} accounts (PICK: {sum(PICK.values())})")
 
 print("\nEvery call note is a logged meeting (14 Nov 2026)")
 from generate_documents import CALL_TOPIC, MEETINGS_FILE      # noqa: E402
@@ -157,6 +158,32 @@ check(any(len(c["files"]) >= 4 for c in key["cases"]), "some cases run to 4+ doc
 team = [x for a in documents.directory(CORPUS) for x in documents.for_account(a, CORPUS)]
 check({"Support", "CS", "Implementation"} <= {x["team"] for x in team}, "three teams write: Support, CS and Implementation")
 check(any(x["logged_by"] == ["CS", "Implementation"] for x in team), "...and an email logged by both is kept once, with both")
+
+print("\nVoices: customers write in six ways (doc_personas.py, 25 Nov 2026)")
+import doc_personas as voices                      # noqa: E402
+key = json.loads((CORPUS / SETTINGS["search"]["key_file"]).read_text(encoding="utf-8"))
+voice_of = key["voices"]
+check(set(voice_of.values()) == set(voices.VOICES), "every voice writes somewhere", set(voice_of.values()))
+check(set(voice_of) == set(by_acc), "every corpus account has its voice")
+pairs = lambda attr: {(voice_of[a], attr(a)) for a in voice_of}
+tiers = {book[a]["tier"] for a in voice_of}
+check(len(pairs(lambda a: book[a]["tier"])) == len(voices.VOICES) * len(tiers), "every voice with every tier (pairwise)")
+topic_pairs = {(voice_of[a], q["id"]) for q in key["questions"] for a in q["accounts"]}
+share = len(topic_pairs) / (len(voices.VOICES) * len(key["questions"]))
+check(share >= 0.75, f"voices x topics: {len(topic_pairs)} of {len(voices.VOICES) * len(key['questions'])} pairs answer a question ({share:.0%}, target 75%+)")
+emails = {p.name: p.read_text(encoding="utf-8", errors="ignore") for p in (CORPUS / "emails").glob("*.eml")}
+formal = [a for a, v in voice_of.items() if v == "formal"]
+check(any("Dear " in t and "Kind regards" in t for t in emails.values()), "a formal customer writes Dear ... Kind regards")
+check(any("I write you because" in t or "Thank you in advance" in t for t in emails.values()),
+      "a customer writing in their second language sounds like it")
+by_region = {r: set(f) | set(l) for r, (f, l) in voices.NAMES.items()}
+with (CORPUS / SETTINGS["handover"]["contacts_file"]).open(encoding="utf-8") as f:
+    customers = [r for r in csv.DictReader(f) if r["side"] == "customer"]
+wrong = [r["name"] for r in customers
+         if not set(r["name"].replace("De ", "De_").split()) <= {n.replace("De ", "De_") for n in by_region[book[r["account_id"]]["region"]]}]
+check(not wrong, "customers' names come from their region's list (no Ulrich Okafor in Stockholm)", wrong[:5])
+check(all(re.fullmatch(r"[a-z0-9.]+@[a-z0-9.-]+", r["email"]) for r in customers),
+      "addresses are plain ASCII (Amélie O'Brien -> amelie.obrien@...)", [r["email"] for r in customers][:3])
 
 print(f"\n{'All passed' if not failed else f'{failed} failed'}")
 sys.exit(1 if failed else 0)
