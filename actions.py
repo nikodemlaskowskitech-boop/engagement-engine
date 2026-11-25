@@ -210,7 +210,7 @@ HOLDOUT_NOTE = " (onboarding holdout: no welcome email or onboarding pack; help 
 
 # QBR first: Enterprise accounts with a QBR coming up, and its date
 qbr_soon = dict(con.sql("SELECT account_id, next_qbr_date FROM qbr_schedule WHERE qbr_coming_up").fetchall())
-QBR_COVERS = ("churn", "expansion")       # flags the QBR takes over (settings could hold this later)
+QBR_COVERS = ("churn", "expansion", "growth")   # flags the QBR takes over; growth: a hook is raised at the QBR
 in_the_brief = defaultdict(list)          # account -> flags folded into its QBR task
 
 # What was already done, from earlier runs

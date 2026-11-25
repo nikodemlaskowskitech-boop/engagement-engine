@@ -100,6 +100,7 @@ RAMP_DAYS = SETTINGS["churn"]["ramp_days"]
 RENEWAL_SOON_MONTHS = SETTINGS["expansion"]["renewal_soon_months"]
 
 DQ = SETTINGS["data_quality"]
+GR = SETTINGS["growth"]
 FEED_GAP_DAYS = DQ["feed_gap_days"]
 CONTRACT = SETTINGS["utilisation"]["contract_column"]
 USAGE_EVENT = SETTINGS["utilisation"]["usage_event"]
@@ -638,6 +639,106 @@ def add_views(con):
         GROUP BY c.account_id, c.account_name, c.tier, c.region, c.cs_pool, c.csm_owner, s.risk
     """)
 
+    # Whitespace (25 Nov 2026): growth with a hook, never "they don't use it, sell it". Each hook
+    # is a behaviour of the last hook_days and the question to open with. One line per account
+    # (an unused add-on first: it's a risk at renewal, then the add-on, then people). Held back,
+    # shown but not a task (routed 'none'): at churn Watch or Act, with data missing, and on Scale
+    # an add-on hook before the basics work (utilisation under basics_min_util, or Shelfware).
+    # Self-service rows go to the report: no pitch to people with no CSM.
+    con.sql(f"""
+        CREATE VIEW growth_hooks AS
+        WITH recent AS (
+            SELECT e.account_id,
+                   count(*) FILTER (WHERE e.event_type = 'product')                       AS actions,
+                   count(*) FILTER (WHERE e.event_name = 'cohort_created')                AS cohorts,
+                   count(DISTINCT e.user_id) FILTER (WHERE e.event_name = 'cohort_created') AS builders,
+                   count(*) FILTER (WHERE e.event_name = 'experiment_launched')           AS experiments,
+                   max(try_cast(e.properties.viewers AS INTEGER))
+                       FILTER (WHERE e.event_name = 'dashboard_shared')                   AS max_viewers
+            FROM events e, as_of a
+            WHERE e.event_date > a.as_of_date - {GR["hook_days"]}
+            GROUP BY e.account_id
+        ),
+        base AS (
+            SELECT c.account_id, c.account_name, c.tier, c.region, c.arr, c.csm_owner, c.cs_pool,
+                   coalesce(c.add_ons, '') LIKE '%{GR["addon"]}%' AS has_addon,
+                   r.actions, r.cohorts, r.builders, r.experiments, r.max_viewers,
+                   coalesce(w.wau_now, 0) AS wau_now, u.utilisation_pct AS util,
+                   u.go_live_date <= a.as_of_date - {GR["hook_days"]} AS settled,
+                   q.days_to_next_qbr, c.renewal_date - a.as_of_date AS days_to_renewal
+            FROM crm c
+            CROSS JOIN as_of a
+            JOIN recent r USING (account_id)
+            LEFT JOIN weekly_users w USING (account_id)
+            LEFT JOIN utilisation u USING (account_id)
+            LEFT JOIN qbr_schedule q USING (account_id)
+        ),
+        hooks AS (
+            SELECT *, 1 AS rank, 'Unused add-on' AS hook,
+                   format('{GR["addon"]} add-on bought, no experiment in {GR["hook_days"]} days, '
+                          || 'while {{}} people use the product', wau_now) AS evidence,
+                   'What did you plan to test when you bought experiments, and what got in the way?' AS opener
+            FROM base WHERE has_addon AND experiments = 0 AND settled
+            UNION ALL
+            SELECT *, 2, 'Add-on hook',
+                   format('{{}} cohorts in {GR["hook_days"]} days by {{}} people ({{}}% of all actions), '
+                          || 'no {GR["addon"]} add-on', cohorts, builders, round(100.0 * cohorts / actions)::INT),
+                   'Your team builds a lot of cohorts: what decisions are they feeding, and how do you test the changes?'
+            FROM base WHERE NOT has_addon AND actions > 0 AND cohorts >= {GR["addon_min_cohorts"]}
+                        AND builders >= {GR["addon_min_builders"]}
+                        AND 1.0 * cohorts / actions >= {GR["addon_cohort_share"]}
+            UNION ALL
+            SELECT *, 3, 'People hook',
+                   format('Dashboards shared with up to {{}} people; {{}} log in in a week', max_viewers, wau_now),
+                   'Who reads these dashboards, and what would they do if they could explore the data themselves?'
+            FROM base WHERE max_viewers >= {GR["people_min_viewers"]} AND max_viewers >= 2 * wau_now
+        ),
+        ranked AS (                               -- one line per account: the first by rank
+            SELECT *, row_number() OVER (PARTITION BY account_id ORDER BY rank) AS n FROM hooks
+        ),
+        also AS (                                 -- the account's other hooks, named on that line
+            SELECT account_id, string_agg(hook, ', ' ORDER BY rank) AS also FROM ranked WHERE n > 1 GROUP BY account_id
+        ),
+        one AS (SELECT r.*, a.also FROM ranked r LEFT JOIN also a USING (account_id) WHERE r.n = 1),
+        held AS (
+            SELECT o.*,
+                   CASE WHEN ch.status IN ('Watch', 'Act') THEN 'Held: churn risk'
+                        WHEN dg.account_id IS NOT NULL THEN 'Held: data missing'
+                        WHEN o.tier = 'Scale' AND o.hook = 'Add-on hook'
+                             AND (ch.status = 'Shelfware' OR coalesce(o.util, 0) < {GR["basics_min_util"]})
+                             THEN 'Held: basics first'
+                   END AS held,
+                   ch.status AS churn_status
+            FROM one o
+            LEFT JOIN churn ch USING (account_id)
+            LEFT JOIN (SELECT DISTINCT account_id FROM data_gaps) dg USING (account_id)
+        )
+        SELECT account_id, account_name, tier, region,
+               coalesce(held, hook) AS status,
+               evidence
+               || CASE WHEN hook <> 'People hook'
+                       THEN format('; {GR["addon"]} add-on about €{{}}k a year at list', round(arr * {GR["addon_share_of_arr"]} / 1000)::INT)
+                       ELSE '' END
+               || CASE WHEN also IS NOT NULL THEN '. Also seen: ' || also ELSE '' END
+               || CASE held WHEN 'Held: churn risk' THEN format('. Held back: churn {{}} first', churn_status)
+                            WHEN 'Held: data missing' THEN '. Held back: the data first'
+                            WHEN 'Held: basics first' THEN '. Held back: the basics first (utilisation or Shelfware)'
+                            ELSE '' END AS reasons,
+               CASE WHEN held IS NOT NULL THEN 'none'
+                    WHEN tier = 'Self-service' THEN 'report'
+                    WHEN tier = 'Scale' THEN coalesce(cs_pool, 'cs_ops')
+                    ELSE coalesce(csm_owner, 'cs_ops') END AS routed_to,
+               CASE WHEN held IS NOT NULL THEN 'No growth conversation now: ' || lower(replace(held, 'Held: ', ''))
+                    ELSE format('Open with: "{{}}" Raise it {{}}. Investigate, don''t pitch; if it isn''t a fit, '
+                                || 'say why (it pauses for {GR["pause_days"]} days)', opener,
+                                CASE WHEN tier = 'Enterprise' AND days_to_next_qbr BETWEEN 0 AND {GR["qbr_window_days"]}
+                                     THEN format('at the QBR ({{}} days)', days_to_next_qbr)
+                                     WHEN days_to_renewal BETWEEN 0 AND {GR["renewal_window_days"]}
+                                     THEN format('with the renewal ({{}} days)', days_to_renewal)
+                                     ELSE 'at the next check-in' END) END AS action
+        FROM held
+    """)
+
 
 def main():
     con = connect()
@@ -771,6 +872,18 @@ def main():
     """).show(max_rows=100, max_width=320)
     con.sql(f"COPY (SELECT * FROM data_gaps ORDER BY status, account_id) TO '{out_sql('flags_data')}' (HEADER)")
     print("Saved every row to data/flags_data.csv")
+
+
+    # --- Growth: whitespace with a hook ------------------------------------------------
+
+
+    print("\n\nGrowth hooks: whitespace with a hook (no hook, no pitch); held back = shown, not a task")
+    con.sql("""
+        SELECT routed_to, status, account_id, account_name, tier, reasons
+        FROM growth_hooks ORDER BY status LIKE 'Held%', routed_to, status, account_id
+    """).show(max_rows=100, max_width=320)
+    con.sql(f"COPY (SELECT * FROM growth_hooks ORDER BY status, account_id) TO '{out_sql('flags_growth')}' (HEADER)")
+    print("Saved every row to data/flags_growth.csv")
 
 
 if __name__ == "__main__":

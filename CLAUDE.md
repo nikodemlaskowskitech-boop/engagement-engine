@@ -62,7 +62,7 @@ Docs-only PRs need none.
 | A PR that touches | Runs |
 | --- | --- |
 | the engine (any step, settings) | `check_inputs.py`, `check_flags.py`, `backtest.py`, `tests/pipeline_test.py`, `tests/journeys_test.py` |
-| `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py`, `tests/data_gaps_test.py` (bad data: never guess, never crash), `tests/contract_terms_test.py` (each day against the contract in force) |
+| `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py`, `tests/data_gaps_test.py` (bad data: never guess, never crash), `tests/contract_terms_test.py` (each day against the contract in force), `tests/growth_test.py` (whitespace: each hook, held back or not) |
 | `generate_events.py`, `generate_documents.py`, the flags, the history; after a regenerate | `tests/heroes_test.py` (the four hero accounts' two-year stories still hold; reads data/), `tests/growth_hooks_test.py` (the planted growth hooks are there, and only there) |
 | `ingest.py` | `tests/store_test.py` |
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
@@ -244,6 +244,15 @@ that need the value skip the account and the gap shows instead, to the data's ow
 ([data_quality]: CS ops or data engineering) in their daily digest, and to the
 account's owner ("Risk hidden") only when a risk can still be seen without it.
 
+Plus growth (`flags_growth.csv`, task flag "growth", 25 Nov 2026): whitespace with
+a hook, never "they don't use it, sell it". A hook is a behaviour of the last 90
+days: an add-on's precursor (cohort-heavy, no experiments add-on), dashboards read
+by far more people than log in, or an add-on bought and never used (a renewal
+risk). One line per account, with the question to open with and when to raise it
+(the QBR, the renewal, the next check-in); the QBR takes it over like churn and
+expansion. Held back (shown, not a task) at churn Watch or Act, with data
+missing, and on Scale an add-on before the basics work. Self-service: the report.
+
 ## Design rules
 
 - SQL computes every fact; the LLM only writes them up.
@@ -304,7 +313,7 @@ Engine:
 - `generate_documents.py`: the search corpus: tickets, emails, calls for 45 accounts, with an answer key.
 - `doc_personas.py`: how the corpus's customers write (six voices, picked pairwise) and names by region.
 - `check_inputs.py`: the inputs against the data contract.
-- `flags.py`: activation, churn, expansion and QBR flags, with value at stake, and data missing.
+- `flags.py`: activation, churn, expansion and QBR flags, with value at stake, data missing and growth hooks.
 - `check_flags.py`: the flags against the generator's answer key.
 - `journeys.py`: rules on the last touch (unopened email, no meeting, hand-backs).
 - `team_report.py`: time to action, action status, the one "called" rule.

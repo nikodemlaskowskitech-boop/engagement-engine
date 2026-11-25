@@ -108,7 +108,7 @@ Read a file's entry before changing that file, and update the entry in the same 
   hooks by a hash like the data gaps (no random draw moves; feature_mix() rewrites event names
   after the draw, by a coin from the event's own ID): 9 add-on hooks (cohorts become half of the
   last 90 days' actions, no add-on; one on a Scale account at churn Act and one on Scale shelfware,
-  which the engine must hold back), 5 people hooks (dashboards shared to 8-20 people,
+  which the engine must hold back), 5 people hooks (dashboards shared to over twice the team that logs in,
   properties.viewers; everyone else 1-4), 5 unused add-ons (bought, never used: negative
   whitespace). Answer key: growth_hook, hook_expected. tests/growth_hooks_test.py: the hooks are
   there and only there (no other CRM account above 45% cohorts; natural ones top out at 41%, and
@@ -675,6 +675,23 @@ Read a file's entry before changing that file, and update the entry in the same 
   with an Open CS ops task (and its age) only until its CSM came.
 - `explore.py`: DuckDB summaries by tier, region and CSM, plus CS
   engagement week by week and meetings by owner.
+- `flags.py` growth hooks (25 Nov 2026, whitespace step 2 of 3; Nikodem: "you won't pitch something
+  without a hook"). View growth_hooks -> `data/flags_growth.csv`, task flag "growth". Three hooks
+  from the last [growth] hook_days: Unused add-on (bought, no experiment; a renewal risk, ranked
+  first), Add-on hook (cohorts at least addon_cohort_share of all actions, addon_min_cohorts+ by
+  addon_min_builders+ people, no add-on), People hook (a dashboard went to people_min_viewers+ and
+  to at least twice the people who log in in a week). One line per account, the others named
+  "Also seen". Each line: the evidence in the customer's terms, the add-on's rough list price
+  (addon_share_of_arr of ARR, an estimate), the question to open with, and when to raise it (an
+  Enterprise QBR within qbr_window_days, a renewal within renewal_window_days, else the next
+  check-in); "investigate, don't pitch". Held back, shown but routed 'none' (not a task): churn
+  Watch or Act, a data gap, and on Scale an add-on hook before the basics work (utilisation under
+  basics_min_util or Shelfware). Self-service to the report. actions.py's QBR_COVERS takes growth
+  too. The not-a-fit reasons and the pause ([growth] not_a_fit, pause_days, Nikodem's list) come
+  with the cockpit (step 3). On the demo data: 19 lines, exactly the 19 planted (check_flags).
+  Found on the way: the events' schema gained properties.viewers, and a store built before it
+  still looked fresh (its stamp only knew the files), so every step failed on the missing key;
+  the stamp now carries the schema too (cairnpath_db.inputs_fingerprint). tests/growth_test.py.
 - `flags.py` data missing (24 Nov 2026, Nikodem: "mimic wrong data entries or lack of it", then
   flag it, show it and push it to Slack). Views feed_gaps (the daily_event_volume feed stopped
   [data_quality] feed_gap_days+ days ago while product events keep coming) and data_gaps (a

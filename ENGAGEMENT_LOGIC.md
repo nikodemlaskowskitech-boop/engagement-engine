@@ -190,6 +190,7 @@ stateDiagram-v2
 | Activation, escalations | Any meeting |
 | CS ops (handoff gap, no CSM) | Only Resolved: the CRM record is fixed |
 | Data missing (no contract volume, renewal date, pool; volume feed stopped) | Only Resolved: the data is fixed. CS ops fixes the CRM, data engineering the feed; "Risk hidden" goes to the account's owner too, and is Done with any meeting |
+| Growth hook (add-on, people, unused add-on; 25 Nov 2026) | Done with any meeting (the conversation), Resolved when the hook goes; Enterprise to the CSM (at the QBR when one is within 30 days), Scale to the pool, Self-service to the report; held back = shown, not a task |
 | Manager hand-back approval | The manager clicks "Approve hand-back" (Slack or the cockpit) |
 
 A manager can also give any open or claimed task of their team to someone else,
