@@ -67,8 +67,14 @@ print(f"  Recall, with synonyms:  {sum(len(w['right']) for w in wide)} of {wante
       f"precision {p_wide:.0%} (right accounts among those returned)")
 recall = r_wide
 check(r_wide >= r_exact, "synonyms never lose an account keywords found overall")
-check(all(set(e["right"]) <= set(w["right"]) for e, w in zip(exact, wide)),
-      "per question too: every account found by keywords is still found with synonyms")
+# Per question, synonyms find at least as many right accounts as keywords alone. Not "every
+# account keywords found": in a top 10, the synonyms' extra matches can push one out while
+# bringing two in (25 Nov 2026, 45 accounts: capacity went from 4 to 6 of 8, swapping one)
+swaps = [(q["id"], sorted(set(e["right"]) - set(w["right"]))) for q, e, w in zip(key["questions"], exact, wide)
+         if set(e["right"]) - set(w["right"])]
+check(all(len(w["right"]) >= len(e["right"]) for e, w in zip(exact, wide)),
+      "per question too: synonyms find at least as many right accounts as keywords"
+      + (f" (swapped out by stronger matches: {swaps})" if swaps else ""))
 check(recall >= float(CONF["min_recall"]),
       f"recall {recall:.0%} at least [search] min_recall ({float(CONF['min_recall']):.0%}): no step backwards")
 

@@ -67,7 +67,7 @@ Docs-only PRs need none.
 | `ingest.py` | `tests/store_test.py` |
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
 | `documents.py` | `tests/documents_test.py`, plus the handover row |
-| `generate_documents.py` | `tests/corpus_test.py` |
+| `generate_documents.py`, `doc_personas.py` | `tests/corpus_test.py`, `tests/search_test.py`, `tests/search_export_test.py` (run `python search_export.py`) |
 | `generate_events.py`'s meeting outcomes and notes | `tests/meeting_log_test.py` |
 | `research.py`, [research], or the redacted documents file | `tests/research_test.py`, plus the cockpit row |
 | `search.py`, `documents.py`, [search], `tests/heldout/` | `tests/search_test.py` (recall per question, corpus and held-out; redacted results), plus the handover row if redaction changes |
@@ -300,7 +300,8 @@ Engine:
 - `cairnpath_db.py`: `connect()` and every shared view, defined once.
 - `ingest.py`: the events store (Parquet plus a stamp of its input files).
 - `generate_events.py`: the demo data: ~500 accounts with personalities, two years (year one written apart, so today's year is unchanged), four hero accounts (HEROES) with set arcs.
-- `generate_documents.py`: the search corpus: tickets, emails, calls for 30 accounts, with an answer key.
+- `generate_documents.py`: the search corpus: tickets, emails, calls for 45 accounts, with an answer key.
+- `doc_personas.py`: how the corpus's customers write (six voices, picked pairwise) and names by region.
 - `check_inputs.py`: the inputs against the data contract.
 - `flags.py`: activation, churn, expansion and QBR flags, with value at stake, and data missing.
 - `check_flags.py`: the flags against the generator's answer key.
@@ -359,7 +360,7 @@ Tests: `tests/`, one file per area (see Testing above).
   results (search.redacted, PRIVACY.md §6) built the same day; the public search on the demo site
   (#166-169) and the local MCP server (mcp_server.py) the same day; "ask about this account" (ask.py) 14 Nov 2026; vectors next to
   keywords built 22 Nov 2026 (embed.py, Titan on Bedrock; held-out recall keywords 90%, meaning 94%,
-  hybrid 96%, so hybrid for ask.py and the MCP server since 23 Nov, and the public search too (Titan per question, kill switch [aws] search_meaning); next grow the corpus to 45 accounts); the AI
+  hybrid 96%, so hybrid for ask.py and the MCP server since 23 Nov, and the public search too (Titan per question, kill switch [aws] search_meaning); the corpus grown to 45 accounts in six voices 25 Nov: keywords with synonyms 95% -> 92%, the meaning search to measure on the laptop); the AI
   cost demo (ai_cost.py) 23 Nov; the public remote MCP server (POST /mcp, no sign-in, keywords only) 24 Nov; last a live Ask box in the cockpit.
 - Bedrock quota for Claude declined again 17 Nov 2026 (new account): no need to ask; AWS
   re-evaluates by itself as usage builds. Briefs use the Anthropic API meanwhile. Lambda concurrency
