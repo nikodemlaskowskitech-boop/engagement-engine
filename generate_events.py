@@ -209,6 +209,28 @@ FEED_STOP_DAYS = 12        # feed_stopped: no daily_event_volume in the last thi
 # accounts the tests, the demo script and the stories name: never given a gap
 DATA_ISSUE_SPARED = {"acc_001", "acc_002", "acc_003", "acc_005", "acc_008", "acc_012", "acc_024", "acc_037",
                      "acc_042", "acc_087", "acc_100", "acc_123", "acc_156", "acc_300"}
+# Growth hooks (25 Nov 2026, whitespace: Nikodem's "no hook, no pitch"). Features follow what
+# was bought: experiments only with the experiments add-on, and add-on holders use it. A few
+# accounts get a hook a CSM could open a growth conversation with, picked by a hash like the
+# data gaps (no random draw moves), each with what the engine should do with it:
+#   addon         cohort-heavy in the last 90 days, no experiments add-on: the add-on's hook
+#   people        dashboards shared to many people, few of them log in: an adoption hook
+#   unused_addon  the experiments add-on bought, never used: negative whitespace (retention)
+# (issue, tier, personality, expected). Expected "show", or held back: "held_churn" (an account
+# at churn risk isn't pitched to) or "held_core" (Scale: the basics first, then add-ons).
+GROWTH_HOOKS = [("addon", "Enterprise", "healthy", "show"), ("addon", "Enterprise", "healthy", "show"),
+                ("addon", "Enterprise", "power_user", "show"), ("addon", "Scale", "healthy", "show"),
+                ("addon", "Scale", "healthy", "show"), ("addon", "Scale", "healthy", "show"),
+                ("addon", "Scale", "power_user", "show"), ("addon", "Scale", "declining", "held_churn"),
+                ("addon", "Scale", "shelfware", "held_core"),
+                ("people", "Enterprise", "healthy", "show"), ("people", "Enterprise", "healthy", "show"),
+                ("people", "Scale", "healthy", "show"), ("people", "Scale", "healthy", "show"),
+                ("people", "Scale", "healthy", "show"),
+                ("unused_addon", "Enterprise", "healthy", "show"), ("unused_addon", "Enterprise", "healthy", "show"),
+                ("unused_addon", "Scale", "healthy", "show"), ("unused_addon", "Scale", "healthy", "show"),
+                ("unused_addon", "Scale", "healthy", "show")]
+HOOK_DAYS = 90                 # hooks are recent behaviour: the last this many days
+ADDON = "experiments"
 RECOVERY = dict(name="recovered", share=0.07, util=(0.30, 0.66), activity=(0.35, 0.6))
 
 # Personality weights that differ by tier (otherwise each personality's own weight applies).
@@ -502,6 +524,7 @@ def build_accounts():
     set_csm_since(accounts)
     set_renewal_changes(accounts)
     plant_data_issues(accounts)
+    plant_growth_hooks(accounts)
     return accounts
 
 
@@ -588,6 +611,52 @@ def plant_data_issues(accounts):
                 and a["id"] not in STORY_ACCOUNTS and a["id"] not in DATA_ISSUE_SPARED]
         if pool:
             min(pool, key=lambda a: zlib.crc32(("data" + a["id"]).encode()))["data_issue"] = issue
+
+
+def plant_growth_hooks(accounts):
+    """GROWTH_HOOKS: one hook each for a few settled accounts, after the data gaps (never both),
+    and the add-on as the hook needs it (set after the draw: no random draw moves)."""
+    for acc in accounts:
+        acc["growth_hook"] = acc["hook_expected"] = ""
+    for hook, tier, kind, expected in GROWTH_HOOKS:
+        pool = [a for a in accounts if a["in_crm"] and not a.get("lost") and not a.get("dip") and not a["planted"]
+                and not a["first_year"] and not a["data_issue"] and not a["growth_hook"] and a["tier"] == tier
+                and a["personality"] == kind and a["id"] not in STORY_ACCOUNTS and a["id"] not in DATA_ISSUE_SPARED]
+        if pool:
+            acc = min(pool, key=lambda a: zlib.crc32(("hook" + a["id"]).encode()))
+            acc["growth_hook"], acc["hook_expected"] = hook, expected
+            acc["add_ons"] = ADDON if hook == "unused_addon" else ("" if hook == "addon" else acc["add_ons"])
+
+
+def coin(e, salt=""):
+    """A number from 0 to 99 fixed by the event's own ID: a choice that moves no random draw."""
+    return zlib.crc32((salt + e["event_id"]).encode()) % 100
+
+
+def feature_mix(acc, rows, day):
+    """Product events follow what was bought, and a hook shows in the last HOOK_DAYS (applied
+    after the draw, so no other account moves). Experiments need the add-on; holders use it on
+    about one action in eight, except unused_addon. addon: cohorts take over (a team asking why
+    users behave differently). people: dashboards go to many people. Every share says how many."""
+    recent = (END_DATE - day).days < HOOK_DAYS
+    hook, has = acc.get("growth_hook"), ADDON in (acc.get("add_ons") or "")
+    for e in rows:
+        if e["event_type"] != "product":
+            continue
+        name = e["event_name"]
+        if name == "experiment_launched" and (not has or hook == "unused_addon"):
+            name = "chart_created"
+        elif name == "chart_created" and has and hook != "unused_addon" and coin(e, "x") < 12:
+            name = "experiment_launched"
+        if recent and hook == "addon" and name in ("chart_created", "dashboard_shared") and coin(e, "c") < 60:
+            name = "cohort_created"
+        if recent and hook == "people" and name == "chart_created" and coin(e, "p") < 35:
+            name = "dashboard_shared"
+        e["event_name"] = name
+        if name == "dashboard_shared":         # how many people the dashboard went to
+            e["properties"] = {**e["properties"],
+                               "viewers": 8 + coin(e, "v") % 13 if recent and hook == "people" else 1 + coin(e, "v") % 4}
+    return rows
 
 
 def crm_cell(acc, column, value):
@@ -1424,7 +1493,7 @@ def write_answer_key(accounts):
     path = OUT_DIR / "answer_key.csv"
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["account_id", "tier", "personality", "has_champion", "welcome_group", "history", "called_in_time", "planted", "data_issue"])
+        writer.writerow(["account_id", "tier", "personality", "has_champion", "welcome_group", "history", "called_in_time", "planted", "data_issue", "growth_hook", "hook_expected"])
         for acc in accounts:
             group = "welcomed" if acc["welcomed"] else "control" if acc["control"] else ""
             dip = acc["dip"]
@@ -1432,7 +1501,8 @@ def write_answer_key(accounts):
                        "new logo this year" if acc["first_year"] else "")
             writer.writerow([acc["id"], acc["tier"], "churned" if acc["lost"] else acc["personality"],
                              acc["has_champion"], group, history, bool(dip and dip["in_time"]) if dip else "",
-                             acc.get("planted", ""), acc.get("data_issue", "")])
+                             acc.get("planted", ""), acc.get("data_issue", ""),
+                             acc.get("growth_hook", ""), acc.get("hook_expected", "")])
     return path
 
 
@@ -1454,6 +1524,7 @@ def write_events(accounts):
                 known = set(year_one_users(acc))
                 got = [e for e in got if not (e["event_name"] == "user_invited"
                                               and e["properties"]["invited_user"] in known)]
+            got = feature_mix(acc, got, day)            # what was bought, and the growth hooks
             if acc.get("data_issue") == "feed_stopped" and (END_DATE - day).days < FEED_STOP_DAYS:
                 # the volume feed stopped (a pipeline problem on their side); the product didn't.
                 # Filtered after drawing, so no random draw moves
@@ -1586,8 +1657,11 @@ def write_year_one(accounts):
     days, plan = year_one_events(accounts)
     meetings = year_one_engagement(accounts, plan)
     n = m = 0
+    by_id = {a["id"]: a for a in accounts}
     for day, rows in days.items():
         if rows:
+            for r in rows:                          # what was bought (no hooks in year one)
+                feature_mix(by_id[r["account_id"]], [r], END_DATE - timedelta(days=HOOK_DAYS + 1))
             rows.sort(key=lambda e: e["timestamp"])
             with (OUT_DIR / "events" / f"{day.isoformat()}.jsonl").open("w") as f:
                 f.writelines(json.dumps(r) + "\n" for r in rows)
@@ -1644,4 +1718,6 @@ if __name__ == "__main__":
     print(f"Year before (top line): {bridge_path}")
     gaps = sorted((a["data_issue"], a["id"]) for a in accounts if a.get("data_issue"))
     print(f"Data gaps:  {len(gaps)} planted (" + ", ".join(f"{a} {i}" for i, a in gaps) + ")")
+    hooks = sorted((a["growth_hook"], a["hook_expected"], a["id"]) for a in accounts if a.get("growth_hook"))
+    print(f"Growth hooks: {len(hooks)} planted (" + ", ".join(f"{a} {h}{'' if x == 'show' else ' ' + x}" for h, x, a in hooks) + ")")
     print(f"Outcomes:   {outcomes_path} (renewals in the {OUTCOME_HORIZON_DAYS} days after the data, for backtest.py)")

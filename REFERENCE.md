@@ -100,6 +100,20 @@ Read a file's entry before changing that file, and update the entry in the same 
   that was already there are drawn as before but not written. The events folder now spans 730
   days; ingest, flags and the windows are unchanged; history.py replays both years (about 3x
   slower: 22s -> 65s in the sandbox).
+- `generate_events.py` growth hooks (25 Nov 2026, whitespace step 1 of 3; Nikodem: at
+  Salesforce the list was "they don't use it, sell it", with no hook, so it became fatigue: "you
+  won't pitch something without a hook"). Features now follow what was bought: experiment_launched
+  only with the experiments add-on (power users without it had been launching experiments), and
+  holders use it on about one action in eight (74 of 74 active ones do). GROWTH_HOOKS plants 19
+  hooks by a hash like the data gaps (no random draw moves; feature_mix() rewrites event names
+  after the draw, by a coin from the event's own ID): 9 add-on hooks (cohorts become half of the
+  last 90 days' actions, no add-on; one on a Scale account at churn Act and one on Scale shelfware,
+  which the engine must hold back), 5 people hooks (dashboards shared to 8-20 people,
+  properties.viewers; everyone else 1-4), 5 unused add-ons (bought, never used: negative
+  whitespace). Answer key: growth_hook, hook_expected. tests/growth_hooks_test.py: the hooks are
+  there and only there (no other CRM account above 45% cohorts; natural ones top out at 41%, and
+  only on handoff gaps). Every flag and check unchanged. Next: the engine's whitespace (step 2),
+  then the cockpit (step 3).
 - `generate_events.py` heroes and terms (24 Nov 2026): HEROES, four accounts a demo walks
   through, each with its two-year arc (Nettle Foods growth, Yarrow Studio churn caught early,
   Driftwood Labs shelfware renewed flat twice, Alder Media the missed signal). Their renewal in

@@ -53,6 +53,7 @@ Events the flags read:
 | any product event with a user_id | Active users: activation, churn breadth, expansion breadth, champions | Required |
 | `ingestion_error` (properties.error_code) | "Technical check first" on churn | That push to Act is off |
 | `experiment_launched` | Underused add-ons in the QBR pack | An experiments add-on always reads as unused |
+| `cohort_created`, `dashboard_shared` (properties.viewers: how many people it went to, optional) | Growth hooks (whitespace, 25 Nov 2026, being built): the behaviour that comes before an add-on, a dashboard read by many who never log in | No hook from them: no growth line (no hook, no pitch) |
 
 Go-live is never sent: it's the first event we see from the account.
 
