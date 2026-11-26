@@ -31,6 +31,7 @@ PARTS = [
     ("js/leadership.js", "Leadership: trends, performance (GRR, NRR), exposure, signals, growth, the one-pager"),
     ("js/shared.js", "shared: My book's constants, the stacked bar chart, sparklines, sortable tables, data missing"),
     ("js/mybook.js", "My book"),
+    ("js/ask_box.js", "the Ask box: sign in, one question about the account, its answer with sources"),
     ("js/search_tour.js", "account search, the demo site's tour, the end of the script"),
 ]
 

@@ -86,6 +86,7 @@ Docs-only PRs need none.
 | `slack_loop.py`, `listener.py` | `tests/slack_lambda_test.py` |
 | `infra/lambdas/search/`, `search.py`, `documents.py` | `tests/search_lambda_test.py`, `tests/mcp_public_test.py` (the public MCP server, with a real MCP client session) |
 | `infra/lambdas/ask/`, `ask.py`, [ask] | `tests/ask_lambda_test.py` (the Ask box's function: who may ask, the caps, only counts kept), `tests/ask_test.py` |
+| `cockpit/js/ask_box.js`, `roles.ask_web()` | `node tests/ask_box_test.js` (the Ask box on the site: the sign-in round trip, PKCE, asking, refusals), plus the cockpit row |
 | `infra/bundle.py`, `infra/lock_lambda.py`, `infra/locks/`, a pin a Lambda uses | `tests/lambda_lock_test.py` |
 | `upload.py` / `pull_clicks.py` / `site_cert.py` / `put_key.py` / `request_briefs.py` | its own `tests/<name>_test.py` |
 | `guardduty_report.py` / `access_report.py` | its own `tests/<name>_test.py` |

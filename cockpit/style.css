@@ -142,6 +142,10 @@ dl.facts dd { margin: 0; }
 .why .todo b { font-weight: 600; }
 .why .todo.declined { color: var(--ink-3); }
 .decline-form .fc-form, .aim-ask .fc-form { margin-top: 6px; }
+/* the Ask box (26 Nov 2026): the question line, and the answer set apart from the notes */
+#tl-ask .fc-form { display: flex; gap: 8px; margin: 6px 0 10px; }
+#tl-ask #ask-q { flex: 1; min-width: 0; font: 400 0.95rem var(--font-body); padding: 6px 9px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.ask-answer { border-left: 3px solid var(--accent); padding: 2px 0 2px 12px; margin: 6px 0; }
 .chip { display: inline-block; font: 600 0.7rem var(--font-body); border-radius: 4px; padding: 1px 6px; background: var(--line); color: var(--ink-2); }
 .chip.late { background: color-mix(in srgb, var(--critical) 20%, transparent); color: var(--critical); }
 .chip.soon { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
