@@ -98,6 +98,7 @@ flowchart TB
     eng["Engine Lambda<br/>ingest, flags, journeys, history,<br/>reports, cockpit export"]
     sch["Daily schedule<br/>(safety net)"]
     sl["Slack Lambda, behind<br/>API Gateway POST /slack/actions<br/>signature checked"]
+    ask["Ask Lambda, behind<br/>API Gateway POST /ask<br/>CS team sign-in (Cognito)"]
     ssm["Parameter Store<br/>API key, Slack secrets"]
     ath["Athena + Glue<br/>ad-hoc SQL"]
     sec["GuardDuty, Access Analyzer,<br/>Cost Anomaly Detection"]
@@ -121,6 +122,9 @@ flowchart TB
   slack -->|button clicks| sl -->|"state/clicks/"| s3
   s3 --> ath
   run --> mcp --> desk
+  team(("CS team<br/>signed in")) -->|"a question"| ask
+  s3 -->|"the export only"| ask -->|"counts only"| s3
+  ask -.->|"redacted text only"| llm
 ```
 
 **2. The public demo: what anyone with the address can reach.** Nothing here

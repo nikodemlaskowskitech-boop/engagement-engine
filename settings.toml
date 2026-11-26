@@ -154,6 +154,15 @@ search_meaning = true
 mcp_public = true
 mcp_rate_per_second = 1
 mcp_burst = 3
+ask = true                       # the Ask box (26 Nov 2026): POST /ask behind the CS team's sign-in; false = not built
+ask_memory_mb = 1024
+ask_timeout_seconds = 60         # the model answers in about 10 s; the gateway gives up at 30 s
+ask_disk_mb = 512
+ask_rate_per_second = 1          # the gateway's limit for /ask: it is one person's question at a time anyway
+ask_burst = 3
+# the sign-in page's own address: https://<prefix>.auth.<region>.amazoncognito.com (any free
+# prefix: no account ID in it, since that address is public)
+ask_login_prefix = "cairnpath-team-k7q2"
 search_max_runs = 5              # the search function runs at most this many at once (a ceiling: a flood of searches can never take the engine's or the Slack listener's capacity; 0 = no cap)
 # The data perimeter (a bucket policy): besides our four workload roles, only these may read or
 # write the bucket's data. The role you get from `aws login` (any IAM path), and the break-glass
