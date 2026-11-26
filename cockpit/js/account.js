@@ -688,6 +688,7 @@
   }
   function drawHandover(id) {
     drawResearch(id);                                   // the research sits under the handover brief
+    drawAsk(id);                                        // and the Ask box under the research (public site, signed in)
     const host = $("tl-handover"), h = HANDOVER[id], a = byId[id];
     if (!h || !a) { host.hidden = true; host.innerHTML = ""; return; }
     host.hidden = false;

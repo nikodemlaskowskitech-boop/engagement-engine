@@ -618,6 +618,19 @@ Read a file's entry before changing that file, and update the entry in the same 
   document by meaning, the other 5 still come by keywords). The margin over nonsense is thin
   (0.016) and rests on 12 off-topic questions: re-run the calibration when the corpus grows.
   embed_test runs its stand-in plumbing with the floor at 0 (a Titan number, not the stand-in's).
+- `cockpit/js/ask_box.js` (26 Nov 2026, the Ask box, step 3 of 4): on the account page, under the
+  research, on the public site only (PAGE.ask, from roles.ask_web(): the ASK_* settings the deploy
+  gives the engine, so nothing is copied by hand; none on the laptop). "Sign in to ask" goes to the
+  team's sign-in page with the code flow and PKCE (S256, a random state, no secret in the page);
+  it comes back to the site's root with a one-time code, which becomes an ID token (kept in this
+  tab's sessionStorage until it expires, never localStorage) and leaves the address, then opens
+  the page and account the sign-in started from. A code whose state we didn't make is never
+  swapped. The question goes to the Ask API with the token; the answer shows with its sources,
+  what is unverified (the checks) and the questions left today; a refusal shows its reason, an
+  expired sign-in offers it again. Written as function declarations only: the account page draws
+  before this part of the script has run, and a const would not exist yet (caught by the test).
+  The site's content policy (data_stack.site_csp) adds exactly the Ask API's and the sign-in
+  page's addresses to connect-src. tests/ask_box_test.js: 14 checks, stand-ins for both.
 - `infra/data_stack.py` the Ask box (26 Nov 2026, step 2b of 4): [aws] ask = true builds a user
   pool for the CS team (no sign-up: the admin makes each login; custom:person = whose page; MFA
   optional, TOTP), its cockpit client (code flow with PKCE, no secret, reads person, can't write

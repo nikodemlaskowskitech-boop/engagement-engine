@@ -15,6 +15,7 @@ Plain Python, no DuckDB: it works on the export, after export_views.py.
 """
 
 import json
+import os
 import re
 import statistics
 import sys
@@ -288,6 +289,19 @@ def write_search_page(out, export):
     (out / search["site_page"]).write_text(html, encoding="utf-8")
 
 
+def ask_web():
+    """Where the public pages ask and sign in: told by the deploy through the engine's settings
+    (ASK_URL, ASK_CLIENT_ID, ASK_LOGIN_URL, ASK_REDIRECT), never typed into a file. None = no
+    Ask box (the laptop, or a deploy without it). Public by design: a sign-in page's client ID
+    and addresses are in every page that uses them; the secrets are the logins' own."""
+    keys = {"url": "ASK_URL", "client_id": "ASK_CLIENT_ID", "login": "ASK_LOGIN_URL", "redirect": "ASK_REDIRECT"}
+    found = {k: os.environ.get(v, "") for k, v in keys.items()}
+    if not all(found.values()):
+        return None
+    conf = SETTINGS["ask"]
+    return {**found, "max_chars": int(conf["question_chars"]), "daily": int(conf["daily_questions_per_person"])}
+
+
 def build(export, template=None, out=PAGES, sandbox=False):
     """Write one page per person, leader.html and index.html (the landing page).
     sandbox=True: the public demo site's pages (forms save in the visitor's browser only)."""
@@ -312,6 +326,8 @@ def build(export, template=None, out=PAGES, sandbox=False):
             page["commitments"] = [c if c.get("doc") or c.get("via") == "cs_history" else {**c, "what": "(typed by a person: kept off the public site)"}
                                    for c in page.get("commitments", [])]
         meta["sandbox"] = bool(sandbox)
+        if sandbox and ask_web():         # the Ask box (26 Nov 2026): only where AWS said where it is
+            meta["ask"] = ask_web()
         if sandbox and SETTINGS.get("demo", {}).get("author"):      # the public site's who-and-why strip and tour
             # the CSM door: [demo] csm, else the first CSM (a company's own team has no Tom)
             csm = SETTINGS["demo"].get("csm") if SETTINGS["demo"].get("csm") in everyone else \

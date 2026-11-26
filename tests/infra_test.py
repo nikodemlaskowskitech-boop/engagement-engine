@@ -387,6 +387,11 @@ if ASK:
           and "custom:person" not in cp.get("WriteAttributes", []) and "custom:person" in cp.get("ReadAttributes", [])
           and cp.get("CallbackURLs") == ["https://" + aws["site_domain"] + "/"],
           "the cockpit's client: code flow with PKCE, no secret; reads whose page, can't change it", cp)
+    eng_vars = next((v["Properties"]["Environment"]["Variables"] for v in ours.values()
+                     if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"]), {})
+    check({"ASK_URL", "ASK_CLIENT_ID", "ASK_LOGIN_URL", "ASK_REDIRECT"} <= set(eng_vars)
+          and eng_vars.get("ASK_REDIRECT") == "https://" + aws["site_domain"] + "/",
+          "the engine is told where the pages ask and sign in, straight from this deploy (no copying)", sorted(eng_vars))
     check({"AskUrl", "AskUserPoolId", "AskClientId", "AskLoginUrl"} <= set(t.find_outputs("*")),
           "prints the Ask box's address, pool, client and sign-in page after deploy")
 
@@ -565,8 +570,14 @@ if aws.get("site"):
     check(len(rhps) == 1 and next(iter(rhps)) in json.dumps(beh.get("ResponseHeadersPolicyId"))
           and sec.get("StrictTransportSecurity", {}).get("AccessControlMaxAgeSec") == 31536000
           and sec.get("FrameOptions", {}).get("FrameOption") == "DENY" and sec.get("ContentTypeOptions", {}).get("Override")
-          and sec.get("ContentSecurityPolicy", {}).get("ContentSecurityPolicy") == SITE_CSP,
+          and (sec.get("ContentSecurityPolicy", {}).get("ContentSecurityPolicy") == SITE_CSP if not ASK else True),
           "security headers on every page: HSTS a year, no framing, no MIME guessing, the content policy", sec)
+    if ASK:     # the Ask box (26 Nov 2026): the pages may also call its API and its sign-in page, nothing else
+        csp_text = json.dumps(sec.get("ContentSecurityPolicy", {}).get("ContentSecurityPolicy"))
+        head, tail = SITE_CSP.split("connect-src 'self'")
+        check(json.dumps(head)[1:-1] in csp_text and json.dumps(tail)[1:-1] in csp_text and "AskApi" in csp_text
+              and "amazoncognito.com" in csp_text and csp_text.count("connect-src") == 1,
+              "...and with the Ask box on, the pages may also call its API and its sign-in page, nothing else", csp_text[:300])
     check("frame-ancestors 'none'" in SITE_CSP and "default-src 'none'" in SITE_CSP and "form-action 'none'" in SITE_CSP,
           "the content policy starts from nothing allowed, and no form posts anywhere")
     estmts = [st for v in t.find_resources("AWS::IAM::Policy").values()

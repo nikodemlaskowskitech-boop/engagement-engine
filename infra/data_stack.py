@@ -60,6 +60,12 @@ SITE_CSP = ("default-src 'none'; script-src 'self' 'unsafe-inline'; "
             "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
+def site_csp(connect=()):
+    """SITE_CSP, plus the addresses a page may call besides its own (26 Nov 2026: the Ask box's
+    API and its sign-in page, from this deploy; nothing else)."""
+    return SITE_CSP.replace("connect-src 'self'", " ".join(["connect-src 'self'", *connect]))
+
+
 class DataStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -319,7 +325,7 @@ class DataStack(Stack):
         # Built only with the public site and its own address: the Ask box lives on the site's
         # pages, and its sign-in and its API accept that address only (26 Nov 2026: infra_test's
         # "site = false" build caught an Ask API left behind without a site).
-        ask_fn = None
+        ask_fn, self.ask_origins = None, []
         if aws.get("ask") and aws.get("site") and aws.get("site_domain"):
             site_address = "https://" + aws["site_domain"]        # the pages the Ask box sits on
             team = cognito.UserPool(
@@ -417,6 +423,14 @@ class DataStack(Stack):
                 format=json.dumps({"requestId": "$context.requestId", "time": "$context.requestTime",
                                    "route": "$context.routeKey", "status": "$context.status",
                                    "latencyMs": "$context.responseLatency"}))
+            # the engine builds the site's pages: it tells them where to ask and where to sign in
+            # (straight from this deploy: nothing copied by hand, nothing stale after a rebuild)
+            ask_web = {"ASK_URL": ask_api.api_endpoint + "/ask", "ASK_CLIENT_ID": team_client.user_pool_client_id,
+                       "ASK_LOGIN_URL": login.base_url(), "ASK_REDIRECT": site_address + "/"}
+            for k, v in ask_web.items():
+                engine.add_environment(k, v)
+            # and the pages may call those two addresses, nothing else (the site's content policy)
+            self.ask_origins = [ask_api.api_endpoint, login.base_url()]
             CfnOutput(self, "AskUrl", value=ask_api.api_endpoint + "/ask")
             CfnOutput(self, "AskUserPoolId", value=team.user_pool_id)
             CfnOutput(self, "AskClientId", value=team_client.user_pool_client_id)
@@ -477,7 +491,7 @@ class DataStack(Stack):
                     referrer_policy=cloudfront.ResponseHeadersReferrerPolicy(
                         referrer_policy=cloudfront.HeadersReferrerPolicy.NO_REFERRER, override=True),
                     content_security_policy=cloudfront.ResponseHeadersContentSecurityPolicy(
-                        content_security_policy=SITE_CSP, override=True)))
+                        content_security_policy=site_csp(self.ask_origins), override=True)))
             # Our own address (optional): [aws] site_domain, with a certificate made by site_cert.py
             # in us-east-1 (the only region CloudFront takes certificates from). The DNS lives at
             # the registrar (Cloudflare), so its two records are added there by hand.
