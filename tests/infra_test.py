@@ -88,7 +88,8 @@ check("BucketName" in t.find_outputs("*"), "prints the bucket name after deploy"
 
 aws = SETTINGS["aws"]
 groups = t.find_resources("AWS::Logs::LogGroup")
-ASK = bool(SETTINGS["aws"].get("ask"))                  # the Ask box (26 Nov 2026): its function and API logs
+# the Ask box (26 Nov 2026): its function and API logs; only with the site and its own address
+ASK = bool(SETTINGS["aws"].get("ask") and SETTINGS["aws"].get("site") and SETTINGS["aws"].get("site_domain"))
 check(len(groups) == 4 + 2 * int(bool(SETTINGS["aws"].get("site"))) + 2 * int(ASK)
       and all(g["Properties"].get("RetentionInDays") == 30 for g in groups.values()),
       "every log (the Lambdas, the APIs' access logs) kept 30 days, then deleted (no cost pile-up)",
@@ -730,6 +731,9 @@ if aws.get("site"):
               and "TOP_K" not in json.dumps(t2.find_resources("AWS::Lambda::Function"))
               and len(t2.find_resources("AWS::ApiGatewayV2::Api")) == 1,
               "[aws] site = false: no distribution, no site bucket, no search, the engine isn't told one")
+        check(not t2.find_resources("AWS::Cognito::UserPool")
+              and "EXPORT_KEY" not in json.dumps(t2.find_resources("AWS::Lambda::Function")),
+              "...and no Ask box either: no sign-in, no Ask API, no Ask function (it lives on the site's pages)")
     finally:
         aws["site"] = True
 else:
