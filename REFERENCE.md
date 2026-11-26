@@ -618,6 +618,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   document by meaning, the other 5 still come by keywords). The margin over nonsense is thin
   (0.016) and rests on 12 off-topic questions: re-run the calibration when the corpus grows.
   embed_test runs its stand-in plumbing with the floor at 0 (a Titan number, not the stand-in's).
+- `ask.py` the AWS way (26 Nov 2026, the Ask box, step 1 of 4): ask_redacted() takes the engine's
+  export and the redacted documents (the public search's file) instead of raw documents, so the
+  same steps run in AWS without the function ever holding a customer's name (PRIVACY.md §8). The
+  facts' own labels become "Our team n" (the documents' "CS n" were labelled apart and may be
+  someone else); the key restores only our team. Errors are ask.Refused now, not sys.exit, so a
+  function can show the reason. `--redacted` tries it on the laptop. handover.engine_facts()
+  takes the export as an argument.
 - `ask.py` (14 Nov 2026): one question about one account, answered in at most 150 words, every
   sentence citing [DATA] or a document ID. RAG on the laptop: search.search picks the
   account's [ask] top_k documents for the question (BM25 with the vocabulary; doc_folders says

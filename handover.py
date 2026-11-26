@@ -103,9 +103,10 @@ def contacts(account_id, stories=None):
         return [r for r in csv.DictReader(f) if r["account_id"] == account_id and r["name"].strip()]
 
 
-def engine_facts(account_id):
-    """The engine's own facts for the account, from the export (no model involved)."""
-    d = json.loads(VIEWS.read_text(encoding="utf-8"))
+def engine_facts(account_id, d=None):
+    """The engine's own facts for the account, from the export (no model involved).
+    d = the export already read (the Ask function in AWS reads it from the bucket)."""
+    d = d or json.loads(VIEWS.read_text(encoding="utf-8"))
     a = next((x for x in d["accounts"] if x["account_id"] == account_id), None)
     if not a:
         sys.exit(f"{account_id} is not in data/views_data.json: run .\\run_all.ps1 first")
