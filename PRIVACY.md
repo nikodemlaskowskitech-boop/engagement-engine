@@ -301,6 +301,14 @@ folder's contact list, over the facts, the documents **and the question itself**
 typed into it becomes its label), then `leak_check()` over all of it; a name nobody
 listed stops the call. Real names go back in after the model. Laptop only.
 
+**The AWS way (26 Nov 2026, for the Ask box).** `ask.ask_redacted()` never reads a raw
+document: it gets the redacted file the public search already uses (§6) and the engine's
+export. The facts are redacted in the same way (the account's name, our team's names), the
+leak check runs over everything, as on the laptop. So the function in AWS can't leak a
+customer's name: it never holds one, and its key can only turn our own team's labels back
+into names, never a customer's. The documents were labelled on their own, so our team in the
+facts is "Our team 1" (not "CS 1") and the model is told the two sets of labels don't match.
+
 
 ## 9. Visitors to the demo site (`visitors.py`, 18 Nov 2026)
 

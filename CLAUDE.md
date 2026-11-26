@@ -348,7 +348,7 @@ Actions and Slack:
 AI:
 - `llm.py`: the provider, budgets per feature and the spend ledger.
 - `brief.py`: QBR briefs; `handover.py`: handover briefs with redaction and the leak check.
-- `ask.py`: one question about one account, answered from its facts and the documents the search picks (RAG), cited and checked.
+- `ask.py`: one question about one account, answered from its facts and the documents the search picks (RAG), cited and checked; `ask_redacted()` does it from the redacted file only (the Ask box in AWS).
 - `ai_cost.py`: the AI cost demo: one question to ask.py priced with RAG and with everything, no model call (AI_COST.md).
 - `embed.py`: search by meaning: one Titan vector (Bedrock) per redacted document, only what changed; search.py ranks keywords, meaning or both ([embed] mode).
 - `stories/`: three hand-written account stories and their answer key (tests only).

@@ -53,7 +53,7 @@ def refused(fn):
     """Runs fn; returns the message it exits with, or None if it didn't."""
     try:
         fn()
-    except SystemExit as e:
+    except (SystemExit, ask.Refused) as e:
         return str(e)
     return None
 
@@ -117,6 +117,36 @@ except llm.OverBudget:
     check(not model.sent, "over budget: refused before any call")
 check("ask_account" not in SETTINGS["llm"]["monthly_budget_usd"].get("aws", {}),
       "no budget in AWS: it can't run there (llm.call refuses a feature without one)")
+
+print("\nThe AWS way (26 Nov 2026): from the redacted file and the export only")
+import json                                         # noqa: E402
+llm.BUDGETS["ask_account"] = 1.00
+export = json.loads(handover.VIEWS.read_text(encoding="utf-8"))
+site_rows = [json.loads(x) for x in (ROOT / SETTINGS["search"]["site_documents_file"]).read_text(encoding="utf-8").splitlines() if x.strip()]
+RED = "acc_177"                                     # a corpus account: a downsize story in a call
+acct = next(a for a in export["accounts"] if a["account_id"] == RED)
+staff = {t["owner_name"] for t in export["team"] if t.get("owner_type") != "pool"}   # people; a pool is a queue ("DACH Scale team")
+q = "Why might they downsize at renewal?"
+r2 = ask.ask_redacted(RED, q, export, site_rows, dry_run=True)
+sent2 = r2["sent"] + "\n" + r2["asked"]
+check(acct["account_name"] not in sent2 and not [n for n in staff if n in sent2]
+      and not handover.EMAIL_RE.findall(sent2) and not handover.phones(sent2),
+      "no company, no team member's name, no email or phone in what the model gets")
+mine = {d["id"] for d in site_rows if d["account_id"] == RED}
+check(len(r2["sources"]) > 1 and all(x["id"] == "DATA" or x["id"] in mine for x in r2["sources"]),
+      f"the sources are the account's own redacted documents ({', '.join(x['id'] for x in r2['sources'])})")
+data_part = r2["sent"].split("\n\n---\n\n")[0]
+check("Our team 1" in data_part and not __import__("re").search(r"\bCS \d+\b", data_part.split(":\n", 1)[1]),
+      "our team in the facts is 'Our team n', never a document's 'CS n' (the two sets are labelled apart)")
+model = StandIn("Our team 1 heard Customer B say the contract must shrink [C1, DATA].")
+res2 = ask.ask_redacted(RED, q, export, site_rows, client=model)
+owner = next((t["owner_name"] for t in export["team"] if t["owner_id"] in (acct.get("csm_owner"), acct.get("pool_owner"), acct.get("cs_pool"))), None)
+check(model.sent and "Customer B" in res2["answer"] and "Our team 1" not in res2["answer"] and (owner is None or owner in res2["answer"]),
+      "our team's label goes back to the real name; a customer stays a label (nothing can turn it back)", res2["answer"])
+msg = refused(lambda: ask.ask_redacted("acc_9999", q, export, site_rows, dry_run=True))
+check(msg and "not in the engine's export" in msg, "an account that isn't in the export is refused", msg)
+msg = refused(lambda: ask.ask_redacted("acc_1' --", q, export, site_rows, dry_run=True))
+check(msg and "not an account ID" in msg, "an account ID with a quote is refused, the AWS way too", msg)
 
 print("\nOnly IDs reach the SQL")
 msg = refused(lambda: ask.ask("acc_1' OR '1'='1", "x", dry_run=True))
