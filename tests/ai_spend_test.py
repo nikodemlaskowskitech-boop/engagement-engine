@@ -139,8 +139,8 @@ llm._BUDGETS = real
 places = {p: llm.budgets_here(p) for p in ("laptop", "aws")}
 check(all({"qbr_brief", "handover"} <= set(b) for b in places.values()),
       "settings.toml gives the laptop and AWS a budget for the briefs (QBR and handover)", places)
-check(set(places["laptop"]) - set(places["aws"]) == {"ask_account", "embed"} and set(places["aws"]) <= set(places["laptop"]),
-      "ask_account and embed are the laptop's only: AWS has no budget for them, so they can't run there (14 and 22 Nov 2026)", places)
+check(set(places["laptop"]) - set(places["aws"]) == {"embed"} and set(places["aws"]) <= set(places["laptop"]),
+      "embed is the laptop's only (22 Nov 2026); ask_account has a budget in AWS too, for the Ask box (26 Nov 2026)", places)
 # the embeddings' ledger row (22 Nov 2026): their own price, no output tokens
 was, llm.LEDGER = llm.LEDGER, tmp / "embed_ledger.csv"      # a file of its own, in the test's folder
 row = llm.record_usage("embed", "acc_x", "bedrock", "amazon.titan-embed-text-v2:0", 1000, 0, 1000 * 0.02 / 1e6, 0.1)
