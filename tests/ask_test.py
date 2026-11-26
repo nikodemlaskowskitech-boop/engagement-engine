@@ -8,8 +8,8 @@ Ask about one account (ask.py), with a stand-in model: no key, no cost, a tempor
     documents is answered from its facts alone;
   - the answer: real names back in after the model, never before; a made-up citation and
     a number in no source are flagged; a cut-off answer is refused, not shown;
-  - money: the call goes in the ledger as "ask_account"; over budget = no call; AWS has no
-    budget for it, so it can't run there;
+  - money: the call goes in the ledger as "ask_account"; over budget = no call; AWS has its
+    own small budget, for the Ask box (26 Nov 2026);
   - an account ID with a quote never reaches the SQL.
 
 Needs DuckDB, data/ (views_data.json) and the corpus. Run: python tests/ask_test.py
@@ -115,8 +115,8 @@ try:
     check(False, "over budget: refused")
 except llm.OverBudget:
     check(not model.sent, "over budget: refused before any call")
-check("ask_account" not in SETTINGS["llm"]["monthly_budget_usd"].get("aws", {}),
-      "no budget in AWS: it can't run there (llm.call refuses a feature without one)")
+check(0 < SETTINGS["llm"]["monthly_budget_usd"]["aws"]["ask_account"] <= 5,
+      "AWS has its own small budget, for the Ask box only (26 Nov 2026; tests/ask_lambda_test.py)")
 
 print("\nThe AWS way (26 Nov 2026): from the redacted file and the export only")
 import json                                         # noqa: E402
@@ -140,8 +140,8 @@ check("Our team 1" in data_part and not __import__("re").search(r"\bCS \d+\b", d
       "our team in the facts is 'Our team n', never a document's 'CS n' (the two sets are labelled apart)")
 model = StandIn("Our team 1 heard Customer B say the contract must shrink [C1, DATA].")
 res2 = ask.ask_redacted(RED, q, export, site_rows, client=model)
-owner = next((t["owner_name"] for t in export["team"] if t["owner_id"] in (acct.get("csm_owner"), acct.get("pool_owner"), acct.get("cs_pool"))), None)
-check(model.sent and "Customer B" in res2["answer"] and "Our team 1" not in res2["answer"] and (owner is None or owner in res2["answer"]),
+owner = acct["owner"]                               # the account's owner, "Our team 1" in the facts
+check(model.sent and "Customer B" in res2["answer"] and "Our team 1" not in res2["answer"] and owner in res2["answer"],
       "our team's label goes back to the real name; a customer stays a label (nothing can turn it back)", res2["answer"])
 msg = refused(lambda: ask.ask_redacted("acc_9999", q, export, site_rows, dry_run=True))
 check(msg and "not in the engine's export" in msg, "an account that isn't in the export is refused", msg)

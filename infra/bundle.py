@@ -145,6 +145,28 @@ def bundle_search(out=None, deps=None, vectors=None):
     return out
 
 
+ASK_FILES = ["ask.py", "handover.py", "documents.py", "search.py", "llm.py", "roles.py", "cockpit_template.py",
+             "cairnpath_db.py", "settings.py", "settings.toml"]
+
+
+def bundle_ask(out=None, deps=None):
+    """The Ask box's function (26 Nov 2026): handler, ASK_FILES, the cockpit's parts (roles.py
+    imports them), the redacted documents (the public search's file) and the engine's locked
+    libraries (DuckDB, anthropic). No raw document, no story folder, no answer key."""
+    sys.path.insert(0, str(REPO))
+    from settings import SETTINGS
+    out = _fresh(out or BUILD / "ask", "ask")
+    for name in ASK_FILES:
+        shutil.copy(REPO / name, out)
+    shutil.copytree(REPO / "cockpit", out / "cockpit")
+    shutil.copy(REPO / SETTINGS["search"]["site_documents_file"], out / "documents.jsonl")
+    if deps is None:
+        deps = not os.environ.get("CAIRNPATH_SKIP_DEPS")
+    if deps:
+        shutil.copytree(lambda_deps(LAMBDA_PACKAGES), out, dirs_exist_ok=True)
+    return out
+
+
 def pinned(package):
     """The version requirements.txt pins for a package (one source of truth for laptop and AWS)."""
     text = (REPO / "requirements.txt").read_text(encoding="utf-8")

@@ -618,6 +618,19 @@ Read a file's entry before changing that file, and update the entry in the same 
   document by meaning, the other 5 still come by keywords). The margin over nonsense is thin
   (0.016) and rests on 12 off-topic questions: re-run the calibration when the corpus grows.
   embed_test runs its stand-in plumbing with the floor at 0 (a Titan number, not the stand-in's).
+- `infra/lambdas/ask/handler.py` (26 Nov 2026, the Ask box, step 2a of 4): the function behind
+  POST /ask. The gateway checks the sign-in (the CS team's user pool, step 2b); custom:person on
+  the login names whose page it is (set by the admin). Refused, before anything runs: no sign-in,
+  a login linked to nobody, an account not on that person's page (roles.slice_export, the
+  cockpit's own cut; the leader sees all), a bad ID, an empty question or one over [ask]
+  question_chars. Then the daily cap ([ask] daily_questions_per_person, by login and the real
+  day: it limits spending, not facts) and the monthly budget ([llm.monthly_budget_usd.aws]
+  ask_account, $2) through its own ledger (state/ask/: the engine's run rewrites its own ledger,
+  so they can't share one). One run at a time (reserved concurrency 1 in 2b), so the counts and
+  the ledger can't race; no database needed. Only counts are kept: never the question or the
+  answer, and an error is logged by its type only. bundle.bundle_ask: ASK_FILES, the cockpit's
+  parts (roles.py imports them), the redacted file, the engine's locked libraries; no story
+  folder, no raw document. tests/ask_lambda_test.py: 19 checks with a bucket in memory.
 - `ask.py` the AWS way (26 Nov 2026, the Ask box, step 1 of 4): ask_redacted() takes the engine's
   export and the redacted documents (the public search's file) instead of raw documents, so the
   same steps run in AWS without the function ever holding a customer's name (PRIVACY.md §8). The

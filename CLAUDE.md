@@ -85,6 +85,7 @@ Docs-only PRs need none.
 | `infra/`, or what an engine step imports | `tests/infra_test.py` (Nikodem: needs aws_cdk), `tests/check_lambda_test.py`, `tests/engine_lambda_test.py`, `tests/slack_lambda_test.py` |
 | `slack_loop.py`, `listener.py` | `tests/slack_lambda_test.py` |
 | `infra/lambdas/search/`, `search.py`, `documents.py` | `tests/search_lambda_test.py`, `tests/mcp_public_test.py` (the public MCP server, with a real MCP client session) |
+| `infra/lambdas/ask/`, `ask.py`, [ask] | `tests/ask_lambda_test.py` (the Ask box's function: who may ask, the caps, only counts kept), `tests/ask_test.py` |
 | `infra/bundle.py`, `infra/lock_lambda.py`, `infra/locks/`, a pin a Lambda uses | `tests/lambda_lock_test.py` |
 | `upload.py` / `pull_clicks.py` / `site_cert.py` / `put_key.py` / `request_briefs.py` | its own `tests/<name>_test.py` |
 | `guardduty_report.py` / `access_report.py` | its own `tests/<name>_test.py` |
@@ -362,6 +363,7 @@ AWS (run by Nikodem, signed in with `aws login --profile cairnpath`):
 - `site_cert.py`: the certificate for the demo site's own address.
 - `site_logs.py`: turns on the demo site's visit logs (us-east-1, once): no IP, no cookie; `visitors.py`: counts them.
 - `to_parquet.py`: the engine's tables for Athena.
+- `infra/lambdas/ask/`: the Ask box's function: one signed-in person's page, a daily cap each, the AI budget, only counts kept.
 - `infra/lambdas/search/`: the public search on the demo site: its handler, the redacted file and (hybrid, when up to date) their vectors; `mcp_public.py`, the public remote MCP server (POST /mcp, keywords only).
 
 Tests: `tests/`, one file per area (see Testing above).
