@@ -27,10 +27,12 @@ holds only the sandbox role pages the engine builds from fake data.
 from aws_cdk import CfnOutput, Duration, Fn, RemovalPolicy, Size, Stack
 from aws_cdk import aws_accessanalyzer as accessanalyzer
 from aws_cdk import aws_apigatewayv2 as apigwv2
+from aws_cdk import aws_apigatewayv2_authorizers as authorizers
 from aws_cdk import aws_apigatewayv2_integrations as integrations
 from aws_cdk import aws_athena as athena
 from aws_cdk import aws_certificatemanager as acm
 from aws_cdk import aws_ce as ce
+from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_cloudfront as cloudfront
 from aws_cdk import aws_cloudfront_origins as origins
 from aws_cdk import aws_glue as glue
@@ -46,7 +48,7 @@ from constructs import Construct
 
 import json
 
-from bundle import ENGINE_FILES, bundle_check_inputs, bundle_engine, bundle_search, bundle_slack, search_mode
+from bundle import ENGINE_FILES, bundle_ask, bundle_check_inputs, bundle_engine, bundle_search, bundle_slack, search_mode
 from settings import SETTINGS
 
 
@@ -309,16 +311,125 @@ class DataStack(Stack):
         CfnOutput(self, "SlackListenerFunction", value=listener.function_name)
         CfnOutput(self, "SlackRequestUrl", value=f"{api.api_endpoint}/slack/actions")   # for the Slack app
 
+        # --- the Ask box (26 Nov 2026): POST /ask, for the CS team only ---
+        # Its own door and its own key (ARCHITECTURE.md O): a user pool for the CS team (no
+        # sign-up: the admin makes each login), its own API and its own function. The gateway
+        # checks the sign-in before any code runs. The function reads the engine's export and
+        # its own state/ask/, holds the redacted documents only, and writes counts, never text.
+        ask_fn = None
+        if aws.get("ask"):
+            site_address = "https://" + aws["site_domain"]        # the pages the Ask box sits on
+            team = cognito.UserPool(
+                self, "TeamUsers",
+                user_pool_name="cairnpath-team",
+                self_sign_up_enabled=False,                       # only the admin makes logins
+                sign_in_aliases=cognito.SignInAliases(email=True),
+                auto_verify=cognito.AutoVerifiedAttrs(email=True),
+                # whose page a login sees (an owner_id from the CS team, or "leader"): set by the
+                # admin, read by the function; the cockpit's client can't write it (below)
+                custom_attributes={"person": cognito.StringAttribute(min_len=1, max_len=40, mutable=True)},
+                password_policy=cognito.PasswordPolicy(min_length=12, require_lowercase=True, require_uppercase=True,
+                                                       require_digits=True, require_symbols=False,
+                                                       temp_password_validity=Duration.days(3)),
+                mfa=cognito.Mfa.OPTIONAL,
+                mfa_second_factor=cognito.MfaSecondFactor(sms=False, otp=True),
+                account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
+                removal_policy=RemovalPolicy.DESTROY)             # demo logins: nothing to keep
+            team_client = team.add_client(
+                "Cockpit",
+                generate_secret=False,                            # a web page can't keep a secret: PKCE instead
+                auth_flows=cognito.AuthFlow(user_srp=True),
+                o_auth=cognito.OAuthSettings(
+                    flows=cognito.OAuthFlows(authorization_code_grant=True),
+                    scopes=[cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
+                    callback_urls=[site_address + "/"], logout_urls=[site_address + "/"]),
+                supported_identity_providers=[cognito.UserPoolClientIdentityProvider.COGNITO],
+                prevent_user_existence_errors=True,
+                read_attributes=cognito.ClientAttributes().with_standard_attributes(email=True)
+                                                        .with_custom_attributes("person"),
+                write_attributes=cognito.ClientAttributes().with_standard_attributes(email=True),
+                id_token_validity=Duration.hours(1), access_token_validity=Duration.hours(1),
+                refresh_token_validity=Duration.hours(12))
+            login = team.add_domain("TeamLogin", cognito_domain=cognito.CognitoDomainOptions(
+                domain_prefix=aws["ask_login_prefix"]))
+
+            ask_fn = lambda_.Function(
+                self, "Ask",
+                description="The Ask box: one signed-in person's question about an account on their page",
+                runtime=lambda_.Runtime.PYTHON_3_13,
+                architecture=lambda_.Architecture.ARM_64,
+                handler="handler.handler",
+                code=lambda_.Code.from_asset(str(bundle_ask())),
+                memory_size=aws["ask_memory_mb"],
+                timeout=Duration.seconds(aws["ask_timeout_seconds"]),
+                ephemeral_storage_size=Size.mebibytes(aws["ask_disk_mb"]),
+                # one at a time: the day's counts and its ledger are read and written back whole
+                reserved_concurrent_executions=1,
+                environment={"BUCKET": self.bucket.bucket_name, "ACCOUNT_ID": str(aws["account_id"]),
+                             "EXPORT_KEY": outputs + "views_data.json",
+                             "KEY_PARAMETER": aws["api_key_parameter"],     # the key's name, never the key
+                             "CAIRNPATH_LLM_PROVIDER": aws["briefs_llm_provider"]},
+                log_group=logs.LogGroup(self, "AskLogs", retention=logs.RetentionDays.ONE_MONTH,
+                                        removal_policy=RemovalPolicy.DESTROY))
+            ask_state = SETTINGS["ask"]["usage_key"].split("{")[0]          # state/ask/
+            # Written out by hand, not grant_read: that also lets a role list every file name in the
+            # bucket, and this one answers any signed-in login. Read: the export and its own folder.
+            ask_fn.add_to_role_policy(iam.PolicyStatement(
+                actions=["s3:GetObject"],
+                resources=[self.bucket.arn_for_objects(outputs + "views_data.json"),
+                           self.bucket.arn_for_objects(ask_state + "*")]))
+            ask_fn.add_to_role_policy(iam.PolicyStatement(          # write: its counts and its ledger only
+                actions=["s3:PutObject"], resources=[self.bucket.arn_for_objects(ask_state + "*")]))
+            # list its own folder only, so a file not written yet reads as "missing", not "denied"
+            ask_fn.add_to_role_policy(iam.PolicyStatement(
+                actions=["s3:ListBucket"], resources=[self.bucket.bucket_arn],
+                conditions={"StringLike": {"s3:prefix": [ask_state + "*"]}}))
+            # the key, for S3 to use on its behalf (the key's own perimeter refuses any direct use)
+            ask_fn.add_to_role_policy(iam.PolicyStatement(
+                actions=["kms:Decrypt", "kms:GenerateDataKey"], resources=[self.key.key_arn]))
+            ask_fn.add_to_role_policy(iam.PolicyStatement(
+                actions=["ssm:GetParameter"],
+                resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter{aws['api_key_parameter']}"]))
+
+            ask_api = apigwv2.HttpApi(
+                self, "AskApi", description="The Ask box (CS team sign-in checked at the gateway)",
+                create_default_stage=False,
+                # only the demo site's pages may call it from a browser (the sign-in is the real check)
+                cors_preflight=apigwv2.CorsPreflightOptions(
+                    allow_origins=[site_address], allow_methods=[apigwv2.CorsHttpMethod.POST],
+                    allow_headers=["Authorization", "Content-Type"], max_age=Duration.hours(1)))
+            ask_api.add_routes(
+                path="/ask", methods=[apigwv2.HttpMethod.POST],
+                integration=integrations.HttpLambdaIntegration("AskQuestions", ask_fn),
+                # the ID token from the team's pool, for the cockpit's client only
+                authorizer=authorizers.HttpUserPoolAuthorizer("TeamSignIn", team, user_pool_clients=[team_client]))
+            ask_logs = logs.LogGroup(self, "AskApiAccessLogs", retention=logs.RetentionDays.ONE_MONTH,
+                                     removal_policy=RemovalPolicy.DESTROY)
+            ask_stage = ask_api.add_stage(
+                "AskStage", stage_name="$default", auto_deploy=True,
+                throttle=apigwv2.ThrottleSettings(rate_limit=aws["ask_rate_per_second"], burst_limit=aws["ask_burst"]))
+            # when, which route, our answer: never the body (it holds the question)
+            ask_stage.node.default_child.access_log_settings = apigwv2.CfnStage.AccessLogSettingsProperty(
+                destination_arn=ask_logs.log_group_arn,
+                format=json.dumps({"requestId": "$context.requestId", "time": "$context.requestTime",
+                                   "route": "$context.routeKey", "status": "$context.status",
+                                   "latencyMs": "$context.responseLatency"}))
+            CfnOutput(self, "AskUrl", value=ask_api.api_endpoint + "/ask")
+            CfnOutput(self, "AskUserPoolId", value=team.user_pool_id)
+            CfnOutput(self, "AskClientId", value=team_client.user_pool_client_id)
+            CfnOutput(self, "AskLoginUrl", value=login.base_url())
+
         # --- the data perimeter: a second, independent check on the bucket itself ---
         # Each role's own policy already limits what it can do. These two statements make the
         # bucket refuse everyone else, whatever their own permissions say: an identity outside
-        # this account, or any identity in it that isn't one of our four workload roles or the
+        # this account, or any identity in it that isn't one of our workload roles or the
         # admin (you, via aws login, plus the break-glass user). So a stolen key or a careless
         # "s3:*" policy elsewhere in the account still can't read or change the data.
         # Bucket-level settings (this policy itself, notifications) are left out on purpose: an
         # admin can always fix a mistake here, so this can never lock us out for good.
         acct = self.account
-        workload_roles = [fn.role.role_arn, engine.role.role_arn, listener.role.role_arn, crawler_role.role_arn]
+        workload_roles = [fn.role.role_arn, engine.role.role_arn, listener.role.role_arn, crawler_role.role_arn] \
+            + ([ask_fn.role.role_arn] if ask_fn else [])
         admins = ([f"arn:aws:iam::{acct}:role/*{name}" for name in aws["admin_role_names"]]      # any IAM path
                   + [f"arn:aws:iam::{acct}:user/{name}" for name in aws["break_glass_users"]])
         not_a_service = {"BoolIfExists": {"aws:PrincipalIsAWSService": "false"}}

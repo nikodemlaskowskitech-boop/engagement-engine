@@ -290,7 +290,8 @@ One run, in [pipeline] order (laptop: `.\run_all.ps1`; AWS: the engine Lambda):
 
 AWS (`infra/`, CDK): a private KMS-encrypted bucket; upload -> check Lambda ->
 engine Lambda (gated on the check, plus a daily schedule); Slack listener on API
-Gateway; Athena over outputs/; the public demo site on CloudFront; GuardDuty,
+Gateway; the Ask box (its own API behind the CS team's Cognito sign-in); Athena over outputs/;
+the public demo site on CloudFront; GuardDuty,
 Access Analyzer, Cost Anomaly Detection; a data perimeter in the bucket policy.
 
 ## Map of files

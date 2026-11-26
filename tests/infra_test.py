@@ -88,7 +88,8 @@ check("BucketName" in t.find_outputs("*"), "prints the bucket name after deploy"
 
 aws = SETTINGS["aws"]
 groups = t.find_resources("AWS::Logs::LogGroup")
-check(len(groups) == 4 + 2 * int(bool(SETTINGS["aws"].get("site")))
+ASK = bool(SETTINGS["aws"].get("ask"))                  # the Ask box (26 Nov 2026): its function and API logs
+check(len(groups) == 4 + 2 * int(bool(SETTINGS["aws"].get("site"))) + 2 * int(ASK)
       and all(g["Properties"].get("RetentionInDays") == 30 for g in groups.values()),
       "every log (the Lambdas, the APIs' access logs) kept 30 days, then deleted (no cost pile-up)",
       {k: g["Properties"].get("RetentionInDays") for k, g in groups.items()})
@@ -294,7 +295,7 @@ on_api = lambda kind, api: [v["Properties"] for v in t.find_resources(kind).valu
                             if v["Properties"].get("ApiId") == {"Ref": api}]
 routes = [r["RouteKey"] for r in on_api("AWS::ApiGatewayV2::Route", slack_api)]
 check(len(apis) == 1 and routes == ["POST /slack/actions"], "one Slack API, one route: POST /slack/actions", routes)
-check(len(all_apis) == 1 + int(bool(aws.get("site"))), "no other API but the site's search", sorted(all_apis))
+check(len(all_apis) == 1 + int(bool(aws.get("site"))) + int(ASK), "no other API but the site's search and the Ask box", sorted(all_apis))
 stages = on_api("AWS::ApiGatewayV2::Stage", slack_api)
 st0 = stages[0] if stages else {}
 thr = st0.get("DefaultRouteSettings", {})
@@ -318,6 +319,76 @@ check(aws["slack_clicks_prefix"].startswith(aws["state_prefix"])
       and not any(c["Filter"]["Key"]["FilterRules"][0]["Value"].startswith(aws["state_prefix"]) for c in lam),
       "clicks land in state/ (the engine reads them), and nothing wakes on state/ (no run per click)")
 
+if ASK:
+    print("\nThe Ask box (26 Nov 2026): its own sign-in, its own API, a narrow role")
+    asks = {k: v for k, v in ours.items() if "EXPORT_KEY" in v["Properties"]["Environment"]["Variables"]}
+    ask_id, af = next(iter(asks.items()), (None, {}))
+    ap = af.get("Properties", {})
+    check(len(asks) == 1 and ap.get("Runtime") == "python3.13" and ap.get("Architectures") == ["arm64"]
+          and ap.get("MemorySize") == aws["ask_memory_mb"] and ap.get("Timeout") == aws["ask_timeout_seconds"]
+          and ap.get("ReservedConcurrentExecutions") == 1,
+          "one function, sizes from settings, one run at a time (its counts and ledger never race)", ap.get("ReservedConcurrentExecutions"))
+    aenv = ap.get("Environment", {}).get("Variables", {})
+    check(aenv.get("EXPORT_KEY") == aws["outputs_prefix"] + "views_data.json" and aenv.get("KEY_PARAMETER") == aws["api_key_parameter"]
+          and "ANTHROPIC_API_KEY" not in aenv, "told the export's and the key's names, never the key", sorted(aenv))
+    arole = ap.get("Role", {}).get("Fn::GetAtt", [None])[0]
+    ast_ = [st for v in t.find_resources("AWS::IAM::Policy").values()
+            if any(r.get("Ref") == arole for r in v["Properties"].get("Roles", []))
+            for st in v["Properties"]["PolicyDocument"]["Statement"]]
+    aacts = [a for st in ast_ for a in actions_of(st)]
+    atext = json.dumps(ast_)
+    ask_state = SETTINGS["ask"]["usage_key"].split("{")[0]
+    s3_res = json.dumps([st["Resource"] for st in ast_ if any(a.startswith("s3:GetObject") for a in actions_of(st))])
+    put_res = json.dumps([st["Resource"] for st in ast_ if any(a.startswith("s3:PutObject") for a in actions_of(st))])
+    check("s3:*" not in aacts and not any(a.startswith("s3:Delete") for a in aacts)
+          and set(a for a in aacts if a.startswith("s3:")) == {"s3:GetObject", "s3:PutObject", "s3:ListBucket"},
+          "no s3:*, no delete: read, write and list, nothing more", aacts)
+    check("/" + aws["outputs_prefix"] + 'views_data.json"' in s3_res and "/" + ask_state + '*"' in s3_res
+          and "/" + aws["inputs_prefix"] not in s3_res and "/" + aws["outputs_prefix"] + '*"' not in s3_res,
+          "reads the export and its own state/ask/ only: no inputs, nothing else in outputs/", s3_res)
+    check("/" + ask_state + '*"' in put_res and "/" + aws["outputs_prefix"] not in put_res and "/" + aws["inputs_prefix"] not in put_res,
+          "writes its own state/ask/ only", put_res)
+    lists = [st for st in ast_ if any(a.startswith("s3:List") for a in actions_of(st))]
+    check(len(lists) == 1 and actions_of(lists[0]) == ["s3:ListBucket"] and json.dumps(lists[0].get("Condition", {})).count(ask_state) == 1,
+          "lists its own folder only, never the bucket's file names (a missing file reads as missing)", lists)
+    akms = sorted(a for st in ast_ for a in actions_of(st) if a.startswith("kms:"))
+    check(akms == ["kms:Decrypt", "kms:GenerateDataKey"], "the key: decrypt and a data key, for S3 to use (nothing else)", akms)
+    assm = [st for st in ast_ if any(a.startswith("ssm:") for a in actions_of(st))]
+    check(len(assm) == 1 and actions_of(assm[0]) == ["ssm:GetParameter"] and aws["api_key_parameter"] in json.dumps(assm[0]["Resource"]),
+          "may read the API key, nothing else in Parameter Store", assm)
+    check(not any(a.startswith(("bedrock:", "lambda:", "iam:", "cognito")) for a in aacts),
+          "can't call Bedrock, start a function, change a role or a login", aacts)
+    ask_api = next((k for k, v in all_apis.items() if "Ask box" in v["Properties"].get("Description", "")), None)
+    cors = all_apis.get(ask_api, {}).get("Properties", {}).get("CorsConfiguration", {})
+    check(cors.get("AllowOrigins") == ["https://" + aws["site_domain"]] and cors.get("AllowMethods") == ["POST"],
+          "a browser may call it from the demo site only, POST only", cors)
+    aroutes = on_api("AWS::ApiGatewayV2::Route", ask_api)
+    check([r["RouteKey"] for r in aroutes] == ["POST /ask"] and all(r.get("AuthorizationType") == "JWT" for r in aroutes),
+          "one route, POST /ask, behind the sign-in (JWT)", aroutes)
+    auths = on_api("AWS::ApiGatewayV2::Authorizer", ask_api)
+    jwt = auths[0].get("JwtConfiguration", {}) if auths else {}
+    check(len(auths) == 1 and auths[0].get("AuthorizerType") == "JWT" and "cognito-idp" in json.dumps(jwt.get("Issuer"))
+          and len(jwt.get("Audience", [])) == 1, "the gateway trusts the CS team's pool, for the cockpit's client only", auths)
+    astg = on_api("AWS::ApiGatewayV2::Stage", ask_api)
+    athr = astg[0].get("DefaultRouteSettings", {}) if astg else {}
+    afmt = astg[0].get("AccessLogSettings", {}).get("Format", "") if astg else ""
+    check(athr.get("ThrottlingRateLimit") == aws["ask_rate_per_second"] and athr.get("ThrottlingBurstLimit") == aws["ask_burst"]
+          and "$context.status" in afmt and "body" not in afmt.lower(),
+          "throttled at the gateway; an access log without the body (the question)", athr)
+    pools = list(t.find_resources("AWS::Cognito::UserPool").values())
+    pp = pools[0]["Properties"] if pools else {}
+    check(len(pools) == 1 and pp.get("AdminCreateUserConfig", {}).get("AllowAdminCreateUserOnly") is True
+          and any(a.get("Name") == "person" for a in pp.get("Schema", [])),
+          "one user pool, no sign-up (the admin makes each login), with the person it sees", pp.get("AdminCreateUserConfig"))
+    clients = list(t.find_resources("AWS::Cognito::UserPoolClient").values())
+    cp = clients[0]["Properties"] if clients else {}
+    check(len(clients) == 1 and cp.get("GenerateSecret") is False and cp.get("AllowedOAuthFlows") == ["code"]
+          and "custom:person" not in cp.get("WriteAttributes", []) and "custom:person" in cp.get("ReadAttributes", [])
+          and cp.get("CallbackURLs") == ["https://" + aws["site_domain"] + "/"],
+          "the cockpit's client: code flow with PKCE, no secret; reads whose page, can't change it", cp)
+    check({"AskUrl", "AskUserPoolId", "AskClientId", "AskLoginUrl"} <= set(t.find_outputs("*")),
+          "prints the Ask box's address, pool, client and sign-in page after deploy")
+
 print("\nData perimeter: the bucket refuses everyone but our roles and the admin")
 bp = next((v for v in t.find_resources("AWS::S3::BucketPolicy").values()
            if v["Properties"].get("Bucket") == {"Ref": data_id}), {}).get("Properties", {})
@@ -340,12 +411,12 @@ role_ids = {}
 for k, v in ours.items():
     var = v["Properties"]["Environment"]["Variables"]
     kind = ("check" if "REPORTS_PREFIX" in var else "engine" if "ENGINE_STEPS" in var
-            else "search" if "TOP_K" in var else "slack")
+            else "search" if "TOP_K" in var else "ask" if "EXPORT_KEY" in var else "slack")
     role_ids[kind] = v["Properties"]["Role"]["Fn::GetAtt"][0]
 role_ids["crawler"] = crole
-check(len(exempt) == 4 + len(aws["admin_role_names"]) + len(aws["break_glass_users"])
+check(len(exempt) == 4 + int(ASK) + len(aws["admin_role_names"]) + len(aws["break_glass_users"])
       and all(rid in exempt_text for k, rid in role_ids.items() if k != "search"),
-      "exempt: the check, engine, Slack listener and crawler roles", sorted(role_ids))
+      "exempt: the check, engine, Slack listener and crawler roles (and the Ask box's, when on)", sorted(role_ids))
 check("search" not in role_ids or role_ids["search"] not in exempt_text,
       "...never the public search's role: the bucket refuses it everything, whatever its policy says")
 check(all(f"role/*{n}" in exempt_text for n in aws["admin_role_names"])

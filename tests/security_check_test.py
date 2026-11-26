@@ -37,6 +37,9 @@ class FakeCfn:
                 ("SearchServiceRole0A1B2C3D", "AWS::IAM::Role", "CairnpathData-SearchServiceRole-GGG"),
                 ("Search4E5F6A7B", "AWS::Lambda::Function", "CairnpathData-Search-GGG"),
                 ("SearchLogsC8D9E0F1", "AWS::Logs::LogGroup", "logs-search"),
+                ("AskServiceRole1B2C3D4E", "AWS::IAM::Role", "CairnpathData-AskServiceRole-HHH"),
+                ("Ask5F6A7B8C", "AWS::Lambda::Function", "CairnpathData-Ask-HHH"),
+                ("AskApi9D0E1F2A", "AWS::ApiGatewayV2::Api", "abc123"),
                 ("BucketNotificationsHandler050aRole", "AWS::IAM::Role", "CairnpathData-Handler-EEE"),
                 ("DataKey1F2C3D4E", "AWS::KMS::Key", "1234abcd-12ab-34cd-56ef-1234567890ab"),
                 ("Data666C94C7", "AWS::S3::Bucket", "cairnpathdata-data666c94c7-mp5lz9ky9ir4"),
@@ -70,7 +73,7 @@ class FakeKMS:
 
 
 ADMIN_ARN = f"arn:aws:iam::{ACCOUNT}:role/aws-reserved/AccountFullAccessRole"
-EXEMPT = ("CheckInputs", "RunEngine", "SlackListener", "CrawlerRole", "AccountFullAccessRole")
+EXEMPT = ("CheckInputs", "RunEngine", "SlackListener", "CrawlerRole", "AskServiceRole", "AccountFullAccessRole")
 DATA = ("s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket")
 
 
@@ -126,6 +129,9 @@ class FakeIAM:
                    or ("CheckInputs" in role and action == "s3:PutObject" and "/reports/check_inputs/" in res)
                    or ("ScheduleRole" in role and action == "lambda:InvokeFunction" and "RunEngine" in res)
                    or ("CrawlerRole" in role and action == "s3:GetObject" and "/outputs/tables/" in res)
+                   or ("AskServiceRole" in role and not http and ((action == "s3:GetObject" and res.endswith("/outputs/views_data.json"))
+                                                                  or (action in ("s3:GetObject", "s3:PutObject") and "/state/ask/" in res)
+                                                                  or (action == "ssm:GetParameter" and "anthropic-api-key" in res)))
                    or ("SlackListener" in role and ((action == "s3:PutObject" and "/state/clicks/" in res)
                                                     or (action == "ssm:GetParameter" and "/cairnpath/slack-" in res)
                                                     or action == "kms:GenerateDataKey")))
@@ -179,6 +185,11 @@ check(all(r["ok"] for r in sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION, F
 leaky = FakeIAM(leak=lambda role, action, res: "SearchServiceRole" in role and action == "ssm:GetParameter")
 bad = [r for r in sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
 check(len(bad) == 1 and "public search" in bad[0]["why"], "a public search that can read the API key is caught", bad)
+check(names.get("ask", "").endswith("AskServiceRole-HHH"), "finds the Ask box's role (not its function or API)", names)
+leaky = FakeIAM(leak=lambda role, action, res: "AskServiceRole" in role and action == "s3:GetObject" and "/inputs/" in res)
+bad = [r for r in sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
+check(len(bad) == 1 and bad[0]["role"] == "ask" and "inputs" in bad[0]["why"],
+      "an Ask box that can read the inputs is caught (any signed-in login reaches it)", bad)
 leaky = FakeIAM(leak=lambda role, action, res: "SlackListener" in role and action == "s3:GetObject")
 bad = [r for r in sc.run(FakeCfn(), leaky, FakeS3(), ACCOUNT, REGION, FakeKMS()) if not r["ok"]]
 check(len(bad) == 1 and bad[0]["role"] == "slack" and "read any data" in bad[0]["why"],

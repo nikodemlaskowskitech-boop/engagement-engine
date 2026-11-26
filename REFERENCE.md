@@ -618,6 +618,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   document by meaning, the other 5 still come by keywords). The margin over nonsense is thin
   (0.016) and rests on 12 off-topic questions: re-run the calibration when the corpus grows.
   embed_test runs its stand-in plumbing with the floor at 0 (a Titan number, not the stand-in's).
+- `infra/data_stack.py` the Ask box (26 Nov 2026, step 2b of 4): [aws] ask = true builds a user
+  pool for the CS team (no sign-up: the admin makes each login; custom:person = whose page; MFA
+  optional, TOTP), its cockpit client (code flow with PKCE, no secret, reads person, can't write
+  it, callback the site's root), the sign-in page at [aws] ask_login_prefix, its own HTTP API
+  (POST /ask, JWT authorizer on that pool and client, CORS for the site's address only, 1 a
+  second, an access log without the body) and the Ask function (one run at a time). Its role is
+  written out by hand: GetObject on the export and state/ask/*, PutObject on state/ask/*,
+  ListBucket for state/ask/ only, the key for S3 to use, the API key's parameter; grant_read
+  would also have let it list every file name in the bucket. It joins the data perimeter's
+  exempt roles. The browser calls the API directly, not through CloudFront: CloudFront passes an
+  Authorization header on only as part of a cache key. security_check.py: 13 Ask cases.
 - `infra/lambdas/ask/handler.py` (26 Nov 2026, the Ask box, step 2a of 4): the function behind
   POST /ask. The gateway checks the sign-in (the CS team's user pool, step 2b); custom:person on
   the login names whose page it is (set by the admin). Refused, before anything runs: no sign-in,

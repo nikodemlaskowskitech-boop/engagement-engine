@@ -32,7 +32,7 @@ DENY, ALLOW = "denied", "allowed"
 # CloudFormation logical ID prefix -> short name used in the cases
 WANTED = {"CheckInputsServiceRole": "check", "RunEngineServiceRole": "engine",
           "ScheduleRole": "schedule", "CrawlerRole": "crawler",
-          "SlackListenerServiceRole": "slack", "SearchServiceRole": "search",
+          "SlackListenerServiceRole": "slack", "SearchServiceRole": "search", "AskServiceRole": "ask",
           "CheckInputs": "check_fn", "RunEngine": "engine_fn"}
 
 
@@ -52,13 +52,13 @@ def find(cfn):
             continue
         for prefix, name in WANTED.items():
             # longest prefix wins: "CheckInputsServiceRole..." is the role, "CheckInputs..." the function
-            is_role_name = name in ("check", "engine", "schedule", "crawler", "slack", "search")
+            is_role_name = name in ("check", "engine", "schedule", "crawler", "slack", "search", "ask")
             if r["LogicalResourceId"].startswith(prefix) and name not in found and (
                     (kind == "AWS::IAM::Role") == is_role_name):
                 found[name] = r["PhysicalResourceId"]
                 break
     # the public search exists only with the site
-    wanted = set(WANTED.values()) - (set() if AWS.get("site") else {"search"})
+    wanted = set(WANTED.values()) - (set() if AWS.get("site") else {"search"}) - (set() if AWS.get("ask") else {"ask"})
     missing = (wanted | {"key"} | ({"site"} if AWS.get("site") else set())) - set(found)
     if missing:
         sys.exit(f"Not found in stack {STACK}: {', '.join(sorted(missing))}. Deployed?")
@@ -136,7 +136,30 @@ def cases(account, region):
         ("slack", "kms:GenerateDataKey", key, ALLOW, "control: the Slack listener can encrypt a click via S3", False, VIA_S3),
         ("admin", "kms:Decrypt", key, ALLOW, "control: the admin can still use the key directly", False),
         ("admin", "kms:PutKeyPolicy", key, ALLOW, "control: the admin can still fix the key's policy (no lockout)", False),
-    ] + (site_cases() + search_cases(b, i, api_key, key, region) if AWS.get("site") else [])
+    ] + (site_cases() + search_cases(b, i, api_key, key, region) if AWS.get("site") else []) \
+      + (ask_cases(b, i, o, st, api_key, other, signing, key) if AWS.get("ask") else [])
+
+
+def ask_cases(b, i, o, st, api_key, other, signing, key):
+    """The Ask box (26 Nov 2026): reachable by any signed-in CS login, so its role reads the
+    export and its own state/ask/ and writes only there: no inputs, no other output, no
+    delete, one secret. Controls first, so an all-deny mistake shows as a FAIL too."""
+    mine = SETTINGS["ask"]["usage_key"].split("{")[0]
+    return [
+        ("ask", "s3:GetObject", f"{b}/{o}views_data.json", ALLOW, "control: Ask box: reads the engine's export", False),
+        ("ask", "s3:PutObject", f"{b}/{mine}usage-2026-11.json", ALLOW, "control: Ask box: writes its own counts", False),
+        ("ask", "ssm:GetParameter", api_key, ALLOW, "control: Ask box: reads the API key", False),
+        ("ask", "s3:GetObject", f"{b}/{i}crm_accounts.csv", DENY, "Ask box: can't read the inputs", False),
+        ("ask", "s3:GetObject", f"{b}/{o}flags_churn.csv", DENY, "Ask box: nothing else in outputs/", False),
+        ("ask", "s3:GetObject", f"{b}/{st}action_log.csv", DENY, "Ask box: nothing else in state/", False),
+        ("ask", "s3:PutObject", f"{b}/{o}views_data.json", DENY, "Ask box: can't change the export", False),
+        ("ask", "s3:PutObject", f"{b}/{st}action_log.csv", DENY, "Ask box: can't write outside state/ask/", False),
+        ("ask", "s3:DeleteObject", f"{b}/{mine}usage-2026-11.json", DENY, "Ask box: can't delete, even its own counts", False),
+        ("ask", "s3:GetObject", f"{b}/{o}views_data.json", DENY, "Ask box: plain HTTP refused", True),
+        ("ask", "ssm:GetParameter", signing, DENY, "Ask box: can't read the Slack secrets", False),
+        ("ask", "ssm:GetParameter", other, DENY, "Ask box: no other secret", False),
+        ("ask", "kms:Decrypt", key, DENY, "Ask box: can't use the key outside S3", False),
+    ]
 
 
 def search_cases(b, i, api_key, key, region):
