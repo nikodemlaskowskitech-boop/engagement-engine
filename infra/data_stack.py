@@ -316,8 +316,11 @@ class DataStack(Stack):
         # sign-up: the admin makes each login), its own API and its own function. The gateway
         # checks the sign-in before any code runs. The function reads the engine's export and
         # its own state/ask/, holds the redacted documents only, and writes counts, never text.
+        # Built only with the public site and its own address: the Ask box lives on the site's
+        # pages, and its sign-in and its API accept that address only (26 Nov 2026: infra_test's
+        # "site = false" build caught an Ask API left behind without a site).
         ask_fn = None
-        if aws.get("ask"):
+        if aws.get("ask") and aws.get("site") and aws.get("site_domain"):
             site_address = "https://" + aws["site_domain"]        # the pages the Ask box sits on
             team = cognito.UserPool(
                 self, "TeamUsers",

@@ -629,6 +629,9 @@ Read a file's entry before changing that file, and update the entry in the same 
   would also have let it list every file name in the bucket. It joins the data perimeter's
   exempt roles. The browser calls the API directly, not through CloudFront: CloudFront passes an
   Authorization header on only as part of a cache key. security_check.py: 13 Ask cases.
+  Built only with [aws] site and site_domain on (26 Nov 2026): infra_test's "site = false" build
+  found an Ask API left behind without a site; the live stack (site on) was never affected.
+  First deploy 26 Nov 2026: security_check.py 64 of 64.
 - `infra/lambdas/ask/handler.py` (26 Nov 2026, the Ask box, step 2a of 4): the function behind
   POST /ask. The gateway checks the sign-in (the CS team's user pool, step 2b); custom:person on
   the login names whose page it is (set by the admin). Refused, before anything runs: no sign-in,
