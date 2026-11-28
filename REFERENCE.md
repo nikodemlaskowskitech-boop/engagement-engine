@@ -853,6 +853,17 @@ Read a file's entry before changing that file, and update the entry in the same 
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- `cairnpath_db.py` small inputs as tables (28 Nov 2026): the AWS run at 06:17 failed in flags.py,
+  "Out of Memory Error ... 1.7 GiB/1.7 GiB used", while creating account_value. Not the data (a
+  normal run peaks near 340 MB): the CRM, the team, the CS history, renewals and the ARR bridge
+  were views over their files, so every mention of one in the stack of views opened the file
+  again with a ~30 MB read buffer, all held until the statement ended; the growth views added
+  enough mentions to pass the Lambda's 2 GB. They are now read once into tables by connect()
+  (crm_all a table, crm still a view over it; the empty CS history a table too); history.py
+  drops engagement and crm_all after copying them, then swaps them in as views week by week, as
+  before. Outputs byte for byte the same (19 files), and faster: flags.py 26 s -> 12 s, history
+  112 s -> about 60-100 s in the sandbox. tests/memory_test.py runs each heavy step with DuckDB
+  capped at half the engine Lambda's memory; on the old code it fails with the same error.
 - `facts.py` addressed (25 Nov 2026, ARCHITECTURE.md fix M): whether growth in play is addressed,
   in SQL, for every expansion and growth line: since (the first week of its current run in
   history.py's replay, gaps and islands; today if the replay hasn't seen it), then raised (a

@@ -47,6 +47,9 @@ def main():
     con.sql("CREATE TABLE events_all AS SELECT * FROM events")
     con.sql("CREATE TABLE engagement_all AS SELECT * FROM engagement")
     con.sql("CREATE TABLE crm_now AS SELECT * FROM crm_all")
+    # read once into tables by connect(); from here they are views, "up to day W", swapped weekly
+    con.sql("DROP TABLE engagement")
+    con.sql("DROP TABLE crm_all")
     has_log = con.sql("SELECT count(*) FROM information_schema.tables WHERE table_name = 'action_log'").fetchone()[0]
     if has_log:
         con.sql("CREATE TABLE action_log_all AS SELECT * FROM action_log")

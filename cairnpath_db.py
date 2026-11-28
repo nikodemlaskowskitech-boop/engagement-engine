@@ -127,7 +127,7 @@ def connect():
     # events, but its own properties: who owns the touch and what it was about.
     if eng_globs:
         con.sql(f"""
-            CREATE VIEW engagement AS
+            CREATE TABLE engagement AS
             SELECT *, "timestamp"::DATE AS event_date
             FROM read_json({eng_list}, format = 'newline_delimited', columns = {{
                 event_id:   'VARCHAR',
@@ -145,10 +145,10 @@ def connect():
             }})
         """)
     else:
-        # no CS history yet (a company's first run): an empty view with the same
+        # no CS history yet (a company's first run): an empty table with the same
         # columns, so flags still run; journeys and time to action stay empty
         con.sql("""
-            CREATE VIEW engagement AS
+            CREATE TABLE engagement AS
             SELECT NULL::VARCHAR AS event_id, NULL::VARCHAR AS event_name, NULL::VARCHAR AS event_type,
                    NULL::TIMESTAMP AS "timestamp", NULL::VARCHAR AS account_id, NULL::VARCHAR AS user_id,
                    NULL::STRUCT(owner_id VARCHAR, topic VARCHAR, outcome VARCHAR, note VARCHAR, slack_user VARCHAR, status VARCHAR, manager VARCHAR, amount DOUBLE, due VARCHAR, intended VARCHAR) AS properties,
@@ -171,7 +171,7 @@ def connect():
            else f"round({u['contract_column']} / 1000.0 * {price}, -2)")
     arr_exclude = f", {money['arr_column']}" if money["arr_column"] in crm_cols else ""
     con.sql(f"""
-        CREATE VIEW crm AS
+        CREATE TABLE crm_all AS
         WITH raw AS ({crm_raw})
         -- dates and numbers read with try_cast: one cell typed '26/06/2027' or '300,000,000'
         -- turns the whole column into text, and every renewal sum after it would fail. The bad
@@ -195,21 +195,24 @@ def connect():
                {'' if 'csm_since' in crm_cols else ', NULL::DATE AS csm_since'}
         FROM raw
     """)
+    # The small inputs (the CRM, the team, the CS history, renewals, the ARR bridge) are read
+    # once into tables (28 Nov 2026): as views, every mention in the stack of views re-read the
+    # file and held a ~30 MB read buffer until the statement ended, and with the growth views
+    # creating account_value needed more than the engine Lambda's 2 GB (it failed there).
     # crm = today's book (what the flags and the cockpit work on); crm_all keeps the
     # accounts that churned too, so their old events aren't mistaken for a handoff gap
-    con.sql("ALTER VIEW crm RENAME TO crm_all")
     con.sql("CREATE VIEW crm AS SELECT * FROM crm_all WHERE coalesce(status, 'active') <> 'churned'")
     # the pool column is optional (a pool member's pool); without it, no members
     team_raw = f"SELECT *{_renames('team')} FROM read_csv_auto('{team_file}')"
     team_cols = {r[0] for r in con.sql(f"DESCRIBE {team_raw}").fetchall()}
-    con.sql(f"CREATE VIEW cs_team AS SELECT *{'' if 'pool' in team_cols else ', NULL::VARCHAR AS pool'} FROM ({team_raw})")
+    con.sql(f"CREATE TABLE cs_team AS SELECT *{'' if 'pool' in team_cols else ', NULL::VARCHAR AS pool'} FROM ({team_raw})")
 
     # Closed renewals with the ARR before and after (optional), and the year before
     # the data as finance's quarterly ARR bridge (optional): retention.py's inputs.
     # Missing = empty views with the same columns.
     hist_file, bridge_file = input_path("renewal_history_file"), input_path("arr_bridge_file")
     if hist_file.exists():
-        con.sql(f"""CREATE VIEW renewal_history AS
+        con.sql(f"""CREATE TABLE renewal_history AS
                    SELECT account_id, renewal_date::DATE AS renewal_date, outcome,
                           renewal_arr::DOUBLE AS renewal_arr, arr_before::DOUBLE AS arr_before
                    FROM read_csv('{_sql_path(hist_file)}', all_varchar = true)""")
@@ -244,7 +247,7 @@ def connect():
 
     cols = "period_start, period_end, starting_arr, new_logo_arr, expansion_arr, contraction_arr, churned_arr, ending_arr"
     if bridge_file.exists():
-        con.sql(f"""CREATE VIEW arr_bridge AS
+        con.sql(f"""CREATE TABLE arr_bridge AS
                    SELECT period_start::DATE AS period_start, period_end::DATE AS period_end,
                           {', '.join(f'{c}::DOUBLE AS {c}' for c in cols.split(', ')[2:])}
                    FROM read_csv('{_sql_path(bridge_file)}', all_varchar = true)""")
