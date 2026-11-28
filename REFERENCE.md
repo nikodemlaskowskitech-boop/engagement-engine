@@ -853,6 +853,22 @@ Read a file's entry before changing that file, and update the entry in the same 
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- Run safeguards (28 Nov 2026, after the out-of-memory failure; Nikodem: "address the issues and
+  amend the methodology"). The failure showed three gaps besides the bug: nothing ran under
+  AWS's limits, a deploy wasn't followed by a run, and nobody was told. Now:
+  - `infra/lambdas/run_engine/handler.py`: each step runs through a small wrapper that reports its
+    own peak memory (ru_maxrss); run.json gets step_peak_mb and budgets (the function's memory,
+    its time, [aws] budget_share = 0.7), and past 70% of either a warning in run.json and a
+    "BUDGET WARNING" line in the log, while the run still works (the day before the failure it
+    ran at 1,492 of 2,048 MB: that would have warned).
+  - `infra/data_stack.py` run alerts: an SNS topic (HTTPS only) emailing the cost alert's address
+    (settings.local.toml), with alarms on the engine's and the check's errors (the first in an
+    hour; no run is not a failure) and a metric filter on BUDGET WARNING. AWS asks once to
+    confirm the address.
+  - `after_deploy.py` + `deploy.ps1`: one command for the whole deploy, gates included; the last
+    step starts the engine with {"trigger": "deploy"} (always runs; only the schedule skips when
+    nothing is new), waits for that run's run.json, prints result, time, peak memory and
+    warnings, and saves it to data/aws_outputs/run.json. tests/after_deploy_test.py.
 - `cairnpath_db.py` small inputs as tables (28 Nov 2026): the AWS run at 06:17 failed in flags.py,
   "Out of Memory Error ... 1.7 GiB/1.7 GiB used", while creating account_value. Not the data (a
   normal run peaks near 340 MB): the CRM, the team, the CS history, renewals and the ARR bridge

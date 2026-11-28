@@ -88,7 +88,7 @@ Docs-only PRs need none.
 | `infra/lambdas/ask/`, `ask.py`, [ask] | `tests/ask_lambda_test.py` (the Ask box's function: who may ask, the caps, only counts kept), `tests/ask_test.py` |
 | `cockpit/js/ask_box.js`, `roles.ask_web()` | `node tests/ask_box_test.js` (the Ask box on the site: the sign-in round trip, PKCE, asking, refusals), plus the cockpit row |
 | `infra/bundle.py`, `infra/lock_lambda.py`, `infra/locks/`, a pin a Lambda uses | `tests/lambda_lock_test.py` |
-| `upload.py` / `pull_clicks.py` / `site_cert.py` / `put_key.py` / `request_briefs.py` | its own `tests/<name>_test.py` |
+| `upload.py` / `pull_clicks.py` / `site_cert.py` / `put_key.py` / `request_briefs.py` / `after_deploy.py`, `deploy.ps1` | its own `tests/<name>_test.py` (`deploy.ps1`: `tests/after_deploy_test.py`) |
 | `guardduty_report.py` / `access_report.py` | its own `tests/<name>_test.py` |
 | `visitors.py`, `site_logs.py`, [visits] | `tests/visitors_test.py`, plus `tests/infra_test.py` if the bucket changes |
 | IAM roles or policies | `tests/security_check_test.py`; after the deploy Nikodem runs `python security_check.py` (live) |
@@ -291,7 +291,8 @@ One run, in [pipeline] order (laptop: `.\run_all.ps1`; AWS: the engine Lambda):
 
 AWS (`infra/`, CDK): a private KMS-encrypted bucket; upload -> check Lambda ->
 engine Lambda (gated on the check, plus a daily schedule); Slack listener on API
-Gateway; the Ask box (its own API behind the CS team's Cognito sign-in); Athena over outputs/;
+Gateway; the Ask box (its own API behind the CS team's Cognito sign-in); run alerts (an email
+when the engine or the check fails, or a run passes 70% of its memory or time); Athena over outputs/;
 the public demo site on CloudFront; GuardDuty,
 Access Analyzer, Cost Anomaly Detection; a data perimeter in the bucket policy.
 
@@ -358,6 +359,7 @@ AI:
 
 AWS (run by Nikodem, signed in with `aws login --profile cairnpath`):
 - `infra/`: the CDK app (`app.py`, `data_stack.py`, `bundle.py`, the Lambdas).
+- `deploy.ps1`: the whole deploy, one command: pull, infra_test (a FAIL deploys nothing), cdk deploy, security_check, then `after_deploy.py` runs the engine on the new code and prints its result, time and memory.
 - `upload.py`: inputs to the bucket, only what changed.
 - `request_briefs.py`: the only way the model runs in AWS.
 - `put_key.py`: secrets into Parameter Store, never printed.

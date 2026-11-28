@@ -74,6 +74,18 @@ MARKER = os.environ.get("MARKER_NAME", "_upload_complete.json")
 STEPS = json.loads(os.environ.get("ENGINE_STEPS", "[]"))
 CODE = json.loads(os.environ.get("ENGINE_CODE", "[]"))   # files and folders copied into the work folder
 OPTIONAL = json.loads(os.environ.get("OPTIONAL_STEPS", "[]"))   # a failure here is a warning, not a failed run
+# Budgets (28 Nov 2026: the run failed on memory with no warning, 1,492 of 2,048 MB the day
+# before). Each step reports its own peak memory; past this share of the function's memory or
+# its time limit, the run says so in run.json and in its log (a "BUDGET WARNING" line, which an
+# alarm watches), while it still works.
+BUDGET_SHARE = float(os.environ.get("BUDGET_SHARE", "0.7"))
+MEMORY_MB = int(os.environ.get("AWS_LAMBDA_FUNCTION_MEMORY_SIZE", "0") or 0)   # set by Lambda itself
+# a step runs in its own Python, then reports the most memory it held (Linux: kilobytes)
+STEP = ("import resource, runpy, sys\n"
+        "sys.argv = sys.argv[1:]\n"
+        "try:\n    runpy.run_path(sys.argv[0], run_name='__main__')\n"
+        "finally:\n    print('\\n@@peak_mb=%d' % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024), file=sys.stderr)\n")
+PEAK = re.compile(r"\n@@peak_mb=(\d+)\n?")
 BRIEFS_STEP = os.environ.get("BRIEFS_STEP", "handover.py")   # the only step that calls the model: on request only
 DRY_RUN = BRIEFS_STEP + " --dry-run"
 ACCOUNT_ID = re.compile(r"acc_[A-Za-z0-9_-]{1,40}")               # what a forced brief may name
@@ -237,12 +249,13 @@ def publish_site(s3, folder):
 
 def run_steps(work, secrets=None, steps=None):
     """Run each engine step in order, like run_all.ps1 (a step may carry arguments, e.g. --dry-run).
-    Returns (ok, log, failed step, step times, warnings). secrets go to the briefs step only."""
+    Returns (ok, log, failed step, step times, warnings, step peaks in MB). secrets go to the
+    briefs step only."""
     steps = STEPS if steps is None else steps
     env = {**os.environ, "PYTHONPATH": str(HERE), "PYTHONIOENCODING": "utf-8", "HOME": "/tmp"}
     if LLM_PROVIDER:
         env["CAIRNPATH_LLM_PROVIDER"] = LLM_PROVIDER
-    log, times, warnings = [f"Engine run {now()}\n"], {}, []
+    log, times, warnings, peaks = [f"Engine run {now()}\n"], {}, [], {}
     for step in steps:
         label = step if step not in times else f"{step} (again)"
         if step == BRIEFS_STEP and secrets is None:
@@ -252,24 +265,48 @@ def run_steps(work, secrets=None, steps=None):
             continue
         t0 = time.time()
         step_env = {**env, **(secrets or {})} if step == BRIEFS_STEP else env
-        done = subprocess.run([sys.executable, *step.split()], cwd=work, env=step_env,
+        done = subprocess.run([sys.executable, "-c", STEP, *step.split()], cwd=work, env=step_env,
                               capture_output=True, text=True, timeout=900)
         times[label] = round(time.time() - t0, 1)
-        log.append(f"\n===== python {step} ({times[label]} s) =====\n{done.stdout}{done.stderr}")
+        peak = PEAK.search(done.stderr or "")
+        if peak:
+            peaks[label] = int(peak.group(1))
+        stderr = PEAK.sub("", done.stderr or "")
+        log.append(f"\n===== python {step} ({times[label]} s" + (f", {peaks[label]} MB" if label in peaks else "")
+                   + f") =====\n{done.stdout}{stderr}")
         if done.returncode != 0:
             if step in OPTIONAL:                 # e.g. the model API is down: the cockpit still updates
                 warnings.append(f"{step} failed (see last_run.txt); the rest of the run went on")
                 log.append(f"\nWARNING: {step} failed; optional, carrying on\n")
                 continue
             log.append(f"\nFAILED: {step}\n")
-            return False, "".join(log), step, times, warnings
+            return False, "".join(log), step, times, warnings, peaks
     log.append(f"\nDONE: {len(steps)} steps" + (f", {len(warnings)} warning(s)" if warnings else "") + "\n")
-    return True, "".join(log), None, times, warnings
+    return True, "".join(log), None, times, warnings, peaks
+
+
+def budget_warnings(peaks, seconds, limit_seconds, memory_mb=None, share=None):
+    """Past share of the memory or the time limit: one line each, while the run still works."""
+    memory_mb = MEMORY_MB if memory_mb is None else memory_mb
+    share = BUDGET_SHARE if share is None else share
+    out = []
+    if memory_mb and peaks:
+        step, mb = max(peaks.items(), key=lambda kv: kv[1])
+        if mb >= share * memory_mb:
+            out.append(f"memory: {step} peaked at {mb:,} MB of {memory_mb:,} ({100 * mb // memory_mb}%): "
+                       f"over {int(share * 100)}% of the function's memory")
+    if limit_seconds and seconds >= share * limit_seconds:
+        out.append(f"time: the run took {seconds:.0f} s of {limit_seconds:.0f} ({100 * seconds // limit_seconds:.0f}%): "
+                   f"over {int(share * 100)}% of the function's time limit")
+    return out
 
 
 def handler(event, context, s3=None, work=None, ssm=None):
     s3 = s3 or _s3()
     started = time.time()
+    # the time this run may take: what Lambda gives it (gone from the start), else the settings' limit
+    limit_seconds = (context.get_remaining_time_in_millis() / 1000 if context is not None and hasattr(context, "get_remaining_time_in_millis")
+                     else float(os.environ.get("TIMEOUT_SECONDS", "900")))
     trigger = next((r["s3"]["object"]["key"] for r in event.get("Records", [])),
                    event.get("trigger", "manual"))
     # briefs only when explicitly asked for, never on an S3 event (those carry Records)
@@ -317,7 +354,7 @@ def handler(event, context, s3=None, work=None, ssm=None):
         ledger = carry(s3, LEDGER, data)         # this month's AI spend so far: the budget counts it
         key = api_key(ssm or _ssm()) if BRIEFS_STEP in steps else None    # read only on a briefs request
         secrets = {"ANTHROPIC_API_KEY": key, **({"CAIRNPATH_FORCE_BRIEFS": ",".join(force)} if force else {})} if key else None
-        ok, log, failed, times, warnings = run_steps(work, secrets, steps)
+        ok, log, failed, times, warnings, peaks = run_steps(work, secrets, steps)
         # everything the steps wrote, at any depth (tables/<name>/ for Athena), minus what came in,
         # minus redaction keys, minus cache files that didn't change (no new S3 version for nothing)
         written = []
@@ -338,9 +375,14 @@ def handler(event, context, s3=None, work=None, ssm=None):
         site = publish_site(s3, data / SITE.strip("/")) if ok else []        # never half a failed run's pages
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    summary.update(status="OK" if ok else "FAILED", failed_step=failed, warnings=warnings, step_seconds=times,
+    seconds = round(time.time() - started, 1)
+    over = budget_warnings(peaks, seconds, limit_seconds)
+    for line in over:
+        print(f"BUDGET WARNING {line}")              # the alarm's metric filter looks for this
+    summary.update(status="OK" if ok else "FAILED", failed_step=failed, warnings=warnings + over, step_seconds=times,
+                   step_peak_mb=peaks, budgets={"memory_mb": MEMORY_MB, "seconds": limit_seconds, "warn_at": BUDGET_SHARE},
                    inputs=len(inputs), slack_clicks=clicks, outputs=written, site_pages=site,
-                   seconds=round(time.time() - started, 1))
+                   seconds=seconds)
     put(s3, OUTPUTS + "last_run.txt", log)
     put(s3, OUTPUTS + "run.json", json.dumps(summary, indent=2), "application/json")   # last
     print(json.dumps(summary))
