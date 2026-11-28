@@ -102,6 +102,7 @@ flowchart TB
     ssm["Parameter Store<br/>API key, Slack secrets"]
     ath["Athena + Glue<br/>ad-hoc SQL"]
     sec["GuardDuty, Access Analyzer,<br/>Cost Anomaly Detection"]
+    alarm["Run alerts: engine or check<br/>failed, or past 70% of its<br/>memory or time"]
   end
   slack(("Slack"))
   llm(("Claude API<br/>briefs, on request"))
@@ -121,6 +122,7 @@ flowchart TB
   run -->|"task cards (actions.py)"| slack
   slack -->|button clicks| sl -->|"state/clicks/"| s3
   s3 --> ath
+  eng -.->|"errors, BUDGET WARNING"| alarm -->|email| owner(("Owner"))
   run --> mcp --> desk
   team(("CS team<br/>signed in")) -->|"a question"| ask
   s3 -->|"the export only"| ask -->|"counts only"| s3
@@ -171,11 +173,15 @@ flowchart LR
    brief is out of date, writes the public site's sandbox pages and Parquet
    tables for Athena. `run.json` is written last, with each step's seconds, so
    whoever reads it sees a finished run.
-4. A **daily schedule** reruns the engine only if a run was missed or failed,
+4. A deploy is one command, `.\deploy.ps1`: the infrastructure test (a FAIL deploys
+   nothing), the deploy, the live security check, then a real engine run on the new code,
+   with its time and peak memory printed. A run that fails, or passes 70% of its memory or
+   time, sends an email.
+5. A **daily schedule** reruns the engine only if a run was missed or failed,
    or Slack clicks came in since.
-5. **Slack clicks** ("I'll take it", "Log call") go to their own small Lambda
+6. **Slack clicks** ("I'll take it", "Log call") go to their own small Lambda
    behind API Gateway and become CS history on the next run.
-6. **AI briefs** are written only when the admin asks (`request_briefs.py`).
+7. **AI briefs** are written only when the admin asks (`request_briefs.py`).
    Nothing a user clicks, uploads or saves can make the model run. The one
    model call a visitor can cause is the public search's: their question turns
    into a vector (Titan, a tiny fraction of a cent), throttled, cached, and

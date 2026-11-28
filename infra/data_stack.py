@@ -32,7 +32,11 @@ from aws_cdk import aws_apigatewayv2_integrations as integrations
 from aws_cdk import aws_athena as athena
 from aws_cdk import aws_certificatemanager as acm
 from aws_cdk import aws_ce as ce
+from aws_cdk import aws_cloudwatch as cloudwatch
+from aws_cdk import aws_cloudwatch_actions as cw_actions
 from aws_cdk import aws_cognito as cognito
+from aws_cdk import aws_sns as sns
+from aws_cdk import aws_sns_subscriptions as subs
 from aws_cdk import aws_cloudfront as cloudfront
 from aws_cdk import aws_cloudfront_origins as origins
 from aws_cdk import aws_glue as glue
@@ -151,6 +155,7 @@ class DataStack(Stack):
                          "CHECK_SUMMARY": check_summary, "MARKER_NAME": aws["upload_marker"],
                          "CLICKS_PREFIX": aws["slack_clicks_prefix"],     # Slack clicks (inside state/)
                          "ENGINE_STEPS": json.dumps(aws["engine_steps"]),
+                         "BUDGET_SHARE": str(aws["budget_share"]),       # warn past this share of memory or time
                          "ENGINE_CODE": json.dumps(ENGINE_FILES),
                          "OPTIONAL_STEPS": json.dumps(aws["engine_optional_steps"]),
                          "BRIEFS_STEP": aws["briefs_step"],     # the model, only on an admin's request
@@ -718,6 +723,37 @@ class DataStack(Stack):
             conditions={"StringNotEquals": {"kms:ViaService": f"s3.{self.region}.amazonaws.com"},
                         "ArnNotLike": {"aws:PrincipalArn": admins}, **not_a_service}))
         CfnOutput(self, "DataKeyArn", value=self.key.key_arn)
+
+        # --- Run alerts (28 Nov 2026): an email when a run fails, or nears its limits ---
+        # The 28 Nov run failed at 06:17 and nobody knew until someone looked. Now: the engine or
+        # the check failing, or a run past [aws] budget_share of its memory or time (the engine
+        # logs "BUDGET WARNING"), sends an email to the same address as the cost alert. AWS asks
+        # once to confirm the address (a link in the first email). Alarm names only: no data.
+        if aws.get("cost_alert_email"):
+            alerts = sns.Topic(self, "RunAlerts", display_name="Cairnpath run alerts", enforce_ssl=True)
+            alerts.add_subscription(subs.EmailSubscription(aws["cost_alert_email"]))
+            to_email = cw_actions.SnsAction(alerts)
+            for name, fn, what in (("EngineFailed", engine, "the engine run failed: see outputs/last_run.txt"),
+                                   ("CheckFailed", fn, "the input check failed to run")):
+                alarm = cloudwatch.Alarm(
+                    self, name, alarm_description=what,
+                    metric=fn.metric_errors(period=Duration.hours(1), statistic="Sum"),
+                    threshold=1, evaluation_periods=1,
+                    comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                    treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING)
+                alarm.add_alarm_action(to_email)
+            budget = logs.MetricFilter(
+                self, "BudgetWarnings", log_group=engine.log_group,
+                filter_pattern=logs.FilterPattern.all_terms("BUDGET", "WARNING"),
+                metric_namespace="Cairnpath", metric_name="BudgetWarnings", metric_value="1")
+            near = cloudwatch.Alarm(
+                self, "EngineNearLimit",
+                alarm_description=f"an engine run used over {int(aws['budget_share'] * 100)}% of its memory or time: see run.json",
+                metric=budget.metric(period=Duration.hours(1), statistic="Sum"),
+                threshold=1, evaluation_periods=1,
+                comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING)
+            near.add_alarm_action(to_email)
 
         # --- Cost Anomaly Detection (free): an email when a day's spend jumps ---
         # AWS learns this account's usual daily cost per service and flags a day that breaks

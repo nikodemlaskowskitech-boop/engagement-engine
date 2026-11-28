@@ -181,6 +181,21 @@ else:
 s3 = FakeS3(bucket_with_demo("WARN"))
 summary = h.handler(event, None, s3=s3, work=work)
 check(summary["status"] == "OK", "the check said WARN: the engine runs (OK)", summary.get("failed_step"))
+# budgets (28 Nov 2026): each step's peak memory, next to its seconds; a warning past 70%
+check(set(summary.get("step_peak_mb", {})) == set(summary["step_seconds"]) and all(v > 0 for v in summary["step_peak_mb"].values()),
+      "each step reports its peak memory, next to its seconds", summary.get("step_peak_mb"))
+check(summary.get("budgets", {}).get("warn_at") == 0.7 and "seconds" in summary["budgets"],
+      "run.json says the limits it was measured against", summary.get("budgets"))
+check(not [w for w in summary["warnings"] if w.startswith(("memory:", "time:"))] or h.MEMORY_MB,
+      "no budget warning without a memory limit to measure against (outside Lambda)")
+w = h.budget_warnings({"flags.py": 1492, "history.py": 600}, 120, 900, memory_mb=2048)
+check(len(w) == 1 and w[0].startswith("memory: flags.py peaked at 1,492 MB of 2,048 (72%)"),
+      "1,492 MB of 2,048 (the day before the 28 Nov failure): a memory warning, naming the step", w)
+check(h.budget_warnings({"flags.py": 1400}, 120, 900, memory_mb=2048) == [], "1,400 MB of 2,048 (68%): no warning")
+w = h.budget_warnings({"flags.py": 300}, 650, 900, memory_mb=2048)
+check(len(w) == 1 and w[0].startswith("time: the run took 650 s of 900 (72%)"), "650 s of 900: a time warning", w)
+log_text = s3.objects.get(OUTPUTS + "last_run.txt", b"").decode() if isinstance(s3.objects.get(OUTPUTS + "last_run.txt"), bytes) else str(s3.objects.get(OUTPUTS + "last_run.txt", ""))
+check("@@peak_mb" not in log_text and " MB) =====" in log_text, "the log shows each step's MB, without the marker it was read from")
 check(all(k.startswith(OUTPUTS) for k in s3.writes), "writes only under outputs/ (never inputs/ or reports/: no loops)",
       [k for k in s3.writes if not k.startswith(OUTPUTS)])
 check(s3.writes[-1] == OUTPUTS + "run.json", "run.json is written last (whoever reads it sees a finished run)")

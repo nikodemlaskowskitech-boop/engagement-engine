@@ -500,6 +500,38 @@ tracked = subprocess.run(["git", "-C", str(REPO), "show", "HEAD:settings.toml"],
 check(not tracked or 'cost_alert_email = ""' in tracked,
       "the address isn't in settings.toml (a public repo): only in the git-ignored settings.local.toml")
 
+print("\nRun alerts (28 Nov 2026): an email when a run fails or nears its limits")
+topics = t.find_resources("AWS::SNS::Topic")
+alarms = {k: v["Properties"] for k, v in t.find_resources("AWS::CloudWatch::Alarm").items()}
+if aws.get("cost_alert_email"):
+    tsubs = [v["Properties"] for v in t.find_resources("AWS::SNS::Subscription").values()]
+    check(len(topics) == 1 and len(tsubs) == 1 and tsubs[0].get("Protocol") == "email"
+          and tsubs[0].get("Endpoint") == aws["cost_alert_email"], "one topic, emailing the cost alert's address", tsubs)
+    tpol = json.dumps(t.find_resources("AWS::SNS::TopicPolicy"))
+    check("aws:SecureTransport" in tpol, "the topic refuses plain HTTP", tpol[:200])
+    def alarm_on(fn_kind):
+        return [a for a in alarms.values() if a.get("MetricName") == "Errors"
+                and fn_kind in json.dumps(a.get("Dimensions", []))]
+    check(len(alarm_on("RunEngine")) == 1 and len(alarm_on("CheckInputs")) == 1,
+          "an alarm on the engine's and the check's errors", sorted(alarms))
+    errs = alarm_on("RunEngine") + alarm_on("CheckInputs")
+    check(all(a.get("Threshold") == 1 and a.get("ComparisonOperator") == "GreaterThanOrEqualToThreshold"
+              and a.get("TreatMissingData") == "notBreaching" and a.get("Period") == 3600 for a in errs),
+          "...each on the first failure in an hour; no run is not a failure", errs)
+    filters = [v["Properties"] for v in t.find_resources("AWS::Logs::MetricFilter").values()]
+    check(len(filters) == 1 and "BUDGET" in filters[0].get("FilterPattern", "") and "WARNING" in filters[0]["FilterPattern"]
+          and filters[0]["MetricTransformations"][0]["MetricName"] == "BudgetWarnings",
+          "the engine's log is watched for its BUDGET WARNING line", filters)
+    near = [a for a in alarms.values() if a.get("MetricName") == "BudgetWarnings"]
+    check(len(near) == 1 and near[0].get("Threshold") == 1, "...and an alarm when one appears", near)
+    check(len(alarms) == 3 and all(len(a.get("AlarmActions", [])) == 1 and "RunAlerts" in json.dumps(a["AlarmActions"])
+                                   for a in alarms.values()), "all three alarms email through the topic, nothing else", alarms)
+    eng_env = next((v["Properties"]["Environment"]["Variables"] for v in ours.values()
+                    if "ENGINE_STEPS" in v["Properties"]["Environment"]["Variables"]), {})
+    check(eng_env.get("BUDGET_SHARE") == str(aws["budget_share"]), "the engine warns at [aws] budget_share", eng_env.get("BUDGET_SHARE"))
+else:
+    check(not topics and not alarms, "no address in settings.local.toml: no topic, no alarms (nothing half-built)")
+
 print("\nGuardDuty: on trial, only the plans this stack needs")
 dets = t.find_resources("AWS::GuardDuty::Detector")
 if aws.get("guardduty"):
