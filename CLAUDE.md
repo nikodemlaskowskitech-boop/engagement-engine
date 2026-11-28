@@ -62,7 +62,7 @@ Docs-only PRs need none.
 | A PR that touches | Runs |
 | --- | --- |
 | the engine (any step, settings) | `check_inputs.py`, `check_flags.py`, `backtest.py`, `tests/pipeline_test.py`, `tests/journeys_test.py` |
-| `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py`, `tests/data_gaps_test.py` (bad data: never guess, never crash), `tests/contract_terms_test.py` (each day against the contract in force), `tests/growth_test.py` (whitespace: each hook, held back or not) |
+| `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py`, `tests/data_gaps_test.py` (bad data: never guess, never crash), `tests/contract_terms_test.py` (each day against the contract in force), `tests/growth_test.py` (whitespace: each hook, held back or not), `tests/memory_test.py` (each heavy step under half the engine Lambda's memory) |
 | `generate_events.py`, `generate_documents.py`, the flags, the history; after a regenerate | `tests/heroes_test.py` (the four hero accounts' two-year stories still hold; reads data/), `tests/growth_hooks_test.py` (the planted growth hooks are there, and only there) |
 | `ingest.py` | `tests/store_test.py` |
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
