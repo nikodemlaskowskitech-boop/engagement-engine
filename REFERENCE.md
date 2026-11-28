@@ -853,6 +853,13 @@ Read a file's entry before changing that file, and update the entry in the same 
   chart (speed), activated in 14 days for accounts 14+ days old (outcome),
   overall and by tier, counts next to percentages. Planted effect: shows the
   method, doesn't prove emails work.
+- `tests/read_once_test.py` and the method (28 Nov 2026): the rule behind the failure, enforced.
+  After connect() the small inputs are tables, and no view reads a file except events (the
+  Parquet store, too big to hold), action_log and open_flags (written by this run, read back);
+  a stale allowance fails too. On the code before #263 it fails, as it should. CLAUDE.md's
+  working rules gain "Scale and limits": production's limits in the tests, read once, every
+  deploy through deploy.ps1 and done only when its run is read, a budget warning fixed the same
+  day; the design rules gain "each input is read once per run".
 - Run safeguards (28 Nov 2026, after the out-of-memory failure; Nikodem: "address the issues and
   amend the methodology"). The failure showed three gaps besides the bug: nothing ran under
   AWS's limits, a deploy wasn't followed by a run, and nobody was told. Now:

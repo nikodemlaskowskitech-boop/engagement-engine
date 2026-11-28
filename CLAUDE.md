@@ -49,6 +49,18 @@ read a file's entry there before changing the file, and update it in the same PR
 - A refactor must leave the outputs identical, byte for byte (sorts without ties).
 - Fix review findings now, in the same change or PR. Don't defer them to
   "later": deferred fixes get lost.
+- Scale and limits (28 Nov 2026: the engine ran out of memory in AWS, unseen for two days,
+  while every test passed). The laptop and the sandbox are not production (more memory; the
+  sandbox's DuckDB is a command-line stand-in), so:
+  - a change to the engine passes under AWS's limits: `tests/memory_test.py` (half the engine
+    Lambda's memory) and `tests/read_once_test.py`, with every row of the Testing table it
+    touches, the infra row included whenever a file an engine step imports changes;
+  - each input is read once per run (a table), and new features build on that: growth in views
+    or features must never multiply reads of the same data;
+  - every deploy is `.\deploy.ps1` (gates, then a real run on the new code), and a change is done
+    only once that run's run.json is read: OK, with its time and peak memory;
+  - a budget warning (a run past 70% of its memory or time, by email) is fixed the same day,
+    like a FAIL: it is the failure before it happens.
 - When a fix or concept has a real-world angle (something a TAM meets
   with customers, or a good interview story), add a short tip on it.
   Keep it brief and only when it's genuinely useful.
@@ -62,7 +74,7 @@ Docs-only PRs need none.
 | A PR that touches | Runs |
 | --- | --- |
 | the engine (any step, settings) | `check_inputs.py`, `check_flags.py`, `backtest.py`, `tests/pipeline_test.py`, `tests/journeys_test.py` |
-| `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py`, `tests/data_gaps_test.py` (bad data: never guess, never crash), `tests/contract_terms_test.py` (each day against the contract in force), `tests/growth_test.py` (whitespace: each hook, held back or not), `tests/memory_test.py` (each heavy step under half the engine Lambda's memory) |
+| `cairnpath_db.py`, `flags.py`, `history.py`, a window in the flags | `tests/history_test.py`, `tests/long_history_test.py`, `tests/store_test.py`, `tests/data_gaps_test.py` (bad data: never guess, never crash), `tests/contract_terms_test.py` (each day against the contract in force), `tests/growth_test.py` (whitespace: each hook, held back or not), `tests/memory_test.py` (each heavy step under half the engine Lambda's memory), `tests/read_once_test.py` (small inputs are tables; no view reads a file but the three allowed) |
 | `generate_events.py`, `generate_documents.py`, the flags, the history; after a regenerate | `tests/heroes_test.py` (the four hero accounts' two-year stories still hold; reads data/), `tests/growth_hooks_test.py` (the planted growth hooks are there, and only there) |
 | `ingest.py` | `tests/store_test.py` |
 | `facts.py`, `export_views.py` | `tests/facts_test.py`, plus the cockpit row |
@@ -265,6 +277,9 @@ missing, and on Scale an add-on before the basics work. Self-service: the report
 - Actions are sent once only (idempotent), logged in the action log.
 - Users are pseudonymised before anything reaches an LLM.
 - Use the data's as-of date (max event date), never today().
+- Each input is read once per run: the small ones into tables by `connect()`, the events
+  through the Parquet store. A view builds on tables or views, never on a file (three named
+  exceptions in `tests/read_once_test.py`, each with its reason).
 - Utilisation divides by days live in the window (max 30), so new
   accounts aren't penalised and silent days still count, and each day
   by the contract in force that day (contract_terms: a renewal that
